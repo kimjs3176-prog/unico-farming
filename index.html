@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>유니코 팜 - 농업 메타버스</title>
+  <meta name="description" content="한국농업기술진흥원 마스코트 유니코와 함께하는 캐주얼 3D 농장 메타버스" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦄</text></svg>" />
+  <link rel="stylesheet" href="/src/ui/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="ui"></div>
+  <div id="loading">
+    <div class="loading-card">
+      <div class="loading-logo">🦄</div>
+      <h1>유니코 팜</h1>
+      <p>농업 메타버스 불러오는 중…</p>
+      <div class="bar"><div id="loading-bar"></div></div>
+      <label class="name-row">닉네임 <input id="nickname" maxlength="12" placeholder="유니코" /></label>
+      <button id="start-btn" disabled>입장하기</button>
+      <p class="hint">PC: WASD/방향키 이동 · E 상호작용 · 마우스 드래그 시점 · 휠 줌<br/>모바일: 왼쪽 조이스틱 이동 · 오른쪽 버튼 상호작용</p>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

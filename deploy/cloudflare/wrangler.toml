@@ -1,0 +1,11 @@
+name = "unico-farm-relay"
+main = "worker.js"
+compatibility_date = "2025-10-01"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "FarmRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FarmRoom"]

@@ -1,0 +1,113 @@
+:root {
+  --ink: #231916; --teal: #30b6aa; --teal-d: #299d93; --gold: #fac03e; --leaf: #6dbb4f; --pink: #f1deec;
+  --panel: rgba(255,255,255,0.94); --shadow: 0 8px 24px rgba(35,25,22,0.18);
+  font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe4ff; color: var(--ink); touch-action: none; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#ui { position: fixed; inset: 0; pointer-events: none; }
+#ui > * { pointer-events: auto; }
+button { font: inherit; cursor: pointer; border: 0; border-radius: 12px; padding: 8px 14px; background: var(--teal); color: #fff; font-weight: 700; box-shadow: 0 3px 0 var(--teal-d); }
+button:active { transform: translateY(2px); box-shadow: none; }
+button.ghost { background: #eee; color: var(--ink); box-shadow: 0 3px 0 #ccc; }
+button.gold { background: var(--gold); color: var(--ink); box-shadow: 0 3px 0 #d9a21c; }
+button:disabled { opacity: 0.45; cursor: default; }
+
+/* 로딩 */
+#loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: linear-gradient(160deg, #bfe4ff, #e8f7d4); z-index: 50; }
+.loading-card { background: var(--panel); border-radius: 24px; padding: 28px 32px; text-align: center; box-shadow: var(--shadow); width: min(92vw, 420px); }
+.loading-logo { font-size: 64px; }
+.loading-card h1 { margin: 4px 0 2px; color: var(--teal-d); }
+.loading-card .bar { height: 10px; background: #e5e5e5; border-radius: 6px; overflow: hidden; margin: 14px 0; }
+#loading-bar { height: 100%; width: 0; background: var(--teal); transition: width 0.2s; }
+.name-row { display: flex; gap: 8px; align-items: center; justify-content: center; margin-bottom: 12px; font-weight: 700; }
+.name-row input { font: inherit; padding: 8px 10px; border: 2px solid #ddd; border-radius: 10px; width: 160px; }
+#start-btn { width: 100%; font-size: 18px; padding: 12px; }
+.hint { font-size: 12px; color: #666; line-height: 1.6; }
+
+/* HUD */
+.hud-top { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
+.chip { background: var(--panel); border-radius: 14px; padding: 8px 12px; font-weight: 700; box-shadow: var(--shadow); display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.chip small { font-weight: 500; color: #666; }
+.chip .xpbar { width: 70px; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
+.chip .xpbar i { display: block; height: 100%; background: var(--leaf); }
+.hud-right { margin-left: auto; display: flex; gap: 6px; }
+.hud-right button { padding: 8px 10px; font-size: 14px; }
+.prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 30px; font-weight: 700; box-shadow: var(--shadow); display: flex; gap: 10px; align-items: center; white-space: nowrap; max-width: 92vw; }
+.prompt kbd { background: var(--gold); color: var(--ink); border-radius: 8px; padding: 2px 8px; font-weight: 900; }
+.prompt.hidden { display: none; }
+.toasts { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.toast { background: var(--panel); padding: 8px 16px; border-radius: 20px; font-weight: 700; box-shadow: var(--shadow); animation: toast 3.2s forwards; max-width: 92vw; }
+@keyframes toast { 0% { opacity: 0; transform: translateY(-8px); } 10% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
+.event-banner { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: var(--gold); color: var(--ink); font-weight: 900; padding: 6px 14px; border-radius: 20px; box-shadow: var(--shadow); }
+
+/* 모바일 컨트롤 */
+.joystick { position: absolute; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.35); border: 2px solid rgba(255,255,255,0.7); display: none; }
+.joystick i { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: var(--teal); }
+.touch-btn { position: absolute; right: 24px; bottom: 36px; width: 84px; height: 84px; border-radius: 50%; font-size: 28px; display: none; background: var(--gold); color: var(--ink); box-shadow: 0 4px 0 #d9a21c; }
+@media (pointer: coarse) { .touch-btn { display: block; } .hint-kbd { display: none; } }
+
+/* 패널 */
+.panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--panel); border-radius: 22px; padding: 18px 20px; width: min(94vw, 560px); max-height: 86vh; overflow: auto; box-shadow: var(--shadow); }
+.panel h2 { margin: 0 0 10px; display: flex; align-items: center; gap: 8px; color: var(--teal-d); }
+.panel h2 .close { margin-left: auto; }
+.panel h3 { margin: 12px 0 6px; font-size: 14px; color: #555; }
+.rows { display: flex; flex-direction: column; gap: 6px; }
+.row { display: flex; align-items: center; gap: 8px; background: #f7f7f7; border-radius: 12px; padding: 8px 10px; }
+.row .nm { font-weight: 700; flex: 1; }
+.row .pr { font-weight: 700; color: var(--teal-d); min-width: 80px; text-align: right; }
+.row .qty { color: #666; font-size: 13px; }
+.row button { padding: 6px 10px; font-size: 13px; }
+.trend-up { color: #d9534f; } .trend-down { color: #3b82f6; }
+.money { font-weight: 900; color: var(--ink); }
+.quest { border-left: 5px solid #ddd; }
+.quest.done { border-left-color: var(--leaf); background: #eef9e6; }
+.quest .desc { font-size: 12px; color: #666; }
+.quest .bar { height: 6px; background: #e5e5e5; border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.quest .bar i { display: block; height: 100%; background: var(--teal); }
+.seed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.seed-grid button { background: #fff; color: var(--ink); border: 2px solid #e5e5e5; box-shadow: none; padding: 12px 8px; font-size: 15px; }
+.seed-grid button:hover { border-color: var(--teal); }
+.seed-grid button .q { display: block; font-size: 12px; color: #666; }
+
+/* 미니게임 HUD */
+.mini-hud { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 22px; border-radius: 16px; font-weight: 900; font-size: 20px; display: flex; gap: 22px; box-shadow: var(--shadow); }
+.mini-hud small { font-size: 12px; opacity: 0.7; display: block; font-weight: 500; }
+.smart-panel { position: absolute; right: 12px; top: 218px; background: var(--panel); border-radius: 18px; padding: 14px; width: min(92vw, 320px); box-shadow: var(--shadow); }
+.smart-panel h3 { margin: 0 0 8px; color: var(--teal-d); }
+.gauge { margin-bottom: 8px; }
+.gauge .lbl { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; }
+.gauge .track { position: relative; height: 14px; background: #eee; border-radius: 7px; overflow: hidden; }
+.gauge .band { position: absolute; top: 0; bottom: 0; background: #c9efc0; }
+.gauge .pin { position: absolute; top: 0; bottom: 0; width: 6px; background: var(--ink); border-radius: 3px; transition: left 0.15s; }
+.gauge.bad .pin { background: #d9534f; }
+.smart-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.smart-timer { font-weight: 900; font-size: 18px; text-align: center; margin-top: 6px; }
+
+/* 채팅 */
+.chat { position: absolute; left: 12px; bottom: 12px; width: min(70vw, 320px); }
+.chat .log { max-height: 120px; overflow: auto; font-size: 13px; display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.chat .log div { background: rgba(255,255,255,0.8); border-radius: 10px; padding: 3px 8px; width: fit-content; max-width: 100%; }
+.chat input { width: 100%; font: inherit; padding: 8px 10px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.8); background: rgba(255,255,255,0.85); }
+.online { font-size: 12px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); margin-bottom: 4px; font-weight: 700; }
+@media (max-width: 600px) { .chat { width: 46vw; } .chat .log { max-height: 70px; } .prompt { bottom: 140px; font-size: 13px; } }
+
+/* 미니맵 */
+.minimap { position: absolute; right: 12px; top: 56px; width: 150px; height: 150px; border-radius: 16px; box-shadow: var(--shadow); border: 3px solid rgba(255,255,255,0.9); }
+@media (max-width: 600px) { .minimap { width: 100px; height: 100px; top: 100px; } .smart-panel { top: 210px; right: 8px; } }
+
+/* 하단 액션바 */
+.actionbar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 4px; background: rgba(35,25,22,0.82); padding: 6px; border-radius: 20px; box-shadow: var(--shadow); backdrop-filter: blur(6px); }
+.actionbar button { background: transparent; box-shadow: none; color: #fff; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 12px; font-size: 11px; font-weight: 600; border-radius: 14px; min-width: 56px; }
+.actionbar button span { font-size: 20px; }
+.actionbar button:hover { background: rgba(255,255,255,0.12); }
+.actionbar .sep { width: 1px; background: rgba(255,255,255,0.2); margin: 4px 2px; }
+.emote-menu { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); display: flex; gap: 6px; background: var(--panel); padding: 8px; border-radius: 16px; box-shadow: var(--shadow); }
+.emote-menu button { background: #fff; color: var(--ink); box-shadow: none; border: 2px solid #eee; font-size: 20px; padding: 6px 10px; }
+.emote-menu button small { display: block; font-size: 10px; }
+@media (max-width: 600px) { .actionbar { bottom: 130px; left: 8px; transform: none; } .actionbar button { min-width: 44px; padding: 4px 6px; } .chat { bottom: 8px; } .touch-btn { bottom: 20px; } }
+.room-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.room-list button { background: #f7f7f7; color: var(--ink); box-shadow: none; border: 2px solid #eee; text-align: left; padding: 10px 12px; }
+.room-list button.cur { border-color: var(--teal); background: #e4f7f4; }
+.room-list button small { display: block; color: #666; font-weight: 500; }

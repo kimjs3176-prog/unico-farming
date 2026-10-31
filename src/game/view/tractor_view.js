@@ -1,0 +1,141 @@
+import * as THREE from 'three';
+import { FieldSim, Vehicle, TRACTOR_TIME } from '../sim/tractor.js';
+import { LAYOUT } from '../world.js';
+
+/** 트랙터: 탑승/운전 + 밭갈이 미니게임 */
+export class TractorView {
+  constructor(game) {
+    this.game = game;
+    const F = LAYOUT.field;
+    this.field = new FieldSim(F.cols, F.rows, F.cell, F.x0, F.z0, [[2, 1], [6, 3], [8, 0], [4, 4]]);
+    const T = LAYOUT.tractorHome;
+    this.vehicle = new Vehicle(T.x, T.z, T.heading);
+    this.model = game.assets.clone('tractor');
+    game.world.scene.add(this.model);
+    this.wheels = ['WheelFL', 'WheelFR', 'WheelBL', 'WheelBR'].map((n) => this.model.getObjectByName(n)).filter(Boolean);
+    this.steers = ['SteerL', 'SteerR'].map((n) => this.model.getObjectByName(n)).filter(Boolean);
+    this.plow = this.model.getObjectByName('Plow');
+    this.driving = false;
+    this.plowDown = false;
+    // 트랙터 충돌체 (주차 중)
+    this.obstacle = { x: T.x, z: T.z, r: 1.8 };
+    game.world.obstacles.push(this.obstacle);
+    this.syncModel();
+    // 밭 셀 메시 (인스턴스)
+    const geo = new THREE.PlaneGeometry(F.cell - 0.15, F.cell - 0.15);
+    this.cellMat = new THREE.MeshStandardMaterial({ color: 0x8a5a3c, roughness: 1 });
+    this.cells = new THREE.InstancedMesh(geo, this.cellMat, F.cols * F.rows);
+    this.cells.receiveShadow = true;
+    const m = new THREE.Matrix4();
+    for (let i = 0; i < F.cols * F.rows; i++) {
+      const c = i % F.cols, r = Math.floor(i / F.cols);
+      m.makeRotationX(-Math.PI / 2);
+      m.setPosition(F.x0 + (c + 0.5) * F.cell, 0.02, F.z0 + (r + 0.5) * F.cell);
+      this.cells.setMatrixAt(i, m);
+      this.cells.setColorAt(i, new THREE.Color(0xb08a5a));
+    }
+    game.world.scene.add(this.cells);
+    for (const i of this.field.rocks) {
+      const c = i % F.cols, r = Math.floor(i / F.cols);
+      const rock = game.assets.clone('rock');
+      rock.position.set(F.x0 + (c + 0.5) * F.cell, 0, F.z0 + (r + 0.5) * F.cell);
+      rock.scale.setScalar(0.9);
+      game.world.scene.add(rock);
+    }
+  }
+
+  syncModel() {
+    const v = this.vehicle;
+    this.model.position.set(v.x, 0, v.z);
+    this.model.rotation.y = v.heading;
+    for (const w of this.wheels) w.rotation.x = v.wheelSpin;
+    for (const s of this.steers) s.rotation.y = -v.steer * 0.8;
+    if (this.plow) this.plow.position.y = this.plowDown ? 0.15 : 0.5;
+    this.obstacle.x = v.x; this.obstacle.z = v.z;
+  }
+
+  resetCells() {
+    for (let i = 0; i < this.cells.count; i++) this.cells.setColorAt(i, new THREE.Color(0xb08a5a));
+    this.cells.instanceColor.needsUpdate = true;
+  }
+
+  mount() {
+    const g = this.game;
+    this.driving = true;
+    this.plowDown = false;
+    g.player.frozen = true;
+    g.player.hidden = true;
+    g.player.unico.playAction('safety', 0);
+    this.rider = g.player.unico; // 플레이어 유니코를 좌석 위에 표시
+    this.riderGroup = new THREE.Group();
+    this.riderGroup.add(this.rider.group);
+    g.world.scene.add(this.riderGroup);
+    g.player.hidden = false;
+    this.obstacle.r = 0;
+    this.field.start();
+    this.resetCells();
+    g.audio.play('engine');
+    g.ui.showMinigame('tractor', { time: TRACTOR_TIME, score: 0, max: this.field.cols * this.field.rows - this.field.rocks.size });
+    g.ui.toast('🚜 트랙터 밭갈이! W/S 가속·후진, A/D 조향, SPACE 쟁기 올림/내림. 60초 안에 최대한 많이 갈아보세요');
+  }
+
+  dismount(finished = false) {
+    const g = this.game;
+    this.driving = false;
+    g.player.frozen = false;
+    g.player.unico.clearAction();
+    g.world.scene.remove(this.riderGroup);
+    g.world.scene.add(this.rider.group);
+    const v = this.vehicle;
+    this.rider.group.position.set(v.x - Math.cos(v.heading) * 2.2, 0, v.z + Math.sin(v.heading) * 2.2);
+    this.obstacle.r = 1.8;
+    g.ui.hideMinigame();
+    if (finished) {
+      const reward = this.field.reward();
+      g.economy.earn(reward);
+      g.onEvent('tractor');
+      g.onEvent('plowbest', this.field.score);
+      g.player.unico.playAction('cheer', 2);
+      g.audio.play('win');
+      g.ui.result('🚜 밭갈이 완료!', [`갈아낸 칸: ${this.field.score}칸`, `바위 충돌: ${this.field.hits}회`, `보상: +${reward} 코인`]);
+    } else this.field.running = false;
+  }
+
+  update(dt, input, playerPos) {
+    const v = this.vehicle;
+    if (!this.driving) {
+      const d = Math.hypot(v.x - playerPos.x, v.z - playerPos.z);
+      if (d < 3.2) return { label: '트랙터 타기 (밭갈이 미니게임)', key: 'tractor', onInteract: () => this.mount() };
+      return null;
+    }
+    const ax = input.axis();
+    const prevX = v.x, prevZ = v.z;
+    v.step(dt, -ax.y, ax.x);
+    // 경계/장애물 (연못, 건물)
+    const next = new THREE.Vector3(v.x, 0, v.z);
+    this.game.world.resolveCollision(next, 1.4);
+    if (next.x !== v.x || next.z !== v.z) { v.speed *= 0.3; v.x = next.x; v.z = next.z; }
+    if (input.justPressed('Space')) { this.plowDown = !this.plowDown; this.game.audio.play('click'); }
+    // 쟁기 위치 = 트랙터 뒤 2.3m
+    const px = v.x - Math.sin(v.heading) * 2.3, pz = v.z - Math.cos(v.heading) * 2.3;
+    if (this.plowDown && Math.abs(v.speed) > 0.5) {
+      const i = this.field.plowAt(px, pz);
+      if (i >= 0) { this.cells.setColorAt(i, new THREE.Color(0x6b4430)); this.cells.instanceColor.needsUpdate = true; this.game.audio.play('dig', 0.3); }
+    }
+    if (this.field.isRock(v.x + Math.sin(v.heading) * 1.2, v.z + Math.cos(v.heading) * 1.2) && Math.abs(v.speed) > 1) {
+      v.speed = -Math.sign(v.speed) * 1.5; v.x = prevX; v.z = prevZ; this.field.hits++; this.field.time = Math.max(0, this.field.time - 3);
+      this.game.ui.toast('🪨 바위에 부딪혔어요! -3초');
+      this.game.audio.play('bump');
+    }
+    this.syncModel();
+    this.riderGroup.position.set(v.x + Math.cos(v.heading) * 0.0 - Math.sin(v.heading) * 0.6, 1.05, v.z - Math.cos(v.heading) * 0.6);
+    this.rider.group.position.set(0, 0, 0);
+    this.rider.update(dt, this.game.followCam.camera);
+    this.rider.models.safety.scale.setScalar(0.85);
+    const done = this.field.tick(dt);
+    this.game.ui.updateMinigame({ time: this.field.time, score: this.field.score });
+    if (done) { this.dismount(true); return null; }
+    if (input.justPressed('KeyE') || input.interactTap) { this.dismount(false); return null; }
+    return { label: `쟁기 ${this.plowDown ? '내림 🟢' : '올림 ⚪'} · SPACE 전환 · E 내리기`, key: 'driving' };
+  }
+}
