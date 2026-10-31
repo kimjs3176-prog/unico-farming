@@ -47,3 +47,22 @@ npx skills add gamedev-skills/awesome-gamedev-agent-skills      # 라우터가 �
 npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a claude-code -g -y
 npx skills add majidmanzarpour/blender-game-skills --skill blender-image-to-3d -a claude-code
 ```
+
+## 시각 스코어카드 자체 평가 (`threejs-aaa-graphics-builder/references/visual-scorecard.md`)
+
+0 자리표시 · 1 기본 스타일 · 2 프리미엄 스타일 · 3 쇼케이스. 직접 찍은 플레이 화면(`docs/screenshots`) 기준이며 외부 평가가 아닙니다.
+
+| 항목 | 이전 | 이후 | 근거 |
+|---|---|---|---|
+| 아트 디렉션 | 1 | 2 | 농촌 마을 테마가 지면·소품·논·UI 색까지 일관 |
+| 주인공 | 1 | 2 | 원안 특징을 살린 3D 유니콘, 접지되는 걷기, 감정표현·옷차림 |
+| 장애물/역할 구분 | 1 | 2 | 바위(트랙터), 잡초(논), 입질(낚시) 등 역할별 형태와 신호 |
+| 상호작용 대상 | 1 | 2 | 밭·논·나무·곤충·주민마다 안내·아이콘·패널 피드백 |
+| 월드 | 1 | 2 | 근경 소품·중경 마을·원경 산맥 레이어, 곡선 흙길 |
+| 재질 | 1 | 1.5 | 공유 재질 팔레트, 지면 페인트·AO. 소품 텍스처 디테일은 아직 단색 위주 |
+| 조명/렌더 | 1 | 2 | ACES 톤매핑, 키·필·림, 구운 AO, 날씨·낮밤 연동 |
+| 효과/모션 | 1 | 2 | 흙먼지·물보라·비·눈·번개·화면 흔들림·팝 |
+| UI/HUD | 1 | 2 | 날씨 칩·미니맵·액션바·논 상태·도감, 터치 대응 |
+| 성능 근거 | 0 | 2 | 렌더러 수치 측정, 정적 병합, 저사양 프리셋 |
+
+평균 약 1.95로 '프리미엄(모든 항목 ≥2, 평균 ≥2.3)'에는 아직 못 미칩니다. 다음 단계는 재질(소품 텍스처·나뭇결·트림), 캐릭터 전용 연출(표정 변화), 이미지/3D 생성 모델을 이용한 대표 에셋 교체입니다.

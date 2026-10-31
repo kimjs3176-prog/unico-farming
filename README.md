@@ -91,6 +91,8 @@ node scripts/balance.mjs   # 자원 유입·분당 수익·지배 전략·차익
 | Cloudflare Workers + Durable Objects 무료 플랜 (`deploy/cloudflare/`) | 방당 50명, 하루 약 100 플레이어·시간 | 일일 요청 한도(약 10만 요청, WebSocket 메시지 20개=1요청) 기준 추정. 유료 $5/월이면 약 100배 |
 | Vercel 무료 | 클라이언트만 | 서버리스는 WebSocket 상시 연결 불가 → 클라이언트는 Vercel, 서버는 Cloudflare/Fly.io/Render 등에 분리 |
 
+**렌더링 수치** (1280×800, 스폰 화면, 그림자 패스 포함): 고사양 드로우콜 약 1,220 · 삼각형 약 123만 · 그림자맵 3072, 저사양(모바일 자동) 드로우콜 약 555 · 삼각형 약 56만 · 그림자맵 1024·3프레임마다 갱신. 움직이지 않는 장식은 재질별로 병합해 그립니다.
+
 수천 명 규모가 필요하면 Colyseus 같은 룸 서버나 서버 수평 확장(방을 서버별로 분산)이 필요합니다. 자세한 배포 절차는 [docs/DEPLOY.md](docs/DEPLOY.md) 참고.
 
 ## 프로젝트 구조

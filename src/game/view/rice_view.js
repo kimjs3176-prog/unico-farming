@@ -61,7 +61,7 @@ export class RiceView {
     }
     // 탈곡장
     const T = LAYOUT.thresher;
-    this.thresher = game.world.place('thresher', T.x, T.z, -0.5, 1, { r: 0.9 });
+    this.thresher = game.world.place('thresher', T.x, T.z, -0.5, 1, { r: 0.9, dynamic: true });
     this.drum = this.thresher.getObjectByName('Drum');
     this.threshing = null;
     this.sim.on((t) => { if (t !== 'weedgrow') this.dirty = true; });

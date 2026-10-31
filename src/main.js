@@ -204,6 +204,12 @@ class Game {
     }
     this.saveTimer += dt;
     if (this.saveTimer > 10) { this.saveTimer = 0; saveGame(this); }
+    // 저사양: 그림자 맵을 3프레임마다 갱신 (정적 장면이 대부분이라 체감 차이 작음)
+    if (this.quality.level === 'low') {
+      this.renderer.shadowMap.autoUpdate = false;
+      this.frameNo = (this.frameNo || 0) + 1;
+      if (this.frameNo % 3 === 0) this.renderer.shadowMap.needsUpdate = true;
+    }
     this.postfx.render();
     input.endFrame();
   }

@@ -127,21 +127,18 @@ export class Scenery {
   /** 들꽃: 꽃잎 5장 + 줄기, 색은 인스턴스별 (동물의 숲 들판 느낌) */
   _flowers(rnd) {
     const parts = [];
-    const stem = new THREE.CylinderGeometry(0.012, 0.012, 0.22, 4);
+    const stem = new THREE.CylinderGeometry(0.012, 0.012, 0.22, 3, 1, true);
     stem.translate(0, 0.11, 0);
     parts.push(stem);
-    for (let i = 0; i < 5; i++) {
-      const pet = new THREE.SphereGeometry(0.045, 6, 4);
-      pet.scale(1, 0.35, 0.7);
-      const a = (i / 5) * Math.PI * 2;
-      pet.translate(Math.cos(a) * 0.05, 0.23, Math.sin(a) * 0.05);
-      parts.push(pet);
-    }
-    const center = new THREE.SphereGeometry(0.03, 6, 4);
-    center.translate(0, 0.24, 0);
-    parts.push(center);
-    const geo = mergeGeometries(parts.map((g) => g.index ? g : g));
-    const mat = new THREE.MeshStandardMaterial({ roughness: 0.8 });
+    const petals = new THREE.CircleGeometry(0.085, 5);
+    petals.rotateX(-Math.PI / 2);
+    petals.translate(0, 0.23, 0);
+    parts.push(petals);
+    const center = new THREE.OctahedronGeometry(0.03, 0);
+    center.translate(0, 0.245, 0);
+    parts.push(center.index ? center : center);
+    const geo = mergeGeometries(parts.map((g) => (g.index ? g : withIndex(g))));
+    const mat = new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide });
     const COUNT = this.world.quality?.level === 'low' ? 500 : 1400;
     const mesh = new THREE.InstancedMesh(geo, mat, COUNT);
     const palette = [0xffffff, 0xffe066, 0xf3b7cf, 0xe35d5d, 0xb39ddb, 0x8ecae6];
@@ -231,6 +228,12 @@ export class Scenery {
     const cloudShade = (0.5 + 0.5 * daylight) * (1 - weather.precip * 0.4);
     for (const c of this.clouds) c.traverse((o) => { if (o.isMesh) o.material.color?.setScalar(cloudShade); });
   }
+}
+
+function withIndex(g) {
+  const n = g.attributes.position.count;
+  g.setIndex(Array.from({ length: n }, (_, i) => i));
+  return g;
 }
 
 function mergeGeometries(geos) {

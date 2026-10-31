@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Scenery } from './scenery.js';
 import { Precipitation } from './precip.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /** 월드 레이아웃 상수 (m). +X 동쪽, +Z 남쪽, 스폰 (0,0,9) */
 export const LAYOUT = {
@@ -63,6 +64,8 @@ export const LAYOUT = {
 };
 
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
+// 애니메이션·상호작용이 있어 병합하면 안 되는 모델
+const DYNAMIC = new Set(['windmill', 'drone', 'smartfarm', 'fruit_tree', 'thresher', 'tractor', 'cow', 'sheep', 'chicken', 'cloud']);
 const GREY = new THREE.Color(0x9aa4ae);
 
 export class World {
@@ -75,6 +78,7 @@ export class World {
     this.scene.fog = new THREE.Fog(0xbfe4ff, 45, 110);
     this.obstacles = []; // {x,z,r} 원형 충돌체
     this.aoSpots = []; // 지면에 구울 부드러운 그림자
+    this.staticObjs = []; // 움직이지 않는 장식 → 재질별로 병합해 드로우콜 절감
     this.boxes = []; // {x0,z0,x1,z1}
     this.animated = []; // update(dt) 를 갖는 객체
     this.time = 0.33; // 하루 중 비율 (0=자정, 0.5=정오)
@@ -85,6 +89,7 @@ export class World {
     this._ground();
     this._decorate();
     this._paintGround();
+    this._batchStatic();
     this.scenery = new Scenery(this);
     this.precip = new Precipitation(this.scene);
     // 날씨: target 은 실시간 날씨, cur 은 부드럽게 따라가는 현재값
@@ -95,7 +100,7 @@ export class World {
   /** 날씨 서비스(describeWeather 결과) 적용 */
   setWeather(w) {
     this.weatherTarget = { kind: w.kind, cloud: w.cloud, precip: w.precip, fog: w.fog, wind: w.wind };
-    if (!this.weatherKind) Object.assign(this.weatherCur, this.weatherTarget); // 첫 적용은 즉시
+    if (!this.weatherKind) { Object.assign(this.weatherCur, this.weatherTarget); this.snowCover = w.kind === 'snow' ? Math.min(1, w.precip * 1.2) : 0; } // 첫 적용은 즉시
     this.weatherKind = w.kind;
   }
 
@@ -251,12 +256,13 @@ export class World {
   }
 
   // ------------------------------------------------------------ 배치
-  place(name, x, z, rotY = 0, scale = 1, { collide = true, r = null } = {}) {
+  place(name, x, z, rotY = 0, scale = 1, { collide = true, r = null, dynamic = false } = {}) {
     const m = this.assets.clone(name);
     m.position.set(x, 0, z);
     m.rotation.y = rotY;
     m.scale.setScalar(scale);
     this.scene.add(m);
+    if (!dynamic && !DYNAMIC.has(name)) this.staticObjs.push(m);
     const bb = new THREE.Box3().setFromObject(m), sz = bb.getSize(new THREE.Vector3()), cc = bb.getCenter(new THREE.Vector3());
     if (name !== 'cloud' && sz.y > 0.4) this.aoSpots.push({ x: cc.x, z: cc.z, rx: sz.x * 0.62 + 0.25, rz: sz.z * 0.62 + 0.25, k: Math.min(0.42, 0.16 + sz.y * 0.05) });
     if (collide) {
@@ -331,12 +337,38 @@ export class World {
     this.lampGlows = [];
     for (const [name, x, z, rot] of L.props) {
       const m = this.place(name, x, z, rot, 1, { r: name === 'lamp' ? 0.25 : name === 'bench' ? 0.7 : name === 'planter' ? 0.55 : 0.4 });
-      if (name === 'lamp') m.traverse((o) => { if (o.isMesh && o.material.emissive) { o.material = o.material.clone(); this.lampGlows.push(o.material); } });
+      if (name === 'lamp') m.traverse((o) => { if (o.isMesh && o.material.emissiveIntensity > 0 && !this.lampGlows.includes(o.material)) this.lampGlows.push(o.material); });
     }
     this.place('scarecrow', L.scarecrow.x, L.scarecrow.z, 0.4, 1, { r: 0.35 });
     this.place('dock', L.dock.x, L.dock.z, L.dock.rot, 1, { collide: false });
     this._mountains();
     this.sun.position.set(30, 50, 20);
+  }
+
+  /** 정적 장식을 재질별 한 메시로 병합 (technical-art: 반복 소품은 묶어서 그리기) */
+  _batchStatic() {
+    const buckets = new Map();
+    for (const o of this.staticObjs) {
+      o.updateMatrixWorld(true);
+      o.traverse((m) => {
+        if (!m.isMesh) return;
+        const key = m.material.uuid;
+        if (!buckets.has(key)) buckets.set(key, { mat: m.material, geos: [] });
+        const g = m.geometry.clone().applyMatrix4(m.matrixWorld);
+        for (const k of Object.keys(g.attributes)) if (!['position', 'normal'].includes(k)) g.deleteAttribute(k);
+        buckets.get(key).geos.push(g.index ? g.toNonIndexed() : g);
+      });
+      this.scene.remove(o);
+    }
+    for (const { mat, geos } of buckets.values()) {
+      const merged = mergeGeometries(geos, false);
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.matrixAutoUpdate = false;
+      this.scene.add(mesh);
+    }
+    this.staticObjs = [];
   }
 
   /** 원경 산맥: 안개에 묻히지 않는 푸른 실루엣으로 깊이감 (대기 원근) */
@@ -430,7 +462,12 @@ export class World {
     const daylight = THREE.MathUtils.clamp(elev * 2.2 + 0.25, 0, 1) * (1 - overcast * 0.35);
     this.daylight = daylight;
     this.sun.intensity = (0.15 + daylight * 2.2) * (1 - overcast * 0.8);
-    this.hemi.intensity = 0.25 + daylight * 0.9 + this.precip.flash * 2.5;
+    this.hemi.intensity = 0.1 + daylight * 1.0 + this.precip.flash * 2.5;
+    this.scene.environmentIntensity = 0.06 + daylight * 0.28; // 환경광도 밤에는 줄임
+    // 눈: 지면이 점점 하얗게 덮임
+    const snowCover = W.kind === 'snow' ? Math.min(1, W.precip * 1.2) : 0;
+    this.snowCover = (this.snowCover || 0) + (snowCover - (this.snowCover || 0)) * Math.min(1, dt * 0.15);
+    this.groundMat.emissive.setRGB(1, 1, 1).multiplyScalar(this.snowCover * 0.32 * (0.3 + daylight * 0.7));
     this.hemi.color.setHex(0xd8eeff).lerp(GREY, overcast * 0.6);
     const dayCol = new THREE.Color(0xbfe4ff), duskCol = new THREE.Color(0xf4b183), nightCol = new THREE.Color(0x1d2a4a);
     const sky = new THREE.Color();
@@ -452,7 +489,7 @@ export class World {
     this.rim.position.set(fx - Math.cos(sunA) * 50, 25, fz - 35);
     this.rim.target.position.set(fx, 0, fz);
     this.rim.intensity = 0.25 + daylight * 0.45;
-    this.ambient.intensity = 0.08 + daylight * 0.1;
+    this.ambient.intensity = 0.03 + daylight * 0.12;
     this.scenery?.update(dt, daylight, this.sun.position.clone().sub(new THREE.Vector3(fx, 0, fz)), W);
   }
 

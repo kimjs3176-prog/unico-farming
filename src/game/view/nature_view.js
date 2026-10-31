@@ -20,7 +20,7 @@ export class NatureView {
     this.t = 0;
     // ---- 과일 나무 ----
     this.trees = LAYOUT.orchard.map((o, i) => {
-      const m = game.world.place('fruit_tree', o.x, o.z, i * 1.3, 1.1, { r: 0.5 });
+      const m = game.world.place('fruit_tree', o.x, o.z, i * 1.3, 1.1, { r: 0.5, dynamic: true });
       const mat = new THREE.MeshStandardMaterial({ color: FRUIT_COLOR[o.fruit], roughness: 0.45 });
       const fruits = [];
       for (let k = 0; k < 6; k++) {
