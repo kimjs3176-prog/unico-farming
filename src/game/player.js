@@ -31,7 +31,7 @@ export class Player {
       this.group.position.copy(next);
     }
     this.unico.moving = moving;
-    this.unico.update(dt, followCam.camera);
+    this.unico.update(dt, followCam.camera, this.world.daylight);
     this.group.visible = !this.hidden;
   }
 }

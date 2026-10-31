@@ -25,7 +25,7 @@ export class NPCs {
   update(dt, playerPos) {
     let hit = null;
     for (const e of this.list) {
-      e.u.update(dt, this.game.followCam.camera);
+      e.u.update(dt, this.game.followCam.camera, this.game.world.daylight);
       if (!hit && Math.hypot(e.n.x - playerPos.x, e.n.z - playerPos.z) < 2.6) hit = e;
     }
     if (!hit) return null;

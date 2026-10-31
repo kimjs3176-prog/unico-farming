@@ -14,12 +14,13 @@ warnings.filterwarnings("ignore")
 import pymupdf  # noqa: E402
 
 BEZIER_STEPS = 5
+SAMPLE_PT = 2.5  # 곡선 샘플 간격(pt). 작을수록 정밀 (래스터용은 0.4)
 
 
 def _bez(p0, p1, p2, p3, n=None):
     if n is None:  # 곡선 길이에 따라 적응형 샘플링 (pt 단위)
         approx = math.dist((p0.x, p0.y), (p1.x, p1.y)) + math.dist((p1.x, p1.y), (p2.x, p2.y)) + math.dist((p2.x, p2.y), (p3.x, p3.y))
-        n = max(2, min(BEZIER_STEPS, int(approx / 2.5) + 1))
+        n = max(2, min(BEZIER_STEPS, int(approx / SAMPLE_PT) + 1))
     pts = []
     for i in range(1, n + 1):
         t = i / n

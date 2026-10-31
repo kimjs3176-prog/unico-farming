@@ -34,6 +34,10 @@ POSES = {
 }
 # 소품이 같이 그려진 포즈: 클러스터 폭 기준 비율로 캐릭터 영역만 잘라냄 (safety = 2D 트랙터 제외, 3D 트랙터로 대체)
 CROP_X = {"safety": (0.62, 1.0), "tablet": (0.55, 1.0)}
+# 포즈별 추가 제외 규칙: (정규화 bbox, 색) -> True 면 제거. safety: 머리 높이의 트랙터 초록 조각(캐빈 기둥)
+DROP = {
+    "safety": lambda nb, col: col == "#7cc062" and nb[1] < 0.45,
+}
 
 
 def _filter_paths(char, name):
@@ -45,6 +49,12 @@ def _filter_paths(char, name):
         px0, py0, px1, py1 = p["rect"]
         if px0 < x0 + lo * w - 1 or px1 > x0 + hi * w + 1:
             continue
+        drop = DROP.get(name)
+        if drop:
+            nb = ((px0 - x0) / w, (py0 - y0) / h, (px1 - x0) / w, (py1 - y0) / h)
+            col = "#%02x%02x%02x" % tuple(int(round(c * 255)) for c in p["color"])
+            if drop(nb, col):
+                continue
         # 흰 배경 위의 작은 흰 조각(2D 에선 안 보이지만 3D 에선 떠 보임) 제거
         if all(c > 0.97 for c in p["color"]) and (px1 - px0) * (py1 - py0) < 0.004 * w * h:
             continue

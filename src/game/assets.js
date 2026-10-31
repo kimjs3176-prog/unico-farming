@@ -6,22 +6,49 @@ export const ENV_MODELS = [
   'tree', 'pine', 'bush', 'rock', 'flowers', 'hay_bale', 'fence', 'barn', 'silo', 'windmill', 'smartfarm',
   'market', 'well', 'sign', 'coop', 'trough', 'plot', 'crops', 'cow', 'chicken', 'sheep', 'tractor', 'drone', 'wheelbarrow',
 ];
-/** 원본 마스코트 벡터를 입체화한 유니코 포즈 */
+/** 원본 마스코트 벡터를 고해상도 투명 PNG 로 래스터한 유니코 포즈 (public/sprites) */
 export const UNICO_POSES = ['idle', 'front', 'side', 'back', 'water', 'tablet', 'safety', 'cheer', 'heart', 'wave', 'think', 'lab', 'present', 'megaphone'];
+export const UNICO_HEIGHT = 2.0; // 캐릭터 키(m), 여백 제외
+const SPRITE_MARGIN = 0.03 / 1.06; // render_character_sprites.py 의 MARGIN 비율 (상하 여백)
 
-const BASE = (import.meta.env?.BASE_URL || '/') + 'models/';
+const ROOT = import.meta.env?.BASE_URL || '/';
+const BASE = ROOT + 'models/';
+const SPRITES = ROOT + 'sprites/';
 
 export class Assets {
   constructor() {
     this.loader = new GLTFLoader();
+    this.texLoader = new THREE.TextureLoader();
     this.scenes = new Map();
+    this.sprites = new Map(); // pose -> { texture, aspect }
+    this.maxAniso = 8;
   }
 
   async loadAll(onProgress) {
-    const names = [...ENV_MODELS, ...UNICO_POSES.map((p) => `unico_${p}`)];
+    const names = [...ENV_MODELS];
+    const total = names.length + UNICO_POSES.length + 1;
     let done = 0;
-    await Promise.all(
-      names.map(async (n) => {
+    const tick = () => { done++; onProgress?.(done / total); };
+    const spriteJob = (async () => {
+      let meta = {};
+      try { meta = await (await fetch(`${SPRITES}unico_sprites.json`)).json(); } catch (e) { console.warn('스프라이트 메타 로드 실패', e); }
+      tick();
+      await Promise.all(UNICO_POSES.map(async (p) => {
+        try {
+          const tex = await this.texLoader.loadAsync(`${SPRITES}unico_${p}.png`);
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.minFilter = THREE.LinearMipmapLinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          tex.generateMipmaps = true;
+          tex.anisotropy = this.maxAniso;
+          this.sprites.set(p, { texture: tex, aspect: meta[p]?.aspect ?? tex.image.width / tex.image.height });
+        } catch (e) { console.warn('스프라이트 로드 실패', p, e?.message || e); }
+        tick();
+      }));
+    })();
+    await Promise.all([
+      spriteJob,
+      ...names.map(async (n) => {
         try {
           const gltf = await this.loader.loadAsync(`${BASE}${n}.glb`);
           prepare(gltf.scene, n);
@@ -30,10 +57,29 @@ export class Assets {
           console.warn('모델 로드 실패, 대체 박스 사용:', n, e?.message || e);
           this.scenes.set(n, fallbackBox(n));
         }
-        done++;
-        onProgress?.(done / names.length);
+        tick();
       }),
-    );
+    ]);
+  }
+
+  /**
+   * 유니코 포즈 스프라이트 평면 (발이 y=0, 가로 중앙). 캐릭터 키 UNICO_HEIGHT.
+   * - 색은 원본 그대로(unlit, 톤매핑 제외), 알파 테스트로 깊이 정렬, 실루엣 그림자(customDepthMaterial)
+   */
+  makeUnicoSprite(pose) {
+    const s = this.sprites.get(pose);
+    if (!s) { const g = new THREE.Group(); g.visible = false; return g; }
+    const H = UNICO_HEIGHT / (1 - 2 * SPRITE_MARGIN);
+    const W = H * s.aspect;
+    const geo = new THREE.PlaneGeometry(W, H);
+    geo.translate(0, H / 2 - H * SPRITE_MARGIN, 0);
+    const mat = new THREE.MeshBasicMaterial({ map: s.texture, transparent: true, alphaTest: 0.02, side: THREE.DoubleSide, toneMapped: false });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = false;
+    mesh.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: s.texture, alphaTest: 0.5, side: THREE.DoubleSide });
+    mesh.name = `unico_${pose}`;
+    return mesh;
   }
 
   /** 모델 복제 (지오메트리/머티리얼은 공유) */
@@ -78,22 +124,6 @@ function prepare(scene, name) {
     o.castShadow = true;
     o.receiveShadow = true;
   });
-  if (name.startsWith('unico_')) {
-    // 릴리프 캐릭터는 양면 렌더 (얇은 조각 뒷면 깨짐 방지)
-    scene.traverse((o) => {
-      if (o.isMesh) {
-        // 원본 일러스트 색을 또렷하게: 자체 발광을 섞어 조명 각도와 무관하게 밝게 (플랫 룩)
-        const m = o.material.clone();
-        m.side = THREE.DoubleSide;
-        m.emissive = m.color.clone();
-        m.emissiveIntensity = 0.55;
-        m.roughness = 1;
-        o.material = m;
-        o.receiveShadow = false;
-      }
-    });
-    scene.userData.noReceive = true;
-  }
 }
 
 function fallbackBox(name) {

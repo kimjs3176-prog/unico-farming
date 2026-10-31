@@ -81,7 +81,7 @@ export class Net {
       const dx = r.target.x - p.x, dz = r.target.z - p.z, d = Math.hypot(dx, dz);
       r.unico.moving = d > 0.05;
       if (d > 0.001) { const k = Math.min(1, dt * 8); p.x += dx * k; p.z += dz * k; }
-      r.unico.update(dt, g.followCam.camera);
+      r.unico.update(dt, g.followCam.camera, g.world.daylight);
     }
     if (!this.connected) return;
     this.acc += dt;

@@ -37,6 +37,7 @@ export class World {
     this.boxes = []; // {x0,z0,x1,z1}
     this.animated = []; // update(dt) 를 갖는 객체
     this.time = 0.33; // 하루 중 비율 (0=자정, 0.5=정오)
+    this.daylight = 1;
     this.day = 1;
     this.lampMaterials = [];
     this._lights();
@@ -241,6 +242,7 @@ export class World {
     const elev = Math.sin(sunA);
     this.sun.position.set(Math.cos(sunA) * 40, Math.max(elev, -0.2) * 60 + 8, 25);
     const daylight = THREE.MathUtils.clamp(elev * 2.2 + 0.25, 0, 1);
+    this.daylight = daylight;
     this.sun.intensity = 0.15 + daylight * 2.2;
     this.hemi.intensity = 0.25 + daylight * 0.9;
     const dayCol = new THREE.Color(0xbfe4ff), duskCol = new THREE.Color(0xf4b183), nightCol = new THREE.Color(0x1d2a4a);
