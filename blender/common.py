@@ -372,3 +372,124 @@ def segment(name, mat, p0, p1, radius, parent=None, segments=14, cap=True):
     m = Matrix.Translation((p0 + p1) / 2) @ rot
     bmesh.ops.transform(bm, matrix=m, verts=bm.verts)
     return _new_object(name, bm, mat, True, parent)
+
+
+# ---------------------------------------------------------------------------
+# 모디파이어 기반 고품질 조형 (헤드리스: evaluated mesh 로 적용)
+# ---------------------------------------------------------------------------
+def apply_modifiers(obj):
+    """모디파이어를 모두 적용한 새 메시로 교체 (bpy.ops 없이)."""
+    dg = bpy.context.evaluated_depsgraph_get()
+    me = bpy.data.meshes.new_from_object(obj.evaluated_get(dg))
+    old = obj.data
+    mats = list(old.materials)
+    obj.modifiers.clear()
+    obj.data = me
+    if not me.materials:
+        for m in mats:
+            me.materials.append(m)
+    bpy.data.meshes.remove(old)
+    return obj
+
+
+def shade_smooth(obj, angle_deg=None):
+    for p in obj.data.polygons:
+        p.use_smooth = True
+    if angle_deg is not None and hasattr(obj.data, "set_sharp_from_angle"):
+        obj.data.set_sharp_from_angle(angle=math.radians(angle_deg))
+
+
+def organic(name, parts, mat, voxel=0.035, smooth_iters=6, smooth_factor=0.9, decimate=0.4, subsurf=0, parent=None):
+    """여러 프리미티브를 복셀 리메시 + 스무딩으로 '점토처럼' 하나로 녹여 유기적인 메시 생성 (단일 머티리얼)."""
+    obj = join(name, parts, parent=parent)
+    obj.data.materials.clear()
+    obj.data.materials.append(material(mat) if isinstance(mat, str) else mat)
+    r = obj.modifiers.new("remesh", "REMESH")
+    r.mode = "VOXEL"
+    r.voxel_size = voxel
+    r.use_smooth_shade = True
+    s = obj.modifiers.new("smooth", "SMOOTH")
+    s.factor = smooth_factor
+    s.iterations = smooth_iters
+    if decimate and decimate < 1:
+        d = obj.modifiers.new("decimate", "DECIMATE")
+        d.ratio = decimate
+    if subsurf:
+        ss = obj.modifiers.new("subsurf", "SUBSURF")
+        ss.levels = subsurf
+    apply_modifiers(obj)
+    shade_smooth(obj)
+    return obj
+
+
+def bevel(obj, width=0.05, segments=3, angle_deg=30, smooth=True):
+    """모서리 베벨 (상자형 건물/기계의 날카로운 모서리를 둥글게)."""
+    b = obj.modifiers.new("bevel", "BEVEL")
+    b.width = width
+    b.segments = segments
+    b.limit_method = "ANGLE"
+    b.angle_limit = math.radians(angle_deg)
+    b.harden_normals = False
+    apply_modifiers(obj)
+    if smooth:
+        shade_smooth(obj, angle_deg=40)
+    return obj
+
+
+def subdivide(obj, levels=1, smooth=True):
+    ss = obj.modifiers.new("subsurf", "SUBSURF")
+    ss.levels = levels
+    apply_modifiers(obj)
+    if smooth:
+        shade_smooth(obj)
+    return obj
+
+
+def displace_noise(obj, strength=0.08, scale=1.2, seed=0):
+    """나무 잎뭉치 등에 울퉁불퉁한 유기적 표면."""
+    tex = bpy.data.textures.new(f"noise{seed}", "CLOUDS")
+    tex.noise_scale = scale
+    tex.noise_depth = 2
+    d = obj.modifiers.new("displace", "DISPLACE")
+    d.texture = tex
+    d.strength = strength
+    d.mid_level = 0.5
+    apply_modifiers(obj)
+    shade_smooth(obj)
+    return obj
+
+
+def chain(name, mat, points, radii, segments=12):
+    """구슬 체인 (organic() 으로 녹이면 매끈한 가닥이 됨). points: [(x,y,z)], radii: [r]"""
+    parts = []
+    for i, (p, r) in enumerate(zip(points, radii)):
+        parts.append(sphere(f"{name}_{i}", mat, loc=p, radius=r, segments=segments, rings=8))
+        if i > 0:
+            parts.append(segment(f"{name}_s{i}", mat, points[i - 1], p, min(r, radii[i - 1]) * 0.95, segments=segments, cap=False))
+    return parts
+
+
+def twisted_cone(name, mat, loc=(0, 0, 0), radius=0.1, depth=0.5, twist_deg=270, rings=14, segments=12, rot=(0, 0, 0), parent=None, grooves=0.0):
+    """나선 홈이 있는 뿔 (유니콘 뿔)."""
+    bm = bmesh.new()
+    verts_rings = []
+    for i in range(rings + 1):
+        t = i / rings
+        r = radius * (1 - t) + 0.004
+        z = depth * t
+        a0 = math.radians(twist_deg) * t
+        ring = []
+        for j in range(segments):
+            a = a0 + 2 * math.pi * j / segments
+            rr = r * (1 + grooves * math.sin(3 * a + 3 * t * math.pi))
+            ring.append(bm.verts.new((rr * math.cos(a), rr * math.sin(a), z)))
+        verts_rings.append(ring)
+    for i in range(rings):
+        for j in range(segments):
+            a, b = verts_rings[i][j], verts_rings[i][(j + 1) % segments]
+            c, d = verts_rings[i + 1][(j + 1) % segments], verts_rings[i + 1][j]
+            bm.faces.new((a, b, c, d))
+    bm.faces.new(tuple(reversed(verts_rings[0])))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    _xform(bm, loc, rot)
+    return _new_object(name, bm, mat, True, parent)

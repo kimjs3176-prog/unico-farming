@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Scenery } from './scenery.js';
 
 /** 월드 레이아웃 상수 (m). +X 동쪽, +Z 남쪽, 스폰 (0,0,9) */
 export const LAYOUT = {
@@ -27,8 +28,9 @@ export const LAYOUT = {
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
 
 export class World {
-  constructor(assets, renderer) {
+  constructor(assets, renderer, quality = { grass: 9000, shadowMap: 3072 }) {
     this.assets = assets;
+    this.quality = quality;
     this.renderer = renderer;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xbfe4ff);
@@ -43,19 +45,21 @@ export class World {
     this._lights();
     this._ground();
     this._decorate();
+    this.scenery = new Scenery(this);
   }
 
   // ------------------------------------------------------------ 조명 / 하늘
   _lights() {
-    this.hemi = new THREE.HemisphereLight(0xffffff, 0x88aa66, 1.1);
+    this.hemi = new THREE.HemisphereLight(0xd8eeff, 0x6f9a4a, 0.9);
     this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xfff3dd, 2.2);
+    this.sun = new THREE.DirectionalLight(0xfff3dd, 2.4);
     this.sun.castShadow = true;
-    const s = 48;
-    Object.assign(this.sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 160 });
-    this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.bias = -0.0005;
-    this.sun.shadow.normalBias = 0.02;
+    const s = 34; // 플레이어 주변만 고해상도 그림자 (update 에서 추적)
+    Object.assign(this.sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 200 });
+    this.sun.shadow.mapSize.set(this.quality.shadowMap, this.quality.shadowMap);
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.03;
+    this.sun.shadow.radius = 3;
     this.scene.add(this.sun, this.sun.target);
     this.ambient = new THREE.AmbientLight(0xffffff, 0.15);
     this.scene.add(this.ambient);
@@ -63,12 +67,12 @@ export class World {
 
   _ground() {
     const B = LAYOUT.bounds + 30;
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(B * 2, B * 2), new THREE.MeshStandardMaterial({ color: 0x8ccf5a, roughness: 1 }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(B * 2, B * 2), new THREE.MeshStandardMaterial({ map: grassTexture(), roughness: 1 }));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
     // 흙길
-    const pathMat = new THREE.MeshStandardMaterial({ color: 0xd9c08a, roughness: 1 });
+    const pathMat = new THREE.MeshStandardMaterial({ map: dirtTexture(), roughness: 1 });
     const addPath = (x, z, w, h, rot = 0) => {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), pathMat);
       p.rotation.x = -Math.PI / 2;
@@ -83,10 +87,10 @@ export class World {
     addPath(0, 9, 24, 3); // 동서
     addPath(6, 11, 3, 7); // 트랙터 밭
     // 연못
-    const pond = new THREE.Mesh(new THREE.CircleGeometry(LAYOUT.pond.r, 28), new THREE.MeshStandardMaterial({ color: 0x6fc3e8, roughness: 0.3, transparent: true, opacity: 0.92 }));
-    pond.rotation.x = -Math.PI / 2;
-    pond.position.set(LAYOUT.pond.x, 0.02, LAYOUT.pond.z);
-    this.scene.add(pond);
+    const pondBed = new THREE.Mesh(new THREE.CircleGeometry(LAYOUT.pond.r, 48), new THREE.MeshStandardMaterial({ color: 0x3f7fa8, roughness: 0.9 }));
+    pondBed.rotation.x = -Math.PI / 2;
+    pondBed.position.set(LAYOUT.pond.x, -0.05, LAYOUT.pond.z);
+    this.scene.add(pondBed);
     this.obstacles.push({ x: LAYOUT.pond.x, z: LAYOUT.pond.z, r: LAYOUT.pond.r - 0.3 });
     const rim = new THREE.Mesh(new THREE.RingGeometry(LAYOUT.pond.r, LAYOUT.pond.r + 0.6, 28), new THREE.MeshStandardMaterial({ color: 0xd9c08a, roughness: 1 }));
     rim.rotation.x = -Math.PI / 2;
@@ -233,14 +237,20 @@ export class World {
   }
 
   // ------------------------------------------------------------ 시간
-  update(dt) {
+  update(dt, focus = null) {
     for (const a of this.animated) a.update(dt);
+    if (focus) {
+      // 그림자 카메라를 플레이어 주변으로 이동
+      this.sun.target.position.set(focus.x, 0, focus.z);
+      this.cameraPos = focus;
+    }
     this.time += dt / DAY_LENGTH;
     if (this.time >= 1) { this.time -= 1; this.day++; this.onNewDay?.(this.day); }
     const t = this.time;
     const sunA = (t - 0.25) * Math.PI * 2; // 06:00 일출, 18:00 일몰
     const elev = Math.sin(sunA);
-    this.sun.position.set(Math.cos(sunA) * 40, Math.max(elev, -0.2) * 60 + 8, 25);
+    const fx = focus?.x || 0, fz = focus?.z || 0;
+    this.sun.position.set(fx + Math.cos(sunA) * 60, Math.max(elev, -0.2) * 80 + 12, fz + 35);
     const daylight = THREE.MathUtils.clamp(elev * 2.2 + 0.25, 0, 1);
     this.daylight = daylight;
     this.sun.intensity = 0.15 + daylight * 2.2;
@@ -255,12 +265,57 @@ export class World {
     this.sun.color.setHex(elev < 0.15 ? 0xffb080 : 0xfff3dd);
     const night = daylight < 0.4 ? 1 : 0;
     for (const m of this.lampMaterials) m.emissiveIntensity = 1 + night * 3;
+    this.ambient.intensity = 0.08 + daylight * 0.1;
+    this.scenery?.update(dt, daylight, this.sun.position.clone().sub(new THREE.Vector3(fx, 0, fz)));
   }
 
   clockText() {
     const h = Math.floor(this.time * 24), m = Math.floor((this.time * 24 - h) * 60);
     return `${this.day}일차 ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
+}
+
+/** 프로시저럴 잔디 텍스처 (두 톤 얼룩 + 미세 점) */
+function grassTexture() {
+  const S = 512, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#86cc55';
+  ctx.fillRect(0, 0, S, S);
+  const rnd = mulberry32(5);
+  for (let i = 0; i < 900; i++) {
+    const r = 6 + rnd() * 26;
+    ctx.fillStyle = `hsla(${96 + rnd() * 14}, ${50 + rnd() * 20}%, ${48 + rnd() * 14}%, 0.35)`;
+    ctx.beginPath(); ctx.ellipse(rnd() * S, rnd() * S, r, r * (0.5 + rnd() * 0.6), rnd() * 3, 0, 7); ctx.fill();
+  }
+  for (let i = 0; i < 4000; i++) {
+    ctx.fillStyle = rnd() > 0.5 ? 'rgba(60,120,40,0.35)' : 'rgba(190,240,150,0.3)';
+    ctx.fillRect(rnd() * S, rnd() * S, 2, 2 + rnd() * 3);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(26, 26);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+function dirtTexture() {
+  const S = 256, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#d7bb84';
+  ctx.fillRect(0, 0, S, S);
+  const rnd = mulberry32(8);
+  for (let i = 0; i < 500; i++) {
+    ctx.fillStyle = `hsla(${34 + rnd() * 10}, ${35 + rnd() * 20}%, ${55 + rnd() * 20}%, 0.5)`;
+    ctx.beginPath(); ctx.arc(rnd() * S, rnd() * S, 1 + rnd() * 5, 0, 7); ctx.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(2, 2);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 function mulberry32(a) {

@@ -23,13 +23,13 @@
 | 🌐 **메타버스** | 방(농장)당 최대 50명. 다른 유니코의 위치·포즈·채팅이 실시간 동기화. 방 선택·이동 가능 (내 농장 데이터는 로컬 저장이라 방을 옮겨도 유지) |
 | 🦄 **감정표현** | 하단 "행동" 메뉴에서 환호·하트·인사·생각 등 공식 마스코트 포즈를 재생 (다른 플레이어에게도 보임) |
 | 📸 기타 | 미니맵, 찰칵(스크린샷 저장), 효과음(WebAudio 합성), 모바일 가상 조이스틱, 10초 자동 저장 |
+| 🎨 그래픽 | 하늘 돔·구름·지평선 언덕, 바람에 흔들리는 잔디 인스턴싱, 물결 연못, 프로시저럴 지면 텍스처, 블룸·SMAA·비네팅 후처리, 환경맵, 플레이어 추적 고해상도 그림자. 모바일은 자동으로 저사양 프리셋(`?quality=low/high`) |
 
-## 캐릭터 — 원본 벡터를 그대로 입체화
+## 캐릭터
 
-첨부된 디자인 가이드(AI 파일)의 유니코 벡터 도형을 PyMuPDF 로 추출해 **Blender(bpy)에서 조각별로 두께를 주고 그리기 순서대로 쌓아 올린 릴리프(종이공예/클레이) 3D 모델**로 만들었습니다. 원본의 선·색·비율이 100% 유지되며, 게임에서는 카메라 방향으로 빌보드 처리하고 이동 방향에 따라 정면·3/4·뒷면 모델(디자인 가이드의 턴어라운드 3종)을 전환합니다.
+현재 게임 캐릭터는 첨부된 디자인 가이드(AI 파일)의 유니코 벡터를 PyMuPDF 로 고해상도 투명 PNG 로 래스터한 **2.5D 스프라이트**입니다. 원본과 색·비율이 동일하고, 카메라를 향하는 평면에 그려 이동 방향에 따라 정면·3/4·뒷면 그림을 전환합니다. 물주기·안전모·환호·하트 등 14개 포즈를 감정표현과 액션에 씁니다 (`public/sprites/`).
 
-- 사용 포즈 14종: `idle, front, side, back, water, tablet, safety, cheer, heart, wave, think, lab, present, megaphone` (`public/models/unico_*.glb`, 포즈당 80~190KB)
-- 프리미티브 조합 로우폴리 버전(`blender/build_character_lowpoly.py`)도 실험했으나 원본 인상과 달라 기본 캐릭터에서는 제외했습니다 (`docs/screenshots/character_compare_lowpoly.jpg`).
+블렌더로 만든 입체 캐릭터(프리미티브 조합, 벡터 릴리프, 리메시 조형)는 원본과 인상이 달라 모두 폐기했습니다. 입체 캐릭터는 이미지→3D 생성 모델(Hunyuan3D, Tripo, Meshy 등)로 다시 만드는 것을 검토 중입니다.
 
 환경 에셋(나무·헛간·사일로·풍차·비닐하우스·센서·태양광·드론·트랙터·젖소·양·닭·작물 5종×3단계 등 24종)은 Blender 파이썬 스크립트로 프로시저럴 생성해 glTF 로 내보냈습니다. `.blend` 파일은 `blender/blend/` 에 있어 Blender 에서 바로 열어 수정할 수 있습니다.
 
@@ -55,7 +55,7 @@ npm start              # Node 서버가 dist 정적 파일 + WebSocket 을 함�
 ```bash
 pip install bpy pymupdf                               # Blender 5.x 파이썬 모듈
 python3 blender/build_all.py                          # 환경 에셋 24종 → public/models/*.glb, blender/blend/*.blend
-python3 blender/build_character_relief.py <유니코.ai>  # 캐릭터 포즈 → public/models/unico_*.glb
+python3 blender/render_character_sprites.py <유니코.ai>  # 캐릭터 포즈 → public/sprites/unico_*.png
 ```
 
 Blender 실행파일로도 가능합니다: `blender -b -P blender/build_all.py -- tractor cow`

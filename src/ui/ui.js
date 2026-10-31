@@ -113,7 +113,7 @@ export class UI {
 
   snapshot() {
     const g = this.game;
-    g.renderer.render(g.world.scene, g.camera);
+    g.postfx.render();
     const url = g.renderer.domElement.toDataURL('image/png');
     const a = document.createElement('a');
     a.href = url; a.download = `unico-farm-${Date.now()}.png`; a.click();

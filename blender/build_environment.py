@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy  # noqa: E402
 
 import common as C  # noqa: E402
-from common import box, cone, cylinder, empty, join, material, plane, prism, segment, sphere, torus  # noqa: E402
+from common import bevel, box, cone, cylinder, displace_noise, empty, join, material, organic, plane, prism, segment, shade_smooth, sphere, subdivide, torus  # noqa: E402
 
 F = -1
 
@@ -21,53 +21,62 @@ F = -1
 def tree_round():
     C.reset_scene()
     root = empty("Tree")
-    join("Trunk", [cylinder("t", material("wood_dark"), loc=(0, 0, 0.6), radius=0.16, depth=1.2, radius2=0.12, segments=10)], parent=root)
-    g = material("grass_dark")
-    g2 = material("grass")
-    join("Canopy", [
-        sphere("c1", g, loc=(0, 0, 1.75), radius=0.85, segments=14, rings=10),
-        sphere("c2", g2, loc=(0.45, 0.2, 2.1), radius=0.6, segments=12, rings=8),
-        sphere("c3", g2, loc=(-0.4, -0.25, 2.0), radius=0.55, segments=12, rings=8),
-        sphere("c4", g, loc=(0.05, -0.1, 2.5), radius=0.5, segments=12, rings=8),
+    trunk = join("Trunk", [
+        cylinder("t", material("wood_dark"), loc=(0, 0, 0.7), radius=0.17, depth=1.4, radius2=0.11, segments=14),
+        cylinder("root1", material("wood_dark"), loc=(0.12, 0.05, 0.08), radius=0.1, depth=0.25, rot=(0, 25, 0), segments=8),
+        cylinder("root2", material("wood_dark"), loc=(-0.1, -0.1, 0.08), radius=0.09, depth=0.25, rot=(15, -25, 0), segments=8),
     ], parent=root)
+    shade_smooth(trunk, 40)
+    g = material("grass_dark", roughness=0.9)
+    canopy = organic("Canopy", [
+        sphere("c1", g, loc=(0, 0, 1.85), radius=0.9, segments=16, rings=12),
+        sphere("c2", g, loc=(0.5, 0.25, 2.2), radius=0.65, segments=14, rings=10),
+        sphere("c3", g, loc=(-0.45, -0.3, 2.1), radius=0.6, segments=14, rings=10),
+        sphere("c4", g, loc=(0.05, -0.15, 2.65), radius=0.55, segments=14, rings=10),
+        sphere("c5", g, loc=(-0.1, 0.5, 2.4), radius=0.5, segments=14, rings=10),
+    ], g, voxel=0.09, smooth_iters=3, decimate=0.6, parent=root)
+    displace_noise(canopy, strength=0.16, scale=0.8, seed=1)
     return root
-
 
 def tree_pine():
     C.reset_scene()
     root = empty("Pine")
-    join("Trunk", [cylinder("t", material("wood_dark"), loc=(0, 0, 0.5), radius=0.14, depth=1.0, segments=10)], parent=root)
-    g = material("grass_dark")
-    join("Canopy", [
-        cone("a", g, loc=(0, 0, 1.3), radius=0.9, depth=1.2, segments=10),
-        cone("b", g, loc=(0, 0, 2.0), radius=0.7, depth=1.1, segments=10),
-        cone("c", g, loc=(0, 0, 2.65), radius=0.45, depth=0.9, segments=10),
-    ], parent=root)
+    trunk = join("Trunk", [cylinder("t", material("wood_dark"), loc=(0, 0, 0.6), radius=0.15, depth=1.2, radius2=0.1, segments=12)], parent=root)
+    shade_smooth(trunk, 40)
+    g = material("pine", "#4f9a4a", roughness=0.9)
+    canopy = organic("Canopy", [
+        cone("a", g, loc=(0, 0, 1.35), radius=0.95, depth=1.3, segments=14),
+        cone("b", g, loc=(0, 0, 2.05), radius=0.72, depth=1.2, segments=14),
+        cone("c", g, loc=(0, 0, 2.7), radius=0.48, depth=1.0, segments=14),
+    ], g, voxel=0.07, smooth_iters=2, decimate=0.6, parent=root)
+    displace_noise(canopy, strength=0.1, scale=0.5, seed=2)
     return root
-
 
 def bush():
     C.reset_scene()
     root = empty("Bush")
-    g, g2 = material("grass_dark"), material("grass")
-    join("BushMesh", [
-        sphere("a", g, loc=(0, 0, 0.35), radius=0.45, segments=12, rings=8),
-        sphere("b", g2, loc=(0.35, 0.1, 0.3), radius=0.32, segments=12, rings=8),
-        sphere("c", g2, loc=(-0.3, -0.15, 0.28), radius=0.3, segments=12, rings=8),
-    ], parent=root)
+    g = material("grass_dark", roughness=0.9)
+    b = organic("BushMesh", [
+        sphere("a", g, loc=(0, 0, 0.38), radius=0.48, segments=14, rings=10),
+        sphere("b", g, loc=(0.38, 0.1, 0.3), radius=0.34, segments=12, rings=8),
+        sphere("c", g, loc=(-0.32, -0.18, 0.28), radius=0.32, segments=12, rings=8),
+        sphere("d", g, loc=(0.05, 0.35, 0.3), radius=0.3, segments=12, rings=8),
+    ], g, voxel=0.05, smooth_iters=3, decimate=0.6, parent=root)
+    displace_noise(b, strength=0.08, scale=0.4, seed=3)
     return root
-
 
 def rock():
     C.reset_scene()
     root = empty("Rock")
-    s = material("stone")
-    join("RockMesh", [
-        sphere("a", s, loc=(0, 0, 0.25), radius=0.4, scale=(1.2, 0.9, 0.65), segments=8, rings=6, smooth=False),
-        sphere("b", s, loc=(0.3, 0.2, 0.2), radius=0.25, scale=(1, 1, 0.7), segments=7, rings=5, smooth=False),
-    ], parent=root)
+    st = material("stone", roughness=0.95)
+    r = organic("RockMesh", [
+        sphere("a", st, loc=(0, 0, 0.28), radius=0.42, scale=(1.2, 0.9, 0.7), segments=12, rings=8),
+        sphere("b", st, loc=(0.32, 0.2, 0.2), radius=0.26, scale=(1, 1, 0.75), segments=10, rings=6),
+        sphere("c", st, loc=(-0.25, -0.15, 0.18), radius=0.22, segments=10, rings=6),
+    ], st, voxel=0.05, smooth_iters=1, decimate=0.5, parent=root)
+    displace_noise(r, strength=0.07, scale=0.35, seed=4)
+    shade_smooth(r, angle_deg=35)
     return root
-
 
 def flower_patch():
     C.reset_scene()
@@ -100,51 +109,77 @@ def fence():
     """1 유닛 길이(2m) 펜스. X 방향으로 이어 붙임."""
     C.reset_scene()
     root = empty("Fence")
-    w = material("wood")
+    w = material("wood", roughness=0.85)
     parts = []
     for x in (-1.0, 1.0):
         parts.append(box("post", w, loc=(x, 0, 0.5), size=(0.14, 0.14, 1.0)))
         parts.append(cone("cap", w, loc=(x, 0, 1.06), radius=0.1, depth=0.12, segments=4, smooth=False))
     for z in (0.4, 0.8):
-        parts.append(box("rail", material("wood_dark"), loc=(0, 0, z), size=(2.0, 0.08, 0.12)))
-    join("FenceMesh", parts, parent=root)
+        parts.append(box("rail", material("wood_dark", roughness=0.85), loc=(0, 0, z), size=(2.0, 0.08, 0.12)))
+    f = join("FenceMesh", parts, parent=root)
+    bevel(f, 0.015, 2)
     return root
-
 
 def barn():
     C.reset_scene()
     root = empty("Barn")
-    red, roof, cream, wd = material("barn_red"), material("barn_roof"), material("cream"), material("wood_dark")
-    parts = [
-        box("base", red, loc=(0, 0, 1.4), size=(5.0, 6.0, 2.8)),
-        prism("roof", roof, loc=(0, 0, 2.8), width=5.6, depth=6.6, height=1.9),
-        box("trim", cream, loc=(0, F * 3.0, 1.4), size=(5.2, 0.05, 0.12)),
-        # 정면 X 자 문
-        box("door", wd, loc=(0, F * 3.03, 1.0), size=(1.8, 0.1, 2.0)),
-        box("door_x1", cream, loc=(0, F * 3.09, 1.0), size=(0.12, 0.04, 2.2), rot=(0, 0, 40)),
-        box("door_x2", cream, loc=(0, F * 3.09, 1.0), size=(0.12, 0.04, 2.2), rot=(0, 0, -40)),
-        box("loft", cream, loc=(0, F * 3.03, 3.3), size=(1.0, 0.1, 0.9)),
+    red, roof, cream, wd = material("barn_red", roughness=0.8), material("barn_roof", roughness=0.7), material("cream", roughness=0.8), material("wood_dark")
+    body = [box("base", red, loc=(0, 0, 1.4), size=(5.0, 6.0, 2.8))]
+    # 판자 홈 (정면/측면 얇은 어두운 줄)
+    for i in range(1, 10):
+        body.append(box("plank", material("barn_red_dark", "#b8433f"), loc=(-2.5 + i * 0.5, F * 3.001, 1.4), size=(0.03, 0.02, 2.8)))
+    for sx in (-1, 1):
+        for i in range(1, 12):
+            body.append(box("plank_s", material("barn_red_dark", "#b8433f"), loc=(sx * 2.501, -3 + i * 0.5, 1.4), size=(0.02, 0.03, 2.8)))
+    base = join("BarnBody", body, parent=root)
+    bevel(base, 0.04, 2)
+    roof_parts = [
+        prism("roof", roof, loc=(0, 0, 2.8), width=5.8, depth=6.8, height=2.0),
+        box("ridge", wd, loc=(0, 0, 4.8), size=(0.2, 7.0, 0.14)),
+        box("vane_post", material("steel_dark"), loc=(0, -2.2, 5.3), size=(0.05, 0.05, 0.9)),
+        cone("vane", material("steel_dark"), loc=(0.2, -2.2, 5.6), radius=0.12, depth=0.5, rot=(0, 90, 0), segments=4, smooth=False),
+    ]
+    rf = join("BarnRoof", roof_parts, parent=root)
+    bevel(rf, 0.03, 2)
+    detail = [
+        box("trim", cream, loc=(0, F * 3.0, 0.1), size=(5.2, 0.08, 0.2)),
+        box("door", wd, loc=(0, F * 3.05, 1.0), size=(1.9, 0.1, 2.0)),
+        box("door_frame_l", cream, loc=(-1.0, F * 3.08, 1.0), size=(0.12, 0.08, 2.1)),
+        box("door_frame_r", cream, loc=(1.0, F * 3.08, 1.0), size=(0.12, 0.08, 2.1)),
+        box("door_frame_t", cream, loc=(0, F * 3.08, 2.05), size=(2.1, 0.08, 0.12)),
+        box("door_x1", cream, loc=(0, F * 3.1, 1.0), size=(0.12, 0.04, 2.3), rot=(0, 0, 42)),
+        box("door_x2", cream, loc=(0, F * 3.1, 1.0), size=(0.12, 0.04, 2.3), rot=(0, 0, -42)),
+        box("loft", wd, loc=(0, F * 3.03, 3.3), size=(1.0, 0.1, 0.9)),
+        box("loft_frame", cream, loc=(0, F * 3.06, 3.3), size=(1.15, 0.06, 1.05)),
+        box("loft_in", wd, loc=(0, F * 3.09, 3.3), size=(0.95, 0.04, 0.85)),
     ]
     for sx in (-1, 1):
-        parts.append(box("window", cream, loc=(sx * 1.7, F * 3.03, 1.8), size=(0.8, 0.1, 0.8)))
-        parts.append(box("window_glass", material("glass", alpha=0.7), loc=(sx * 1.7, F * 3.08, 1.8), size=(0.6, 0.04, 0.6)))
-    join("BarnMesh", parts, parent=root)
+        detail.append(box("window", cream, loc=(sx * 1.7, F * 3.03, 1.8), size=(0.9, 0.1, 0.9)))
+        detail.append(box("window_glass", material("glass", alpha=0.75, roughness=0.1), loc=(sx * 1.7, F * 3.09, 1.8), size=(0.7, 0.04, 0.7)))
+        detail.append(box("window_x", cream, loc=(sx * 1.7, F * 3.11, 1.8), size=(0.05, 0.03, 0.75)))
+        detail.append(box("window_y", cream, loc=(sx * 1.7, F * 3.11, 1.8), size=(0.75, 0.03, 0.05)))
+    d = join("BarnDetail", detail, parent=root)
+    bevel(d, 0.012, 1)
     return root
-
 
 def silo():
     C.reset_scene()
     root = empty("Silo")
     parts = [
-        cylinder("body", material("cream"), loc=(0, 0, 2.0), radius=1.0, depth=4.0, segments=20),
-        sphere("dome", material("barn_red"), loc=(0, 0, 4.0), radius=1.05, scale=(1, 1, 0.6), segments=20, rings=10),
-        cylinder("band1", material("steel"), loc=(0, 0, 1.0), radius=1.03, depth=0.12, segments=20),
-        cylinder("band2", material("steel"), loc=(0, 0, 2.5), radius=1.03, depth=0.12, segments=20),
-        box("ladder", material("steel_dark"), loc=(0, 1.05, 2.0), size=(0.4, 0.06, 3.8)),
+        cylinder("body", material("cream", roughness=0.6), loc=(0, 0, 2.0), radius=1.0, depth=4.0, segments=32),
+        sphere("dome", material("barn_red", roughness=0.6), loc=(0, 0, 4.0), radius=1.05, scale=(1, 1, 0.6), segments=32, rings=14),
+        cylinder("band1", material("steel", roughness=0.4, metallic=0.5), loc=(0, 0, 1.0), radius=1.03, depth=0.12, segments=32),
+        cylinder("band2", material("steel", roughness=0.4, metallic=0.5), loc=(0, 0, 2.5), radius=1.03, depth=0.12, segments=32),
+        cylinder("band3", material("steel", roughness=0.4, metallic=0.5), loc=(0, 0, 3.9), radius=1.03, depth=0.12, segments=32),
+        cylinder("cap", material("steel_dark"), loc=(0, 0, 4.66), radius=0.18, depth=0.2, segments=12),
     ]
-    join("SiloMesh", parts, parent=root)
+    for i in range(8):
+        parts.append(box("rung", material("steel_dark"), loc=(0, 1.08, 0.5 + i * 0.5), size=(0.4, 0.05, 0.05)))
+    parts.append(box("rail_l", material("steel_dark"), loc=(-0.2, 1.08, 2.2), size=(0.05, 0.05, 4.0)))
+    parts.append(box("rail_r", material("steel_dark"), loc=(0.2, 1.08, 2.2), size=(0.05, 0.05, 4.0)))
+    m = join("SiloMesh", parts, parent=root)
+    bevel(m, 0.02, 2)
     return root
-
 
 def windmill():
     C.reset_scene()
@@ -169,94 +204,112 @@ def greenhouse():
     """비닐하우스 3동 (스마트팜) + 센서 폴 + 태양광 패널 + 급수탱크"""
     C.reset_scene()
     root = empty("SmartFarm")
-    film = material("film", alpha=0.45, roughness=0.3)
-    frame = material("steel")
+    film = material("film", alpha=0.42, roughness=0.15)
+    frame = material("steel", roughness=0.35, metallic=0.5)
     parts = []
     for i, y in enumerate((-3.2, 0.0, 3.2)):
-        # 반원 터널: 스케일된 실린더(가로로 눕힘), 아래 절반은 지면 아래
-        parts.append(cylinder(f"tunnel{i}", film, loc=(0, y, 0.0), radius=1.4, depth=8.0, rot=(0, 90, 0), scale=(1, 1.0, 1.0), segments=14))
-        for x in (-3.9, -1.3, 1.3, 3.9):
-            parts.append(torus(f"rib{i}", frame, loc=(x, y, 0), major=1.42, minor=0.04, rot=(0, 90, 0), segments=18, ring=6))
+        parts.append(cylinder(f"tunnel{i}", film, loc=(0, y, 0.0), radius=1.4, depth=8.0, rot=(0, 90, 0), segments=24))
+        for x in (-3.9, -2.6, -1.3, 0.0, 1.3, 2.6, 3.9):
+            parts.append(torus(f"rib{i}", frame, loc=(x, y, 0), major=1.42, minor=0.035, rot=(0, 90, 0), segments=28, ring=8))
         parts.append(box("ridge", frame, loc=(0, y, 1.42), size=(8.0, 0.06, 0.06)))
-        parts.append(box("door", material("steel_dark"), loc=(F * -4.0 * -1, y, 0.6), size=(0.05, 0.9, 1.2)))
-    # 지면 아래 절반 제거 대신 바닥판으로 가림
+        parts.append(box("side_a", frame, loc=(0, y - 1.3, 0.55), size=(8.0, 0.05, 0.05)))
+        parts.append(box("side_b", frame, loc=(0, y + 1.3, 0.55), size=(8.0, 0.05, 0.05)))
+        parts.append(box("door", material("steel_dark"), loc=(4.0, y, 0.6), size=(0.05, 0.9, 1.2)))
+        parts.append(box("door_frame", frame, loc=(4.01, y, 0.6), size=(0.06, 1.0, 1.3)))
     parts.append(box("floor", material("soil"), loc=(0, 0, -0.02), size=(8.4, 9.2, 0.04)))
+    # 내부 작물 베드 (초록 줄)
+    for i, y in enumerate((-3.2, 0.0, 3.2)):
+        for dy in (-0.6, 0.0, 0.6):
+            parts.append(box("bed", material("leaf", roughness=0.9), loc=(0, y + dy, 0.18), size=(7.4, 0.35, 0.3)))
     join("Greenhouses", parts, parent=root)
-    # 센서 폴 (온습도 센서 + 안테나)
     sp = [
-        cylinder("pole", frame, loc=(5.0, -4.5, 1.2), radius=0.05, depth=2.4, segments=8),
-        box("sensor", material("white"), loc=(5.0, -4.5, 2.3), size=(0.3, 0.3, 0.4)),
-        sphere("led", material("tomato", emission=2.0), loc=(5.0, -4.65, 2.3), radius=0.05, segments=8, rings=6),
-        segment("antenna", material("steel_dark"), (5.0, -4.5, 2.5), (5.0, -4.5, 3.1), 0.015, cap=False, segments=6),
-        sphere("ant_tip", material("tomato", emission=2.0), loc=(5.0, -4.5, 3.12), radius=0.04, segments=8, rings=6),
+        cylinder("pole", frame, loc=(5.0, -4.5, 1.2), radius=0.05, depth=2.4, segments=10),
+        box("sensor", material("white", roughness=0.4), loc=(5.0, -4.5, 2.3), size=(0.3, 0.3, 0.4)),
+        sphere("led", material("tomato", emission=2.0), loc=(5.0, -4.65, 2.3), radius=0.05, segments=10, rings=8),
+        segment("antenna", material("steel_dark"), (5.0, -4.5, 2.5), (5.0, -4.5, 3.1), 0.015, cap=False, segments=8),
+        sphere("ant_tip", material("tomato", emission=2.0), loc=(5.0, -4.5, 3.12), radius=0.04, segments=10, rings=8),
+        box("panel", material("steel_dark"), loc=(5.16, -4.5, 1.5), size=(0.04, 0.3, 0.4)),
     ]
-    join("SensorPole", sp, parent=root)
-    # 태양광 패널
+    sen = join("SensorPole", sp, parent=root)
+    bevel(sen, 0.015, 2)
     solar = [
         box("stand", frame, loc=(5.5, 1.0, 0.5), size=(0.1, 0.1, 1.0)),
-        box("panel", material("solar", roughness=0.25, metallic=0.3), loc=(5.5, 1.0, 1.1), size=(2.2, 1.4, 0.06), rot=(0, -30, 0)),
-        box("grid", material("steel"), loc=(5.5, 1.0, 1.13), size=(2.25, 0.04, 0.02), rot=(0, -30, 0)),
+        box("panel", material("solar", roughness=0.15, metallic=0.4), loc=(5.5, 1.0, 1.1), size=(2.2, 1.4, 0.06), rot=(0, -30, 0)),
     ]
-    join("SolarPanel", solar, parent=root)
-    # 급수 탱크
+    for i in range(1, 4):
+        solar.append(box("grid_x", material("steel"), loc=(5.5, 1.0 - 0.7 + i * 0.35, 1.135), size=(2.25, 0.02, 0.02), rot=(0, -30, 0)))
+    for i in range(1, 6):
+        solar.append(box("grid_y", material("steel"), loc=(5.5 - 1.1 + i * 0.366, 1.0, 1.135 + (1.1 - i * 0.366) * 0.0), size=(0.02, 1.45, 0.02), rot=(0, -30, 0)))
+    so = join("SolarPanel", solar, parent=root)
+    bevel(so, 0.01, 1)
     tank = [
-        cylinder("tank", material("water", alpha=0.85), loc=(5.5, 4.0, 1.0), radius=0.7, depth=1.6, segments=14),
-        cylinder("lid", frame, loc=(5.5, 4.0, 1.82), radius=0.72, depth=0.08, segments=14),
-        segment("pipe", frame, (4.9, 4.0, 0.3), (4.3, 3.2, 0.3), 0.05, cap=False, segments=6),
+        cylinder("tank", material("water_tank", "#5fb8e3", alpha=0.9, roughness=0.2), loc=(5.5, 4.0, 1.0), radius=0.7, depth=1.6, segments=28),
+        cylinder("lid", frame, loc=(5.5, 4.0, 1.82), radius=0.72, depth=0.08, segments=28),
+        segment("pipe", frame, (4.9, 4.0, 0.3), (4.3, 3.2, 0.3), 0.05, cap=False, segments=8),
+        torus("band", frame, loc=(5.5, 4.0, 0.6), major=0.71, minor=0.025, segments=28),
     ]
-    join("WaterTank", tank, parent=root)
+    tk = join("WaterTank", tank, parent=root)
+    bevel(tk, 0.02, 2)
     return root
-
 
 def market_stall():
     C.reset_scene()
     root = empty("Market")
-    w, wd = material("wood"), material("wood_dark")
+    w, wd = material("wood", roughness=0.8), material("wood_dark", roughness=0.8)
     parts = [
         box("counter", w, loc=(0, 0, 0.5), size=(3.0, 1.2, 1.0)),
-        box("counter_top", wd, loc=(0, 0, 1.02), size=(3.2, 1.4, 0.06)),
+        box("counter_top", wd, loc=(0, 0, 1.02), size=(3.2, 1.4, 0.08)),
+        box("skirt", wd, loc=(0, F * 0.61, 0.5), size=(3.0, 0.02, 0.9)),
     ]
     for x in (-1.4, 1.4):
-        parts.append(box("pole", wd, loc=(x, 0.5, 1.4), size=(0.1, 0.1, 2.8)))
-    # 줄무늬 차양
+        parts.append(cylinder("pole", wd, loc=(x, 0.5, 1.4), radius=0.06, depth=2.8, segments=12))
     for i in range(6):
-        c = material("awning_red") if i % 2 == 0 else material("awning_white")
+        c = material("awning_red", roughness=0.7) if i % 2 == 0 else material("awning_white", roughness=0.7)
         parts.append(box("awning", c, loc=(-1.5 + 0.3 + i * 0.52, 0.0, 2.75), size=(0.52, 1.9, 0.06), rot=(12, 0, 0)))
-    # 진열 상자 + 작물
+        parts.append(cylinder("scallop", c, loc=(-1.5 + 0.3 + i * 0.52, F * 0.93, 2.55), radius=0.26, depth=0.06, rot=(90, 0, 0), segments=16))
     for i, col in enumerate(("tomato", "carrot", "corn", "cabbage")):
         x = -1.1 + i * 0.72
         parts.append(box("crate", wd, loc=(x, -0.2, 1.17), size=(0.6, 0.6, 0.25)))
         for j in range(3):
-            parts.append(sphere("goods", material(col), loc=(x - 0.18 + j * 0.18, -0.2, 1.33), radius=0.1, segments=8, rings=6))
+            for k in range(2):
+                parts.append(sphere("goods", material(col, roughness=0.5), loc=(x - 0.18 + j * 0.18, -0.32 + k * 0.24, 1.33), radius=0.1, segments=12, rings=8))
     parts.append(box("sign", material("cream"), loc=(0, 0.55, 2.2), size=(2.0, 0.06, 0.5)))
-    join("MarketMesh", parts, parent=root)
+    parts.append(box("sign_frame", wd, loc=(0, 0.58, 2.2), size=(2.1, 0.04, 0.6)))
+    m = join("MarketMesh", parts, parent=root)
+    bevel(m, 0.02, 2)
     return root
-
 
 def well():
     C.reset_scene()
     root = empty("Well")
-    parts = [
-        cylinder("wall", material("stone"), loc=(0, 0, 0.45), radius=0.7, depth=0.9, segments=14),
-        cylinder("water", material("water"), loc=(0, 0, 0.6), radius=0.6, depth=0.1, segments=14),
+    st = material("stone", roughness=0.95)
+    parts = [cylinder("wall", st, loc=(0, 0, 0.45), radius=0.7, depth=0.9, segments=24)]
+    for i in range(14):  # 돌 블록
+        a = math.radians(i * 360 / 14)
+        parts.append(sphere("stone", material("stone2", "#8f9194", roughness=0.95), loc=(math.cos(a) * 0.68, math.sin(a) * 0.68, 0.3 + (i % 2) * 0.35), radius=0.17, scale=(1, 1, 0.8), segments=10, rings=6))
+    parts += [
+        cylinder("water", material("water", roughness=0.1), loc=(0, 0, 0.6), radius=0.6, depth=0.1, segments=24),
         box("post1", material("wood"), loc=(-0.6, 0, 1.3), size=(0.12, 0.12, 1.6)),
         box("post2", material("wood"), loc=(0.6, 0, 1.3), size=(0.12, 0.12, 1.6)),
-        prism("roof", material("barn_roof"), loc=(0, 0, 2.05), width=1.8, depth=1.6, height=0.5),
-        cylinder("axle", material("wood_dark"), loc=(0, 0, 1.7), radius=0.06, depth=1.3, rot=(0, 90, 0), segments=8),
-        cylinder("bucket", material("steel"), loc=(0, 0, 1.0), radius=0.15, depth=0.25, segments=10),
+        prism("roof", material("barn_roof"), loc=(0, 0, 2.05), width=1.9, depth=1.7, height=0.55),
+        cylinder("axle", material("wood_dark"), loc=(0, 0, 1.7), radius=0.06, depth=1.3, rot=(0, 90, 0), segments=10),
+        cylinder("crank", material("steel_dark"), loc=(0.75, 0, 1.75), radius=0.03, depth=0.3, rot=(90, 0, 0), segments=8),
+        cylinder("bucket", material("steel", metallic=0.4, roughness=0.4), loc=(0, 0, 1.0), radius=0.15, depth=0.25, segments=14),
+        segment("rope", material("hay_dark"), (0, 0, 1.7), (0, 0, 1.12), 0.012, cap=False),
     ]
-    join("WellMesh", parts, parent=root)
+    m = join("WellMesh", parts, parent=root)
+    bevel(m, 0.02, 2)
     return root
-
 
 def sign_post():
     C.reset_scene()
     root = empty("Sign")
-    join("SignMesh", [
+    m = join("SignMesh", [
         box("post", material("wood"), loc=(0, 0, 0.7), size=(0.12, 0.12, 1.4)),
         box("board", material("cream"), loc=(0, F * 0.08, 1.2), size=(1.2, 0.06, 0.5)),
         box("board2", material("hay"), loc=(0, F * 0.08, 0.75), size=(0.9, 0.06, 0.35), rot=(0, 0, -8)),
     ], parent=root)
+    bevel(m, 0.02, 2)
     return root
 
 
@@ -279,10 +332,11 @@ def coop():
 def trough():
     C.reset_scene()
     root = empty("Trough")
-    join("TroughMesh", [
+    m = join("TroughMesh", [
         box("base", material("wood_dark"), loc=(0, 0, 0.25), size=(1.6, 0.6, 0.5)),
         box("inner", material("hay"), loc=(0, 0, 0.47), size=(1.4, 0.45, 0.1)),
     ], parent=root)
+    bevel(m, 0.02, 2)
     return root
 
 
@@ -369,6 +423,7 @@ def cow():
         sphere("spot2", spot, loc=(-0.3, -0.45, 0.15), radius=0.26, scale=(1, 1, 0.8), segments=12, rings=8),
         sphere("udder", pink, loc=(0, 0.35, -0.45), radius=0.22, scale=(1, 1.2, 0.7), segments=12, rings=8),
     ], parent=body)
+    subdivide(obj_by("BodyMesh"), 1)
     head = empty("Head", loc=(0, F * 0.9, 0.3), parent=body)
     join("HeadMesh", [
         sphere("skull", w, loc=(0, 0, 0), radius=0.32, scale=(1, 1.1, 0.95), segments=16, rings=12),
@@ -474,7 +529,8 @@ def tractor():
         # 뒤 쟁기 연결부
         box("hitch", sd, loc=(0, 1.95, 0.5), size=(0.3, 0.4, 0.15)),
     ]
-    join("TractorBody", body, parent=root)
+    tb = join("TractorBody", body, parent=root)
+    bevel(tb, 0.03, 2)
 
     def wheel(name, loc, r, w):
         piv = empty(name, loc=loc, parent=root)
@@ -519,7 +575,7 @@ def drone():
 def wheelbarrow():
     C.reset_scene()
     root = empty("Wheelbarrow")
-    join("WheelbarrowMesh", [
+    m = join("WheelbarrowMesh", [
         box("tub", material("tractor_green"), loc=(0, 0, 0.45), size=(0.8, 1.0, 0.4)),
         box("tub_in", material("soil"), loc=(0, 0, 0.6), size=(0.7, 0.9, 0.1)),
         cylinder("wheel", material("tire"), loc=(0, F * 0.6, 0.25), radius=0.25, depth=0.1, rot=(0, 90, 0), segments=12),
@@ -528,10 +584,47 @@ def wheelbarrow():
         box("legL", material("steel_dark"), loc=(-0.3, 0.3, 0.12), size=(0.05, 0.05, 0.25)),
         box("legR", material("steel_dark"), loc=(0.3, 0.3, 0.12), size=(0.05, 0.05, 0.25)),
     ], parent=root)
+    bevel(m, 0.02, 2)
+    return root
+
+
+def obj_by(name):
+    return bpy.context.scene.objects[name]
+
+
+def grass_tuft():
+    """잔디 포기 (게임에서 수천 개 인스턴싱)"""
+    C.reset_scene()
+    root = empty("Grass")
+    import random
+    rnd = random.Random(11)
+    parts = []
+    for i in range(6):
+        a = rnd.uniform(0, 6.28)
+        r = rnd.uniform(0.0, 0.12)
+        h = rnd.uniform(0.28, 0.5)
+        col = material("grass_blade", "#7fc84f", roughness=0.9) if i % 2 else material("grass_blade2", "#9ad95a", roughness=0.9)
+        parts.append(cone("blade", col, loc=(math.cos(a) * r, math.sin(a) * r, h / 2), radius=0.035, depth=h, rot=(rnd.uniform(-25, 25), rnd.uniform(-25, 25), 0), segments=5, smooth=False))
+    join("GrassMesh", parts, parent=root)
+    return root
+
+
+def cloud():
+    C.reset_scene()
+    root = empty("Cloud")
+    w = material("cloud", "#ffffff", roughness=1.0, emission=0.15)
+    c = organic("CloudMesh", [
+        sphere("a", w, loc=(0, 0, 0), radius=1.2, scale=(1.3, 1, 0.8), segments=14, rings=10),
+        sphere("b", w, loc=(1.3, 0.2, 0.2), radius=0.9, segments=12, rings=8),
+        sphere("c", w, loc=(-1.2, -0.1, 0.1), radius=0.85, segments=12, rings=8),
+        sphere("d", w, loc=(0.3, 0.1, 0.7), radius=0.8, segments=12, rings=8),
+        sphere("e", w, loc=(2.2, 0, -0.1), radius=0.6, segments=12, rings=8),
+    ], w, voxel=0.12, smooth_iters=4, decimate=0.5, parent=root)
     return root
 
 
 ASSETS = {
+    "grass_tuft": grass_tuft, "cloud": cloud,
     "tree": tree_round, "pine": tree_pine, "bush": bush, "rock": rock, "flowers": flower_patch, "hay_bale": hay_bale,
     "fence": fence, "barn": barn, "silo": silo, "windmill": windmill, "smartfarm": greenhouse, "market": market_stall,
     "well": well, "sign": sign_post, "coop": coop, "trough": trough,

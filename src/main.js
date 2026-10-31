@@ -19,22 +19,26 @@ import { saveGame, loadSave, clearSave } from './game/save.js';
 import { Minimap } from './ui/minimap.js';
 import { randomName } from './game/names.js';
 import { Juice } from './game/juice.js';
+import { PostFX } from './game/postfx.js';
+import { pickQuality } from './game/quality.js';
 
 class Game {
   constructor(canvas, assets, name) {
     this.playerName = name;
     this.assets = assets;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.quality = pickQuality();
+    this.renderer.setPixelRatio(this.quality.pixelRatio);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 300);
+    this.renderer.toneMappingExposure = 1.0;
+    this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
     this.input = new Input(canvas);
     this.audio = new Audio();
-    this.world = new World(assets, this.renderer);
+    this.world = new World(assets, this.renderer, this.quality);
+    this.postfx = new PostFX(this.renderer, this.world.scene, this.camera, this.quality);
     this.followCam = new FollowCamera(this.camera);
     this.economy = new Economy();
     this.quests = new Quests();
@@ -70,6 +74,7 @@ class Game {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.postfx?.setSize(w, h);
   }
 
   restore() {
@@ -113,8 +118,8 @@ class Game {
     if (input.justPressed('Escape') && this.ui.panel) this.ui.closePanel();
     if (input.justPressed('KeyT')) this.ui.chatInput.focus();
 
-    this.world.update(dt);
     const pp = this.player.position;
+    this.world.update(dt, this.tractor.driving ? this.tractor.riderGroup.position : pp);
     // 상호작용 후보 (우선순위: 운전 > 스마트팜 > NPC > 트랙터 > 밭 > 목장)
     let prompt = null;
     prompt = this.tractor.update(dt, input, pp) || prompt;
@@ -142,7 +147,7 @@ class Game {
     this.ui.updateHud();
     this.saveTimer += dt;
     if (this.saveTimer > 10) { this.saveTimer = 0; saveGame(this); }
-    this.renderer.render(this.world.scene, this.camera);
+    this.postfx.render();
     input.endFrame();
   }
 }

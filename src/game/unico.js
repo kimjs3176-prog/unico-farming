@@ -88,7 +88,7 @@ export class Unico {
     const toCam = Math.atan2(dx, dz);
     this.group.rotation.y = toCam;
     const pitch = Math.atan2(camera.position.y - (p.y + 1.0), Math.hypot(dx, dz));
-    this.tint.setScalar(0.35 + 0.65 * daylight).lerp(new THREE.Color(0.6, 0.7, 1.0), (1 - daylight) * 0.35);
+    this.tint.setScalar(0.3 + 0.62 * daylight).lerp(new THREE.Color(0.6, 0.7, 1.0), (1 - daylight) * 0.35);
 
     if (this.action && this.t > this.actionUntil) this.action = null;
     if (this.bubble && this.t > this.bubbleUntil) { this.group.remove(this.bubble); this.bubble.userData.dispose(); this.bubble = null; }

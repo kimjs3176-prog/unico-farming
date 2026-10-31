@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 /** 블렌더에서 생성한 GLB 목록 (public/models) */
 export const ENV_MODELS = [
   'tree', 'pine', 'bush', 'rock', 'flowers', 'hay_bale', 'fence', 'barn', 'silo', 'windmill', 'smartfarm',
-  'market', 'well', 'sign', 'coop', 'trough', 'plot', 'crops', 'cow', 'chicken', 'sheep', 'tractor', 'drone', 'wheelbarrow',
+  'market', 'well', 'sign', 'coop', 'trough', 'plot', 'crops', 'cow', 'chicken', 'sheep', 'tractor', 'drone', 'wheelbarrow', 'cloud',
 ];
 /** 원본 마스코트 벡터를 고해상도 투명 PNG 로 래스터한 유니코 포즈 (public/sprites) */
 export const UNICO_POSES = ['idle', 'front', 'side', 'back', 'water', 'tablet', 'safety', 'cheer', 'heart', 'wave', 'think', 'lab', 'present', 'megaphone'];
@@ -73,7 +73,8 @@ export class Assets {
     const W = H * s.aspect;
     const geo = new THREE.PlaneGeometry(W, H);
     geo.translate(0, H / 2 - H * SPRITE_MARGIN, 0);
-    const mat = new THREE.MeshBasicMaterial({ map: s.texture, transparent: true, alphaTest: 0.02, side: THREE.DoubleSide, toneMapped: false });
+    const mat = new THREE.MeshBasicMaterial({ map: s.texture, transparent: true, alphaTest: 0.02, side: THREE.DoubleSide, toneMapped: true });
+    mat.color.setScalar(0.92);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = false;
