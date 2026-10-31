@@ -1,4 +1,10 @@
 import { CROPS, PRODUCTS, FEED_PRICE } from '../game/sim/crops.js';
+import { ITEMS, CATEGORY_NAMES, itemsOf } from '../game/sim/items.js';
+import { BOOK_CATS, COMPLETE_REWARD } from '../game/sim/collection.js';
+import { VILLAGERS } from '../game/sim/villagers.js';
+import { RICE_STAGES, WATER_MAX } from '../game/sim/rice.js';
+
+const anyItem = (k) => CROPS[k] || PRODUCTS[k] || ITEMS[k];
 
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 
@@ -69,6 +75,7 @@ export class UI {
     mk('🦄', '행동', () => this.toggleEmotes());
     mk('💬', '말하기', () => this.chatInput.focus());
     mk('🛒', '장터', () => this.openMarket());
+    mk('📖', '도감', () => this.openBook());
     this.bar.append(h('div', 'sep'));
     mk('🏡', '농장 방', () => this.openRooms());
     this.soundBtn = mk('🔊', '소리', () => { game.audio.enabled = !game.audio.enabled; this.soundBtn.firstChild.textContent = game.audio.enabled ? '🔊' : '🔇'; });
@@ -151,6 +158,130 @@ export class UI {
       list.append(h('div', 'row', '서버에 연결되어 있지 않아요 (오프라인 모드). 혼자서도 농장은 즐길 수 있어요!'));
     }
   }
+
+  // ---------------------------------------------------------------- 주민 대화 (동물의 숲풍)
+  openVillager(e, line) {
+    const g = this.game, v = g.villagers, id = e.id, info = VILLAGERS[id];
+    const p = this.openPanel(`🦄 ${e.n.name}`);
+    const render = () => {
+      p.querySelectorAll('.body').forEach((x) => x.remove());
+      const body = h('div', 'body');
+      const hearts = v.hearts(id);
+      body.append(h('div', 'villager-line', `“${esc(line)}”`));
+      body.append(h('div', 'row', `<span class="nm">우정 ${'❤️'.repeat(hearts)}${'🤍'.repeat(5 - hearts)}</span><span class="qty">${v.state[id].friendship}/100 · 성격 ${info.personality}</span>`));
+      const req = v.requestFor(id, g.world.day, g.npcs.requestPool());
+      const acts = h('div', 'room-list');
+      if (!req.done) {
+        const have = g.economy.count(req.item);
+        const b = h('button', have >= req.n ? 'cur' : '', `📝 부탁: ${v.describeRequest(req)}<small>보유 ${have}/${req.n}</small>`);
+        b.disabled = have < req.n;
+        b.onclick = () => {
+          if (!g.economy.take(req.item, req.n)) return;
+          const r = v.fulfill(id);
+          g.economy.earn(r.reward);
+          g.audio.play('coin');
+          this.toast(`🙏 ${e.n.name}: 고마워! +${r.reward}🪙, 우정 +${r.gained}`);
+          g.npcs.applyRewards(e, r);
+          render();
+        };
+        acts.append(b);
+      } else acts.append(h('button', '', `✅ 오늘 부탁 완료<small>내일 또 놀러 와!</small>`));
+      const gift = h('button', '', `🎁 선물하기<small>좋아하는 것: ${info.likes.map((k) => anyItem(k)?.emoji || '').join(' ')}</small>`);
+      gift.disabled = v.state[id].lastGift === g.world.day;
+      gift.onclick = () => this.openGiftPicker(e);
+      acts.append(gift);
+      if (id === 'merchant') { const m = h('button', '', '🛒 장터 열기<small>사고 팔기</small>'); m.onclick = () => this.openMarket(); acts.append(m); }
+      if (id === 'guide') { const q = h('button', '', '📜 퀘스트<small>할 일 보기</small>'); q.onclick = () => this.openQuests(); acts.append(q); }
+      body.append(acts);
+      p.append(body);
+    };
+    render();
+  }
+
+  openGiftPicker(e) {
+    const g = this.game, eco = g.economy;
+    const p = this.openPanel(`🎁 ${e.n.name}에게 무엇을 줄까요?`);
+    const grid = h('div', 'seed-grid');
+    const all = { ...eco.inventory.crops, ...eco.inventory.products, ...eco.inventory.items };
+    let any = false;
+    for (const [k, n] of Object.entries(all)) {
+      if (!n || ITEMS[k]?.cat === 'seed') continue;
+      any = true;
+      const it = anyItem(k);
+      const liked = VILLAGERS[e.id].likes.includes(k);
+      const b = h('button', '', `${it.emoji} ${it.name}${liked ? ' 💕' : ''}<span class="q">${n}개</span>`);
+      b.onclick = () => {
+        if (!eco.take(k, 1)) return;
+        const r = g.villagers.gift(e.id, k, g.world.day);
+        e.u.playAction(r.liked ? 'cheer' : 'heart', 1.8);
+        e.u.say(r.liked ? '와아! 이거 정말 좋아해! 💕' : '고마워, 잘 쓸게!', 3);
+        g.audio.play(r.liked ? 'win' : 'coin');
+        this.toast(`🎁 ${it.name} 선물! 우정 +${r.gained}${r.liked ? ' (아주 좋아해요!)' : ''}`);
+        g.npcs.applyRewards(e, r);
+        this.closePanel();
+      };
+      grid.append(b);
+    }
+    if (!any) grid.append(h('div', 'row', '줄 수 있는 물건이 없어요. 작물·과일·물고기를 모아 보세요!'));
+    p.append(grid);
+  }
+
+  // ---------------------------------------------------------------- 도감
+  openBook(cat = 'fish') {
+    const g = this.game, c = g.collection;
+    const p = this.openPanel('📖 유니코 도감');
+    const tabs = h('div', 'book-tabs');
+    for (const k of BOOK_CATS) {
+      const pr = c.progress(k);
+      const t = h('button', k === cat ? '' : 'ghost', `${CATEGORY_NAMES[k]} ${pr.got}/${pr.total}`);
+      t.onclick = () => this.openBook(k);
+      tabs.append(t);
+    }
+    p.append(tabs);
+    const grid = h('div', 'book-grid');
+    for (const k of itemsOf(cat)) {
+      const it = ITEMS[k], e = c.entries[k];
+      grid.append(h('div', `book-cell${e ? '' : ' locked'}`, e
+        ? `<span class="em">${it.emoji}</span><b>${it.name}</b><small>${e.count}마리·개${e.best ? ` · 최대 ${e.best}cm` : ''}</small><small>${'⭐'.repeat(it.rarity || 1)}</small>`
+        : `<span class="em">❔</span><b>???</b><small>${'⭐'.repeat(it.rarity || 1)}</small>`));
+    }
+    p.append(grid);
+    const pr = c.progress(cat);
+    p.append(h('h3', '', pr.got === pr.total ? `🏅 ${CATEGORY_NAMES[cat]} 도감 완성! (보상 ${COMPLETE_REWARD[cat]}🪙 지급됨)` : `모두 모으면 보상 ${COMPLETE_REWARD[cat]}🪙 · 힌트: ${cat === 'fish' ? '비 오는 날·밤에 희귀한 물고기' : cat === 'bug' ? '밤에는 반딧불이, 나무를 흔들면 풍뎅이' : '과수원 나무는 하루 한 번'}`));
+  }
+
+  // ---------------------------------------------------------------- 논 상태 / 탈곡
+  showRice(s, sim) {
+    if (!this.ricePanel) { this.ricePanel = h('div', 'smart-panel rice-panel'); this.root.append(this.ricePanel); }
+    const st = s.state === 'growing' ? RICE_STAGES[s.stage] : null;
+    const names = { dry: '마른 논', tilled: '갈아 둔 논', flooded: '물 댄 논 (모내기 준비)', growing: st?.name, ripe: '황금 들녘 (수확!)' };
+    const band = st ? `<div class="band" style="left:${(st.water[0] / WATER_MAX) * 100}%;width:${((st.water[1] - st.water[0]) / WATER_MAX) * 100}%"></div>` : '';
+    const ok = !st || (s.water >= st.water[0] && s.water <= st.water[1]);
+    const html = `<h3>🌾 ${names[s.state]}</h3>
+      <div class="gauge${ok ? '' : ' bad'}"><div class="lbl"><span>물 높이</span><span>${s.water.toFixed(1)}cm${st ? ` (적정 ${st.water[0]}~${st.water[1]})` : ''}</span></div><div class="track">${band}<div class="pin" style="left:calc(${(s.water / WATER_MAX) * 100}% - 3px)"></div></div></div>
+      ${s.state === 'growing' ? `<div class="gauge"><div class="lbl"><span>성장</span><span>${s.stage + 1}/4 단계 ${Math.round(s.progress * 100)}%</span></div><div class="track"><div class="band" style="left:0;width:${((s.stage + s.progress) / 4) * 100}%"></div></div></div>
+      <div class="lbl-row">품질 ${Math.round(s.quality)} · 잡초 ${'🌿'.repeat(s.weeds) || '없음'}</div>` : ''}
+      <div class="lbl-row">농사 숙련도 Lv.${sim.skillLevel}</div>`;
+    if (html !== this.riceHtml) { this.ricePanel.innerHTML = html; this.riceHtml = html; }
+  }
+  hideRice() { this.ricePanel?.remove(); this.ricePanel = null; this.riceHtml = null; }
+
+  showThresh(onMash) {
+    this.hideThresh();
+    const p = h('div', 'thresh-panel');
+    p.innerHTML = '<h3>⚙️ 탈곡</h3><div class="track big"><div class="fill"></div></div><div class="t"></div>';
+    const b = h('button', 'gold mash', '👊 연타!');
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); onMash(); });
+    p.append(b);
+    this.root.append(p);
+    this.threshPanel = p;
+  }
+  updateThresh(gauge, left) {
+    if (!this.threshPanel) return;
+    this.threshPanel.querySelector('.fill').style.width = `${Math.round(gauge * 100)}%`;
+    this.threshPanel.querySelector('.t').textContent = `남은 시간 ${Math.max(0, left).toFixed(1)}초`;
+  }
+  hideThresh() { this.threshPanel?.remove(); this.threshPanel = null; }
 
   snapshot() {
     const g = this.game;
@@ -248,13 +379,21 @@ export class UI {
       const fb5 = h('button', '', '5개'); fb5.disabled = eco.money < FEED_PRICE * 5; fb5.onclick = () => { eco.buyFeed(5); g.audio.play('coin'); render(); };
       fr.append(fb, fb5);
       seeds.append(fr);
+      const rs = ITEMS.rice_seed;
+      const rr = h('div', 'row', `<span>${rs.emoji}</span><span class="nm">${rs.name} <span class="qty">보유 ${eco.count('rice_seed')}</span></span><span class="pr">${rs.price}🪙</span>`);
+      const rb1 = h('button', '', '1개'); rb1.disabled = eco.money < rs.price; rb1.onclick = () => { eco.buyItem('rice_seed', 1); g.audio.play('coin'); render(); };
+      const rb3 = h('button', '', '3개'); rb3.disabled = eco.money < rs.price * 3; rb3.onclick = () => { eco.buyItem('rice_seed', 3); g.audio.play('coin'); render(); };
+      rr.append(rb1, rb3);
+      seeds.append(rr);
       body.append(seeds);
       body.append(h('h3', '', '📈 오늘의 시세 · 판매 (매일 변동, 수요 이벤트 시 2배)'));
       const sells = h('div', 'rows');
       let any = false;
-      for (const [k, c] of Object.entries({ ...CROPS, ...PRODUCTS })) {
-        const have = (eco.inventory.crops[k] || eco.inventory.products[k] || 0);
-        const tr = eco.prices[k].trend;
+      const sellable = { ...CROPS, ...PRODUCTS };
+      for (const [k, n] of Object.entries(eco.inventory.items)) if (n > 0 && ITEMS[k].cat !== 'seed') sellable[k] = ITEMS[k];
+      for (const [k, c] of Object.entries(sellable)) {
+        const have = eco.count(k);
+        const tr = eco.prices[k]?.trend || 0;
         const trend = tr > 0 ? '<span class="trend-up">▲</span>' : tr < 0 ? '<span class="trend-down">▼</span>' : '–';
         const ev = eco.event?.item === k ? ' 🔥' : '';
         const r = h('div', 'row', `<span>${c.emoji}</span><span class="nm">${c.name}${ev} <span class="qty">보유 ${have}</span></span><span class="pr">${eco.sellPrice(k)}🪙 ${trend}</span>`);
@@ -266,7 +405,7 @@ export class UI {
         any = any || have > 0;
       }
       body.append(sells);
-      if (any) { const all = h('button', 'gold', '🧺 모두 판매하기'); all.style.marginTop = '10px'; all.onclick = () => { const n = Object.values(eco.inventory.crops).reduce((a, b) => a + b, 0) + Object.values(eco.inventory.products).reduce((a, b) => a + b, 0); const got = eco.sellAll(); g.onEvent('sell', n); g.audio.play('coin'); this.toast(`+${got} 코인`); render(); }; body.append(all); }
+      if (any) { const all = h('button', 'gold', '🧺 모두 판매하기'); all.style.marginTop = '10px'; all.onclick = () => { const n = Object.values(eco.inventory.crops).reduce((a, b) => a + b, 0) + Object.values(eco.inventory.products).reduce((a, b) => a + b, 0) + Object.entries(eco.inventory.items).filter(([k]) => ITEMS[k].cat !== 'seed' && k !== 'paddy').reduce((a, [, b]) => a + b, 0); const got = eco.sellAll(); g.onEvent('sell', n); g.audio.play('coin'); this.toast(`+${got} 코인`); render(); }; body.append(all); }
       p.append(body);
     };
     render();
@@ -282,7 +421,9 @@ export class UI {
     for (const [k, n] of Object.entries(eco.inventory.crops)) if (n) add(CROPS[k].emoji, CROPS[k].name, n);
     for (const [k, n] of Object.entries(eco.inventory.products)) if (n) add(PRODUCTS[k].emoji, PRODUCTS[k].name, n);
     add('🌾', '사료', eco.inventory.feed);
+    for (const [k, n] of Object.entries(eco.inventory.items)) if (n) add(ITEMS[k].emoji, ITEMS[k].name, n);
     p.append(rows);
+    p.append(h('h3', '', `🌾 농사 숙련도 Lv.${this.game.rice.sim.skillLevel} (${this.game.rice.sim.skill}점) · 📖 도감 ${BOOK_CATS.map((c) => { const pr = this.game.collection.progress(c); return `${CATEGORY_NAMES[c]} ${pr.got}/${pr.total}`; }).join(' · ')}`));
     const s = eco.stats;
     p.append(h('h3', '', `누적 수입 ${s.earned.toLocaleString()} · 지출 ${s.spent.toLocaleString()} · 판매 ${s.sold}개`));
   }

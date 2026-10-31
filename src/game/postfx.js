@@ -17,7 +17,7 @@ export class PostFX {
     this.renderer = renderer;
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.18, 0.4, 1.05);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.14, 0.35, 1.35);
     if (quality.bloom) this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.smaa = new SMAAPass();

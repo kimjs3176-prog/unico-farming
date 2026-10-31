@@ -106,7 +106,7 @@ export class TractorView {
     const v = this.vehicle;
     if (!this.driving) {
       const d = Math.hypot(v.x - playerPos.x, v.z - playerPos.z);
-      if (d < 3.2) return { label: '트랙터 타기 (밭갈이 미니게임)', key: 'tractor', onInteract: () => this.mount() };
+      if (d < 3.2) return { d, label: '🚜 트랙터 타기 (밭갈이 미니게임)', key: 'tractor', onInteract: () => this.mount() };
       return null;
     }
     const ax = input.axis();

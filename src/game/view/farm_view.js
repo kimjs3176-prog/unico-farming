@@ -4,6 +4,9 @@ import { LAYOUT } from '../world.js';
 import { CROPS } from '../sim/crops.js';
 
 /** 경작지 3D 표현 + 근접 상호작용 */
+// 갈지 않은 밭: 거친 흙 (지면 페인트 위에 살짝 진하게)
+const EMPTY_MAT = new THREE.MeshStandardMaterial({ color: 0x8d6a45, roughness: 1, transparent: true, opacity: 0.85 });
+
 export class FarmView {
   constructor(game) {
     this.game = game;
@@ -18,7 +21,7 @@ export class FarmView {
         plot.visible = false;
         game.world.scene.add(plot);
         // 빈 밭 표시(풀밭 위 연한 사각형)
-        const empty = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshStandardMaterial({ color: 0x7fbf52, roughness: 1 }));
+        const empty = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 2.1), EMPTY_MAT);
         empty.rotation.x = -Math.PI / 2;
         empty.position.set(x, 0.015, z);
         empty.receiveShadow = true;
@@ -66,6 +69,7 @@ export class FarmView {
     // 가장 가까운 플롯
     let best = -1, bd = 2.2;
     this.tiles.forEach((t, i) => { const d = Math.hypot(t.x - playerPos.x, t.z - playerPos.z); if (d < bd) { bd = d; best = i; } });
+    this.nearD = bd;
     if (best !== this.near) {
       if (this.near >= 0) this.tiles[this.near].ring.visible = false;
       this.near = best;
@@ -75,7 +79,7 @@ export class FarmView {
       const eco = this.game.economy;
       const hasSeed = Object.values(eco.inventory.seeds).some((n) => n > 0);
       const act = this.sim.actionFor(best, hasSeed);
-      return act ? { label: act.label, key: act.type, onInteract: () => this.interact(best, act.type) } : null;
+      return act ? { d: bd, label: act.label, key: act.type, onInteract: () => this.interact(best, act.type) } : null;
     }
     return null;
   }

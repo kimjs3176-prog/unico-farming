@@ -31,6 +31,9 @@ export class PointerNav {
     for (const e of g.ranch.ents) out.push({ objs: [e.m], pos: () => e.m.position, stop: 1.7 });
     for (const e of g.npcs.list) out.push({ objs: [e.u.group], pos: () => e.u.group.position, stop: 1.9 });
     if (!g.tractor.driving) out.push({ objs: [g.tractor.model], pos: () => new THREE.Vector3(g.tractor.vehicle.x, 0, g.tractor.vehicle.z), stop: 2.7 });
+    for (const tr of g.nature.trees) out.push({ objs: [tr.m], pos: () => new THREE.Vector3(tr.x, 0, tr.z), stop: 1.6 });
+    for (const b of g.nature.bugs) if (b.g.visible) out.push({ objs: [b.g], pos: () => b.g.position.clone().setY(0), stop: 1.2, big: true });
+    out.push({ objs: [g.rice.thresher], pos: () => new THREE.Vector3(LAYOUT.thresher.x, 0, LAYOUT.thresher.z), stop: 1.8 });
     const sensor = g.world.smartfarmModel?.getObjectByName('SensorPole');
     if (sensor) out.push({ objs: [sensor], pos: () => new THREE.Vector3(LAYOUT.sensor.x, 0, LAYOUT.sensor.z), stop: 1.8 });
     return out;
@@ -52,11 +55,22 @@ export class PointerNav {
     // 밭 칸 위를 누르면 그 칸이 대상
     const tile = g.farm.tiles.find((t) => Math.abs(p.x - t.x) < 1.15 && Math.abs(p.z - t.z) < 1.15);
     if (tile) return { target: { pos: () => new THREE.Vector3(tile.x, 0, tile.z), stop: 0.35 } };
+    // 논
+    const pi = g.rice.paddyAt(p.x, p.z, 0.2);
+    if (pi >= 0) { const pd = g.rice.paddies[pi]; return { target: { pos: () => new THREE.Vector3(pd.x, 0, pd.z), stop: 1.0 } }; }
+    // 연못 물을 누르면 가장 가까운 물가로 가서 낚시
+    const P = LAYOUT.pond, dc = Math.hypot(p.x - P.x, p.z - P.z);
+    if (dc < P.r + 0.3) {
+      const pl = g.player.position, dir = new THREE.Vector3(pl.x - P.x, 0, pl.z - P.z).normalize();
+      const rimPt = new THREE.Vector3(P.x + dir.x * (P.r + 0.6), 0, P.z + dir.z * (P.r + 0.6));
+      return { target: { pos: () => rimPt, stop: 0.4 } };
+    }
     return { point: p };
   }
 
   click(sx, sy) {
     const g = this.game;
+    if (g.nature.fishing || g.rice.threshing) { g.input.interactTap = true; return; } // 낚시 중 클릭 = 당기기, 탈곡 중 = 연타
     if (g.ui.panel || g.tractor.driving || g.smartfarm.active) return;
     const r = this.pick(sx, sy);
     if (!r) return;

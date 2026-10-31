@@ -19,11 +19,12 @@ export class SmartFarmView {
       const done = this.sim.tick(dt);
       g.ui.updateSmartfarm(this.sim);
       if (done) this.finish();
-      return { label: '스마트팜 제어 중… 패널의 버튼으로 환경을 맞추세요', key: 'smart' };
+      return { d: -1, label: '스마트팜 제어 중… 패널의 버튼으로 환경을 맞추세요', key: 'smart' };
     }
     const S = LAYOUT.sensor;
-    if (Math.hypot(S.x - playerPos.x, S.z - playerPos.z) < 3) {
-      return { label: '스마트팜 환경 제어 (미니게임)', key: 'smart', onInteract: () => this.start() };
+    const ds = Math.hypot(S.x - playerPos.x, S.z - playerPos.z);
+    if (ds < 3) {
+      return { d: ds, label: '스마트팜 환경 제어 (미니게임)', key: 'smart', onInteract: () => this.start() };
     }
     return null;
   }

@@ -63,9 +63,9 @@ export class RanchView {
     if (!best) return null;
     const act = this.sim.actionFor(best.a);
     const name = ANIMALS[best.a.type].name;
-    if (act.type === 'wait') return { label: `${name}: ${act.label}`, key: 'wait' };
-    if (act.type === 'feed') return { label: `${name}에게 ${act.label} (사료 ${this.game.economy.inventory.feed}개)`, key: 'feed', onInteract: () => this.feed(best) };
-    return { label: `${name}: ${act.label}`, key: 'collect', onInteract: () => this.collect(best) };
+    if (act.type === 'wait') return { d: bd, label: `${name}: ${act.label}`, key: 'wait' };
+    if (act.type === 'feed') return { d: bd, label: `${name}에게 ${act.label} (사료 ${this.game.economy.inventory.feed}개)`, key: 'feed', onInteract: () => this.feed(best) };
+    return { d: bd, label: `${name}: ${act.label}`, key: 'collect', onInteract: () => this.collect(best) };
   }
 
   feed(e) {

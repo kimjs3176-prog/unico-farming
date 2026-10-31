@@ -23,6 +23,10 @@ import { PostFX } from './game/postfx.js';
 import { pickQuality } from './game/quality.js';
 import { WeatherService } from './game/weather.js';
 import { PointerNav } from './game/pointer.js';
+import { RiceView } from './game/view/rice_view.js';
+import { NatureView } from './game/view/nature_view.js';
+import { Villagers } from './game/sim/villagers.js';
+import { Collection } from './game/sim/collection.js';
 
 class Game {
   constructor(canvas, assets, name) {
@@ -35,7 +39,7 @@ class Game {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 0.95;
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
     this.input = new Input(canvas);
     this.audio = new Audio();
@@ -52,7 +56,11 @@ class Game {
     this.ranch = new RanchView(this);
     this.tractor = new TractorView(this);
     this.smartfarm = new SmartFarmView(this);
+    this.villagers = new Villagers();
+    this.collection = new Collection();
     this.npcs = new NPCs(this);
+    this.rice = new RiceView(this);
+    this.nature = new NatureView(this);
     this.net = new Net(this);
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
@@ -104,12 +112,26 @@ class Game {
     this.economy.load(s.economy);
     this.quests.load(s.quests);
     this.ranch.sim.load(s.ranch);
+    this.rice.load(s.rice);
+    this.nature.load(s.nature);
+    this.villagers.load(s.villagers);
+    this.collection.load(s.collection);
     if (s.world) { this.world.time = s.world.time; this.world.day = s.world.day; }
     if (s.player) this.player.position.set(s.player.x, 0, s.player.z);
     this.ui.toast('💾 저장된 농장을 불러왔어요');
   }
 
   resetSave() { clearSave(); location.reload(); }
+
+  /** 도감 등록 후: 진행 퀘스트, 카테고리 완성 보상 */
+  afterCollect() {
+    this.onEvent('book', Object.keys(this.collection.entries).length);
+    for (const r of this.collection.claimCompletions()) {
+      this.economy.earn(r.money);
+      this.audio.play('levelup');
+      this.ui.result('🏅 도감 완성!', [`${{ fish: '물고기', bug: '곤충', fruit: '과일' }[r.cat]} 도감을 모두 채웠어요!`, `보상 +${r.money}🪙`]);
+    }
+  }
 
   /** 게임 이벤트 → 퀘스트 진행 */
   onEvent(event, amount = 1) {
@@ -139,15 +161,17 @@ class Game {
 
     const pp = this.player.position;
     this.world.update(dt, this.tractor.driving ? this.tractor.riderGroup.position : pp);
-    // 상호작용 후보 (우선순위: 운전 > 스마트팜 > NPC > 트랙터 > 밭 > 목장)
+    // 상호작용 후보: 진행 중인 미니게임(d<0)이 최우선, 그다음 가장 가까운 대상
     let prompt = null;
-    prompt = this.tractor.update(dt, input, pp) || prompt;
+    const pick = (p) => { if (p && (!prompt || (p.d ?? 99) < (prompt.d ?? 99))) prompt = p; };
+    pick(this.tractor.update(dt, input, pp));
     if (!this.tractor.driving) {
-      prompt = this.smartfarm.update(dt, input, pp) || prompt;
-      prompt = prompt || this.npcs.update(dt, pp);
-      const farmP = this.farm.update(dt, pp);
-      const ranchP = this.ranch.update(dt, pp);
-      prompt = prompt || farmP || ranchP;
+      pick(this.smartfarm.update(dt, input, pp));
+      pick(this.npcs.update(dt, pp));
+      pick(this.farm.update(dt, pp));
+      pick(this.ranch.update(dt, pp));
+      pick(this.rice.update(dt, pp));
+      pick(this.nature.update(dt, pp));
       this.pointer.update(dt, input);
       const arrived = this.player.arrivedInteract;
       this.player.arrivedInteract = false;
@@ -159,6 +183,8 @@ class Game {
       this.farm.update(dt, pp);
       this.ranch.update(dt, pp);
       this.npcs.update(dt, pp);
+      this.rice.update(dt, pp);
+      this.nature.update(dt, pp);
       // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스로 돌려도 천천히 복귀)
       const behind = this.tractor.vehicle.heading + Math.PI;
       const dy = ((behind - this.followCam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;

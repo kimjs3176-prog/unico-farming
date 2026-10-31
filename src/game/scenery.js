@@ -59,6 +59,8 @@ export class Scenery {
     void cloudSrc;
     // ---- 잔디 인스턴싱 ----
     this._grass(rnd);
+    // ---- 들꽃 ----
+    this._flowers(rnd);
     // ---- 연못 물결 ----
     this._water();
   }
@@ -66,9 +68,6 @@ export class Scenery {
   _grass(rnd) {
     const L = LAYOUT;
     const no = [
-      [-8.5, -4.5, 8.5, 4.5], // 경작지
-      [-1.6, -10, 1.6, 12], [-1.5, 3.5, 17.5, 6.5], [-18, 0.5, -2, 3.5], [-12, 7.5, 12, 10.5], [4.5, 7.5, 7.5, 15], // 흙길
-      [L.field.x0 - 1, L.field.z0 - 1, L.field.x0 + L.field.cols * L.field.cell + 1, L.field.z0 + L.field.rows * L.field.cell + 1],
       [L.smartfarm.x - 4.5, L.smartfarm.z - 5, L.smartfarm.x + 7, L.smartfarm.z + 5.5],
       [L.barn.x - 3, L.barn.z - 3.5, L.barn.x + 3, L.barn.z + 3.5], [L.market.x - 2, L.market.z - 1, L.market.x + 2, L.market.z + 1],
     ];
@@ -107,6 +106,7 @@ export class Scenery {
       const x = (rnd() - 0.5) * 2 * B, z = (rnd() - 0.5) * 2 * B;
       if (Math.hypot(x - LAYOUT.pond.x, z - LAYOUT.pond.z) < LAYOUT.pond.r + 1.5) continue;
       if (no.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1)) continue;
+      if (this.world.isBare(x, z) || this.world.isReserved(x, z, -0.5)) continue;
       if (this.world.isBlocked(x, z, 0.3)) continue;
       p.set(x, 0, z);
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * Math.PI * 2);
@@ -122,6 +122,54 @@ export class Scenery {
     mesh.instanceMatrix.needsUpdate = true;
     this.world.scene.add(mesh);
     this.grass = mesh;
+  }
+
+  /** 들꽃: 꽃잎 5장 + 줄기, 색은 인스턴스별 (동물의 숲 들판 느낌) */
+  _flowers(rnd) {
+    const parts = [];
+    const stem = new THREE.CylinderGeometry(0.012, 0.012, 0.22, 4);
+    stem.translate(0, 0.11, 0);
+    parts.push(stem);
+    for (let i = 0; i < 5; i++) {
+      const pet = new THREE.SphereGeometry(0.045, 6, 4);
+      pet.scale(1, 0.35, 0.7);
+      const a = (i / 5) * Math.PI * 2;
+      pet.translate(Math.cos(a) * 0.05, 0.23, Math.sin(a) * 0.05);
+      parts.push(pet);
+    }
+    const center = new THREE.SphereGeometry(0.03, 6, 4);
+    center.translate(0, 0.24, 0);
+    parts.push(center);
+    const geo = mergeGeometries(parts.map((g) => g.index ? g : g));
+    const mat = new THREE.MeshStandardMaterial({ roughness: 0.8 });
+    const COUNT = this.world.quality?.level === 'low' ? 500 : 1400;
+    const mesh = new THREE.InstancedMesh(geo, mat, COUNT);
+    const palette = [0xffffff, 0xffe066, 0xf3b7cf, 0xe35d5d, 0xb39ddb, 0x8ecae6];
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
+    let n = 0, tries = 0;
+    const B = LAYOUT.bounds - 2;
+    // 군락: 무작위 중심 주변에 모여 핌
+    const clusters = Array.from({ length: 40 }, () => [(rnd() - 0.5) * 2 * B, (rnd() - 0.5) * 2 * B, palette[Math.floor(rnd() * palette.length)]]);
+    while (n < COUNT && tries < COUNT * 8) {
+      tries++;
+      const [cx, cz, pc] = clusters[Math.floor(rnd() * clusters.length)];
+      const x = cx + (rnd() - 0.5) * 6, z = cz + (rnd() - 0.5) * 6;
+      if (Math.abs(x) > B || Math.abs(z) > B) continue;
+      if (this.world.isBare(x, z) || this.world.isBlocked(x, z, 0.4) || this.world.isReserved(x, z, 0)) continue;
+      if (Math.hypot(x - LAYOUT.pond.x, z - LAYOUT.pond.z) < LAYOUT.pond.r + 1) continue;
+      p.set(x, 0, z);
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 6.28);
+      const s = 0.8 + rnd() * 0.6;
+      sc.set(s, s, s);
+      m.compose(p, q, sc);
+      mesh.setMatrixAt(n, m);
+      mesh.setColorAt(n, col.setHex(rnd() < 0.8 ? pc : palette[Math.floor(rnd() * palette.length)]));
+      n++;
+    }
+    mesh.count = n;
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    this.world.scene.add(mesh);
   }
 
   _water() {

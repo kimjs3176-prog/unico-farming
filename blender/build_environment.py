@@ -623,7 +623,192 @@ def cloud():
     return root
 
 
+def crate():
+    C.reset_scene()
+    root = empty("Crate")
+    w, wd = material("wood", roughness=0.85), material("wood_dark", roughness=0.85)
+    parts = [box("body", w, loc=(0, 0, 0.3), size=(0.6, 0.6, 0.6))]
+    for z in (0.05, 0.55):
+        for sx in (-1, 1):
+            parts.append(box("rim_x", wd, loc=(0, sx * 0.31, z), size=(0.64, 0.04, 0.08)))
+            parts.append(box("rim_y", wd, loc=(sx * 0.31, 0, z), size=(0.04, 0.64, 0.08)))
+    parts.append(box("diag", wd, loc=(0, -0.315, 0.3), size=(0.06, 0.02, 0.78), rot=(0, 45, 0)))
+    m = join("CrateMesh", parts, parent=root)
+    bevel(m, 0.015, 2)
+    return root
+
+
+def barrel():
+    C.reset_scene()
+    root = empty("Barrel")
+    from mathutils import Vector
+    import bmesh as _bm
+    parts = [cylinder("body", material("wood", roughness=0.8), loc=(0, 0, 0.42), radius=0.3, depth=0.84, segments=20)]
+    # 배불뚝이: 가운데를 부풀림
+    body = parts[0]
+    for v in body.data.vertices:
+        k = 1 + 0.12 * (1 - ((v.co.z - 0.42) / 0.42) ** 2)
+        v.co.x *= k; v.co.y *= k
+    for z in (0.12, 0.42, 0.72):
+        r = 0.3 * (1 + 0.12 * (1 - ((z - 0.42) / 0.42) ** 2)) + 0.012
+        parts.append(torus("hoop", material("steel_dark", roughness=0.5), loc=(0, 0, z), major=r, minor=0.018, segments=24, ring=6))
+    parts.append(cylinder("lid", material("wood_dark"), loc=(0, 0, 0.845), radius=0.29, depth=0.02, segments=20))
+    join("BarrelMesh", parts, parent=root)
+    return root
+
+
+def lamp_post():
+    C.reset_scene()
+    root = empty("Lamp")
+    dark = material("lamp_iron", "#3b3f46", roughness=0.5, metallic=0.4)
+    parts = [
+        cylinder("base", dark, loc=(0, 0, 0.1), radius=0.16, depth=0.2, segments=12),
+        cylinder("pole", dark, loc=(0, 0, 1.3), radius=0.05, depth=2.4, segments=10),
+        segment("arm", dark, (0, 0, 2.3), (0, -0.35, 2.45), 0.03, cap=False, segments=8),
+        cylinder("cap", dark, loc=(0, -0.38, 2.62), radius=0.2, depth=0.06, radius2=0.04, segments=12),
+    ]
+    join("LampPost", parts, parent=root)
+    join("LampGlow", [sphere("bulb", material("lamp_glow", "#ffd77a", emission=1.0, roughness=0.3), loc=(0, -0.38, 2.45), radius=0.14, scale=(1, 1, 1.2), segments=14, rings=10)], parent=root)
+    return root
+
+
+def bench():
+    C.reset_scene()
+    root = empty("Bench")
+    w, dark = material("wood", roughness=0.8), material("lamp_iron", "#3b3f46", roughness=0.5, metallic=0.4)
+    parts = []
+    for i in range(3):
+        parts.append(box("seat", w, loc=(0, -0.12 + i * 0.13, 0.45), size=(1.4, 0.11, 0.05)))
+    for i in range(2):
+        parts.append(box("back", w, loc=(0, 0.2, 0.68 + i * 0.16), size=(1.4, 0.04, 0.11), rot=(-10, 0, 0)))
+    for sx in (-1, 1):
+        parts.append(box("leg", dark, loc=(sx * 0.6, 0.0, 0.22), size=(0.06, 0.4, 0.44)))
+        parts.append(box("back_leg", dark, loc=(sx * 0.6, 0.21, 0.6), size=(0.05, 0.05, 0.5), rot=(-10, 0, 0)))
+    m = join("BenchMesh", parts, parent=root)
+    bevel(m, 0.012, 2)
+    return root
+
+
+def mailbox():
+    C.reset_scene()
+    root = empty("Mailbox")
+    parts = [
+        box("post", material("wood"), loc=(0, 0, 0.5), size=(0.1, 0.1, 1.0)),
+        box("box", material("mail_red", "#e35d5d", roughness=0.5), loc=(0, -0.05, 1.08), size=(0.32, 0.5, 0.25)),
+        cylinder("roof", material("mail_red", "#e35d5d", roughness=0.5), loc=(0, -0.05, 1.2), radius=0.16, depth=0.5, rot=(90, 0, 0), segments=16),
+        box("flag", material("gold", roughness=0.4), loc=(0.18, 0.05, 1.25), size=(0.02, 0.12, 0.2)),
+    ]
+    m = join("MailboxMesh", parts, parent=root)
+    bevel(m, 0.015, 2)
+    return root
+
+
+def scarecrow():
+    """허수아비: 밀짚모자 + 체크 셔츠 + 짚 팔"""
+    C.reset_scene()
+    root = empty("Scarecrow")
+    w, hay = material("wood"), material("hay", roughness=0.9)
+    parts = [
+        box("post", w, loc=(0, 0, 0.9), size=(0.1, 0.1, 1.8)),
+        box("arm", w, loc=(0, 0, 1.35), size=(1.4, 0.08, 0.08)),
+        sphere("head", material("burlap", "#d9c08a", roughness=0.95), loc=(0, 0, 1.75), radius=0.22, segments=16, rings=12),
+        cylinder("brim", hay, loc=(0, 0, 1.92), radius=0.38, depth=0.03, segments=24),
+        cylinder("crown", hay, loc=(0, 0, 2.02), radius=0.18, depth=0.18, segments=20),
+        box("shirt", material("shirt", "#4a90d9", roughness=0.9), loc=(0, 0, 1.18), size=(0.5, 0.25, 0.5)),
+        box("sleeve", material("shirt", "#4a90d9", roughness=0.9), loc=(0, 0, 1.35), size=(1.0, 0.18, 0.16)),
+        box("patch", material("shirt2", "#e35d5d", roughness=0.9), loc=(0.1, -0.13, 1.1), size=(0.14, 0.02, 0.14)),
+        sphere("eyeL", material("eye"), loc=(-0.08, -0.19, 1.78), radius=0.025, segments=8, rings=6),
+        sphere("eyeR", material("eye"), loc=(0.08, -0.19, 1.78), radius=0.025, segments=8, rings=6),
+    ]
+    for sx in (-1, 1):
+        parts.append(cone("straw", hay, loc=(sx * 0.75, 0, 1.35), radius=0.08, depth=0.2, rot=(0, sx * 90, 0), segments=8))
+    m = join("ScarecrowMesh", parts, parent=root)
+    bevel(m, 0.01, 1)
+    return root
+
+
+def thresher():
+    """탈곡기 (발로 밟는 옛 탈곡기 느낌): 드럼 + 받침 + 짚더미"""
+    C.reset_scene()
+    root = empty("Thresher")
+    w, wd, st = material("wood"), material("wood_dark"), material("steel", roughness=0.4, metallic=0.4)
+    base = [
+        box("frame", wd, loc=(0, 0, 0.35), size=(1.4, 0.8, 0.7)),
+        box("hopper", w, loc=(0, -0.2, 0.8), size=(1.2, 0.5, 0.25), rot=(-20, 0, 0)),
+        box("pedal", st, loc=(0.5, -0.55, 0.12), size=(0.3, 0.3, 0.05)),
+        box("tray", w, loc=(0, 0.55, 0.25), size=(1.3, 0.4, 0.08)),
+    ]
+    b = join("ThresherBase", base, parent=root)
+    bevel(b, 0.02, 2)
+    drum = empty("Drum", loc=(0, -0.1, 0.78), parent=root)
+    dp = [cylinder("drum", material("drum", "#c9a26b", roughness=0.7), loc=(0, 0, 0), radius=0.24, depth=1.1, rot=(0, 90, 0), segments=18)]
+    for i in range(10):
+        a = math.radians(i * 36)
+        dp.append(box("tooth", st, loc=(0, math.cos(a) * 0.25, math.sin(a) * 0.25), size=(1.05, 0.03, 0.03), rot=(math.degrees(a), 0, 0)))
+    join("DrumMesh", dp, parent=drum)
+    hay = material("hay", roughness=0.9)
+    pile = organic("StrawPile", [sphere("a", hay, loc=(-0.9, 0.5, 0.2), radius=0.35, scale=(1, 1, 0.6), segments=12, rings=8), sphere("b", hay, loc=(-1.2, 0.2, 0.15), radius=0.28, scale=(1, 1, 0.55), segments=12, rings=8)], hay, voxel=0.05, smooth_iters=2, decimate=0.6, parent=root)
+    displace_noise(pile, 0.05, 0.2, seed=9)
+    return root
+
+
+def dock():
+    """연못 낚시 데크"""
+    C.reset_scene()
+    root = empty("Dock")
+    w, wd = material("wood", roughness=0.85), material("wood_dark", roughness=0.85)
+    parts = []
+    for i in range(7):
+        parts.append(box("plank", w if i % 2 else material("wood2", "#c08a58", roughness=0.85), loc=(0, i * 0.36, 0.32), size=(1.6, 0.32, 0.06)))
+    for x in (-0.75, 0.75):
+        for y in (0.0, 1.2, 2.2):
+            parts.append(cylinder("pile", wd, loc=(x, y, 0.05), radius=0.07, depth=0.7, segments=10))
+    m = join("DockMesh", parts, parent=root)
+    bevel(m, 0.012, 1)
+    return root
+
+
+def planter():
+    C.reset_scene()
+    root = empty("Planter")
+    parts = [box("box", material("wood"), loc=(0, 0, 0.18), size=(1.0, 0.4, 0.36)), box("soil", material("soil"), loc=(0, 0, 0.35), size=(0.92, 0.32, 0.04))]
+    import random
+    rnd = random.Random(5)
+    cols = ["tomato", "corn", "pink_deep", "white", "awning_red"]
+    for i in range(9):
+        x = -0.38 + i * 0.095
+        parts.append(segment("stem", material("leaf_dark"), (x, 0, 0.35), (x, 0, 0.55 + rnd.random() * 0.12), 0.012, cap=False, segments=6))
+        parts.append(sphere("bloom", material(cols[i % 5]), loc=(x, 0, 0.6 + rnd.random() * 0.1), radius=0.055, scale=(1, 1, 0.7), segments=10, rings=6))
+    m = join("PlanterMesh", parts, parent=root)
+    return root
+
+
+def fruit_tree():
+    """과일 나무 (열매는 게임에서 색을 입혀 붙임). 잎뭉치는 Canopy, 열매 소켓 Fruit0..5"""
+    C.reset_scene()
+    root = empty("FruitTree")
+    trunk = join("Trunk", [
+        cylinder("t", material("wood_dark"), loc=(0, 0, 0.6), radius=0.15, depth=1.2, radius2=0.1, segments=14),
+        segment("b1", material("wood_dark"), (0, 0, 1.0), (0.4, 0.1, 1.5), 0.06, segments=8),
+        segment("b2", material("wood_dark"), (0, 0, 1.0), (-0.35, -0.15, 1.45), 0.06, segments=8),
+    ], parent=root)
+    shade_smooth(trunk, 40)
+    g = material("orchard_leaf", "#5fae4a", roughness=0.9)
+    canopy = organic("Canopy", [
+        sphere("c1", g, loc=(0, 0, 1.75), radius=0.8, scale=(1.15, 1.15, 0.85), segments=16, rings=12),
+        sphere("c2", g, loc=(0.45, 0.2, 1.95), radius=0.55, segments=14, rings=10),
+        sphere("c3", g, loc=(-0.45, -0.2, 1.9), radius=0.55, segments=14, rings=10),
+    ], g, voxel=0.08, smooth_iters=3, decimate=0.6, parent=root)
+    displace_noise(canopy, strength=0.12, scale=0.7, seed=6)
+    sockets = [(0.75, -0.2, 1.6), (-0.7, 0.3, 1.65), (0.2, -0.78, 1.7), (-0.25, 0.75, 1.75), (0.55, 0.55, 1.95), (-0.5, -0.55, 2.0)]
+    for i, p in enumerate(sockets):
+        empty(f"Fruit{i}", loc=p, parent=root)
+    return root
+
+
 ASSETS = {
+    "crate": crate, "barrel": barrel, "lamp": lamp_post, "bench": bench, "mailbox": mailbox, "scarecrow": scarecrow,
+    "thresher": thresher, "dock": dock, "planter": planter, "fruit_tree": fruit_tree,
     "grass_tuft": grass_tuft, "cloud": cloud,
     "tree": tree_round, "pine": tree_pine, "bush": bush, "rock": rock, "flowers": flower_patch, "hay_bale": hay_bale,
     "fence": fence, "barn": barn, "silo": silo, "windmill": windmill, "smartfarm": greenhouse, "market": market_stall,

@@ -31,6 +31,8 @@ export class Minimap {
     const fd = L.field; rect(fd.x0, fd.z0, fd.x0 + fd.cols * fd.cell, fd.z0 + fd.rows * fd.cell, '#b08a5a');
     rect(L.market.x - 1.5, L.market.z - 0.6, L.market.x + 1.5, L.market.z + 0.6, '#e35d5d');
     c.fillStyle = '#6fc3e8'; c.beginPath(); c.arc(X(L.pond.x), Z(L.pond.z), L.pond.r * k, 0, 7); c.fill();
+    const pd = L.paddy; rect(pd.x0, pd.z0, pd.x0 + pd.cols * (pd.size + pd.bund) + pd.bund, pd.z0 + pd.rows * (pd.size + pd.bund) + pd.bund, '#5fa3b0');
+    c.fillStyle = '#e0413a'; for (const o of L.orchard) { c.beginPath(); c.arc(X(o.x), Z(o.z), 2.2, 0, 7); c.fill(); }
     // 다른 플레이어
     c.fillStyle = '#bfe4ff';
     for (const r of this.game.net.remote.values()) { const p = r.unico.group.position; c.beginPath(); c.arc(X(p.x), Z(p.z), 2.5, 0, 7); c.fill(); }
@@ -45,5 +47,7 @@ export class Minimap {
     c.fillText('스마트팜', X(L.smartfarm.x), Z(L.smartfarm.z + 7));
     c.fillText('장터', X(L.market.x), Z(L.market.z - 2));
     c.fillText('밭갈이', X(fd.x0 + fd.cols), Z(fd.z0 + fd.rows + 4));
+    c.fillText('논', X(0), Z(pd.z0 - 1.5));
+    c.fillText('과수원', X(9), Z(-11.5));
   }
 }
