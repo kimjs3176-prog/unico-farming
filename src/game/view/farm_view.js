@@ -81,7 +81,7 @@ export class FarmView {
 
   interact(i, type) {
     const g = this.game;
-    if (type === 'till') { this.sim.till(i); g.onEvent('till'); g.audio.play('dig'); g.player.unico.playAction('think', 0.6); }
+    if (type === 'till') { this.sim.till(i); g.onEvent('till'); g.audio.play('dig'); g.juice.shake(0.2); g.player.unico.playAction('think', 0.6); }
     else if (type === 'plant') g.ui.openSeedPicker((crop) => {
       if (g.economy.useSeed(crop) && this.sim.plant(i, crop)) { g.onEvent('plant'); g.audio.play('plant'); g.ui.toast(`${CROPS[crop].emoji} ${CROPS[crop].name} 씨앗을 심었어요`); }
     });
@@ -89,7 +89,7 @@ export class FarmView {
     else if (type === 'water') { this.sim.water(i); g.onEvent('water'); g.audio.play('water'); g.player.unico.playAction('water', 1.4); g.fx.sprinkle(this.tiles[i].x, this.tiles[i].z); }
     else if (type === 'harvest') {
       const r = this.sim.harvest(i);
-      if (r) { g.economy.addCrop(r.crop, r.amount); g.onEvent('harvest', r.amount); g.audio.play('harvest'); g.player.unico.playAction('cheer', 1.2); g.ui.toast(`${CROPS[r.crop].emoji} ${CROPS[r.crop].name} ×${r.amount} 수확!`); g.fx.pop(this.tiles[i].x, this.tiles[i].z, CROPS[r.crop].emoji); }
+      if (r) { g.economy.addCrop(r.crop, r.amount); g.onEvent('harvest', r.amount); g.audio.play('harvest'); g.player.unico.playAction('cheer', 1.2); g.juice.pop(g.player.group, 0.18); g.ui.toast(`${CROPS[r.crop].emoji} ${CROPS[r.crop].name} ×${r.amount} 수확!`); g.fx.pop(this.tiles[i].x, this.tiles[i].z, CROPS[r.crop].emoji); }
     }
   }
 }

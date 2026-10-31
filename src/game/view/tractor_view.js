@@ -126,6 +126,7 @@ export class TractorView {
       v.speed = -Math.sign(v.speed) * 1.5; v.x = prevX; v.z = prevZ; this.field.hits++; this.field.time = Math.max(0, this.field.time - 3);
       this.game.ui.toast('🪨 바위에 부딪혔어요! -3초');
       this.game.audio.play('bump');
+      this.game.juice.shake(0.6);
     }
     this.syncModel();
     this.riderGroup.position.set(v.x + Math.cos(v.heading) * 0.0 - Math.sin(v.heading) * 0.6, 1.05, v.z - Math.cos(v.heading) * 0.6);

@@ -86,6 +86,7 @@ export class RanchView {
     g.onEvent('collect');
     g.audio.play('harvest');
     g.ui.toast(`${PRODUCTS[p].emoji} ${PRODUCTS[p].name} 획득!`);
+    g.juice.pop(e.m, 0.2);
     g.fx.pop(e.m.position.x, e.m.position.z, PRODUCTS[p].emoji);
   }
 }

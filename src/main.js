@@ -18,6 +18,7 @@ import { Net } from './game/net.js';
 import { saveGame, loadSave, clearSave } from './game/save.js';
 import { Minimap } from './ui/minimap.js';
 import { randomName } from './game/names.js';
+import { Juice } from './game/juice.js';
 
 class Game {
   constructor(canvas, assets, name) {
@@ -46,6 +47,7 @@ class Game {
     this.smartfarm = new SmartFarmView(this);
     this.npcs = new NPCs(this);
     this.net = new Net(this);
+    this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
     this.world.onNewDay = (day) => {
       const ev = this.economy.newDay();
@@ -57,9 +59,10 @@ class Game {
     window.addEventListener('resize', () => this.resize());
     this.restore();
     this.net.connect();
-    this.clock = new THREE.Clock();
-    this.loop = this.loop.bind(this);
-    requestAnimationFrame(this.loop);
+    // 렌더 루프: setAnimationLoop + Timer (탭 복귀 시 dt 폭주 방지 위해 클램프)
+    this.timer = new THREE.Timer();
+    this.timer.connect?.(document);
+    this.renderer.setAnimationLoop(() => this.loop());
   }
 
   resize() {
@@ -102,8 +105,8 @@ class Game {
   }
 
   loop() {
-    requestAnimationFrame(this.loop);
-    const dt = Math.min(0.05, this.clock.getDelta());
+    this.timer.update();
+    const dt = Math.min(0.05, this.timer.getDelta());
     const input = this.input;
     if (input.justPressed('KeyI')) this.ui.panel ? this.ui.closePanel() : this.ui.openInventory();
     if (input.justPressed('KeyQ')) this.ui.panel ? this.ui.closePanel() : this.ui.openQuests();
@@ -134,6 +137,7 @@ class Game {
     this.ui.setPrompt(this.ui.panel ? null : prompt);
     this.net.update(dt);
     this.fx.update(dt);
+    this.juice.update(dt, this.camera);
     this.minimap.update(dt);
     this.ui.updateHud();
     this.saveTimer += dt;
