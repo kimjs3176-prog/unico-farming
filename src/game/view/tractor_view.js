@@ -62,7 +62,8 @@ export class TractorView {
   mount() {
     const g = this.game;
     this.driving = true;
-    this.plowDown = false;
+    this.plowDown = true; // 모바일(스페이스 없음) 배려: 쟁기 내린 채 출발
+    g.followCam.yaw = this.vehicle.heading + Math.PI; // 카메라를 트랙터 뒤로
     g.player.frozen = true;
     g.player.hidden = true;
     g.player.unico.playAction('safety', 0);
@@ -76,7 +77,7 @@ export class TractorView {
     this.resetCells();
     g.audio.play('engine');
     g.ui.showMinigame('tractor', { time: TRACTOR_TIME, score: 0, max: this.field.cols * this.field.rows - this.field.rocks.size });
-    g.ui.toast('🚜 트랙터 밭갈이! W/S 가속·후진, A/D 조향, SPACE 쟁기 올림/내림. 60초 안에 최대한 많이 갈아보세요');
+    g.ui.toast('🚜 트랙터 밭갈이! W 전진 · S 후진 · A/D 좌우 회전 · SPACE 쟁기 올림/내림 · E 내리기. 60초 안에 최대한 많이 갈아보세요');
   }
 
   dismount(finished = false) {
@@ -129,10 +130,12 @@ export class TractorView {
       this.game.juice.shake(0.6);
     }
     this.syncModel();
-    this.riderGroup.position.set(v.x + Math.cos(v.heading) * 0.0 - Math.sin(v.heading) * 0.6, 1.05, v.z - Math.cos(v.heading) * 0.6);
+    // 좌석은 차체 중심보다 뒤쪽(-진행방향 0.72m), 높이 1.42
+    this.riderGroup.position.set(v.x - Math.sin(v.heading) * 0.72, 1.42, v.z - Math.cos(v.heading) * 0.72);
     this.rider.group.position.set(0, 0, 0);
+    this.rider.facing = v.heading;
     this.rider.update(dt, this.game.followCam.camera, this.game.world.daylight);
-    this.riderGroup.scale.setScalar(0.85);
+    this.riderGroup.scale.setScalar(0.62);
     const done = this.field.tick(dt);
     this.game.ui.updateMinigame({ time: this.field.time, score: this.field.score });
     if (done) { this.dismount(true); return null; }

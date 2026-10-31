@@ -1,6 +1,12 @@
 import { Unico } from '../unico.js';
 import { LAYOUT } from '../world.js';
 
+const OUTFITS = {
+  merchant: { hat: 'straw', scarf: 'red' },
+  researcher: { goggles: true, scarf: 'blue', sprout: true },
+  guide: { scarf: 'green', sprout: true },
+};
+
 const LINES = {
   merchant: ['신선한 농산물 삽니다~ 씨앗도 팔아요!', '오늘 시세를 확인해 보세요. 매일 바뀐답니다.'],
   researcher: ['스마트팜은 센서로 온도·습도를 자동 관리해요.', '환경 제어를 잘하면 작물이 빨리 자라요!'],
@@ -12,10 +18,9 @@ export class NPCs {
   constructor(game) {
     this.game = game;
     this.list = Object.entries(LAYOUT.npcs).map(([id, n]) => {
-      const u = new Unico(game.assets, { name: n.name, poses: [n.pose], labelColor: '#ffe066' });
-      u.hasDirectional = false;
-      u.showPose(n.pose);
+      const u = new Unico(game.assets, { name: n.name, labelColor: '#ffe066', outfit: OUTFITS[id] });
       u.group.position.set(n.x, 0, n.z);
+      u.facing = u.yaw = Math.atan2(0 - n.x, 9 - n.z); // 스폰 쪽을 바라봄
       game.world.scene.add(u.group);
       game.world.obstacles.push({ x: n.x, z: n.z, r: 0.7 });
       return { id, u, n, lineIdx: 0 };
@@ -25,6 +30,10 @@ export class NPCs {
   update(dt, playerPos) {
     let hit = null;
     for (const e of this.list) {
+      const d = Math.hypot(e.n.x - playerPos.x, e.n.z - playerPos.z);
+      if (d < 7) e.u.facing = Math.atan2(playerPos.x - e.n.x, playerPos.z - e.n.z);
+      e.idle = (e.idle || 0) + dt;
+      if (e.idle > 7 + Math.random() * 4) { e.idle = 0; e.u.playAction(e.n.pose, 2); }
       e.u.update(dt, this.game.followCam.camera, this.game.world.daylight);
       if (!hit && Math.hypot(e.n.x - playerPos.x, e.n.z - playerPos.z) < 2.6) hit = e;
     }

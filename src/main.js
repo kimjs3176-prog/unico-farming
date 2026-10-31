@@ -154,6 +154,10 @@ class Game {
       this.farm.update(dt, pp);
       this.ranch.update(dt, pp);
       this.npcs.update(dt, pp);
+      // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스로 돌려도 천천히 복귀)
+      const behind = this.tractor.vehicle.heading + Math.PI;
+      const dy = ((behind - this.followCam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+      if (!input.drag.active) this.followCam.yaw += dy * Math.min(1, dt * 3);
       this.followCam.update(dt, input, this.tractor.riderGroup.position);
     }
     this.ui.setPrompt(this.ui.panel ? null : prompt);

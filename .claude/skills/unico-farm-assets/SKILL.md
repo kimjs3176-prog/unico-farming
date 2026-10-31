@@ -1,6 +1,6 @@
 ---
 name: unico-farm-assets
-description: 유니코 팜 저장소의 3D 에셋(Blender bpy 스크립트 → GLB)과 마스코트 릴리프 캐릭터를 수정·재생성할 때 사용. "캐릭터 포즈 추가", "에셋 다시 빌드", "새 건물/동물 추가", "GLB 용량 줄이기" 요청에 트리거.
+description: 유니코 팜 저장소의 3D 환경 에셋(Blender bpy 스크립트 → GLB)과 코드로 만든 유니코 캐릭터를 수정·재생성할 때 사용. "캐릭터 포즈 추가", "에셋 다시 빌드", "새 건물/동물 추가", "GLB 용량 줄이기" 요청에 트리거.
 ---
 
 # 유니코 팜 에셋 파이프라인
@@ -16,11 +16,11 @@ description: 유니코 팜 저장소의 3D 에셋(Blender bpy 스크립트 → G
 4. 색은 `common.PALETTE` 키 또는 `#rrggbb`. 전방은 Blender -Y (glTF +Z).
 5. 게임에서는 `src/game/assets.js` 의 `ENV_MODELS` 에 이름을 추가하고 `world.place(name, x, z, rotY)` 로 배치한다.
 
-## 캐릭터 포즈 추가 (blender/build_character_relief.py)
-- 원본 AI 파일의 각 페이지에서 `vector_extract.extract_all()` 이 x 좌표로 클러스터링한 캐릭터를 `POSES` 에 `"포즈명": "p<페이지>_<클러스터>"` 로 매핑한다.
-- 소품이 함께 그려진 포즈는 `CROP_X` 로 캐릭터 영역만 잘라낸다.
-- 조각 수가 많으면 `DEPTH/GAP` 을 줄이거나 `BEZIER_STEPS` 를 낮춘다. 포즈당 200KB 이하 유지.
-- 게임 쪽: `assets.js` 의 `UNICO_POSES` 와 `Unico` 생성 시 `extraPoses` 에 추가. 감정표현 메뉴는 `src/ui/ui.js` 의 `EMOTES`.
+## 캐릭터 (Blender 아님)
+- 유니코는 `src/game/unico.js` 에서 Three.js 도형으로 조립한다 (사용자 요청: 블렌더 조형 캐릭터 사용 금지).
+- 부품 추가는 `buildTemplate()` 의 해당 피벗(body/head/eyes/leg/tail/소품) 배열에 `[geometry, material]` 을 넣는다. 머티리얼은 `C.*` 공유 팩토리 사용.
+- 새 감정표현은 `EMOTE_ICON` 과 `update()` 의 `switch (this.action)` 에 추가하고, 메뉴는 `src/ui/ui.js` 의 `EMOTES`.
+- 새 옷차림은 템플릿에 bundle 추가 → `acc` 에 등록 → `setOutfit()` 에서 표시 조건.
 
 ## 검증
 - `npm test` (게임 규칙·서버 로직), `npx vite build`

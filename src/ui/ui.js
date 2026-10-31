@@ -113,13 +113,16 @@ export class UI {
 
   toggleEmotes() {
     if (this.emoteMenu) { this.emoteMenu.remove(); this.emoteMenu = null; return; }
-    const EMOTES = [['cheer', '🙌', '환호'], ['heart', '❤️', '하트'], ['wave', '👋', '인사'], ['think', '🤔', '생각'], ['water', '🚿', '물주기'], ['tablet', '📱', '점검']];
+    const EMOTES = [['cheer', '🙌', '깡총'], ['wave', '👋', '인사'], ['heart', '❤️', '하트'], ['think', '🤔', '생각'], ['present', '📊', '발표'], ['megaphone', '📣', '외치기']];
     const m = h('div', 'emote-menu');
     for (const [pose, icon, name] of EMOTES) {
       const b = h('button', '', `${icon}<small>${name}</small>`);
       b.onclick = () => { this.game.player.unico.playAction(pose, 2.5); this.game.audio.play('click'); m.remove(); this.emoteMenu = null; };
       m.append(b);
     }
+    const hat = h('button', '', `👒<small>모자</small>`);
+    hat.onclick = () => { const u = this.game.player.unico; u.setOutfit({ hat: u.outfit.hat === 'straw' ? null : 'straw' }); m.remove(); this.emoteMenu = null; };
+    m.append(hat);
     this.root.append(m);
     this.emoteMenu = m;
   }

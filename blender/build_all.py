@@ -15,12 +15,11 @@ OUT = os.path.join(ROOT, "public", "models")
 BLEND = os.path.join(HERE, "blend")
 
 import common as C  # noqa: E402
-from build_character_lowpoly import build_unico  # noqa: E402
 from build_environment import ASSETS  # noqa: E402
 
 
 def main(names):
-    builders = {**ASSETS, "unico_lowpoly": build_unico}  # unico_lowpoly 는 실험용(기본 미포함)
+    builders = dict(ASSETS)
     names = names or list(ASSETS)  # 기본: 환경 에셋만. 캐릭터는 build_character_relief.py
     report = []
     for n in names:

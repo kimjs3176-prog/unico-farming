@@ -6,7 +6,7 @@ const SPEED = 5.2;
 /** 로컬 플레이어 컨트롤러 */
 export class Player {
   constructor(assets, world, name) {
-    this.unico = new Unico(assets, { name, extraPoses: ['water', 'cheer', 'safety', 'tablet', 'heart', 'think'], labelColor: '#fff' });
+    this.unico = new Unico(assets, { name, labelColor: '#fff' });
     this.world = world;
     this.group = this.unico.group;
     this.group.position.set(0, 0, 9);
