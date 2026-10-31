@@ -21,6 +21,10 @@ Anthropic 이 공개한 **Agent Skills(SKILL.md) 포맷**의 커뮤니티 스킬
 | | `threejs-game-ui-designer` | 모바일 터치 컨트롤(가상 조이스틱 + 상호작용 버튼), 세이프 에어리어 고려한 하단 액션바 |
 | | `threejs-qa-release` | 프로덕션 빌드 + 헤드리스 브라우저 콘솔 체크 + 데스크톱/모바일 뷰포트 스크린샷 투어로 검증 (`docs/screenshots`) |
 | | `threejs-debug-profiler` | 검은 화면/리사이즈/모바일 버그 진단 플레이북 (초기 `obstacle` 미정의 크래시를 콘솔 체크로 발견·수정) |
+| | `threejs-aaa-graphics-builder` | "형태 → 재질 → 조명 → 효과" 순서와 10개 항목 시각 스코어카드로 필드 2차 개선: 한 장으로 칠한 지면(곡선 흙길·구운 AO), 근·중·원경 레이어(소품→과수원·논→원경 산맥), 키·필·림 조명, 블룸은 발광체에만, 렌더러 수치 보고 |
+| | `threejs-game-director` | 핵심 루프를 먼저 완성하고 증거(스크린샷·브라우저 검증)로 확장하는 작업 순서 |
+| [Donchitos/Claude-Code-Game-Studios](https://github.com/Donchitos/Claude-Code-Game-Studios) (MIT, 약 2.5만~3만★, 이번 조사에서 가장 인기 있는 게임 제작 스킬 모음) | `balance-check` | 자원 유입·유출 지도, 지배 전략·차익 루프 점검 절차를 `scripts/balance.mjs` 로 구현 → 쌀 ★5 가 최고 작물의 5배라는 지배 전략을 찾아 단가 조정, 쓸모없던 달걀·양배추·옥수수 상향 (`docs/BALANCE.md`) |
+| | `design-system`, `quick-design`, `playtest-report`, `ux-review`, `art-bible` | 새 시스템(논·낚시·주민) 설계 체크리스트, 브라우저 자동 플레이 테스트, UX 점검(마우스·터치 동등 조작, 클릭 가능한 안내) 참고용. 원본은 저장소 훅에 의존해 절차 문서로만 보관 |
 | [majidmanzarpour/blender-game-skills](https://github.com/majidmanzarpour/blender-game-skills) (MIT) | `blender-image-to-3d` | 레퍼런스 이미지 → 게임용 3D 의 단계별 게이트(브리프→형태→토폴로지→내보내기→라운드트립 검증) 를 참고해, 캐릭터는 원본 벡터 릴리프 방식으로 전환하고 결과를 매 단계 스크린샷으로 원본과 비교 |
 
 ## 조사했지만 복사하지 않은 것
