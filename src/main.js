@@ -22,6 +22,7 @@ import { Juice } from './game/juice.js';
 import { PostFX } from './game/postfx.js';
 import { pickQuality } from './game/quality.js';
 import { WeatherService } from './game/weather.js';
+import { PointerNav } from './game/pointer.js';
 
 class Game {
   constructor(canvas, assets, name) {
@@ -55,6 +56,7 @@ class Game {
     this.net = new Net(this);
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
+    this.pointer = new PointerNav(this);
     this.world.onNewDay = (day) => {
       const ev = this.economy.newDay();
       this.ui.toast(`🌅 ${day}일차 아침! 장터 시세가 바뀌었어요`);
@@ -146,7 +148,10 @@ class Game {
       const farmP = this.farm.update(dt, pp);
       const ranchP = this.ranch.update(dt, pp);
       prompt = prompt || farmP || ranchP;
-      if (prompt?.onInteract && input.interact() && !this.ui.panel) prompt.onInteract();
+      this.pointer.update(dt, input);
+      const arrived = this.player.arrivedInteract;
+      this.player.arrivedInteract = false;
+      if (prompt?.onInteract && (input.interact() || arrived) && !this.ui.panel) prompt.onInteract();
       this.player.update(dt, input, this.followCam);
       this.followCam.update(dt, this.ui.panel ? null : input, pp);
     } else {

@@ -34,6 +34,7 @@ export class UI {
     this.toasts = h('div', 'toasts');
     root.append(this.toasts);
     this.prompt = h('div', 'prompt hidden', '');
+    this.prompt.addEventListener('pointerdown', (e) => { if (this.currentPrompt?.onInteract) { e.preventDefault(); game.input.interactTap = true; } });
     root.append(this.prompt);
     // 모바일
     this.joy = h('div', 'joystick', '<i></i>');
@@ -183,9 +184,12 @@ export class UI {
   }
 
   setPrompt(p) {
+    this.currentPrompt = p;
     if (!p) { this.prompt.classList.add('hidden'); return; }
     this.prompt.classList.remove('hidden');
-    this.prompt.innerHTML = (p.onInteract ? '<kbd>E</kbd> ' : '') + p.label;
+    this.prompt.classList.toggle('clickable', !!p.onInteract);
+    const html = (p.onInteract ? '<kbd>E</kbd> ' : '') + p.label + (p.onInteract ? ' <span class="tapme">👆</span>' : '');
+    if (html !== this.promptHtml) { this.prompt.innerHTML = html; this.promptHtml = html; }
   }
 
   toast(text) {
@@ -320,10 +324,12 @@ export class UI {
   openHelp() {
     const p = this.openPanel('❔ 유니코 팜 도움말');
     p.append(h('div', 'rows', [
-      '🚶 <b>이동</b> WASD/방향키, 모바일은 왼쪽 조이스틱 · 마우스/오른쪽 터치 드래그로 시점 회전, 휠 줌',
+      '🚶 <b>이동</b> 키보드 WASD/방향키 · 마우스 클릭 또는 터치 탭으로 그 자리까지 이동 · 모바일 왼쪽 조이스틱',
+      '👆 <b>상호작용</b> E 키 · 밭/동물/NPC/트랙터를 클릭·탭하면 걸어가서 자동 실행 · 하단 안내 말풍선을 눌러도 실행',
+      '🎥 <b>시점</b> 마우스 드래그(왼쪽/오른쪽) 또는 오른쪽 화면 드래그로 회전 · 휠 또는 두 손가락으로 확대/축소',
       '🌱 <b>농사</b> 밭 근처에서 E: 갈기 → 씨앗 심기 → 물 주기 → 수확. 물을 주면 3배 빨리 자라요',
       '🛒 <b>장터</b> 북쪽 장터 유니코에게 씨앗·사료를 사고 작물을 팔아요. 시세는 매일 바뀌고 수요 이벤트가 생겨요',
-      '🚜 <b>트랙터</b> 남동쪽 밭의 트랙터를 타면 60초 밭갈이 미니게임 (SPACE 쟁기, 바위 주의)',
+      '🚜 <b>트랙터</b> 60초 밭갈이 미니게임. 키보드 W/S/A/D·SPACE 또는 화면의 ◀ ▶ ▲ ▼·쟁기 버튼 (바위 주의)',
       '📱 <b>스마트팜</b> 서쪽 비닐하우스 센서에서 환경제어 미니게임 → 성공하면 작물 성장 부스트',
       '🐄 <b>목장</b> 동쪽 울타리 안 동물에게 사료를 주면 달걀·우유·양털이 생겨요',
       '📜 <b>퀘스트</b> Q 키. 보상을 받으면 레벨이 오르고 새 작물이 해금돼요',
@@ -351,9 +357,43 @@ export class UI {
     this.hideMinigame();
     this.miniHud = h('div', 'mini-hud', `<div><small>남은 시간</small><span class="t">${Math.ceil(s.time)}</span>s</div><div><small>갈아낸 칸</small><span class="s">${s.score}</span>/${s.max}</div>`);
     this.root.append(this.miniHud);
+    // 마우스/터치용 운전 버튼 (누르고 있는 동안 동작)
+    const inp = this.game.input;
+    const pad = h('div', 'drive-pad');
+    const hold = (label, cls, on, off) => {
+      const b = h('button', cls, label);
+      const start = (e) => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); b.classList.add('on'); on(); };
+      const stop = () => { b.classList.remove('on'); off(); };
+      b.addEventListener('pointerdown', start);
+      b.addEventListener('pointerup', stop);
+      b.addEventListener('pointercancel', stop);
+      b.addEventListener('lostpointercapture', stop);
+      return b;
+    };
+    const steer = h('div', 'pad-steer');
+    steer.append(hold('◀', 'pad-btn', () => (inp.virtual.x = -1), () => inp.virtual.x === -1 && (inp.virtual.x = 0)),
+      hold('▶', 'pad-btn', () => (inp.virtual.x = 1), () => inp.virtual.x === 1 && (inp.virtual.x = 0)));
+    const pedals = h('div', 'pad-pedals');
+    pedals.append(hold('▲<small>전진</small>', 'pad-btn gas', () => (inp.virtual.y = -1), () => inp.virtual.y === -1 && (inp.virtual.y = 0)),
+      hold('▼<small>후진</small>', 'pad-btn', () => (inp.virtual.y = 1), () => inp.virtual.y === 1 && (inp.virtual.y = 0)));
+    const extra = h('div', 'pad-extra');
+    const plow = h('button', 'pad-small', '🪓 쟁기');
+    plow.onclick = () => { this.game.tractor.plowDown = !this.game.tractor.plowDown; this.game.audio.play('click'); };
+    const exit = h('button', 'pad-small ghost', '🚪 내리기');
+    exit.onclick = () => this.game.tractor.dismount(false);
+    extra.append(plow, exit);
+    pad.append(steer, extra, pedals);
+    this.root.append(pad);
+    this.drivePad = pad;
+    this.bar.style.display = 'none';
   }
   updateMinigame(s) { if (this.miniHud) { this.miniHud.querySelector('.t').textContent = Math.ceil(s.time); this.miniHud.querySelector('.s').textContent = s.score; } }
-  hideMinigame() { this.miniHud?.remove(); this.miniHud = null; }
+  hideMinigame() {
+    this.miniHud?.remove(); this.miniHud = null;
+    this.drivePad?.remove(); this.drivePad = null;
+    this.game.input.virtual.x = this.game.input.virtual.y = 0;
+    this.bar.style.display = '';
+  }
 
   showSmartfarm(sim, onAct) {
     this.hideSmartfarm();

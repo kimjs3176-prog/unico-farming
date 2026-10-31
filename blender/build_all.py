@@ -20,7 +20,7 @@ from build_environment import ASSETS  # noqa: E402
 
 def main(names):
     builders = dict(ASSETS)
-    names = names or list(ASSETS)  # 기본: 환경 에셋만. 캐릭터는 build_character_relief.py
+    names = names or list(ASSETS)  # 환경 에셋 (캐릭터는 src/game/unico.js)
     report = []
     for n in names:
         t = time.time()

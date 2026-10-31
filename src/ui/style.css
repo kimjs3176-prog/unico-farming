@@ -114,3 +114,22 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 .weather-chip { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); padding: 8px 12px; font-size: 14px; }
 .weather-chip small { color: #666; font-weight: 500; }
+
+/* 클릭 가능한 상호작용 안내 */
+.prompt.clickable { cursor: pointer; pointer-events: auto; transition: transform 0.1s; }
+.prompt.clickable:hover { transform: translateX(-50%) scale(1.04); background: #3a2b26; }
+.prompt .tapme { animation: tap 1s infinite; display: inline-block; }
+@keyframes tap { 0%,100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+
+/* 트랙터 운전 버튼 (마우스·터치) */
+.drive-pad { position: absolute; left: 0; right: 0; bottom: 18px; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 18px; pointer-events: none; }
+.drive-pad > * { pointer-events: auto; }
+.pad-steer, .pad-pedals { display: flex; gap: 10px; }
+.pad-pedals { flex-direction: column; }
+.pad-btn { width: 74px; height: 74px; border-radius: 22px; font-size: 26px; background: rgba(35,25,22,0.78); color: #fff; box-shadow: 0 4px 0 rgba(0,0,0,0.35); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; touch-action: none; user-select: none; }
+.pad-btn small { font-size: 11px; margin-top: 3px; }
+.pad-btn.gas { background: var(--teal); box-shadow: 0 4px 0 var(--teal-d); }
+.pad-btn.on { transform: translateY(3px); box-shadow: none; filter: brightness(1.15); }
+.pad-extra { display: flex; gap: 8px; margin-bottom: 6px; }
+.pad-small { padding: 10px 14px; }
+@media (max-width: 600px) { .pad-btn { width: 64px; height: 64px; } .drive-pad { bottom: 90px; } }

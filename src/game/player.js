@@ -18,10 +18,32 @@ export class Player {
 
   get position() { return this.group.position; }
 
+  /** 클릭/탭 이동: pos() 위치까지 걸어가 stop 거리 안에 들면 멈춤. interact 면 도착 시 상호작용 */
+  goTo(pos, stop = 0.2, interact = false) {
+    this.moveTarget = { pos, stop, interact, stuck: 0 };
+  }
+
   update(dt, input, followCam) {
     const ax = this.frozen ? { x: 0, y: 0 } : input.axis();
     const { fwd, right } = followCam.basis();
     const dir = new THREE.Vector3().addScaledVector(fwd, -ax.y).addScaledVector(right, ax.x);
+    if (dir.lengthSq() > 0.0001 || this.frozen) this.moveTarget = null; // 키보드/조이스틱 입력이 우선
+    else if (this.moveTarget) {
+      const t = this.moveTarget, goal = t.pos();
+      const d = new THREE.Vector3(goal.x - this.position.x, 0, goal.z - this.position.z);
+      const dist = d.length();
+      if (dist <= t.stop) {
+        this.arrivedInteract = t.interact;
+        this.moveTarget = null;
+        if (t.interact && dist > 0.01) this.unico.facing = Math.atan2(d.x, d.z);
+      } else {
+        dir.copy(d.normalize());
+        // 장애물에 막혀 거의 못 움직이면 포기 (상호작용 대상 근처면 도착 처리)
+        t.stuck = (t.lastDist !== undefined && t.lastDist - dist < SPEED * dt * 0.25) ? t.stuck + dt : 0;
+        t.lastDist = dist;
+        if (t.stuck > 0.6) { if (t.interact && dist < t.stop + 1.5) this.arrivedInteract = true; this.moveTarget = null; dir.set(0, 0, 0); }
+      }
+    }
     const moving = dir.lengthSq() > 0.0001;
     if (moving) {
       dir.normalize();

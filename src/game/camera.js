@@ -4,7 +4,7 @@ import * as THREE from 'three';
 export class FollowCamera {
   constructor(camera) {
     this.camera = camera;
-    this.yaw = Math.PI; // 카메라가 플레이어 남쪽(+Z)에서 북쪽을 바라봄
+    this.yaw = 0; // 카메라가 플레이어 남쪽(+Z)에서 북쪽(밭·장터 쪽)을 바라봄
     this.pitch = 0.45;
     this.distance = 9;
     this.target = new THREE.Vector3();

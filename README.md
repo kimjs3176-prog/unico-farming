@@ -84,15 +84,13 @@ npm test               # 게임 규칙(경작·경제·퀘스트·트랙터·스
 ```
 blender/                 Blender(bpy) 에셋 생성 스크립트 + .blend
   common.py              프리미티브/머티리얼/결합/glTF 내보내기 헬퍼
-  vector_extract.py      AI(PDF) 파일에서 마스코트 벡터 추출 (PyMuPDF)
-  build_character_relief.py  원본 벡터 → 릴리프 3D 캐릭터 (기본 캐릭터)
   build_environment.py   농장/목장/스마트팜/농기계/동물/작물 에셋
   build_all.py           전체 빌드
 public/models/           생성된 GLB (약 3.5MB)
 src/
   main.js                게임 루프 / 부트스트랩
   game/world.js          월드 배치(LAYOUT), 조명, 충돌, 낮/밤
-  game/unico.js          유니코 엔티티 (빌보드, 방향별 포즈, 감정표현)
+  game/unico.js          유니코 3D 캐릭터 (코드 조립, 애니메이션, 감정표현, 옷차림)
   game/sim/*.js          렌더링과 분리된 게임 규칙 (테스트 대상)
   game/view/*.js         밭/목장/트랙터/스마트팜/NPC 3D 뷰
   game/net.js            멀티플레이 클라이언트
