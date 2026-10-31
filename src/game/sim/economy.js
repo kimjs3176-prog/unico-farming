@@ -1,11 +1,12 @@
 import { CROPS, PRODUCTS, FEED_PRICE } from './crops.js';
+import { ITEMS, RICE_GRADE_MULT } from './items.js';
 
 /** 간단한 농산물 경제: 시세 랜덤워크 + 수요 이벤트, 인벤토리, 구매/판매 */
 export class Economy {
   constructor(rng = Math.random) {
     this.rng = rng;
     this.money = 150;
-    this.inventory = { seeds: { carrot: 3 }, crops: {}, products: {}, feed: 2 };
+    this.inventory = { seeds: { carrot: 3 }, crops: {}, products: {}, feed: 2, items: { rice_seed: 2 } };
     this.prices = {};
     this.event = null; // { item, mult, name }
     for (const k of Object.keys(CROPS)) this.prices[k] = { mult: 1, trend: 0 };
@@ -13,10 +14,21 @@ export class Economy {
     this.stats = { earned: 0, spent: 0, sold: 0 };
   }
 
-  basePrice(item) { return (CROPS[item] || PRODUCTS[item]).basePrice; }
+  basePrice(item) {
+    if (CROPS[item] || PRODUCTS[item]) return (CROPS[item] || PRODUCTS[item]).basePrice;
+    const it = ITEMS[item];
+    if (!it) return 0;
+    if (item.startsWith('rice_') && item !== 'rice_seed') return Math.round(it.price * RICE_GRADE_MULT[+item.slice(5)]);
+    return it.price;
+  }
+
+  /** 아이템이 들어있는 가방 칸 */
+  bagOf(item) { return CROPS[item] ? this.inventory.crops : PRODUCTS[item] ? this.inventory.products : this.inventory.items; }
+  count(item) { return this.bagOf(item)[item] || 0; }
 
   sellPrice(item) {
     const p = this.prices[item];
+    if (!p) return Math.max(1, Math.round(this.basePrice(item) * (ITEMS[item]?.cat === 'seed' ? 0.5 : 1)));
     const ev = this.event?.item === item ? this.event.mult : 1;
     return Math.max(1, Math.round(this.basePrice(item) * p.mult * ev));
   }
@@ -64,6 +76,30 @@ export class Economy {
     return true;
   }
 
+  /** 볍씨 등 ITEMS 구매 */
+  buyItem(id, n = 1) {
+    const cost = ITEMS[id].price * n;
+    if (this.money < cost) return false;
+    this.money -= cost;
+    this.stats.spent += cost;
+    this.addItem(id, n);
+    return true;
+  }
+
+  addItem(id, n = 1) { this.inventory.items[id] = (this.inventory.items[id] || 0) + n; }
+  useItem(id, n = 1) {
+    if ((this.inventory.items[id] || 0) < n) return false;
+    this.inventory.items[id] -= n;
+    return true;
+  }
+  /** 선물/부탁용: 어느 칸이든 n개 꺼내기 */
+  take(item, n = 1) {
+    const bag = this.bagOf(item);
+    if ((bag[item] || 0) < n) return false;
+    bag[item] -= n;
+    return true;
+  }
+
   useFeed() {
     if (this.inventory.feed <= 0) return false;
     this.inventory.feed--;
@@ -75,7 +111,7 @@ export class Economy {
 
   /** 작물/생산물 판매, 판매액 반환 */
   sell(item, n = 1) {
-    const bag = CROPS[item] ? this.inventory.crops : this.inventory.products;
+    const bag = this.bagOf(item);
     const have = bag[item] || 0;
     n = Math.min(n, have);
     if (n <= 0) return 0;
@@ -91,6 +127,7 @@ export class Economy {
     let total = 0;
     for (const k of Object.keys(this.inventory.crops)) total += this.sell(k, this.inventory.crops[k]);
     for (const k of Object.keys(this.inventory.products)) total += this.sell(k, this.inventory.products[k]);
+    for (const k of Object.keys(this.inventory.items)) if (ITEMS[k]?.cat !== 'seed' && k !== 'paddy') total += this.sell(k, this.inventory.items[k]);
     return total;
   }
 
@@ -100,7 +137,7 @@ export class Economy {
   load(d) {
     if (!d) return;
     this.money = d.money ?? this.money;
-    this.inventory = { seeds: {}, crops: {}, products: {}, feed: 0, ...d.inventory };
+    this.inventory = { seeds: {}, crops: {}, products: {}, feed: 0, items: {}, ...d.inventory };
     if (d.prices) for (const k of Object.keys(this.prices)) if (d.prices[k]) this.prices[k] = d.prices[k];
     this.event = d.event || null;
     this.stats = { ...this.stats, ...d.stats };

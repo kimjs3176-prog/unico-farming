@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Unico } from './unico.js';
 
-const SPEED = 5.2;
+const SPEED = 4.6;
 
 /** 로컬 플레이어 컨트롤러 */
 export class Player {

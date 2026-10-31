@@ -92,6 +92,7 @@ function bundle(parts) {
 // ------------------------------------------------------------------ 템플릿 (한 번만 생성해 공유)
 // 몸통 그룹 원점 = 몸통 중심 (지면에서 BODY_Y)
 const BODY_Y = 0.8;
+const LEG_LEN = 0.6; // 고관절~발바닥
 const HEAD_AT = V(0, 0.78, 0.66); // 몸통 기준 머리 중심
 const HEAD_R = 0.42;
 let TPL = null;
@@ -200,6 +201,24 @@ function meshOf(b) {
   return m;
 }
 
+const BLOB_GEO = new THREE.CircleGeometry(0.62, 28);
+let BLOB_TEX = null;
+/** 가장자리가 부드럽게 사라지는 접지 그림자 텍스처 */
+function blobTexture() {
+  if (BLOB_TEX) return BLOB_TEX;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.5, 'rgba(255,255,255,0.75)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  BLOB_TEX = new THREE.CanvasTexture(c);
+  return BLOB_TEX;
+}
+
 // 감정표현 → 머리 위 아이콘
 const EMOTE_ICON = { cheer: '🎉', heart: '❤️', wave: '👋', think: '❓', water: '💧', tablet: '📱', present: '📊', megaphone: '📣', lab: '🧪' };
 
@@ -246,12 +265,23 @@ export class Unico {
     for (const k of ['scarfRed', 'scarfGreen', 'scarfBlue']) addAcc(k, this.bodyG);
     this.setOutfit({ sprout: true, ...outfit });
     // 바닥 그림자 (부드러운 접지감)
-    const sh = new THREE.Mesh(new THREE.CircleGeometry(0.62, 24), new THREE.MeshBasicMaterial({ color: 0x231916, transparent: true, opacity: 0.18, depthWrite: false }));
+    const sh = new THREE.Mesh(BLOB_GEO, new THREE.MeshBasicMaterial({ map: blobTexture(), color: 0x231916, transparent: true, opacity: 0.42, depthWrite: false }));
     sh.rotation.x = -Math.PI / 2;
-    sh.scale.set(0.85, 1.25, 1);
-    sh.position.y = 0.015;
+    sh.scale.set(0.95, 1.45, 1);
+    sh.position.y = 0.018;
+    sh.renderOrder = 2;
     this.shadow = sh;
     this.root.add(sh);
+    // 발굽 접지 그림자 (발이 땅에 닿아 있는 느낌)
+    this.footShadows = this.legs.map((leg) => {
+      const f = new THREE.Mesh(BLOB_GEO, new THREE.MeshBasicMaterial({ map: blobTexture(), color: 0x1a120f, transparent: true, opacity: 0.55, depthWrite: false }));
+      f.rotation.x = -Math.PI / 2;
+      f.scale.setScalar(0.2);
+      f.position.set(leg.position.x, 0.02, leg.position.z);
+      f.renderOrder = 3;
+      this.root.add(f);
+      return f;
+    });
 
     this.facing = 0;
     this.yaw = 0;
@@ -341,17 +371,30 @@ export class Unico {
     this.yaw += wrap(this.facing - this.yaw) * Math.min(1, dt * 12);
     this.root.rotation.y = this.yaw;
 
-    // ---- 걷기 ----
-    this.walkBlend += ((this.moving ? 1 : 0) - this.walkBlend) * Math.min(1, dt * 10);
-    if (this.moving) this.walkPhase += dt * 11;
+    // ---- 걷기: 발이 미끄러지지 않도록 실제 이동 거리로 보행 위상을 진행 ----
+    const pos = this.group.position;
+    const moved = this.lastPos ? Math.hypot(pos.x - this.lastPos.x, pos.z - this.lastPos.z) : 0;
+    this.lastPos = this.lastPos || new THREE.Vector3();
+    this.lastPos.copy(pos);
+    const speed = dt > 0 ? moved / dt : 0;
+    const walking = this.moving || speed > 0.3;
+    this.walkBlend += ((walking ? 1 : 0) - this.walkBlend) * Math.min(1, dt * 10);
+    const AMP = 0.5; // 다리 최대 각도(rad)
+    const stride = 2 * LEG_LEN * Math.sin(AMP); // 반주기 동안 디딘 발이 미는 거리
+    if (walking) this.walkPhase += (Math.max(speed, 1.2) / stride) * Math.PI * dt;
     const w = this.walkBlend, ph = this.walkPhase;
-    const sw = Math.sin(ph) * 0.62 * w;
+    const sw = Math.sin(ph) * AMP * w;
     const [FL, FR, BL, BR] = this.legs;
     FL.rotation.set(sw, 0, 0); BR.rotation.set(sw, 0, 0);
     FR.rotation.set(-sw, 0, 0); BL.rotation.set(-sw, 0, 0);
-    const bob = Math.abs(Math.sin(ph)) * 0.06 * w;
+    // 드는 발(앞으로 나가는 쪽)은 살짝 접어 들어 올림, 디딘 발은 펴서 땅에 닿게
+    const lift = Math.max(0, Math.cos(ph)) * 0.14 * w, lift2 = Math.max(0, -Math.cos(ph)) * 0.14 * w;
+    FL.scale.y = BR.scale.y = 1 - lift;
+    FR.scale.y = BL.scale.y = 1 - lift2;
+    // 다리가 기울면 발끝 높이가 L(1-cosθ) 만큼 올라가므로 그만큼 몸을 내려 발을 땅에 붙임
+    const bob = -LEG_LEN * (1 - Math.cos(sw));
     const s = Math.sin(ph);
-    if (this.moving && Math.sign(s) !== Math.sign(this.lastSin)) this.onStep?.(this.position.x, this.position.z);
+    if (walking && Math.sign(s) !== Math.sign(this.lastSin)) this.onStep?.(pos.x, pos.z);
     this.lastSin = s;
 
     let bodyY = BODY_Y + bob, bodyPitch = Math.sin(ph * 2) * 0.03 * w, bodyRoll = 0;
@@ -411,12 +454,22 @@ export class Unico {
     if (this.nextBlink < 0.12) blink = 0.12;
     if (this.nextBlink <= 0) this.nextBlink = 2.5 + Math.random() * 3.5;
     this.eyesG.scale.y = blink;
-    // 그림자
-    const lift = bodyY - BODY_Y;
-    const shs = Math.max(0.5, 1 - lift * 1.6);
-    this.shadow.scale.set(0.85 * shs, 1.25 * shs, 1);
-    this.shadow.material.opacity = 0.18 * shs;
+    // 그림자: 점프하면 작고 옅어짐, 발굽 그림자는 발 위치를 따라감
+    const air = Math.max(0, bodyY - BODY_Y);
+    const shs = Math.max(0.45, 1 - air * 1.8);
+    this.shadow.scale.set(0.95 * shs, 1.45 * shs, 1);
+    this.shadow.material.opacity = 0.42 * shs;
     this.shadow.visible = !this.riding;
+    this.legs.forEach((leg, i) => {
+      const f = this.footShadows[i];
+      const a = leg.rotation.x;
+      f.position.z = leg.position.z - Math.sin(a) * LEG_LEN; // 발굽의 수평 위치 (x축 회전 시 발끝은 -z 로)
+      const footY = bodyY + leg.position.y - Math.cos(a) * LEG_LEN * leg.scale.y; // 발굽 높이
+      const k = Math.max(0, 1 - Math.max(0, footY) * 6);
+      f.material.opacity = 0.55 * k;
+      f.scale.setScalar(0.2 * (0.7 + 0.3 * k));
+      f.visible = !this.riding;
+    });
   }
 
   dispose() {

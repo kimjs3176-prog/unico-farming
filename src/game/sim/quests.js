@@ -9,6 +9,13 @@ export const QUESTS = [
   { id: 'smart1',    title: '스마트팜 점검',        desc: '스마트팜 환경제어 미니게임을 완료하세요',  event: 'smartfarm', goal: 1, reward: { money: 120, xp: 80 } },
   { id: 'feed3',     title: '목장 돌보기',          desc: '동물에게 사료를 3번 주세요',              event: 'feed',     goal: 3, reward: { money: 50, xp: 40 } },
   { id: 'collect5',  title: '신선한 생산물',        desc: '달걀/우유/양털을 5개 모으세요',           event: 'collect',  goal: 5, reward: { money: 100, xp: 70 } },
+  { id: 'rice1',     title: '첫 벼농사',            desc: '논을 갈고 물을 대고 모를 심으세요',        event: 'riceplant', goal: 1, reward: { money: 80, xp: 60 } },
+  { id: 'riceharv',  title: '황금 들녘',            desc: '벼를 수확하고 탈곡해 쌀을 만드세요',        event: 'thresh',   goal: 1, reward: { money: 200, xp: 150 } },
+  { id: 'fish1',     title: '첫 낚시',              desc: '연못에서 물고기를 낚으세요',               event: 'fish',     goal: 1, reward: { money: 50, xp: 40 } },
+  { id: 'bug1',      title: '곤충 채집',            desc: '나비나 곤충을 잡아 보세요',                event: 'bug',      goal: 1, reward: { money: 40, xp: 30 } },
+  { id: 'shake3',    title: '과일 나무',            desc: '과일 나무를 3번 흔들어 보세요',            event: 'shake',    goal: 3, reward: { money: 60, xp: 40 } },
+  { id: 'friend2',   title: '이웃사촌',             desc: '주민 한 명과 하트 2개 친구가 되세요',       event: 'hearts',   goal: 2, reward: { money: 150, xp: 100 }, absolute: true },
+  { id: 'book10',    title: '꼬마 박물학자',        desc: '도감에 10종을 등록하세요',                 event: 'book',     goal: 10, reward: { money: 300, xp: 200 }, absolute: true },
   { id: 'rich',      title: '천 원의 농부',         desc: '보유 금액 1,000 코인 달성',               event: 'money',    goal: 1000, reward: { money: 200, xp: 150 }, absolute: true },
   { id: 'plow30',    title: '밭갈이 달인',          desc: '트랙터 미니게임에서 한 번에 30칸 이상 갈기', event: 'plowbest', goal: 30, reward: { money: 250, xp: 200 }, absolute: true },
 ];
