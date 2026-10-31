@@ -86,11 +86,13 @@ export class Scenery {
     const geo = mergeGeometries(parts);
     const mat = new THREE.MeshStandardMaterial({ color: 0x86d156, roughness: 1, side: THREE.DoubleSide });
     this.windUniform = { value: 0 };
+    this.windStrength = { value: 0.18 };
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this.windUniform;
-      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>',
+      sh.uniforms.uWind = this.windStrength;
+      sh.vertexShader = 'uniform float uTime; uniform float uWind;\n' + sh.vertexShader.replace('#include <begin_vertex>',
         `#include <begin_vertex>
-         float sway = sin(uTime * 1.6 + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.5) * 0.18 * position.y;
+         float sway = (sin(uTime * (1.4 + uWind * 3.0) + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.5) + uWind * 1.2) * (0.12 + uWind * 0.4) * position.y;
          transformed.x += sway; transformed.z += sway * 0.5;`);
     };
     const COUNT = this.world.quality?.grass ?? 9000;
@@ -154,25 +156,32 @@ export class Scenery {
   }
 
   /** @param daylight 0..1, @param sunPos THREE.Vector3 */
-  update(dt, daylight, sunPos) {
+  update(dt, daylight, sunPos, weather = { cloud: 0.15, wind: 0.15, precip: 0 }) {
     this.t += dt;
     this.windUniform.value = this.t;
-    this.waterUniform.value = this.t;
-    for (const c of this.clouds) {
-      c.position.x += c.userData.speed * dt;
+    this.windStrength.value = weather.wind;
+    this.waterUniform.value = this.t * (1 + weather.wind * 2 + weather.precip * 2);
+    const visible = Math.round(3 + weather.cloud * (this.clouds.length - 3));
+    this.clouds.forEach((c, i) => {
+      c.visible = i < visible;
+      c.position.x += c.userData.speed * (1 + weather.wind * 6) * dt;
       if (c.position.x > 130) c.position.x = -130;
-    }
+    });
     const u = this.skyUniforms;
     const dayTop = new THREE.Color(0x4f9ff0), dayHz = new THREE.Color(0xd6eeff);
     const duskTop = new THREE.Color(0x4a3f8a), duskHz = new THREE.Color(0xf7b27a);
     const nightTop = new THREE.Color(0x0a1230), nightHz = new THREE.Color(0x1f2c52);
     if (daylight > 0.6) { const k = (daylight - 0.6) / 0.4; u.top.value.copy(duskTop).lerp(dayTop, k); u.horizon.value.copy(duskHz).lerp(dayHz, k); }
     else { const k = daylight / 0.6; u.top.value.copy(nightTop).lerp(duskTop, k); u.horizon.value.copy(nightHz).lerp(duskHz, k); }
+    const grey = new THREE.Color(0x8d98a3).multiplyScalar(0.4 + daylight * 0.6);
+    u.top.value.lerp(grey, weather.cloud * 0.75);
+    u.horizon.value.lerp(grey, weather.cloud * 0.6);
     u.bottom.value.copy(u.horizon.value).multiplyScalar(0.9);
     u.sunDir.value.copy(sunPos).normalize();
-    u.sunColor.value.setHex(daylight > 0.6 ? 0xfff2c8 : 0xffb070).multiplyScalar(Math.max(0.15, daylight));
+    u.sunColor.value.setHex(daylight > 0.6 ? 0xfff2c8 : 0xffb070).multiplyScalar(Math.max(0.15, daylight) * (1 - weather.cloud * 0.85));
     this.sky.position.copy(this.world.cameraPos || this.sky.position);
-    for (const c of this.clouds) c.traverse((o) => { if (o.isMesh) o.material.color?.setScalar(0.5 + 0.5 * daylight); });
+    const cloudShade = (0.5 + 0.5 * daylight) * (1 - weather.precip * 0.4);
+    for (const c of this.clouds) c.traverse((o) => { if (o.isMesh) o.material.color?.setScalar(cloudShade); });
   }
 }
 

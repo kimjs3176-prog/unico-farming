@@ -33,10 +33,21 @@ POSES = {
     "front": "p8_0", "side": "p8_1", "back": "p8_2",
 }
 # 소품이 같이 그려진 포즈: 클러스터 폭 기준 비율로 캐릭터 영역만 잘라냄 (safety = 2D 트랙터 제외, 3D 트랙터로 대체)
-CROP_X = {"safety": (0.62, 1.0), "tablet": (0.55, 1.0)}
+CROP_X = {"safety": (0.62, 1.0)}
+# 오른쪽 끝(x1)이 이 비율보다 왼쪽에 있는 조각은 제거 (캐릭터 손/소품은 살리고 왼쪽 배경 소품만 제거)
+KEEP_X1 = {"tablet": 0.60}
+# 그리기 순서(z)로 지정한 배경 조각 제거: tablet = 캐릭터 뒤로 이어지는 비닐하우스 끝면/바닥선
+DROP_Z = {"tablet": {35, 37, 38, 43, 45, 46}}
 # 포즈별 추가 제외 규칙: (정규화 bbox, 색) -> True 면 제거. safety: 머리 높이의 트랙터 초록 조각(캐빈 기둥)
+def _near(col, ref, tol=6):
+    a = [int(col[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(ref[i:i + 2], 16) for i in (1, 3, 5)]
+    return all(abs(x - y) <= tol for x, y in zip(a, b))
+
+
 DROP = {
-    "safety": lambda nb, col: col == "#7cc062" and nb[1] < 0.45,
+    # 머리 왼쪽에 걸친 트랙터 캐빈 기둥(초록) — 조끼보다 위쪽만
+    "safety": lambda nb, col: _near(col, "#7cc062") and nb[3] < 0.47,
 }
 
 
@@ -48,6 +59,10 @@ def _filter_paths(char, name):
     for p in char["paths"]:
         px0, py0, px1, py1 = p["rect"]
         if px0 < x0 + lo * w - 1 or px1 > x0 + hi * w + 1:
+            continue
+        if name in KEEP_X1 and px1 < x0 + KEEP_X1[name] * w:
+            continue
+        if p.get("z") in DROP_Z.get(name, ()):
             continue
         drop = DROP.get(name)
         if drop:

@@ -87,7 +87,7 @@ def extract_page(doc, pno, gap=14.0):
     page = doc[pno]
     drawings = page.get_drawings()
     shapes = []
-    for d in drawings:
+    for z, d in enumerate(drawings):
         if d.get("fill") is None:
             continue  # 선(stroke) 전용 = 상단 구분선
         r = d["rect"]
@@ -99,7 +99,7 @@ def extract_page(doc, pno, gap=14.0):
         subs = _subpaths(d["items"])
         if not subs:
             continue
-        shapes.append({"color": tuple(d["fill"]), "subpaths": subs, "rect": (r.x0, r.y0, r.x1, r.y1), "even_odd": bool(d.get("even_odd"))})
+        shapes.append({"color": tuple(d["fill"]), "subpaths": subs, "rect": (r.x0, r.y0, r.x1, r.y1), "even_odd": bool(d.get("even_odd")), "z": z, "items": d["items"], "closePath": d.get("closePath")})
     # x 축 클러스터링
     shapes.sort(key=lambda s: s["rect"][0])
     clusters = []
@@ -132,15 +132,11 @@ def extract_page(doc, pno, gap=14.0):
     clusters.sort(key=lambda c: c["x0"])
     out = []
     for ci, c in enumerate(clusters):
-        # 원래 그리기 순서(z-order) 복원
-        c["shapes"].sort(key=lambda s: drawings_index(s, shapes))
+        # 원래 그리기 순서(z-order) 복원 — 겹침 앞뒤가 원본과 같아야 함
+        c["shapes"].sort(key=lambda s: s["z"])
         ys = [s["rect"][1] for s in c["shapes"]] + [s["rect"][3] for s in c["shapes"]]
         out.append({"name": f"p{pno+1}_{ci}", "page": pno + 1, "bbox": (c["x0"], min(ys), c["x1"], max(ys)), "paths": c["shapes"]})
     return out
-
-
-def drawings_index(s, shapes):
-    return shapes.index(s)
 
 
 def extract_all(path):

@@ -26,13 +26,29 @@ export class FX {
     }
   }
 
+  /** 발밑 흙먼지 (걷기 착지마다) */
+  dust(x, z) {
+    if (!this.dustGeo) {
+      this.dustGeo = new THREE.SphereGeometry(0.09, 6, 4);
+      this.dustMat = new THREE.MeshBasicMaterial({ color: 0xe9dcc0, transparent: true, opacity: 0.7, depthWrite: false });
+    }
+    for (let i = 0; i < 3; i++) {
+      const m = new THREE.Mesh(this.dustGeo, this.dustMat.clone());
+      m.position.set(x + (Math.random() - 0.5) * 0.5, 0.08, z + (Math.random() - 0.5) * 0.5);
+      this.scene.add(m);
+      this.items.push({ obj: m, life: 0.45, vy: 0.5, grow: 2.2, fade: true });
+    }
+  }
+
   update(dt) {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
       it.life -= dt;
       it.obj.position.y += it.vy * dt;
+      if (it.grow) it.obj.scale.multiplyScalar(1 + it.grow * dt);
+      if (it.fade) it.obj.material.opacity = Math.max(0, it.life * 1.5);
       if (it.obj.material && 'opacity' in it.obj.material && it.dispose) it.obj.material.opacity = Math.min(1, it.life);
-      if (it.life <= 0 || it.obj.position.y < 0) { this.scene.remove(it.obj); it.dispose?.(); this.items.splice(i, 1); }
+      if (it.life <= 0 || it.obj.position.y < 0) { this.scene.remove(it.obj); it.dispose?.(); if (it.fade) it.obj.material.dispose(); this.items.splice(i, 1); }
     }
   }
 }

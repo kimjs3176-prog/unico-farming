@@ -32,11 +32,23 @@ def render(char, name, out_png):
     doc = pymupdf.open()
     page = doc.new_page(width=pw, height=ph)
     shape = page.new_shape()
+    off = pymupdf.Point(m - x0, m - y0)
+    T = lambda pt: pymupdf.Point(pt.x + off.x, pt.y + off.y)
     for p in char["paths"]:
-        for sp in p["subpaths"]:
-            pts = [pymupdf.Point(x - x0 + m, y - y0 + m) for x, y in sp]
-            shape.draw_polyline(pts + [pts[0]])
-        shape.finish(fill=p["color"], color=None, closePath=True, even_odd=p.get("even_odd", False))
+        # 원본 경로 명령(직선/베지어/사각형)을 그대로 재생 → 곡선·구멍(감김 방향) 원본과 동일
+        for it in p["items"]:
+            op = it[0]
+            if op == "l":
+                shape.draw_line(T(it[1]), T(it[2]))
+            elif op == "c":
+                shape.draw_bezier(T(it[1]), T(it[2]), T(it[3]), T(it[4]))
+            elif op == "re":
+                r = it[1]
+                shape.draw_rect(pymupdf.Rect(r.x0 + off.x, r.y0 + off.y, r.x1 + off.x, r.y1 + off.y))
+            elif op == "qu":
+                q = it[1]
+                shape.draw_quad(pymupdf.Quad(T(q.ul), T(q.ur), T(q.ll), T(q.lr)))
+        shape.finish(fill=p["color"], color=None, closePath=bool(p.get("closePath", True)), even_odd=p.get("even_odd", False))
     shape.commit()
     scale = HEIGHT_PX / ph
     pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=True)

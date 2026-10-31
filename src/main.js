@@ -21,6 +21,7 @@ import { randomName } from './game/names.js';
 import { Juice } from './game/juice.js';
 import { PostFX } from './game/postfx.js';
 import { pickQuality } from './game/quality.js';
+import { WeatherService } from './game/weather.js';
 
 class Game {
   constructor(canvas, assets, name) {
@@ -45,6 +46,7 @@ class Game {
     this.player = new Player(assets, this.world, name);
     this.ui = new UI(this, document.getElementById('ui'));
     this.fx = new FX(this.world.scene);
+    this.player.unico.onStep = (x, z) => this.fx.dust(x, z);
     this.farm = new FarmView(this);
     this.ranch = new RanchView(this);
     this.tractor = new TractorView(this);
@@ -63,6 +65,21 @@ class Game {
     window.addEventListener('resize', () => this.resize());
     this.restore();
     this.net.connect();
+    // 현재 위치 실시간 날씨
+    this.rainAcc = 0;
+    this.world.precip.onThunder = () => { this.juice.shake(0.25); this.audio.play('thunder'); };
+    this.weather = new WeatherService((w, svc) => {
+      const prev = this.world.weatherKind;
+      this.world.setWeather(w);
+      this.farm.sim.weatherMult = w.kind === 'snow' ? 0.6 : 1;
+      this.ui.setWeather(w, svc);
+      if (prev !== w.kind) {
+        const where = svc.loc?.name ? `${svc.loc.name} ` : '';
+        const effect = w.autoWater ? ' 밭에 저절로 물이 뿌려져요 💧' : w.kind === 'snow' ? ' 작물이 조금 천천히 자라요 (스마트팜은 영향 없음)' : '';
+        this.ui.toast(`${w.emoji} ${where}지금 ${w.label}${w.temperature != null ? ` ${Math.round(w.temperature)}°C` : ''}.${effect}`);
+      }
+    });
+    this.weather.start();
     // 렌더 루프: setAnimationLoop + Timer (탭 복귀 시 dt 폭주 방지 위해 클램프)
     this.timer = new THREE.Timer();
     this.timer.connect?.(document);
@@ -145,6 +162,11 @@ class Game {
     this.juice.update(dt, this.camera);
     this.minimap.update(dt);
     this.ui.updateHud();
+    // 비 오는 날 자동 물주기 (3초마다 점검)
+    if (this.world.weatherKind === 'rain' || this.world.weatherKind === 'storm') {
+      this.rainAcc += dt;
+      if (this.rainAcc > 3) { this.rainAcc = 0; this.farm.sim.rain(); }
+    }
     this.saveTimer += dt;
     if (this.saveTimer > 10) { this.saveTimer = 0; saveGame(this); }
     this.postfx.render();

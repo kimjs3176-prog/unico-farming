@@ -29,6 +29,7 @@ export class Audio {
       case 'win': return [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, 0.18, 'triangle', v), i * 110));
       case 'bump': return this.tone(90, 0.25, 'sawtooth', v, -40);
       case 'engine': return this.tone(70, 0.6, 'sawtooth', v * 0.7, 40);
+      case 'thunder': { this.tone(55, 1.2, 'sawtooth', v * 0.9, -20); return setTimeout(() => this.tone(40, 1.0, 'triangle', v * 0.7, -10), 120); }
       case 'levelup': return [392, 523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, 0.2, 'sine', v), i * 90));
     }
   }

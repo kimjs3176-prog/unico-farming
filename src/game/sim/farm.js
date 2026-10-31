@@ -10,6 +10,7 @@ export class FarmSim {
   constructor(count) {
     this.plots = Array.from({ length: count }, () => ({ state: 'empty', crop: null, progress: 0, water: 0 }));
     this.boost = 1; // 스마트팜 보너스 등
+    this.weatherMult = 1; // 날씨 영향 (눈 오면 느려짐)
     this.listeners = [];
   }
 
@@ -50,6 +51,15 @@ export class FarmSim {
     return true;
   }
 
+  /** 비: 자라는 작물 중 물이 마른 밭에 자동으로 물 주기. 물 준 밭 수 반환 */
+  rain() {
+    let n = 0;
+    this.plots.forEach((p, i) => {
+      if (p.state === 'growing' && p.water < 10) { p.water = WATER_DURATION; this.emit('rainwater', i); n++; }
+    });
+    return n;
+  }
+
   harvest(i) {
     const p = this.plots[i];
     if (p.state !== 'ready') return null;
@@ -70,7 +80,7 @@ export class FarmSim {
   tick(dt) {
     this.plots.forEach((p, i) => {
       if (p.state !== 'growing') return;
-      const rate = (p.water > 0 ? 1 : 0.3) * this.boost;
+      const rate = (p.water > 0 ? 1 : 0.3) * this.boost * this.weatherMult;
       p.progress += (dt / CROPS[p.crop].growTime) * rate;
       p.water = Math.max(0, p.water - dt);
       if (p.progress >= 1) { p.progress = 1; p.state = 'ready'; this.emit('ready', i, p.crop); }

@@ -111,3 +111,6 @@ button:disabled { opacity: 0.45; cursor: default; }
 .room-list button { background: #f7f7f7; color: var(--ink); box-shadow: none; border: 2px solid #eee; text-align: left; padding: 10px 12px; }
 .room-list button.cur { border-color: var(--teal); background: #e4f7f4; }
 .room-list button small { display: block; color: #666; font-weight: 500; }
+
+.weather-chip { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); padding: 8px 12px; font-size: 14px; }
+.weather-chip small { color: #666; font-weight: 500; }

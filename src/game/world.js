@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Scenery } from './scenery.js';
+import { Precipitation } from './precip.js';
 
 /** 월드 레이아웃 상수 (m). +X 동쪽, +Z 남쪽, 스폰 (0,0,9) */
 export const LAYOUT = {
@@ -26,6 +27,7 @@ export const LAYOUT = {
 };
 
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
+const GREY = new THREE.Color(0x9aa4ae);
 
 export class World {
   constructor(assets, renderer, quality = { grass: 9000, shadowMap: 3072 }) {
@@ -46,6 +48,17 @@ export class World {
     this._ground();
     this._decorate();
     this.scenery = new Scenery(this);
+    this.precip = new Precipitation(this.scene);
+    // 날씨: target 은 실시간 날씨, cur 은 부드럽게 따라가는 현재값
+    this.weatherTarget = { kind: 'clear', cloud: 0.15, precip: 0, fog: 0, wind: 0.15 };
+    this.weatherCur = { ...this.weatherTarget };
+  }
+
+  /** 날씨 서비스(describeWeather 결과) 적용 */
+  setWeather(w) {
+    this.weatherTarget = { kind: w.kind, cloud: w.cloud, precip: w.precip, fog: w.fog, wind: w.wind };
+    if (!this.weatherKind) Object.assign(this.weatherCur, this.weatherTarget); // 첫 적용은 즉시
+    this.weatherKind = w.kind;
   }
 
   // ------------------------------------------------------------ 조명 / 하늘
@@ -148,7 +161,7 @@ export class World {
     // 풍차
     const wm = this.place('windmill', L.windmill.x, L.windmill.z, 0.5, 1, { r: 0.8 });
     const blades = wm.getObjectByName('Blades');
-    if (blades) this.animated.push({ update: (dt) => (blades.rotation.z += dt * 0.8) });
+    if (blades) this.animated.push({ update: (dt) => (blades.rotation.z += dt * (0.5 + (this.weatherCur?.wind || 0) * 4)) });
     // 드론: 스마트팜 위를 선회
     const drone = this.place('drone', L.smartfarm.x, L.smartfarm.z, 0, 1, { collide: false });
     const rotors = [1, 2, 3, 4].map((i) => drone.getObjectByName(`Rotor${i}`)).filter(Boolean);
@@ -251,22 +264,33 @@ export class World {
     const elev = Math.sin(sunA);
     const fx = focus?.x || 0, fz = focus?.z || 0;
     this.sun.position.set(fx + Math.cos(sunA) * 60, Math.max(elev, -0.2) * 80 + 12, fz + 35);
-    const daylight = THREE.MathUtils.clamp(elev * 2.2 + 0.25, 0, 1);
+    // 날씨 값 부드럽게 보간 (약 4초)
+    const W = this.weatherCur, WT = this.weatherTarget, k = Math.min(1, dt * 0.25);
+    for (const key of ['cloud', 'precip', 'fog', 'wind']) W[key] += (WT[key] - W[key]) * k;
+    W.kind = WT.kind;
+    const overcast = W.cloud;
+    const daylight = THREE.MathUtils.clamp(elev * 2.2 + 0.25, 0, 1) * (1 - overcast * 0.35);
     this.daylight = daylight;
-    this.sun.intensity = 0.15 + daylight * 2.2;
-    this.hemi.intensity = 0.25 + daylight * 0.9;
+    this.sun.intensity = (0.15 + daylight * 2.2) * (1 - overcast * 0.8);
+    this.hemi.intensity = 0.25 + daylight * 0.9 + this.precip.flash * 2.5;
+    this.hemi.color.setHex(0xd8eeff).lerp(GREY, overcast * 0.6);
     const dayCol = new THREE.Color(0xbfe4ff), duskCol = new THREE.Color(0xf4b183), nightCol = new THREE.Color(0x1d2a4a);
     const sky = new THREE.Color();
     if (elev > 0.25) sky.copy(dayCol);
     else if (elev > -0.1) sky.copy(duskCol).lerp(dayCol, (elev + 0.1) / 0.35);
     else sky.copy(nightCol).lerp(duskCol, Math.max(0, (elev + 0.35) / 0.25));
+    sky.lerp(GREY.clone().multiplyScalar(0.55 + daylight * 0.45), overcast * 0.6);
     this.scene.background.copy(sky);
     this.scene.fog.color.copy(sky);
+    this.scene.fog.near = THREE.MathUtils.lerp(45, 6, W.fog);
+    this.scene.fog.far = THREE.MathUtils.lerp(110, 38, W.fog);
+    this.precip.set(W.kind, W.precip, W.wind);
+    this.precip.update(dt, focus || { x: 0, z: 0 });
     this.sun.color.setHex(elev < 0.15 ? 0xffb080 : 0xfff3dd);
     const night = daylight < 0.4 ? 1 : 0;
     for (const m of this.lampMaterials) m.emissiveIntensity = 1 + night * 3;
     this.ambient.intensity = 0.08 + daylight * 0.1;
-    this.scenery?.update(dt, daylight, this.sun.position.clone().sub(new THREE.Vector3(fx, 0, fz)));
+    this.scenery?.update(dt, daylight, this.sun.position.clone().sub(new THREE.Vector3(fx, 0, fz)), W);
   }
 
   clockText() {

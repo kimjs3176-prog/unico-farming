@@ -32,6 +32,7 @@ export class FarmView {
       }
     }
     this.sim.on((type, i) => this.refresh(i));
+    // 비로 물이 뿌려지면 흙 색만 갱신
     this.near = -1;
   }
 

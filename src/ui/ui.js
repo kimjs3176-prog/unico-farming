@@ -14,6 +14,8 @@ export class UI {
     this.moneyChip = h('div', 'chip', '🪙 <span class="money">0</span>');
     this.clockChip = h('div', 'chip', '🕒 <span>1일차 08:00</span>');
     this.levelChip = h('div', 'chip', 'Lv.<span class="lv">1</span> <div class="xpbar"><i></i></div><small class="xp"></small>');
+    this.weatherChip = h('button', 'chip weather-chip', '🌤️ <span>날씨 확인 중…</span>');
+    this.weatherChip.onclick = () => this.openWeather();
     this.boostChip = h('div', 'chip', '🌱 성장 부스트 <span></span>');
     this.boostChip.style.display = 'none';
     const right = h('div', 'hud-right');
@@ -24,7 +26,7 @@ export class UI {
     this.btnQuest.onclick = () => this.openQuests();
     this.btnHelp.onclick = () => this.openHelp();
     right.append(this.btnBag, this.btnQuest, this.btnHelp);
-    this.top.append(this.moneyChip, this.clockChip, this.levelChip, this.boostChip, right);
+    this.top.append(this.moneyChip, this.clockChip, this.weatherChip, this.levelChip, this.boostChip, right);
     root.append(this.top);
     this.banner = h('div', 'event-banner', '');
     this.banner.style.display = 'none';
@@ -72,6 +74,41 @@ export class UI {
     mk('📸', '찰칵', () => this.snapshot());
     root.append(this.bar);
     this.emoteMenu = null;
+  }
+
+  setWeather(w, svc) {
+    this.weatherInfo = { w, svc };
+    const place = svc.loc?.name ? ` <small>${esc(svc.loc.name)}</small>` : '';
+    this.weatherChip.innerHTML = `${w.emoji} <span>${w.temperature != null ? Math.round(w.temperature) + '°' : ''} ${w.label}</span>${place}`;
+    if (this.panel?.dataset.kind === 'weather') this.openWeather();
+  }
+
+  openWeather() {
+    const info = this.weatherInfo;
+    const p = this.openPanel('🌦️ 우리 동네 날씨');
+    p.dataset.kind = 'weather';
+    if (!info) { p.append(h('div', 'row', '날씨를 불러오는 중이에요…')); return; }
+    const { w, svc } = info;
+    const src = { live: '실시간 (Open-Meteo)', manual: '수동 설정', offline: '연결 실패 · 맑음으로 표시', default: '기본값' }[svc.source] || svc.source;
+    const rows = [
+      `${w.emoji} <b>${w.label}</b>${w.temperature != null ? ` · ${Math.round(w.temperature)}°C` : ''}`,
+      `📍 ${esc(svc.loc?.name || '-')}  <small>(위치 권한을 거부하면 기본 위치를 사용해요)</small>`,
+      `💨 바람 ${Math.round(w.windKmh || 0)} km/h · ☁️ 구름 ${Math.round(w.cloud * 100)}%`,
+      `🔄 출처: ${src} · 15분마다 갱신`,
+      `🌱 게임 효과: ${w.autoWater ? '비가 와서 밭에 자동으로 물이 뿌려져요' : w.kind === 'snow' ? '눈 때문에 작물 성장이 40% 느려져요 (스마트팜은 영향 없음)' : w.kind === 'fog' ? '안개로 시야가 짧아져요' : '맑은 날엔 직접 물을 줘야 해요'}`,
+    ];
+    p.append(h('div', 'rows', rows.map((t) => `<div class="row">${t}</div>`).join('')));
+    p.append(h('h3', '', '날씨 바꿔 보기 (체험용)'));
+    const grid = h('div', 'room-list');
+    const live = h('button', svc.source === 'live' ? 'cur' : '', '📡 실시간 날씨<small>현재 위치 기준</small>');
+    live.onclick = () => { svc.useLive(); this.toast('📡 현재 위치 날씨를 불러와요'); };
+    grid.append(live);
+    for (const [k, label] of [['clear', '☀️ 맑음'], ['cloudy', '☁️ 흐림'], ['rain', '🌧️ 비'], ['storm', '⛈️ 뇌우'], ['snow', '❄️ 눈'], ['fog', '🌫️ 안개']]) {
+      const b = h('button', svc.source === 'manual' && w.kind === k ? 'cur' : '', label);
+      b.onclick = () => svc.setPreset(k);
+      grid.append(b);
+    }
+    p.append(grid);
   }
 
   toggleEmotes() {
@@ -287,6 +324,7 @@ export class UI {
       '📱 <b>스마트팜</b> 서쪽 비닐하우스 센서에서 환경제어 미니게임 → 성공하면 작물 성장 부스트',
       '🐄 <b>목장</b> 동쪽 울타리 안 동물에게 사료를 주면 달걀·우유·양털이 생겨요',
       '📜 <b>퀘스트</b> Q 키. 보상을 받으면 레벨이 오르고 새 작물이 해금돼요',
+      '🌦️ <b>날씨</b> 내 위치의 실제 날씨가 반영돼요. 비가 오면 밭에 자동으로 물이 뿌려지고, 눈이 오면 작물이 천천히 자라요 (상단 날씨 칩을 눌러 확인·체험)',
       '🌐 <b>메타버스</b> 같은 서버의 다른 유니코가 보이고 채팅할 수 있어요 (좌하단)',
       '💾 자동 저장(10초) · 로컬 브라우저 저장',
     ].map((t) => `<div class="row">${t}</div>`).join('')));
