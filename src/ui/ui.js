@@ -126,6 +126,42 @@ export class UI {
     p.append(grid);
   }
 
+  /** 목표 안내 칩 */
+  setObjective(q, dist, ang) {
+    if (!this.objective) {
+      this.objective = h('div', 'objective');
+      this.objective.onclick = () => this.openQuests();
+      this.root.append(this.objective);
+    }
+    if (!q) { this.objective.style.display = 'none'; return; }
+    this.objective.style.display = '';
+    this.objective.classList.toggle('done', q.complete);
+    const key = `${q.id}|${q.complete}|${q.count}|${dist === null ? '' : Math.round(dist)}`;
+    if (key !== this.objKey) {
+      this.objKey = key;
+      this.objective.innerHTML = `<span class="ic">${q.complete ? '🎁' : '🎯'}</span><div class="tt">${q.complete ? '보상 받기: ' : ''}${q.title}<small>${q.complete ? '눌러서 퀘스트 창 열기 (Q)' : q.desc}${!q.complete && dist !== null ? ` · ${Math.round(dist)}m` : ''}</small><div class="bar"><i style="width:${Math.round((q.count / q.goal) * 100)}%"></i></div></div>${dist !== null && !q.complete ? '<span class="dir">▲</span>' : q.complete ? '<span class="dir">✓</span>' : ''}`;
+    }
+    const dir = this.objective.querySelector('.dir');
+    if (dir && !q.complete) dir.style.transform = `rotate(${ang}deg)`;
+  }
+
+  /** 월드 위치에서 가방 버튼으로 아이콘이 날아감 */
+  flyToBag(text, worldPos) {
+    const g = this.game;
+    const v = worldPos.clone().project(g.camera);
+    if (v.z > 1) return;
+    const x = (v.x + 1) / 2 * innerWidth, y = (1 - v.y) / 2 * innerHeight;
+    const bag = this.btnBag.getBoundingClientRect();
+    const el = h('div', 'fly', text);
+    el.style.left = `${x - 15}px`; el.style.top = `${y - 15}px`;
+    document.body.append(el);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.style.transform = `translate(${bag.left + bag.width / 2 - x}px, ${bag.top + bag.height / 2 - y}px) scale(0.5)`;
+      el.style.opacity = '0.2';
+    }));
+    setTimeout(() => { el.remove(); this.btnBag.classList.add('bump'); setTimeout(() => this.btnBag.classList.remove('bump'), 400); g.audio.play('pop'); }, 760);
+  }
+
   toggleEmotes() {
     if (this.emoteMenu) { this.emoteMenu.remove(); this.emoteMenu = null; return; }
     const EMOTES = [['cheer', '🙌', '깡총'], ['wave', '👋', '인사'], ['heart', '❤️', '하트'], ['think', '🤔', '생각'], ['present', '📊', '발표'], ['megaphone', '📣', '외치기']];
@@ -303,7 +339,17 @@ export class UI {
   // ---------------------------------------------------------------- HUD
   updateHud() {
     const g = this.game;
-    this.moneyChip.querySelector('.money').textContent = g.economy.money.toLocaleString();
+    // 코인: 숫자가 굴러가며 바뀜
+    const target = g.economy.money;
+    if (this.shownMoney === undefined) this.shownMoney = target;
+    if (this.shownMoney !== target) {
+      const diff = target - this.shownMoney;
+      this.shownMoney += Math.sign(diff) * Math.max(1, Math.ceil(Math.abs(diff) * 0.18));
+      if (Math.abs(target - this.shownMoney) < 1) this.shownMoney = target;
+      const el = this.moneyChip.querySelector('.money');
+      if (diff > 0 && !el.classList.contains('bump')) { el.classList.add('bump'); setTimeout(() => el.classList.remove('bump'), 400); }
+    }
+    this.moneyChip.querySelector('.money').textContent = Math.round(this.shownMoney).toLocaleString();
     this.clockChip.querySelector('span').textContent = g.world.clockText();
     const q = g.quests;
     this.levelChip.querySelector('.lv').textContent = q.level;

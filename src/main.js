@@ -23,6 +23,7 @@ import { PostFX } from './game/postfx.js';
 import { pickQuality } from './game/quality.js';
 import { SURF } from './game/surface.js';
 import { Music } from './game/music.js';
+import { Guide } from './game/guide.js';
 import { WeatherService } from './game/weather.js';
 import { PointerNav } from './game/pointer.js';
 import { RiceView } from './game/view/rice_view.js';
@@ -71,6 +72,8 @@ class Game {
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
     this.pointer = new PointerNav(this);
+    this.guide = new Guide(this);
+    this.fx.onPop = (t, p) => { if (!/[❤️🌿]/u.test(t)) this.ui.flyToBag(t, p); };
     this.world.onNewDay = (day) => {
       const ev = this.economy.newDay();
       this.ui.toast(`🌅 ${day}일차 아침! 장터 시세가 바뀌었어요`);
@@ -224,6 +227,7 @@ class Game {
     if (this.music.on) { const W = this.world.weatherCur || {}; this.music.setScene({ daylight: this.world.daylight, kind: this.world.weatherKind || 'clear', precip: W.precip || 0, wind: W.wind || 0.15 }); }
     SURF.wind.value = this.world.weatherCur?.wind ?? 0.15;
     this.minimap.update(dt);
+    this.guide.update(dt);
     this.ui.updateHud();
     // 비 오는 날 자동 물주기 (3초마다 점검)
     if (this.world.weatherKind === 'rain' || this.world.weatherKind === 'storm') {
@@ -251,12 +255,17 @@ async function boot() {
   const saved = loadSave();
   nick.value = saved?.name || randomName();
   const assets = new Assets();
-  await assets.loadAll((p) => (bar.style.width = Math.round(p * 100) + '%'));
+  const fontReady = Promise.race([document.fonts?.load?.('40px Jua') || Promise.resolve(), new Promise((r) => setTimeout(r, 2500))]);
+  await Promise.all([assets.loadAll((p) => (bar.style.width = Math.round(p * 100) + '%')), fontReady]);
+  const lt = document.getElementById('loading-text');
+  if (lt) lt.textContent = '준비 완료! 닉네임을 정하고 입장하세요';
   btn.disabled = false;
   btn.textContent = '입장하기';
   const start = () => {
     const name = (nick.value.trim() || randomName()).slice(0, 12);
-    document.getElementById('loading').remove();
+    const ld = document.getElementById('loading');
+    ld.classList.add('out');
+    setTimeout(() => ld.remove(), 650);
     window.game = new Game(canvas, assets, name);
     window.game.audio.play('click'); // 사용자 동작 안에서 오디오 시작
     window.game.music.start();

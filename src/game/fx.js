@@ -25,6 +25,7 @@ export class FX {
 
   pop(x, z, text) {
     this.burst(x, 1.0, z);
+    this.onPop?.(text, new THREE.Vector3(x, 1.2, z));
     const s = makeLabel(text, { bg: 'rgba(0,0,0,0)', size: 56, scale: 0.012 });
     s.position.set(x, 1.2, z);
     this.scene.add(s);
