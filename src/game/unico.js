@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeLabel } from './label.js';
 import { enhanceMaterial } from './surface.js';
-import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, BONES } from './unico_mesh.js';
+import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, RIGS, bonePos } from './unico_mesh.js';
 
 /**
  * 유니코 3D 캐릭터 (플레이어 / 다른 접속자 / NPC 공용)
@@ -93,39 +93,39 @@ function bundle(parts) {
 }
 
 // ------------------------------------------------------------------ 한 덩어리 스킨 메시 (public/models/unico_body.bin)
-let SKIN = null; // { geometry, slotWeights, byPalette: Map }
+const SKINS = {}; // rig -> { geometry, slotWeights, byPalette: Map }
 const SKIN_MAT = enhanceMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.58, metalness: 0 }), 'fur', { contact: true, rim: 0.32 });
 const OFFICIAL = { body: 0xffffff, snout: 0xf7e1ec, mane: 0x30b6aa, maneD: 0x249d92, hoof: 0x2aa79b };
 
 /** 게임 시작 전 한 번 호출 (assets.loadAll) */
-export async function loadUnicoMesh(url) {
+export async function loadUnicoMesh(url, rig = 'quad') {
   const ab = await (await fetch(url)).arrayBuffer();
-  SKIN = { ...parseUnicoBin(ab), byPalette: new Map() };
+  SKINS[rig] = { ...parseUnicoBin(ab), byPalette: new Map() };
 }
 
-function skinGeometry(paletteId) {
-  if (!SKIN.byPalette.has(paletteId)) {
-    const g = SKIN.geometry.clone(); // 속성 배열은 복사되지만 1회/팔레트
-    g.setAttribute('color', colorAttribute(SKIN.slotWeights, PALETTES[paletteId] || OFFICIAL));
-    SKIN.byPalette.set(paletteId, g);
+function skinGeometry(rig, paletteId) {
+  const S = SKINS[rig];
+  if (!S.byPalette.has(paletteId)) {
+    const g = S.geometry.clone(); // 속성 배열은 복사되지만 1회/팔레트
+    g.setAttribute('color', colorAttribute(S.slotWeights, PALETTES[paletteId] || OFFICIAL));
+    S.byPalette.set(paletteId, g);
   }
-  return SKIN.byPalette.get(paletteId);
+  return S.byPalette.get(paletteId);
 }
 
 // ------------------------------------------------------------------ 템플릿 (한 번만 생성해 공유)
-// 몸통 그룹 원점 = 몸통 중심 (지면에서 BODY_Y)
+// 네 발 리그 기준 상수 (템플릿 좌표용)
 const BODY_Y = 0.8;
-const LEG_LEN = 0.6; // 고관절~발바닥
 const HEAD_AT = V(0, 0.78, 0.66); // 몸통 기준 머리 중심
 const HEAD_R = 0.42;
-let TPL = null;
+const TPLS = {};
 
-function buildTemplate() {
+function buildTemplate(rig = 'quad') {
   const T = {};
   // 몸통·목·머리·귀·다리·발굽·갈기·꼬리는 이음새 없는 한 덩어리 스킨 메시(unico_mesh.js)
   // 여기서는 그 표면 위에 붙는 얼굴 부품만 만든다 (표면을 찾아 정확히 밀착)
-  const { sdf } = makeSDF();
-  const HC = V(0, BODY_Y, 0).add(HEAD_AT); // 머리 중심(루트 기준)
+  const { sdf } = makeSDF(rig);
+  const HC = bonePos(rig, 'head'); // 머리 중심(루트 기준)
   const onFace = (dirLocal, inset = 0) => {
     const pw = surfacePoint(sdf, HC, dirLocal);
     const n = normalAt(sdf, pw);
@@ -138,7 +138,8 @@ function buildTemplate() {
     const ch = onFace(V(sx * 0.75, -0.2, 0.62), 0.01);
     head.push([sph(0.09, { s: [1, 0.72, 0.28], q: outward(ch.n), p: ch.p.toArray() }, 16), C.pink()]); // 볼
     // 귀 안쪽 (분홍)
-    head.push([sph(0.05, { s: [0.75, 1.9, 0.35], r: [0.25, 0, sx * -0.45], p: [sx * 0.242, 0.36, 0.0] }, 12), C.earIn()]);
+    const ear = rig === 'biped' ? [sx * 0.212, 0.32, 0.0] : [sx * 0.242, 0.36, 0.0];
+    head.push([sph(0.05, { s: [0.75, 1.9, 0.35], r: [0.25, 0, sx * -0.45], p: ear }, 12), C.earIn()]);
   }
   // 미소: 주둥이 아래쪽 표면을 따라 그린 곡선
   const smile = [];
@@ -195,7 +196,11 @@ function buildTemplate() {
   }
   gog.push([cyl(0.015, 0.015, 0.12, { r: [0, 0, Math.PI / 2], p: [0, 0.01, 0.44] }, 8), C.goggle()]);
   T.goggles = bundle(gog);
-  const scarf = (m) => bundle([
+  // 스카프: 목 둘레 (몸통 뼈 기준). 두 발 유니코는 목이 곧게 서 있음
+  const scarf = (m) => bundle(rig === 'biped' ? [
+    [torus(0.19, 0.05, { r: [Math.PI / 2 + 0.18, 0, 0], p: [0, 0.45, 0.03] }, TWO_PI, 28), m],
+    [cone(0.12, 0.22, { r: [Math.PI + 0.25, 0, 0], p: [0.06, 0.3, 0.22] }, 3), m],
+  ] : [
     [torus(0.215, 0.055, { r: [Math.PI / 2 + 0.55, 0, 0], p: [0, 0.38, 0.5] }, TWO_PI, 28), m],
     [cone(0.13, 0.24, { r: [Math.PI + 0.35, 0, 0], p: [0, 0.2, 0.68] }, 3), m],
   ]);
@@ -268,33 +273,36 @@ export class Unico {
    * @param assets (사용 안 함, 호환용)
    * @param opts.name 이름표, opts.outfit { hat: 'straw'|'helmet'|null, goggles, scarf: 'red'|'green'|'blue'|null, sprout }
    */
-  constructor(assets, { name = '', labelColor = '#fff', labelBg, outfit = {}, palette = 'official' } = {}) {
-    if (!SKIN) throw new Error('loadUnicoMesh() 를 먼저 호출하세요');
-    if (!TPL) TPL = buildTemplate();
+  constructor(assets, { name = '', labelColor = '#fff', labelBg, outfit = {}, palette = 'official', rig = 'quad' } = {}) {
+    if (!SKINS[rig]) throw new Error('loadUnicoMesh() 를 먼저 호출하세요');
+    if (!TPLS[rig]) TPLS[rig] = buildTemplate(rig);
+    const TPL = TPLS[rig];
+    this.rig = rig;
+    this.biped = rig === 'biped';
+    const R = RIGS[rig];
+    this.bodyY = R.bones[0][2][1];
+    this.legLen = R.legLen;
     this.group = new THREE.Group();
     this.position = this.group.position;
     this.root = new THREE.Group(); // 회전(진행 방향)
     this.group.add(this.root);
-    // 뼈대: 몸통 → 머리 / 다리 4 / 꼬리 (기존 피벗과 같은 위치·이름이라 애니메이션 코드 그대로 사용)
-    this.bodyG = new THREE.Bone();
-    this.bodyG.position.y = BODY_Y;
-    this.root.add(this.bodyG);
-    this.headG = new THREE.Bone();
-    this.headG.position.copy(HEAD_AT);
-    this.bodyG.add(this.headG);
-    this.legs = [[-0.25, 0.36], [0.25, 0.36], [-0.25, -0.38], [0.25, -0.38]].map(([x, z]) => {
+    // 뼈대 (리그 정의대로): 몸통 → 머리 / 다리 / (두 발이면 팔) / 꼬리
+    const boneMap = {};
+    for (const [n, parent, p] of R.bones) {
       const b = new THREE.Bone();
-      b.position.set(x, -0.2, z);
-      this.bodyG.add(b);
-      return b;
-    });
-    this.tailG = new THREE.Bone();
-    this.tailG.position.set(0, 0.12, -0.56);
-    this.bodyG.add(this.tailG);
+      b.name = n;
+      b.position.set(...p);
+      (parent ? boneMap[parent] : this.root).add(b);
+      boneMap[n] = b;
+    }
+    this.bodyG = boneMap.body;
+    this.headG = boneMap.head;
+    this.tailG = boneMap.tail;
+    this.legs = this.biped ? [boneMap.legL, boneMap.legR] : [boneMap.legFL, boneMap.legFR, boneMap.legBL, boneMap.legBR];
+    this.arms = this.biped ? [boneMap.armL, boneMap.armR] : [];
     this.root.updateMatrixWorld(true);
-    const bones = { body: this.bodyG, head: this.headG, legFL: this.legs[0], legFR: this.legs[1], legBL: this.legs[2], legBR: this.legs[3], tail: this.tailG };
-    this.skeleton = new THREE.Skeleton(BONES.map((n) => bones[n]));
-    this.skin = new THREE.SkinnedMesh(skinGeometry(palette), SKIN_MAT);
+    this.skeleton = new THREE.Skeleton(R.bones.map((b) => boneMap[b[0]]));
+    this.skin = new THREE.SkinnedMesh(skinGeometry(rig, palette), SKIN_MAT);
     this.skin.castShadow = this.skin.receiveShadow = true;
     this.skin.frustumCulled = false;
     this.root.add(this.skin);
@@ -307,7 +315,11 @@ export class Unico {
     // 소품
     this.acc = {};
     const addAcc = (key, parent) => { const m = meshOf(TPL[key]); m.visible = false; parent.add(m); this.acc[key] = m; };
-    for (const k of ['sprout', 'strawHat', 'helmet', 'goggles']) addAcc(k, this.headG);
+    // 머리 소품은 머리 크기에 맞춰 축소
+    this.headAcc = new THREE.Group();
+    this.headAcc.scale.setScalar(R.headR / 0.42);
+    this.headG.add(this.headAcc);
+    for (const k of ['sprout', 'strawHat', 'helmet', 'goggles']) addAcc(k, this.headAcc);
     for (const k of ['scarfRed', 'scarfGreen', 'scarfBlue']) addAcc(k, this.bodyG);
     this.setOutfit({ sprout: true, ...outfit });
     // 바닥 그림자 (부드러운 접지감)
@@ -320,10 +332,11 @@ export class Unico {
     this.root.add(sh);
     // 발굽 접지 그림자 (발이 땅에 닿아 있는 느낌)
     this.footShadows = this.legs.map((leg) => {
+      const lw = leg.getWorldPosition(new THREE.Vector3());
       const f = new THREE.Mesh(BLOB_GEO, new THREE.MeshBasicMaterial({ map: blobTexture(), color: 0x1a120f, transparent: true, opacity: 0.55, depthWrite: false }));
       f.rotation.x = -Math.PI / 2;
       f.scale.setScalar(0.2);
-      f.position.set(leg.position.x, 0.02, leg.position.z);
+      f.position.set(lw.x, 0.02, lw.z);
       f.renderOrder = 3;
       this.root.add(f);
       return f;
@@ -427,27 +440,39 @@ export class Unico {
     const speed = dt > 0 ? moved / dt : 0;
     const walking = this.moving || speed > 0.3;
     this.walkBlend += ((walking ? 1 : 0) - this.walkBlend) * Math.min(1, dt * 10);
-    const AMP = 0.5; // 다리 최대 각도(rad)
+    const LEG_LEN = this.legLen, BODY_Y = this.bodyY, bp = this.biped;
+    const AMP = bp ? 0.55 : 0.5; // 다리 최대 각도(rad)
     const stride = 2 * LEG_LEN * Math.sin(AMP); // 반주기 동안 디딘 발이 미는 거리
     if (walking) this.walkPhase += (Math.max(speed, 1.2) / stride) * Math.PI * dt;
     const w = this.walkBlend, ph = this.walkPhase;
     const sw = Math.sin(ph) * AMP * w;
-    const [FL, FR, BL, BR] = this.legs;
-    FL.rotation.set(sw, 0, 0); BR.rotation.set(sw, 0, 0);
-    FR.rotation.set(-sw, 0, 0); BL.rotation.set(-sw, 0, 0);
-    // 드는 발(앞으로 나가는 쪽)은 살짝 접어 들어 올림, 디딘 발은 펴서 땅에 닿게
+    const legs = this.legs, arms = this.arms;
     const lift = Math.max(0, Math.cos(ph)) * 0.14 * w, lift2 = Math.max(0, -Math.cos(ph)) * 0.14 * w;
-    FL.scale.y = BR.scale.y = 1 - lift;
-    FR.scale.y = BL.scale.y = 1 - lift2;
+    for (const l of legs) l.rotation.set(0, 0, 0);
+    if (bp) {
+      // 두 발: 좌우 다리 교차, 팔은 반대로 흔들기
+      const [L, Rl] = legs;
+      L.rotation.x = sw; Rl.rotation.x = -sw;
+      L.scale.y = 1 - lift; Rl.scale.y = 1 - lift2;
+      const [AL, AR] = arms;
+      AL.rotation.set(-sw * 0.9, 0, -0.12 * w); AR.rotation.set(sw * 0.9, 0, 0.12 * w);
+      // 대기: 팔이 숨쉬듯 살짝
+      if (w < 0.5) { const br = Math.sin(this.t * 2.1) * 0.04; AL.rotation.z -= br; AR.rotation.z += br; }
+    } else {
+      const [FL, FR, BL, BR] = legs;
+      FL.rotation.x = BR.rotation.x = sw;
+      FR.rotation.x = BL.rotation.x = -sw;
+      FL.scale.y = BR.scale.y = 1 - lift;
+      FR.scale.y = BL.scale.y = 1 - lift2;
+    }
     // 다리가 기울면 발끝 높이가 L(1-cosθ) 만큼 올라가므로 그만큼 몸을 내려 발을 땅에 붙임
-    const bob = -LEG_LEN * (1 - Math.cos(sw));
+    const bob = -LEG_LEN * (1 - Math.cos(sw)) + (bp ? Math.abs(Math.sin(ph)) * 0.025 * w : 0);
     const s = Math.sin(ph);
     if (walking && Math.sign(s) !== Math.sign(this.lastSin)) this.onStep?.(pos.x, pos.z);
     this.lastSin = s;
 
-    let bodyY = BODY_Y + bob, bodyPitch = Math.sin(ph * 2) * 0.03 * w, bodyRoll = 0;
+    let bodyY = BODY_Y + bob, bodyPitch = Math.sin(ph * 2) * 0.03 * w + (bp ? 0.06 * w : 0), bodyRoll = bp ? Math.sin(ph) * 0.05 * w : 0;
     let headPitch = Math.sin(ph * 2 + 0.5) * 0.06 * w, headRoll = 0;
-    // 숨쉬기
     const breath = Math.sin(this.t * 2.1) * 0.012 * (1 - w); // 숨쉬기: 가슴이 살짝 오르내림
     bodyY += breath;
     // 대기 중 두리번
@@ -462,36 +487,61 @@ export class Unico {
     if (this.action) {
       this.actionT += dt;
       const a = this.actionT;
+      const [AL, AR] = arms;
       switch (this.action) {
-        case 'cheer': { // 깡총깡총 + 한 바퀴
+        case 'cheer': { // 깡총깡총 + 한 바퀴 (두 발이면 만세)
           const j = Math.abs(Math.sin(a * 9));
-          bodyY += j * 0.32;
+          bodyY += j * (bp ? 0.24 : 0.32);
           this.root.rotation.y = this.yaw + Math.min(1, a / 0.9) * TWO_PI;
           headPitch = -0.25;
-          for (const l of this.legs) l.rotation.x = (1 - j) * 0.4;
+          for (const l of legs) l.rotation.x = (1 - j) * (bp ? 0.25 : 0.4);
+          if (bp) { AL.rotation.set(0, 0, -2.6 + Math.sin(a * 18) * 0.15); AR.rotation.set(0, 0, 2.6 - Math.sin(a * 18) * 0.15); }
           break;
         }
-        case 'wave': { // 앞발 들어 흔들기
-          bodyPitch = -0.38; bodyY += 0.12;
-          FR.rotation.x = -1.4 + Math.sin(a * 12) * 0.35;
-          FL.rotation.x = -0.5;
-          headPitch = 0.15;
+        case 'wave': { // 손 흔들기
+          if (bp) { AR.rotation.set(-0.3, 0, 2.5 + Math.sin(a * 12) * 0.35); headRoll = -0.12; headPitch = -0.1; }
+          else {
+            bodyPitch = -0.38; bodyY += 0.12;
+            legs[1].rotation.x = -1.4 + Math.sin(a * 12) * 0.35;
+            legs[0].rotation.x = -0.5;
+            headPitch = 0.15;
+          }
           break;
         }
-        case 'heart': headRoll = Math.sin(a * 5) * 0.25; bodyRoll = Math.sin(a * 5) * 0.06; break;
-        case 'think': headRoll = 0.3; headYaw = 0.25; headPitch = -0.15; break;
-        case 'water': case 'tablet': case 'lab': headPitch = 0.45 + Math.sin(a * 8) * 0.08; break;
-        case 'present': case 'megaphone': headPitch = -0.2 + Math.sin(a * 6) * 0.1; headYaw = Math.sin(a * 3) * 0.3; break;
+        case 'heart': // 두 손을 가슴 앞에 모으고 흔들흔들
+          headRoll = Math.sin(a * 5) * 0.25; bodyRoll = Math.sin(a * 5) * 0.06;
+          if (bp) { AL.rotation.set(-1.2, 0, 0.55); AR.rotation.set(-1.2, 0, -0.55); }
+          break;
+        case 'think': // 턱에 손
+          headRoll = 0.3; headYaw = 0.25; headPitch = -0.15;
+          if (bp) AR.rotation.set(-1.9, 0, -0.5);
+          break;
+        case 'water': case 'tablet': case 'lab': // 두 손을 앞으로 (물뿌리개·태블릿)
+          headPitch = 0.45 + Math.sin(a * 8) * 0.08;
+          if (bp) { AL.rotation.set(-1.0, 0, 0.25); AR.rotation.set(-1.0 + Math.sin(a * 8) * 0.1, 0, -0.25); }
+          break;
+        case 'present': case 'megaphone': // 한 손을 들어 가리키기
+          headPitch = -0.2 + Math.sin(a * 6) * 0.1; headYaw = Math.sin(a * 3) * 0.3;
+          if (bp) AR.rotation.set(-1.5 + Math.sin(a * 6) * 0.15, 0, 0.2);
+          break;
         default: break;
       }
     }
     // ---- 탑승 (트랙터) ----
     if (this.riding) {
-      bodyY = BODY_Y - 0.28;
-      bodyPitch = -0.25;
-      FL.rotation.x = FR.rotation.x = -1.2;
-      BL.rotation.x = BR.rotation.x = -1.45;
-      this.tailG.rotation.x = 0.6;
+      if (bp) { // 의자에 앉아 두 손으로 핸들
+        bodyY = BODY_Y - 0.18;
+        bodyPitch = 0;
+        for (const l of legs) { l.rotation.x = -1.45; l.scale.y = 1; }
+        arms[0].rotation.set(-1.15, 0, 0.35); arms[1].rotation.set(-1.15, 0, -0.35);
+        this.tailG.rotation.x = 0.4;
+      } else {
+        bodyY = BODY_Y - 0.28;
+        bodyPitch = -0.25;
+        legs[0].rotation.x = legs[1].rotation.x = -1.2;
+        legs[2].rotation.x = legs[3].rotation.x = -1.45;
+        this.tailG.rotation.x = 0.6;
+      }
     }
     this.bodyG.position.y = bodyY;
     this.bodyG.rotation.set(bodyPitch, 0, bodyRoll);
@@ -503,16 +553,17 @@ export class Unico {
     if (this.nextBlink <= 0) this.nextBlink = 2.5 + Math.random() * 3.5;
     this.eyesG.scale.y = blink;
     // 그림자: 점프하면 작고 옅어짐, 발굽 그림자는 발 위치를 따라감
-    const air = Math.max(0, bodyY - BODY_Y);
+    const air = Math.max(0, bodyY - this.bodyY);
     const shs = Math.max(0.45, 1 - air * 1.8);
-    this.shadow.scale.set(0.95 * shs, 1.45 * shs, 1);
+    if (this.biped) this.shadow.scale.set(0.95 * shs, 0.85 * shs, 1);
+    else this.shadow.scale.set(0.95 * shs, 1.45 * shs, 1);
     this.shadow.material.opacity = 0.42 * shs;
     this.shadow.visible = !this.riding;
     this.legs.forEach((leg, i) => {
       const f = this.footShadows[i];
       const a = leg.rotation.x;
-      f.position.z = leg.position.z - Math.sin(a) * LEG_LEN; // 발굽의 수평 위치 (x축 회전 시 발끝은 -z 로)
-      const footY = bodyY + leg.position.y - Math.cos(a) * LEG_LEN * leg.scale.y; // 발굽 높이
+      f.position.z = leg.position.z - Math.sin(a) * this.legLen; // 발굽의 수평 위치 (x축 회전 시 발끝은 -z 로)
+      const footY = bodyY + leg.position.y - Math.cos(a) * this.legLen * leg.scale.y; // 발굽 높이
       const k = Math.max(0, 1 - Math.max(0, footY) * 6);
       f.material.opacity = 0.55 * k;
       f.scale.setScalar(0.2 * (0.7 + 0.3 * k));

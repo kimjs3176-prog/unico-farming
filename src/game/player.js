@@ -6,7 +6,7 @@ const SPEED = 4.6;
 /** 로컬 플레이어 컨트롤러 */
 export class Player {
   constructor(assets, world, name) {
-    this.unico = new Unico(assets, { name: `⭐ ${name} (나)`, labelColor: '#ffffff', labelBg: 'rgba(36,157,146,0.95)' });
+    this.unico = new Unico(assets, { name: `⭐ ${name} (나)`, labelColor: '#ffffff', labelBg: 'rgba(36,157,146,0.95)', rig: 'biped' });
     this.world = world;
     this.group = this.unico.group;
     // 내 캐릭터 표시: 발밑 금색 링 + 머리 위 통통 튀는 화살표

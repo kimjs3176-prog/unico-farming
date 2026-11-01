@@ -21,7 +21,8 @@ export class Assets {
   async loadAll(onProgress) {
     let done = 0;
     await Promise.all([
-      loadUnicoMesh(`${BASE}unico_body.bin`).then(() => { done++; onProgress?.(done / (ENV_MODELS.length + 1)); }),
+      loadUnicoMesh(`${BASE}unico_body.bin`, 'quad').then(() => { done++; onProgress?.(done / (ENV_MODELS.length + 2)); }),
+      loadUnicoMesh(`${BASE}unico_biped.bin`, 'biped').then(() => { done++; onProgress?.(done / (ENV_MODELS.length + 2)); }),
       ...ENV_MODELS.map(async (n) => {
         try {
           const gltf = await this.loader.loadAsync(`${BASE}${n}.glb`);
@@ -32,7 +33,7 @@ export class Assets {
           this.scenes.set(n, fallbackBox(n));
         }
         done++;
-        onProgress?.(done / (ENV_MODELS.length + 1));
+        onProgress?.(done / (ENV_MODELS.length + 2));
       }),
     ]);
   }

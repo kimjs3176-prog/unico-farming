@@ -1,5 +1,5 @@
 /**
- * 유니코 한 덩어리 메시를 미리 구워 public/models/unico_body.bin 으로 저장 (런타임 생성 0.7초 → 로드만)
+ * 유니코 한 덩어리 메시를 미리 구워 저장: unico_body.bin(네 발, 주민) / unico_biped.bin(두 발, 주인공) (런타임 생성 0.7초 → 로드만)
  * 형식(리틀엔디언): 헤더 Uint32[4] = [magic 0x554e4943, nVerts, nIdx, step*1e6]
  *   position Float32×3, normal Int8×3(정규화), skinIndex Uint8×4, skinWeight Uint8×4(/255), slot Uint8×5(/255), index Uint16|Uint32
  * 실행: node scripts/build-unico-mesh.mjs
@@ -8,8 +8,9 @@ import fs from 'node:fs';
 import { buildUnicoGeometry, SLOTS } from '../src/game/unico_mesh.js';
 
 const STEP = 0.032;
+for (const [rig, file] of [['quad', 'unico_body.bin'], ['biped', 'unico_biped.bin']]) {
 const t = Date.now();
-const { geometry: g, slotWeights, stats } = buildUnicoGeometry(STEP);
+const { geometry: g, slotWeights, stats } = buildUnicoGeometry(STEP, rig);
 const n = stats.verts, idx = g.index.array, ni = idx.length;
 const wide = n > 65535;
 const size = 16 + n * (12 + 3 + 4 + 4 + SLOTS.length) + ni * (wide ? 4 : 2);
@@ -30,5 +31,6 @@ for (let v = 0; v < n; v++) {
 for (let i = 0; i < n * SLOTS.length; i++) { buf.writeUInt8(Math.round(slotWeights[i] * 255), o); o += 1; }
 if (o % (wide ? 4 : 2)) o += (wide ? 4 : 2) - (o % (wide ? 4 : 2));
 for (let i = 0; i < ni; i++) { if (wide) buf.writeUInt32LE(idx[i], o); else buf.writeUInt16LE(idx[i], o); o += wide ? 4 : 2; }
-fs.writeFileSync(new URL('../public/models/unico_body.bin', import.meta.url), buf.subarray(0, o));
-console.log(`unico_body.bin: ${stats.verts} verts, ${stats.tris} tris, ${(o / 1024).toFixed(0)}KB, ${Date.now() - t}ms`);
+fs.writeFileSync(new URL(`../public/models/${file}`, import.meta.url), buf.subarray(0, o));
+console.log(`${file}: ${stats.verts} verts, ${stats.tris} tris, ${(o / 1024).toFixed(0)}KB, ${Date.now() - t}ms`);
+}

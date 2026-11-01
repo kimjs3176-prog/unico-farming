@@ -14,6 +14,29 @@ export const HEAD_AT = new THREE.Vector3(0, 0.78, 0.66); // 몸통 기준
 export const LEG_AT = [[-0.25, -0.2, 0.36], [0.25, -0.2, 0.36], [-0.25, -0.2, -0.38], [0.25, -0.2, -0.38]];
 export const TAIL_AT = new THREE.Vector3(0, 0.12, -0.56);
 export const BONES = ['body', 'head', 'legFL', 'legFR', 'legBL', 'legBR', 'tail'];
+
+/**
+ * 리그: quad = 네 발 (NPC 주민), biped = 두 발 두 손으로 선 유니코 (주인공·접속자, 원본 일러스트처럼)
+ * bones: [이름, 부모, 부모 기준 위치]
+ */
+export const RIGS = {
+  quad: {
+    bones: [['body', null, [0, 0.8, 0]], ['head', 'body', [0, 0.78, 0.66]], ['legFL', 'body', [-0.25, -0.2, 0.36]], ['legFR', 'body', [0.25, -0.2, 0.36]],
+      ['legBL', 'body', [-0.25, -0.2, -0.38]], ['legBR', 'body', [0.25, -0.2, -0.38]], ['tail', 'body', [0, 0.12, -0.56]]],
+    legLen: 0.6, headR: 0.42, bounds: [[-0.66, -0.03, -1.02], [0.66, 2.2, 1.28]],
+  },
+  biped: {
+    bones: [['body', null, [0, 0.62, 0]], ['head', 'body', [0, 0.86, 0.06]], ['legL', 'body', [-0.15, -0.12, 0]], ['legR', 'body', [0.15, -0.12, 0]],
+      ['armL', 'body', [-0.3, 0.4, 0.02]], ['armR', 'body', [0.3, 0.4, 0.02]], ['tail', 'body', [0, 0, -0.28]]],
+    legLen: 0.5, headR: 0.38, bounds: [[-0.72, -0.03, -0.92], [0.72, 2.08, 0.82]],
+  },
+};
+/** 뼈의 루트 기준 위치 */
+export function bonePos(rig, name) {
+  const b = RIGS[rig].bones.find((x) => x[0] === name);
+  const p = new THREE.Vector3(...b[2]);
+  return b[1] ? p.add(bonePos(rig, b[1])) : p;
+}
 export const SLOTS = ['body', 'snout', 'mane', 'maneD', 'hoof'];
 
 const B = new THREE.Vector3(0, BODY_Y, 0);
@@ -85,14 +108,50 @@ function primitives() {
   return P;
 }
 
+function primitivesBiped() {
+  const P = [];
+  const push = (f, k, slot, bone) => P.push({ f, k, slot, bone });
+  const Hb = bonePos('biped', 'head');
+  // 몸통: 아래가 넓은 콩 모양 + 둥근 배
+  push(ell([0, 0.84, 0], [0.34, 0.4, 0.29]), 0, 'body', 'body');
+  push(sph([0, 0.68, 0.03], 0.32), 0.14, 'body', 'body');
+  // 목 → 머리 (뒤로 살짝 기울어 원본처럼 고개를 든 모습)
+  push(cap([0, 1.05, 0], [0, 1.28, 0.05], 0.19), 0.14, 'body', 'body');
+  push(ell([Hb.x, Hb.y, Hb.z], [0.38, 0.36, 0.37]), 0.12, 'body', 'head');
+  push(ell(add(Hb, [0, -0.13, 0.27]), [0.23, 0.19, 0.24]), 0.1, 'snout', 'head');
+  for (const sx of [-1, 1]) push(ell(add(Hb, [sx * 0.21, 0.32, -0.04]), [0.07, 0.15, 0.055], sx * -0.45), 0.06, 'body', 'head');
+  // 다리: 짧고 통통 + 청록 발굽
+  for (const [sx, bone] of [[-1, 'legL'], [1, 'legR']]) {
+    push(cap([sx * 0.15, 0.55, 0], [sx * 0.15, 0.15, 0.02], 0.12), 0.1, 'body', bone);
+    push(rcyl([sx * 0.15, 0.075, 0.03], 0.135, 0.075, 0.035), 0.03, 'hoof', bone);
+  }
+  // 팔: 어깨에서 몸통과 떨어져 내려오는 팔 + 청록 손(발굽)
+  for (const [sx, bone] of [[-1, 'armL'], [1, 'armR']]) {
+    const S = [sx * 0.3, 1.02, 0.02], E = [sx * 0.47, 0.82, 0.08], Hd = [sx * 0.52, 0.62, 0.13];
+    push(sph(S, 0.11), 0.08, 'body', bone);
+    push(cap(S, E, 0.085), 0.02, 'body', bone);
+    push(cap(E, Hd, 0.08), 0.02, 'body', bone);
+    push(sph([Hd[0], Hd[1] - 0.03, Hd[2] + 0.01], 0.1), 0.03, 'hoof', bone);
+  }
+  // 갈기: 정수리 곱슬 → 등줄기로 흘러내림
+  const headMane = [[0, 0.33, -0.09, 0.15], [0, 0.22, -0.26, 0.15], [0, 0.05, -0.34, 0.145], [0.12, 0.3, 0.15, 0.09], [0.03, 0.35, 0.09, 0.085], [-0.11, 0.31, 0.03, 0.08]];
+  headMane.forEach(([x, y, z, r], i) => push(sph(add(Hb, [x, y, z]), r), 0.05, i % 2 ? 'maneD' : 'mane', 'head'));
+  [[0, 1.28, -0.24, 0.13], [0, 1.13, -0.28, 0.13], [0, 0.98, -0.29, 0.12], [0, 0.85, -0.28, 0.1]]
+    .forEach(([x, y, z, r], i) => push(sph([x, y, z], r), 0.05, i % 2 ? 'maneD' : 'mane', 'body'));
+  // 꼬리: 엉덩이 뒤에서 뒤·위로 말림
+  [[0, 0.6, -0.36, 0.1], [0, 0.55, -0.5, 0.12], [0, 0.6, -0.64, 0.11], [0, 0.74, -0.72, 0.09], [0, 0.9, -0.7, 0.07]]
+    .forEach(([x, y, z, r], i) => push(sph([x, y, z], r), i === 0 ? 0.07 : 0.05, i % 2 ? 'maneD' : 'mane', 'tail'));
+  return P;
+}
+
 const smin = (a, b, k) => {
   if (k <= 0) return Math.min(a, b);
   const h = Math.max(k - Math.abs(a - b), 0) / k;
   return Math.min(a, b) - h * h * k * 0.25;
 };
 
-export function makeSDF() {
-  const P = primitives();
+export function makeSDF(rig = 'quad') {
+  const P = rig === 'biped' ? primitivesBiped() : primitives();
   const sdf = (x, y, z) => {
     let d = P[0].f(x, y, z);
     for (let i = 1; i < P.length; i++) d = smin(d, P[i].f(x, y, z), P[i].k);
@@ -122,9 +181,10 @@ export function normalAt(sdf, p, e = 0.004) {
  * Surface Nets 로 메시 추출 + 부드러운 법선(SDF 기울기) + 색 슬롯 가중치 + 스킨 가중치
  * @returns { geometry (position, normal, skinIndex, skinWeight, index), slotWeights: Float32Array(n*5), sdf }
  */
-export function buildUnicoGeometry(step = 0.022) {
-  const { P, sdf } = makeSDF();
-  const min = [-0.66, -0.03, -1.02], max = [0.66, 2.2, 1.28];
+export function buildUnicoGeometry(step = 0.022, rig = 'quad') {
+  const { P, sdf } = makeSDF(rig);
+  const [min, max] = RIGS[rig].bounds;
+  const boneNames = RIGS[rig].bones.map((b) => b[0]);
   const nx = Math.ceil((max[0] - min[0]) / step) + 1, ny = Math.ceil((max[1] - min[1]) / step) + 1, nz = Math.ceil((max[2] - min[2]) / step) + 1;
   const field = new Float32Array(nx * ny * nz);
   const id = (i, j, k) => i + nx * (j + ny * k);
@@ -198,7 +258,7 @@ export function buildUnicoGeometry(step = 0.022) {
   const slotW = new Float32Array(nV * SLOTS.length);
   const skinIndex = new Uint16Array(nV * 4), skinWeight = new Float32Array(nV * 4);
   const dist = new Float32Array(P.length);
-  const bw = new Float32Array(BONES.length);
+  const bw = new Float32Array(boneNames.length);
   for (let i = 0; i < nV; i++) {
     const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
     let dmin = Infinity;
@@ -213,7 +273,7 @@ export function buildUnicoGeometry(step = 0.022) {
     for (let s = 0; s < SLOTS.length; s++) slotW[i * SLOTS.length + s] /= tot;
     // 스킨: 가까운 뼈일수록 크게 (관절 주변은 두 뼈가 나눠 가짐)
     bw.fill(0);
-    for (let q = 0; q < P.length; q++) bw[BONES.indexOf(P[q].bone)] += Math.exp(-Math.max(0, dist[q] - dmin) / 0.035);
+    for (let q = 0; q < P.length; q++) bw[boneNames.indexOf(P[q].bone)] += Math.exp(-Math.max(0, dist[q] - dmin) / 0.035);
     const order = [...bw.keys()].sort((a, b) => bw[b] - bw[a]).slice(0, 4);
     const sum = order.reduce((s, b) => s + bw[b], 0);
     order.forEach((b, o) => { skinIndex[i * 4 + o] = b; skinWeight[i * 4 + o] = bw[b] / sum; });
