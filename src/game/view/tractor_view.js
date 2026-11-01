@@ -124,7 +124,7 @@ export class TractorView {
       if (i >= 0) { this.cells.setColorAt(i, new THREE.Color(0x6b4430)); this.cells.instanceColor.needsUpdate = true; this.game.audio.play('dig', 0.3); }
     }
     if (this.field.isRock(v.x + Math.sin(v.heading) * 1.2, v.z + Math.cos(v.heading) * 1.2) && Math.abs(v.speed) > 1) {
-      v.speed = -Math.sign(v.speed) * 1.5; v.x = prevX; v.z = prevZ; this.field.hits++; this.field.time = Math.max(0, this.field.time - 3);
+      v.speed *= -0.2; v.pedal = 0; v.x = prevX; v.z = prevZ; this.field.hits++; this.field.time = Math.max(0, this.field.time - 3);
       this.game.ui.toast('🪨 바위에 부딪혔어요! -3초');
       this.game.audio.play('bump');
       this.game.juice.shake(0.6);

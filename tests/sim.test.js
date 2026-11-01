@@ -89,6 +89,25 @@ test('tractor: field plowing, rocks, timer', () => {
   assert.ok(v.speed > 0 && v.z > 0);
 });
 
+test('tractor: smooth start, no sudden acceleration, gentle stop', () => {
+  const v = new Vehicle(0, 0, 0);
+  for (let i = 0; i < 15; i++) v.step(1 / 60, 1, 0); // 0.25초
+  assert.ok(v.speed < 0.6, `0.25s 후 속도 ${v.speed.toFixed(2)} (급발진 아님)`);
+  let maxJerk = 0, prevV = v.speed;
+  v.step(1 / 60, 1, 0);
+  let prevA = (v.speed - prevV) * 60; prevV = v.speed;
+  for (let i = 0; i < 300; i++) { v.step(1 / 60, 1, 0); const a = (v.speed - prevV) * 60; maxJerk = Math.max(maxJerk, Math.abs(a - prevA) * 60); prevA = a; prevV = v.speed; }
+  assert.ok(v.speed > 4 && v.speed <= 5.5, `5초 후 ${v.speed.toFixed(2)}`);
+  assert.ok(maxJerk < 30, `가가속도 ${maxJerk.toFixed(1)}`);
+  // 손을 떼면 1초 안에 급정거하지 않음
+  const s0 = v.speed;
+  for (let i = 0; i < 60; i++) v.step(1 / 60, 0, 0);
+  assert.ok(v.speed > s0 * 0.4 && v.speed < s0, `관성 감속 ${s0.toFixed(2)} → ${v.speed.toFixed(2)}`);
+  // 브레이크 후 후진
+  for (let i = 0; i < 240; i++) v.step(1 / 60, -1, 0);
+  assert.ok(v.speed < 0 && v.speed >= -2.2);
+});
+
 test('smartfarm: actions move values, score from time in range', () => {
   const s = new SmartFarmSim(() => 0.5);
   s.start();

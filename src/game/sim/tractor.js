@@ -42,18 +42,40 @@ export class FieldSim {
   reward() { return Math.round(this.score * 6 + (this.score >= 30 ? 100 : 0)); }
 }
 
-/** 단순 차량 모델: 가속/제동/조향 */
+/**
+ * 부드러운 트랙터 모델
+ * - 페달 입력 완충: 키를 눌러도 약 0.5초에 걸쳐 서서히 밟힘 (급발진 방지)
+ * - 가속은 속도가 오를수록 줄어듦 (최고 속도 근처에서 완만)
+ * - 브레이크·후진 분리, 손을 떼면 관성으로 천천히 멈춤
+ * - 조향도 서서히 꺾이고, 빠를수록 덜 꺾임
+ */
+export const TRACTOR = { MAX: 5.5, REV_MAX: 2.2, ACC: 4.2, REV_ACC: 2.0, BRAKE: 6.5, DRAG: 0.9, ROLL: 0.6, PEDAL_RATE: 2.4, STEER_RATE: 4, STEER_MAX: 0.6 };
+
 export class Vehicle {
   constructor(x, z, heading) {
-    Object.assign(this, { x, z, heading, speed: 0, steer: 0, wheelSpin: 0 });
+    Object.assign(this, { x, z, heading, speed: 0, steer: 0, wheelSpin: 0, pedal: 0 });
   }
   step(dt, throttle, steerInput) {
-    const maxSpeed = 7, accel = 6, brake = 10, drag = 2.5;
-    if (throttle > 0) this.speed += accel * dt * throttle;
-    else if (throttle < 0) this.speed -= (this.speed > 0 ? brake : accel * 0.6) * dt;
-    else this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), drag * dt);
-    this.speed = Math.max(-3, Math.min(maxSpeed, this.speed));
-    this.steer += (steerInput * 0.6 - this.steer) * Math.min(1, dt * 8);
+    const T = TRACTOR;
+    // 페달: 목표 입력으로 서서히 이동 (놓을 때는 조금 더 빨리)
+    const rate = Math.abs(throttle) > Math.abs(this.pedal) ? T.PEDAL_RATE : T.PEDAL_RATE * 1.6;
+    this.pedal += (throttle - this.pedal) * Math.min(1, dt * rate);
+    const p = this.pedal;
+    if (p > 0.02) {
+      if (this.speed >= 0) this.speed += p * T.ACC * Math.max(0, 1 - this.speed / T.MAX) * dt;
+      else this.speed = Math.min(0, this.speed + T.BRAKE * p * dt); // 후진 중 전진 페달 = 브레이크
+    } else if (p < -0.02) {
+      if (this.speed > 0) this.speed = Math.max(0, this.speed + T.BRAKE * p * dt);
+      else this.speed -= -p * T.REV_ACC * Math.max(0, 1 + this.speed / T.REV_MAX) * dt;
+    }
+    // 관성 감속 (구름 저항 + 공기 저항)
+    const coast = Math.abs(p) < 0.1 ? 1 : 0.25;
+    const dec = (T.ROLL + Math.abs(this.speed) * T.DRAG * 0.3) * coast * dt;
+    this.speed = Math.sign(this.speed) * Math.max(0, Math.abs(this.speed) - dec);
+    this.speed = Math.max(-T.REV_MAX, Math.min(T.MAX, this.speed));
+    // 조향: 서서히, 고속일수록 덜 꺾임
+    const target = steerInput * T.STEER_MAX / (1 + Math.abs(this.speed) * 0.12);
+    this.steer += (target - this.steer) * Math.min(1, dt * T.STEER_RATE);
     this.heading -= this.steer * this.speed * dt * 0.45;
     this.x += Math.sin(this.heading) * this.speed * dt;
     this.z += Math.cos(this.heading) * this.speed * dt;
