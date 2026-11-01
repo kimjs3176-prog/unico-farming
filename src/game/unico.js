@@ -434,6 +434,13 @@ export class Unico {
 
   update(dt, camera) {
     this.t += dt;
+    // 이름표: 가까울 때만 또렷하게 (멀면 흐려져 화면이 복잡하지 않게). 내 캐릭터는 항상 표시
+    if (this.label && !this.labelAlways && camera) {
+      const d = camera.position.distanceTo(this.group.position);
+      const a = THREE.MathUtils.clamp((22 - d) / 7, 0, 1);
+      this.label.material.opacity = a;
+      this.label.visible = a > 0.02;
+    }
     if (this.action && this.t > this.actionUntil) this.action = null;
     if (this.bubble && this.t > this.bubbleUntil) { this.group.remove(this.bubble); this.bubble.userData.dispose(); this.bubble = null; }
     if (this.emote) {

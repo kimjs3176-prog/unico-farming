@@ -26,7 +26,7 @@ export class FarmView {
         empty.position.set(x, 0.015, z);
         empty.receiveShadow = true;
         game.world.scene.add(empty);
-        const ring = new THREE.Mesh(new THREE.RingGeometry(1.25, 1.4, 24), new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.9 }));
+        const ring = new THREE.Mesh(new THREE.RingGeometry(1.22, 1.32, 4, 1, Math.PI / 4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, depthWrite: false }));
         ring.rotation.x = -Math.PI / 2;
         ring.position.set(x, 0.03, z);
         ring.visible = false;

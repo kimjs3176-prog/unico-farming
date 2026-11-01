@@ -53,7 +53,7 @@ export const LAYOUT = {
   ],
   // 소품 배치
   props: [
-    ['lamp', 1.9, 6.5, 0], ['lamp', -1.9, -3, Math.PI], ['lamp', 1.9, -12.5, 0], ['lamp', -6, 10.8, Math.PI / 2], ['lamp', 6.5, 7.6, 0],
+    ['lamp', 3.4, 7.6, 0], ['lamp', -1.9, -3, Math.PI], ['lamp', 1.9, -12.5, 0], ['lamp', -6, 10.8, Math.PI / 2], ['lamp', 6.5, 7.6, 0],
     ['lamp', -11, 3.4, Math.PI], ['lamp', 11.5, 5.4, 0], ['lamp', -1.9, -16, Math.PI],
     ['bench', -3.2, 11.6, Math.PI], ['bench', 3.6, -12.4, 0], ['bench', -6.2, 16.2, -2.4],
     ['crate', -2.4, -10.6, 0.3], ['crate', -2.6, -9.7, -0.2], ['barrel', 2.6, -10.9, 0], ['barrel', 16.2, -10.2, 0], ['barrel', 16.9, -9.6, 0],
@@ -75,6 +75,7 @@ export const LAYOUT = {
 
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
 // 애니메이션·상호작용이 있어 병합하면 안 되는 모델
+const CAM_BLOCK = new Set(['barn', 'silo', 'koat_hq', 'booth', 'market', 'coop', 'smartfarm', 'well', 'tree', 'pine', 'fruit_tree', 'windmill']);
 const DYNAMIC = new Set(['windmill', 'drone', 'smartfarm', 'fruit_tree', 'thresher', 'tractor', 'cow', 'sheep', 'chicken', 'cloud']);
 const GREY = new THREE.Color(0x9aa4ae);
 
@@ -89,6 +90,7 @@ export class World {
     this.obstacles = []; // {x,z,r} 원형 충돌체
     this.aoSpots = []; // 지면에 구울 부드러운 그림자
     this.staticObjs = []; // 움직이지 않는 장식 → 재질별로 병합해 드로우콜 절감
+    this.camBlockers = []; // 카메라가 뚫고 들어가면 안 되는 큰 물체 (Box3)
     this.boxes = []; // {x0,z0,x1,z1}
     this.animated = []; // update(dt) 를 갖는 객체
     this.time = 0.33; // 하루 중 비율 (0=자정, 0.5=정오)
@@ -295,6 +297,7 @@ export class World {
     this.scene.add(m);
     if (!dynamic && !DYNAMIC.has(name)) this.staticObjs.push(m);
     const bb = new THREE.Box3().setFromObject(m), sz = bb.getSize(new THREE.Vector3()), cc = bb.getCenter(new THREE.Vector3());
+    if (CAM_BLOCK.has(name)) this.camBlockers.push(bb.clone().expandByScalar(0.15));
     if (name !== 'cloud' && sz.y > 0.4) this.aoSpots.push({ x: cc.x, z: cc.z, rx: sz.x * 0.62 + 0.25, rz: sz.z * 0.62 + 0.25, k: Math.min(0.42, 0.16 + sz.y * 0.05) });
     if (collide) {
       const box = bb;
@@ -313,8 +316,8 @@ export class World {
     // 장터 / 우물 / 표지판
     this.place('market', L.market.x, L.market.z, 0);
     this.place('well', L.well.x, L.well.z, 0.4);
-    this.place('sign', 0, 5.8, 0.2, 1, { collide: false });
-    this.place('sign', 11, 11, -0.6, 1, { collide: false });
+    this.signText(this.place('sign', -1.9, 5.8, 0.2, 1, { collide: false, dynamic: true }), '🦄 유니코 팜', '← 스마트팜 · 목장 →');
+    this.signText(this.place('sign', 11, 11, -0.6, 1, { collide: false, dynamic: true }), '🚜 밭갈이', '트랙터 체험 →');
     this.place('wheelbarrow', -4, 5.5, 1.2, 1, { collide: false });
     // 목장
     this.place('barn', L.barn.x, L.barn.z, 0);
@@ -401,6 +404,27 @@ export class World {
       this.scene.add(mesh);
     }
     this.staticObjs = [];
+  }
+
+  /** 표지판(sign 모델) 앞면에 글자 붙이기 — 위 판: 큰 글씨, 아래 판: 작은 글씨 */
+  signText(m, title, sub) {
+    const tex = (text, w, h, size, bg) => {
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const g = c.getContext('2d');
+      g.fillStyle = bg; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#4a2f1b'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = `900 ${size}px Jua, "Noto Sans KR", sans-serif`;
+      g.fillText(text, w / 2, h / 2 + 2);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+    };
+    const mk = (text, w, h, y, rz, bg, size) => {
+      const pl = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex(text, 512, Math.round(512 * h / w), size, bg), roughness: 0.9 }));
+      pl.position.set(0, y, 0.115);
+      pl.rotation.z = rz;
+      m.add(pl);
+    };
+    mk(title, 1.16, 0.46, 1.2, 0, '#f5efe0', 92);
+    if (sub) mk(sub, 0.86, 0.31, 0.75, -0.14, '#e8c872', 54);
   }
 
   /** 원경 산맥: 안개에 묻히지 않는 푸른 실루엣으로 깊이감 (대기 원근) */

@@ -8,6 +8,7 @@ export class Player {
   constructor(assets, world, name) {
     this.name = name;
     this.unico = new Unico(assets, { name: `⭐ ${name} (나)`, labelColor: '#ffffff', labelBg: 'rgba(36,157,146,0.95)', rig: 'biped' });
+    this.unico.labelAlways = true;
     this.world = world;
     this.group = this.unico.group;
     // 내 캐릭터 표시: 발밑 금색 링 + 머리 위 통통 튀는 화살표

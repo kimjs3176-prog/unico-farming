@@ -21,6 +21,7 @@ import { randomName } from './game/names.js';
 import { Juice } from './game/juice.js';
 import { PostFX } from './game/postfx.js';
 import { pickQuality } from './game/quality.js';
+import { SURF } from './game/surface.js';
 import { WeatherService } from './game/weather.js';
 import { PointerNav } from './game/pointer.js';
 import { RiceView } from './game/view/rice_view.js';
@@ -47,6 +48,7 @@ class Game {
     this.world = new World(assets, this.renderer, this.quality);
     this.postfx = new PostFX(this.renderer, this.world.scene, this.camera, this.quality);
     this.followCam = new FollowCamera(this.camera);
+    this.followCam.blockers = this.world.camBlockers;
     this.economy = new Economy();
     this.quests = new Quests();
     this.player = new Player(assets, this.world, name);
@@ -216,6 +218,8 @@ class Game {
     this.net.update(dt);
     this.fx.update(dt);
     this.juice.update(dt, this.camera);
+    SURF.time.value += dt;
+    SURF.wind.value = this.world.weatherCur?.wind ?? 0.15;
     this.minimap.update(dt);
     this.ui.updateHud();
     // 비 오는 날 자동 물주기 (3초마다 점검)

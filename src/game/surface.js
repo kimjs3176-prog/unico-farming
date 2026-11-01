@@ -6,6 +6,9 @@ import * as THREE from 'three';
  *  wood: 나뭇결·판자 얼룩 / roof: 기와 줄 / paint: 칠 바램·아랫단 때 / stone: 얼룩·틈 / foliage: 잎 덩어리·윗면 햇빛
  *  soil: 흙 알갱이 / hay: 짚 결 / metal: 결 / fur: 털 결 / 공통: 지면 가까이 접지 어둠(가짜 AO)
  */
+/** 모든 재질이 공유하는 시간·바람 (main 루프에서 갱신) */
+export const SURF = { time: { value: 0 }, wind: { value: 0.15 } };
+
 const NOISE = /* glsl */ `
 varying vec3 vSW; varying vec3 vSN;
 float sh31(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -52,7 +55,21 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
   const prev = m.onBeforeCompile;
   m.onBeforeCompile = (sh, r) => {
     prev?.call(m, sh, r);
-    sh.vertexShader = 'varying vec3 vSW; varying vec3 vSN;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+    sh.uniforms.uSurfTime = SURF.time;
+    sh.uniforms.uSurfWind = SURF.wind;
+    let vs = 'varying vec3 vSW; varying vec3 vSN; uniform float uSurfTime; uniform float uSurfWind;\n' + sh.vertexShader;
+    if (kind === 'foliage') {
+      // 나무 잎: 바람에 흔들림 (높을수록 크게)
+      vs = vs.replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec4 fw = modelMatrix * vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          fw = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
+        #endif
+        float lift = max(0.0, fw.y - 0.9);
+        float sway = (sin(uSurfTime * 1.3 + fw.x * 0.35 + fw.z * 0.27) + 0.5 * sin(uSurfTime * 2.9 + fw.x * 1.1)) * (0.025 + uSurfWind * 0.08) * lift;
+        transformed.x += sway; transformed.z += sway * 0.6;`);
+    }
+    sh.vertexShader = vs.replace('#include <project_vertex>', `#include <project_vertex>
       vec4 sw4 = vec4(transformed, 1.0);
       #ifdef USE_INSTANCING
         sw4 = instanceMatrix * sw4;
