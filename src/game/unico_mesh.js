@@ -42,6 +42,8 @@ export function bonePos(rig, name) {
   return b[1] ? p.add(bonePos(rig, b[1])) : p;
 }
 export const SLOTS = ['body', 'snout', 'mane', 'maneD', 'hoof'];
+/** 관절 경계 폭(m): 작을수록 단단한 관절. 팔은 아주 좁게 (몸통이 따라 늘어나지 않게) */
+const SIGMA = { armL: 0.01, armR: 0.01, legL: 0.018, legR: 0.018, head: 0.03, tail: 0.02, body: 0.035 };
 
 const B = new THREE.Vector3(0, BODY_Y, 0);
 const H = B.clone().add(HEAD_AT); // 머리 중심 (월드, 루트 기준)
@@ -148,7 +150,7 @@ function primitivesBiped() {
   // 팔: 어깨에서 손까지 한 번에 매끈하게 가늘어지는 짧은 팔 + 둥근 청록 손
   for (const [sx, bone] of [[-1, 'armL'], [1, 'armR']]) {
     const S = [sx * 0.25, 0.83, 0.02], Hd = [sx * 0.47, 0.53, 0.1];
-    push(rcone(S, Hd, 0.1, 0.08), 0.07, 'body', bone);
+    push(rcone(S, Hd, 0.1, 0.08), 0.045, 'body', bone);
     push(sph([sx * 0.485, 0.5, 0.11], 0.092), 0.05, 'hoof', bone);
   }
   // 갈기: 정수리 곱슬 → 뒤통수 → 등
@@ -276,7 +278,7 @@ export function buildUnicoGeometry(step = 0.022, rig = 'quad') {
   const slotW = new Float32Array(nV * SLOTS.length);
   const skinIndex = new Uint16Array(nV * 4), skinWeight = new Float32Array(nV * 4);
   const dist = new Float32Array(P.length);
-  const bw = new Float32Array(boneNames.length);
+  const bw = new Float32Array(boneNames.length), bd = new Float32Array(boneNames.length);
   for (let i = 0; i < nV; i++) {
     const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
     let dmin = Infinity;
@@ -289,9 +291,16 @@ export function buildUnicoGeometry(step = 0.022, rig = 'quad') {
       tot += w;
     }
     for (let s = 0; s < SLOTS.length; s++) slotW[i * SLOTS.length + s] /= tot;
-    // 스킨: 가까운 뼈일수록 크게 (관절 주변은 두 뼈가 나눠 가짐)
-    bw.fill(0);
-    for (let q = 0; q < P.length; q++) bw[boneNames.indexOf(P[q].bone)] += Math.exp(-Math.max(0, dist[q] - dmin) / 0.035);
+    // 스킨: 뼈마다 가장 가까운 프리미티브 거리로 가중치. 관절 경계 폭(σ)은 뼈 쌍 중 좁은 쪽을 사용
+    //  → 팔을 들어도 어깨 옆 몸통 정점은 몸통에 남고(늘어남 없음), 팔은 팔만 돈다
+    bd.fill(Infinity);
+    for (let q = 0; q < P.length; q++) { const bi = boneNames.indexOf(P[q].bone); if (dist[q] < bd[bi]) bd[bi] = dist[q]; }
+    let nb = 0;
+    for (let k2 = 1; k2 < boneNames.length; k2++) if (bd[k2] < bd[nb]) nb = k2;
+    for (let k2 = 0; k2 < boneNames.length; k2++) {
+      const sig = Math.min(SIGMA[boneNames[k2]] ?? 0.035, SIGMA[boneNames[nb]] ?? 0.035);
+      bw[k2] = bd[k2] === Infinity ? 0 : Math.exp(-Math.max(0, bd[k2] - bd[nb]) / sig);
+    }
     const order = [...bw.keys()].sort((a, b) => bw[b] - bw[a]).slice(0, 4);
     const sum = order.reduce((s, b) => s + bw[b], 0);
     order.forEach((b, o) => { skinIndex[i * 4 + o] = b; skinWeight[i * 4 + o] = bw[b] / sum; });
