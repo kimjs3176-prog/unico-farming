@@ -33,8 +33,11 @@ export class Minimap {
     c.fillStyle = '#6fc3e8'; c.beginPath(); c.arc(X(L.pond.x), Z(L.pond.z), L.pond.r * k, 0, 7); c.fill();
     const pd = L.paddy; rect(pd.x0, pd.z0, pd.x0 + pd.cols * (pd.size + pd.bund) + pd.bund, pd.z0 + pd.rows * (pd.size + pd.bund) + pd.bund, '#5fa3b0');
     c.fillStyle = '#e0413a'; for (const o of L.orchard) { c.beginPath(); c.arc(X(o.x), Z(o.z), 2.2, 0, 7); c.fill(); }
+    // 주민 (역할 색)
+    const npcCol = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a3a9b0', kid: '#f28bb0' };
+    for (const e of this.game.npcs.list) { const p = e.u.group.position; c.fillStyle = npcCol[e.id] || '#fff'; c.beginPath(); c.arc(X(p.x), Z(p.z), 2.6, 0, 7); c.fill(); }
     // 다른 플레이어
-    c.fillStyle = '#bfe4ff';
+    c.fillStyle = '#4a90d9';
     for (const r of this.game.net.remote.values()) { const p = r.unico.group.position; c.beginPath(); c.arc(X(p.x), Z(p.z), 2.5, 0, 7); c.fill(); }
     // 나
     const p = this.game.tractor.driving ? this.game.tractor.riderGroup.position : this.game.player.position;

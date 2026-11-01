@@ -20,6 +20,7 @@ const MAT = {};
 function mat(key, color, { rough = 0.7, metal = 0, emissive = 0, transparent = false, opacity = 1 } = {}) {
   if (!MAT[key]) {
     MAT[key] = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, transparent, opacity });
+    MAT[key].name = key;
     if (emissive) { MAT[key].emissive = new THREE.Color(color); MAT[key].emissiveIntensity = emissive; }
   }
   return MAT[key];
@@ -219,6 +220,36 @@ function blobTexture() {
   return BLOB_TEX;
 }
 
+/**
+ * 색 팔레트 — 플레이어는 원안 그대로(흰 몸 + 청록), NPC는 역할별로 다른 색이라 한눈에 구분
+ * body: 몸, snout: 주둥이, mane/maneD: 갈기·꼬리 두 톤, hoof: 발굽
+ */
+export const PALETTES = {
+  official: null,
+  merchant: { body: 0xfff0d2, snout: 0xffe1c4, mane: 0xf28c28, maneD: 0xd9741a, hoof: 0xd9741a },
+  researcher: { body: 0xeee8ff, snout: 0xe6ddff, mane: 0x8e7cc3, maneD: 0x7563ad, hoof: 0x7563ad },
+  guide: { body: 0xe6f6e8, snout: 0xd8f0dc, mane: 0x6dbb4f, maneD: 0x58a33c, hoof: 0x58a33c },
+  granny: { body: 0xf1ede6, snout: 0xf0e2da, mane: 0xbfc4ca, maneD: 0xa3a9b0, hoof: 0x8f959c },
+  kid: { body: 0xffe8f0, snout: 0xffd6e4, mane: 0xf28bb0, maneD: 0xe06e98, hoof: 0xe06e98 },
+};
+const SWAP = { white: 'body', snout: 'snout', teal: 'mane', tealD: 'maneD', hoof: 'hoof' };
+
+function applyPalette(root, id) {
+  const pal = PALETTES[id];
+  if (!pal) return;
+  const variant = (m) => {
+    const slot = SWAP[m.name];
+    if (!slot) return m;
+    const key = `${m.name}_${id}`;
+    if (!MAT[key]) { MAT[key] = m.clone(); MAT[key].name = key; MAT[key].color.setHex(pal[slot]); }
+    return MAT[key];
+  };
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = Array.isArray(o.material) ? o.material.map(variant) : variant(o.material);
+  });
+}
+
 // 감정표현 → 머리 위 아이콘
 const EMOTE_ICON = { cheer: '🎉', heart: '❤️', wave: '👋', think: '❓', water: '💧', tablet: '📱', present: '📊', megaphone: '📣', lab: '🧪' };
 
@@ -227,7 +258,7 @@ export class Unico {
    * @param assets (사용 안 함, 호환용)
    * @param opts.name 이름표, opts.outfit { hat: 'straw'|'helmet'|null, goggles, scarf: 'red'|'green'|'blue'|null, sprout }
    */
-  constructor(assets, { name = '', labelColor = '#fff', outfit = {} } = {}) {
+  constructor(assets, { name = '', labelColor = '#fff', labelBg, outfit = {}, palette = 'official' } = {}) {
     if (!TPL) TPL = buildTemplate();
     this.group = new THREE.Group();
     this.position = this.group.position;
@@ -298,7 +329,9 @@ export class Unico {
     this.onStep = null;
     this.lastSin = 0;
     this.label = null;
-    if (name) this.setName(name, labelColor);
+    applyPalette(this.root, palette);
+    this.palette = palette;
+    if (name) this.setName(name, labelColor, labelBg);
   }
 
   setOutfit(o) {
@@ -313,9 +346,9 @@ export class Unico {
     this.acc.scarfBlue.visible = f.scarf === 'blue';
   }
 
-  setName(name, color = '#fff') {
+  setName(name, color = '#fff', bg) {
     if (this.label) { this.group.remove(this.label); this.label.userData.dispose(); }
-    this.label = makeLabel(name, { color });
+    this.label = makeLabel(name, bg ? { color, bg } : { color });
     this.label.position.y = 2.55;
     this.group.add(this.label);
   }

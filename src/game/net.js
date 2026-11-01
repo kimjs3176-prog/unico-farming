@@ -60,7 +60,7 @@ export class Net {
     if (p.id === this.id) return;
     let r = this.remote.get(p.id);
     if (!r) {
-      const u = new Unico(this.game.assets, { name: p.name, labelColor: '#bfe4ff', outfit: { scarf: ['red', 'green', 'blue'][p.id % 3] } });
+      const u = new Unico(this.game.assets, { name: `👤 ${p.name}`, labelColor: '#ffffff', labelBg: 'rgba(74,144,217,0.9)', outfit: { scarf: ['red', 'green', 'blue'][p.id % 3] } });
       this.game.world.scene.add(u.group);
       r = { unico: u, target: { x: p.x ?? 0, z: p.z ?? 9 }, name: p.name };
       u.group.position.set(r.target.x, 0, r.target.z);

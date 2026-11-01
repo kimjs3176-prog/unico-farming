@@ -6,9 +6,24 @@ const SPEED = 4.6;
 /** 로컬 플레이어 컨트롤러 */
 export class Player {
   constructor(assets, world, name) {
-    this.unico = new Unico(assets, { name, labelColor: '#fff' });
+    this.unico = new Unico(assets, { name: `⭐ ${name} (나)`, labelColor: '#ffffff', labelBg: 'rgba(36,157,146,0.95)' });
     this.world = world;
     this.group = this.unico.group;
+    // 내 캐릭터 표시: 발밑 금색 링 + 머리 위 통통 튀는 화살표
+    this.ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.78, 0.95, 40),
+      new THREE.MeshBasicMaterial({ color: 0xfac03e, transparent: true, opacity: 0.85, depthWrite: false }),
+    );
+    this.ring.rotation.x = -Math.PI / 2;
+    this.ring.position.y = 0.035;
+    this.ring.renderOrder = 4;
+    this.group.add(this.ring);
+    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.24, 4), new THREE.MeshBasicMaterial({ color: 0xfac03e }));
+    arrow.rotation.x = Math.PI;
+    arrow.position.y = 3.3;
+    this.arrow = arrow;
+    this.group.add(arrow);
+    this.markT = 0;
     this.group.position.set(0, 0, 9);
     this.velocity = new THREE.Vector3();
     this.frozen = false; // 미니게임/UI 중 이동 금지
@@ -55,5 +70,11 @@ export class Player {
     this.unico.moving = moving;
     this.unico.update(dt, followCam.camera, this.world.daylight);
     this.group.visible = !this.hidden;
+    this.markT += dt;
+    const pulse = 1 + Math.sin(this.markT * 3) * 0.06;
+    this.ring.scale.set(pulse, pulse, 1);
+    this.ring.visible = !this.unico.riding;
+    this.arrow.position.y = (this.unico.riding ? 3.1 : 3.3) + Math.abs(Math.sin(this.markT * 3)) * 0.12;
+    this.arrow.rotation.y += dt * 2;
   }
 }

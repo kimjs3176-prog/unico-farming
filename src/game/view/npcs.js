@@ -3,6 +3,8 @@ import { LAYOUT } from '../world.js';
 import { VILLAGERS } from '../sim/villagers.js';
 import { CROPS } from '../sim/crops.js';
 
+const ROLE_ICON = { merchant: '🛒', researcher: '🔬', guide: '📣', granny: '🌾', kid: '🦋' };
+
 const OUTFITS = {
   merchant: { hat: 'straw', scarf: 'red' },
   researcher: { goggles: true, scarf: 'blue', sprout: true },
@@ -25,7 +27,7 @@ export class NPCs {
   constructor(game) {
     this.game = game;
     this.list = Object.entries(LAYOUT.npcs).map(([id, n]) => {
-      const u = new Unico(game.assets, { name: n.name, labelColor: '#ffe066', outfit: OUTFITS[id] });
+      const u = new Unico(game.assets, { name: `${ROLE_ICON[id] || ''} ${n.name}`, labelColor: '#231916', labelBg: 'rgba(255,248,225,0.92)', outfit: OUTFITS[id], palette: id });
       u.group.position.set(n.x, 0, n.z);
       u.facing = u.yaw = Math.atan2(0 - n.x, 9 - n.z); // 스폰 쪽을 바라봄
       game.world.scene.add(u.group);
