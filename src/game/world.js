@@ -70,13 +70,17 @@ export const LAYOUT = {
       { id: 'smart', x: 32.8, z: -31.5, rot: -Math.PI / 2 }, { id: 'machine', x: 32.8, z: -26.3, rot: -Math.PI / 2 }, { id: 'env', x: 32.8, z: -21.1, rot: -Math.PI / 2 },
     ],
   },
-  reserved: [[13, -39, 37, -18.4], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5]],
+  // CC0 건물 (Quaternius): 물탱크, 트랙터 창고, 논 옆 방앗간 풍차
+  waterTower: { x: 31, z: -13 },
+  shed: { x: 33.4, z: 17 },
+  mill: { x: -15, z: -24 },
+  reserved: [[13, -39, 37, -18.4], [29.5, -14.5, 32.5, -11.5], [30.5, 14, 36.5, 20], [-18, -27, -12, -21], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5]],
 };
 
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
 // 애니메이션·상호작용이 있어 병합하면 안 되는 모델
-const CAM_BLOCK = new Set(['barn', 'silo', 'koat_hq', 'booth', 'market', 'coop', 'smartfarm', 'well', 'tree', 'pine', 'fruit_tree', 'windmill']);
-const DYNAMIC = new Set(['windmill', 'drone', 'smartfarm', 'fruit_tree', 'thresher', 'tractor', 'cow', 'sheep', 'chicken', 'cloud']);
+const CAM_BLOCK = new Set(['barn', 'silo', 'koat_hq', 'booth', 'market', 'coop', 'smartfarm', 'well', 'tree', 'pine', 'fruit_tree', 'windmill', 'tower_windmill', 'water_tower', 'open_barn']);
+const DYNAMIC = new Set(['windmill', 'tower_windmill', 'drone', 'smartfarm', 'fruit_tree', 'thresher', 'tractor', 'cow', 'sheep', 'chicken', 'cloud']);
 const GREY = new THREE.Color(0x9aa4ae);
 
 export class World {
@@ -297,7 +301,7 @@ export class World {
     this.scene.add(m);
     if (!dynamic && !DYNAMIC.has(name)) this.staticObjs.push(m);
     const bb = new THREE.Box3().setFromObject(m), sz = bb.getSize(new THREE.Vector3()), cc = bb.getCenter(new THREE.Vector3());
-    if (CAM_BLOCK.has(name)) this.camBlockers.push(bb.clone().expandByScalar(0.15));
+    if (CAM_BLOCK.has(name) || /^(tree|pine|birch|autumn|willow)_/.test(name)) this.camBlockers.push(bb.clone().expandByScalar(0.15));
     if (name !== 'cloud' && sz.y > 0.4) this.aoSpots.push({ x: cc.x, z: cc.z, rx: sz.x * 0.62 + 0.25, rz: sz.z * 0.62 + 0.25, k: Math.min(0.42, 0.16 + sz.y * 0.05) });
     if (collide) {
       const box = bb;
@@ -319,10 +323,17 @@ export class World {
     this.signText(this.place('sign', -1.9, 5.8, 0.2, 1, { collide: false, dynamic: true }), '🦄 유니코 팜', '← 스마트팜 · 목장 →');
     this.signText(this.place('sign', 11, 11, -0.6, 1, { collide: false, dynamic: true }), '🚜 밭갈이', '트랙터 체험 →');
     this.place('wheelbarrow', -4, 5.5, 1.2, 1, { collide: false });
-    // 목장
-    this.place('barn', L.barn.x, L.barn.z, 0);
-    this.place('silo', L.silo.x, L.silo.z, 0, 1, { r: 1.2 });
-    this.place('coop', L.coop.x, L.coop.z, Math.PI);
+    // 목장 (CC0 Quaternius 농장 건물)
+    this.place('barn', L.barn.x, L.barn.z, 0, 0.9);
+    this.place('silo', L.silo.x, L.silo.z, 0, 0.85, { r: 1.3 });
+    this.place('coop', L.coop.x, L.coop.z, Math.PI, 0.85);
+    if (this.assets.has('water_tower')) this.place('water_tower', L.waterTower.x, L.waterTower.z, 0.3, 0.9, { r: 1.1 });
+    if (this.assets.has('open_barn')) this.place('open_barn', L.shed.x, L.shed.z, -Math.PI / 2, 1);
+    if (this.assets.has('tower_windmill')) {
+      const mill = this.place('tower_windmill', L.mill.x, L.mill.z, 0.6, 0.85, { r: 1.8 });
+      const mb = mill.getObjectByName('Blades') || mill.children[0]?.children.find((c) => /^Blades/.test(c.name));
+      if (mb) this.animated.push({ update: (dt) => (mb.rotation.z -= dt * (0.25 + (this.weatherCur?.wind || 0) * 1.5)) });
+    }
     this.place('trough', L.trough.x, L.trough.z, 0);
     for (let i = 0; i < 4; i++) this.place('hay_bale', 23 + (i % 2) * 1.1, -9 + Math.floor(i / 2) * 1.1, i * 0.3, 1, { collide: i < 2 });
     this._fenceRect(L.ranch.x0, L.ranch.z0, L.ranch.x1, L.ranch.z1, { gapX: null, gapZ: L.ranch.gate.z });
@@ -333,7 +344,7 @@ export class World {
     this.smartfarmModel = sf;
     sf.traverse((o) => { if (o.isMesh && o.material.emissiveIntensity > 0) this.lampMaterials.push(o.material); });
     // 풍차
-    const wm = this.place('windmill', L.windmill.x, L.windmill.z, 0.5, 1, { r: 0.8 });
+    const wm = this.place('windmill', L.windmill.x, L.windmill.z, 0.5, 1, { r: 0.9 });
     const blades = wm.getObjectByName('Blades');
     if (blades) this.animated.push({ update: (dt) => (blades.rotation.z += dt * (0.5 + (this.weatherCur?.wind || 0) * 4)) });
     // 드론: 스마트팜 위를 선회
@@ -349,24 +360,53 @@ export class World {
     } });
     this.drone = drone;
     // 나무 / 수풀 / 꽃 / 바위 (경계 링 + 군데군데)
-    for (let i = 0; i < 44; i++) {
-      const a = (i / 44) * Math.PI * 2 + rnd() * 0.1;
+    // CC0 자연물(q_nature)이 있으면 변형을 섞어 숲을 다채롭게, 없으면 기존 모델
+    const Q = this.assets.has('tree_1');
+    const pick = (list) => list[Math.floor(rnd() * list.length)];
+    const treeName = (edge) => {
+      if (!Q) return rnd() > 0.35 ? 'tree' : 'pine';
+      const r = rnd();
+      if (r < 0.42) return pick(['tree_1', 'tree_2', 'tree_3', 'tree_4', 'tree_5']);
+      if (r < (edge ? 0.72 : 0.6)) return pick(['pine_1', 'pine_2', 'pine_3']);
+      if (r < 0.82) return pick(['birch_1', 'birch_2', 'birch_3']);
+      return pick(['autumn_1', 'autumn_2', 'autumn_3']); // 단풍 포인트 색
+    };
+    const treeScale = (n) => (!Q || n === 'tree' || n === 'pine' ? 1 : /^pine/.test(n) ? 1.45 : 1.35);
+    for (let i = 0; i < 52; i++) {
+      const a = (i / 52) * Math.PI * 2 + rnd() * 0.1;
       const r = L.bounds - 2 + rnd() * 6;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (this.isReserved(x, z, 1.5)) continue;
-      this.place(rnd() > 0.35 ? 'tree' : 'pine', x, z, rnd() * 6.28, 0.9 + rnd() * 0.5, { r: 0.6 });
+      const n = treeName(true);
+      this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.5) * treeScale(n), { r: 0.6 });
     }
-    const spots = [[-8, -6], [-5, -9], [-11, 13], [2, 17], [-20, 4], [-28, -2], [30, 14], [20, 22], [-30, 22], [34, -4], [-18, 24], [-14, -18], [-22, 10]];
-    for (const [x, z] of spots) this.place(rnd() > 0.3 ? 'tree' : 'pine', x, z, rnd() * 6.28, 0.9 + rnd() * 0.4, { r: 0.6 });
-    for (let i = 0; i < 18; i++) {
+    const spots = [[-8, -6], [-5, -9], [-11, 13], [-20, 4], [-28, -2], [30, 14], [20, 22], [-30, 22], [34, -4], [-18, 24], [-14, -18], [-22, 10]];
+    for (const [x, z] of spots) { const n = Q ? pick(['tree_1', 'tree_2', 'tree_3', 'tree_4', 'tree_5', 'birch_1', 'birch_2', 'autumn_1']) : treeName(false); this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.4) * treeScale(n), { r: 0.6 }); }
+    // 연못가 버드나무
+    if (Q) for (const [x, z] of [[-17.6, 15.5], [-16.5, 21.8]]) this.place(rnd() > 0.5 ? 'willow_1' : 'willow_2', x, z, rnd() * 6.28, 1.35, { r: 0.6 });
+    // 연잎 (낚시 데크 반대편)
+    if (Q) for (const [dx, dz, s] of [[-2.6, 1.2, 0.8], [-1.6, 2.6, 0.6], [-3.1, -0.6, 0.7], [-0.4, 3.3, 0.55], [1.4, 3.0, 0.65]]) {
+      const lp = this.place('lilypad', L.pond.x + dx, L.pond.z + dz, rnd() * 6.28, s, { collide: false });
+      lp.position.y = 0.02; // 정적 병합 전에 수면 높이로
+    }
+    for (let i = 0; i < 26; i++) {
       const x = (rnd() - 0.5) * 70, z = (rnd() - 0.5) * 70;
       if (this.isBlocked(x, z, 2.5) || this.isReserved(x, z, 1) || Math.hypot(x, z) < 12) continue;
-      this.place(rnd() > 0.5 ? 'bush' : 'flowers', x, z, rnd() * 6.28, 1, { collide: false });
+      const n = !Q ? (rnd() > 0.5 ? 'bush' : 'flowers') : pick(['bush_1', 'bush_2', 'berrybush_1', 'berrybush_2', 'flowers', 'flowers_q', 'plant_1', 'plant_2', 'plant_3']);
+      this.place(n, x, z, rnd() * 6.28, Q && /bush/.test(n) ? 1.1 : 1, { collide: false });
     }
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
       const x = (rnd() - 0.5) * 60, z = (rnd() - 0.5) * 60;
       if (this.isBlocked(x, z, 2.5) || this.isReserved(x, z, 1) || Math.hypot(x, z) < 14) continue;
-      this.place('rock', x, z, rnd() * 6.28, 0.8 + rnd() * 0.6);
+      this.place(Q ? pick(['rock_1', 'rock_2', 'rock_3', 'mossrock_1', 'mossrock_2', 'mossrock_3']) : 'rock', x, z, rnd() * 6.28, 0.8 + rnd() * 0.6);
+    }
+    // 숲 가장자리 소품: 그루터기, 통나무, 덤불
+    if (Q) for (let i = 0; i < 22; i++) {
+      const a = rnd() * Math.PI * 2, r = L.bounds - 6 + rnd() * 5;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (this.isBlocked(x, z, 1.2) || this.isReserved(x, z, 1)) continue;
+      const n = pick(['stump', 'stump_moss', 'log', 'log_moss', 'plant_4', 'plant_5', 'bush_1', 'mossrock_4', 'grass_q', 'grass_q2']);
+      this.place(n, x, z, rnd() * 6.28, 1, { collide: /log|stump/.test(n) });
     }
     // 소품 (가로등은 밤에 켜짐)
     this.lampGlows = [];

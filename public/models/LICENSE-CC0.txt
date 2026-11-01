@@ -1,0 +1,9 @@
+q_farm.glb, q_nature.glb, q_cow.glb, q_horse.glb, q_donkey.glb, q_alpaca.glb, q_shiba.glb
+
+LowPoly models by Quaternius (https://quaternius.com)
+Farm Buildings Pack / Ultimate Nature Pack / Ultimate Animated Animal Pack
+
+License: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Converted and recolored for UNICO Farming (see docs/ASSETS_CC0.md).

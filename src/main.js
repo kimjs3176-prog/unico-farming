@@ -6,6 +6,7 @@ import { FollowCamera } from './game/camera.js';
 import { Player } from './game/player.js';
 import { FarmView } from './game/view/farm_view.js';
 import { RanchView } from './game/view/ranch_view.js';
+import { Pet } from './game/view/pet.js';
 import { TractorView } from './game/view/tractor_view.js';
 import { SmartFarmView } from './game/view/smartfarm_view.js';
 import { NPCs } from './game/view/npcs.js';
@@ -68,6 +69,7 @@ class Game {
     this.rice = new RiceView(this);
     this.nature = new NatureView(this);
     this.koat = new KoatView(this);
+    this.pet = new Pet(this);
     this.net = new Net(this);
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
@@ -199,6 +201,7 @@ class Game {
       pick(this.rice.update(dt, pp));
       pick(this.nature.update(dt, pp));
       pick(this.koat.update(dt, pp));
+      pick(this.pet.update(dt, pp));
       this.pointer.update(dt, input);
       const arrived = this.player.arrivedInteract;
       this.player.arrivedInteract = false;
@@ -213,6 +216,7 @@ class Game {
       this.rice.update(dt, pp);
       this.nature.update(dt, pp);
       this.koat.update(dt, pp);
+      this.pet.update(dt, this.tractor.riderGroup.position);
       // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스로 돌려도 천천히 복귀)
       const behind = this.tractor.vehicle.heading + Math.PI;
       const dy = ((behind - this.followCam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
@@ -226,6 +230,10 @@ class Game {
     SURF.time.value += dt;
     if (this.music.on) { const W = this.world.weatherCur || {}; this.music.setScene({ daylight: this.world.daylight, kind: this.world.weatherKind || 'clear', precip: W.precip || 0, wind: W.wind || 0.15 }); }
     SURF.wind.value = this.world.weatherCur?.wind ?? 0.15;
+    // 눈 쌓임/녹음: 날씨가 바뀌면 서서히, 처음 접속했을 때 이미 눈이면 바로 덮인 상태
+    const snowTarget = this.world.weatherKind === 'snow' ? 1 : 0;
+    if (this.snowSeen === undefined && this.world.weatherKind) { this.snowSeen = true; SURF.snow.value = snowTarget; }
+    SURF.snow.value += (snowTarget - SURF.snow.value) * Math.min(1, dt * 0.35);
     this.minimap.update(dt);
     this.guide.update(dt);
     this.ui.updateHud();

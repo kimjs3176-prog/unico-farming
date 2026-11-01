@@ -7,7 +7,7 @@ import * as THREE from 'three';
  *  soil: 흙 알갱이 / hay: 짚 결 / metal: 결 / fur: 털 결 / 공통: 지면 가까이 접지 어둠(가짜 AO)
  */
 /** 모든 재질이 공유하는 시간·바람 (main 루프에서 갱신) */
-export const SURF = { time: { value: 0 }, wind: { value: 0.15 } };
+export const SURF = { time: { value: 0 }, wind: { value: 0.15 }, snow: { value: 0 } };
 
 const NOISE = /* glsl */ `
 varying vec3 vSW; varying vec3 vSN;
@@ -49,7 +49,7 @@ export function kindOf(name = '') {
 }
 
 /** 재질에 디테일 셰이더 주입 (한 재질에 한 번) */
-export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim = 0 } = {}) {
+export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim = 0, spots = 0 } = {}) {
   if (!m || m.userData.enhanced || m.transparent || !m.isMeshStandardMaterial) return m;
   m.userData.enhanced = kind;
   const prev = m.onBeforeCompile;
@@ -57,7 +57,8 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
     prev?.call(m, sh, r);
     sh.uniforms.uSurfTime = SURF.time;
     sh.uniforms.uSurfWind = SURF.wind;
-    let vs = 'varying vec3 vSW; varying vec3 vSN; uniform float uSurfTime; uniform float uSurfWind;\n' + sh.vertexShader;
+    sh.uniforms.uSurfSnow = SURF.snow;
+    let vs = 'varying vec3 vSW; varying vec3 vSN; varying vec3 vOP; uniform float uSurfTime; uniform float uSurfWind;\n' + sh.vertexShader;
     if (kind === 'foliage') {
       // 나무 잎: 바람에 흔들림 (높을수록 크게)
       vs = vs.replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -75,9 +76,18 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
         sw4 = instanceMatrix * sw4;
       #endif
       vSW = (modelMatrix * sw4).xyz;
+      vOP = position; // 바인드 포즈 기준 좌표: 뼈대 애니메이션에도 무늬가 몸에 붙어 다님
       vSN = normalize(mat3(modelMatrix) * objectNormal);`);
-    sh.fragmentShader = NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow;\n' + NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       ${KIND_CODE[kind] || KIND_CODE.base}
+      ${spots ? `float spt = smoothstep(0.5, 0.53, sfbm(vOP * ${spots.toFixed(2)} + vec3(3.7, 1.3, 8.1)));
+      #ifdef USE_COLOR
+        spt *= step(0.8, vColor.r) * step(0.8, vColor.g) * step(vColor.b, 0.95); // 흰 몸통에만 (눈·주둥이·발굽 제외)
+      #endif
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045, 0.04, 0.04), spt);` : ''}
+      ${kind !== 'fur' ? `// 눈 오는 날: 위를 향한 면에 서서히 눈이 쌓임
+      float snowCov = uSurfSnow * smoothstep(0.45, 0.85, vSN.y) * smoothstep(0.25, 0.6, sfbm(vSW * 1.7) + uSurfSnow * 0.35);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 1.0), snowCov);` : ''}
       ${contact ? 'k *= mix(0.62, 1.0, smoothstep(0.0, 0.32, vSW.y));' : ''}
       diffuseColor.rgb *= k;`);
     if (rim > 0) {
@@ -86,7 +96,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
         totalEmissiveRadiance += vec3(1.0, 0.97, 0.9) * fres * ${rim.toFixed(2)};`);
     }
   };
-  m.customProgramCacheKey = () => `surf-${kind}-${contact}-${rim}`;
+  m.customProgramCacheKey = () => `surf-${kind}-${contact}-${rim}-${spots}`;
   m.needsUpdate = true;
   return m;
 }
