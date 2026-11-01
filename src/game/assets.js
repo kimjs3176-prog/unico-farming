@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { loadUnicoMesh } from './unico.js';
+import { enhanceMaterial } from './surface.js';
 
 /** 블렌더에서 생성한 환경 GLB 목록 (public/models). 캐릭터 유니코는 src/game/unico.js 에서 코드로 생성 */
 export const ENV_MODELS = [
@@ -68,7 +69,9 @@ function prepare(scene) {
       m.roughness = Math.max(m.roughness ?? 0.8, 0.7);
       m.metalness = 0;
       if (m.transparent) m.depthWrite = false;
-      if (m.emissive && m.emissiveIntensity > 0) m.toneMapped = false;
+      const glows = m.emissive && m.emissiveIntensity > 0 && (m.emissive.r + m.emissive.g + m.emissive.b) > 0.01;
+      if (glows) m.toneMapped = false;
+      else enhanceMaterial(m);
     }
     o.castShadow = true;
     o.receiveShadow = true;

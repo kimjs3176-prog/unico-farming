@@ -7,6 +7,7 @@ import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { VignetteShader } from 'three/addons/shaders/VignetteShader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { ColorGradeShader } from './surface.js';
 
 /**
  * 후처리 파이프라인: 렌더 → 약한 블룸 → 톤매핑/sRGB 출력 → SMAA 안티앨리어싱 → 비네팅
@@ -17,14 +18,16 @@ export class PostFX {
     this.renderer = renderer;
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.14, 0.35, 1.35);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.09, 0.3, 1.6);
     if (quality.bloom) this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    this.grade = new ShaderPass(ColorGradeShader);
+    this.composer.addPass(this.grade);
     this.smaa = new SMAAPass();
     if (quality.smaa) this.composer.addPass(this.smaa);
     this.vignette = new ShaderPass(VignetteShader);
     this.vignette.uniforms.offset.value = 1.05;
-    this.vignette.uniforms.darkness.value = 0.85;
+    this.vignette.uniforms.darkness.value = 0.95;
     this.composer.addPass(this.vignette);
     // 환경맵
     const pmrem = new THREE.PMREMGenerator(renderer);

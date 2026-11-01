@@ -114,7 +114,7 @@ export class World {
     Object.assign(this.sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 200 });
     this.sun.shadow.mapSize.set(this.quality.shadowMap, this.quality.shadowMap);
     this.sun.shadow.bias = -0.0004;
-    this.sun.shadow.normalBias = 0.03;
+    this.sun.shadow.normalBias = 0.05;
     this.sun.shadow.radius = 3;
     this.scene.add(this.sun, this.sun.target);
     this.ambient = new THREE.AmbientLight(0xffffff, 0.15);
@@ -135,12 +135,18 @@ export class World {
     // 잔디 디테일(타일)을 칠한 지면 위에 곱해서 가까이서도 거칠어 보이지 않게
     const detail = grassTexture();
     detail.repeat.set(1, 1);
+    this.groundTime = { value: 0 };
     this.groundMat.onBeforeCompile = (sh) => {
       sh.uniforms.detailMap = { value: detail };
-      sh.fragmentShader = 'uniform sampler2D detailMap;\n' + sh.fragmentShader.replace('#include <map_fragment>',
+      sh.uniforms.uTime = this.groundTime;
+      sh.fragmentShader = 'uniform sampler2D detailMap; uniform float uTime;\n' + sh.fragmentShader.replace('#include <map_fragment>',
         `#include <map_fragment>
          vec3 d = texture2D(detailMap, vMapUv * 46.0).rgb;
-         diffuseColor.rgb *= mix(vec3(1.0), d * 1.55, 0.42);`);
+         diffuseColor.rgb *= mix(vec3(1.0), d * 1.55, 0.42);
+         // 흘러가는 구름 그림자 (넓고 부드럽게)
+         vec2 cp = vMapUv * 7.0 + vec2(uTime * 0.012, uTime * 0.005);
+         float cn = sin(cp.x * 3.1 + sin(cp.y * 2.3)) * sin(cp.y * 2.7 + sin(cp.x * 1.7)) + 0.35 * sin(cp.x * 7.3 + cp.y * 5.1);
+         diffuseColor.rgb *= 1.0 - smoothstep(0.35, 0.9, cn) * 0.16;`);
     };
     // 연못 바닥 / 테두리 (물은 scenery 가 그림)
     const pondBed = new THREE.Mesh(new THREE.CircleGeometry(LAYOUT.pond.r, 48), new THREE.MeshStandardMaterial({ color: 0x3f7fa8, roughness: 0.9 }));
@@ -442,6 +448,7 @@ export class World {
   // ------------------------------------------------------------ 시간
   update(dt, focus = null) {
     for (const a of this.animated) a.update(dt);
+    if (this.groundTime) this.groundTime.value += dt;
     if (focus) {
       // 그림자 카메라를 플레이어 주변으로 이동
       this.sun.target.position.set(focus.x, 0, focus.z);

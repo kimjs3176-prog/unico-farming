@@ -89,10 +89,14 @@ export class Scenery {
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this.windUniform;
       sh.uniforms.uWind = this.windStrength;
-      sh.vertexShader = 'uniform float uTime; uniform float uWind;\n' + sh.vertexShader.replace('#include <begin_vertex>',
+      sh.vertexShader = 'uniform float uTime; uniform float uWind; varying float vGH;\n' + sh.vertexShader.replace('#include <begin_vertex>',
         `#include <begin_vertex>
+         vGH = clamp(position.y / 0.26, 0.0, 1.0);
          float sway = (sin(uTime * (1.4 + uWind * 3.0) + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.5) + uWind * 1.2) * (0.12 + uWind * 0.4) * position.y;
          transformed.x += sway; transformed.z += sway * 0.5;`);
+      sh.fragmentShader = 'varying float vGH;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+         diffuseColor.rgb *= mix(0.42, 1.18, vGH);
+         diffuseColor.rgb += vec3(0.06, 0.07, 0.0) * smoothstep(0.7, 1.0, vGH);`);
     };
     const COUNT = this.world.quality?.grass ?? 9000;
     const mesh = new THREE.InstancedMesh(geo, mat, COUNT);

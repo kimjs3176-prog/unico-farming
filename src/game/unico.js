@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeLabel } from './label.js';
+import { enhanceMaterial } from './surface.js';
 import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, BONES } from './unico_mesh.js';
 
 /**
@@ -93,7 +94,7 @@ function bundle(parts) {
 
 // ------------------------------------------------------------------ 한 덩어리 스킨 메시 (public/models/unico_body.bin)
 let SKIN = null; // { geometry, slotWeights, byPalette: Map }
-const SKIN_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.58, metalness: 0 });
+const SKIN_MAT = enhanceMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.58, metalness: 0 }), 'fur', { contact: true, rim: 0.32 });
 const OFFICIAL = { body: 0xffffff, snout: 0xf7e1ec, mane: 0x30b6aa, maneD: 0x249d92, hoof: 0x2aa79b };
 
 /** 게임 시작 전 한 번 호출 (assets.loadAll) */
