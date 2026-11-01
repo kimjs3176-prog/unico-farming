@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadUnicoMesh } from './unico.js';
 
 /** 블렌더에서 생성한 환경 GLB 목록 (public/models). 캐릭터 유니코는 src/game/unico.js 에서 코드로 생성 */
 export const ENV_MODELS = [
@@ -18,8 +19,9 @@ export class Assets {
 
   async loadAll(onProgress) {
     let done = 0;
-    await Promise.all(
-      ENV_MODELS.map(async (n) => {
+    await Promise.all([
+      loadUnicoMesh(`${BASE}unico_body.bin`).then(() => { done++; onProgress?.(done / (ENV_MODELS.length + 1)); }),
+      ...ENV_MODELS.map(async (n) => {
         try {
           const gltf = await this.loader.loadAsync(`${BASE}${n}.glb`);
           prepare(gltf.scene);
@@ -29,9 +31,9 @@ export class Assets {
           this.scenes.set(n, fallbackBox(n));
         }
         done++;
-        onProgress?.(done / ENV_MODELS.length);
+        onProgress?.(done / (ENV_MODELS.length + 1));
       }),
-    );
+    ]);
   }
 
   /** 모델 복제 (지오메트리/머티리얼은 공유) */

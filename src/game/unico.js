@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeLabel } from './label.js';
+import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, BONES } from './unico_mesh.js';
 
 /**
  * 유니코 3D 캐릭터 (플레이어 / 다른 접속자 / NPC 공용)
@@ -90,6 +91,26 @@ function bundle(parts) {
   return { geo: merged, mats };
 }
 
+// ------------------------------------------------------------------ 한 덩어리 스킨 메시 (public/models/unico_body.bin)
+let SKIN = null; // { geometry, slotWeights, byPalette: Map }
+const SKIN_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.58, metalness: 0 });
+const OFFICIAL = { body: 0xffffff, snout: 0xf7e1ec, mane: 0x30b6aa, maneD: 0x249d92, hoof: 0x2aa79b };
+
+/** 게임 시작 전 한 번 호출 (assets.loadAll) */
+export async function loadUnicoMesh(url) {
+  const ab = await (await fetch(url)).arrayBuffer();
+  SKIN = { ...parseUnicoBin(ab), byPalette: new Map() };
+}
+
+function skinGeometry(paletteId) {
+  if (!SKIN.byPalette.has(paletteId)) {
+    const g = SKIN.geometry.clone(); // 속성 배열은 복사되지만 1회/팔레트
+    g.setAttribute('color', colorAttribute(SKIN.slotWeights, PALETTES[paletteId] || OFFICIAL));
+    SKIN.byPalette.set(paletteId, g);
+  }
+  return SKIN.byPalette.get(paletteId);
+}
+
 // ------------------------------------------------------------------ 템플릿 (한 번만 생성해 공유)
 // 몸통 그룹 원점 = 몸통 중심 (지면에서 BODY_Y)
 const BODY_Y = 0.8;
@@ -100,64 +121,52 @@ let TPL = null;
 
 function buildTemplate() {
   const T = {};
-  // ---- 몸통 + 목 + 목 갈기 ----
-  const body = [
-    [sph(0.5, { s: [0.92, 0.84, 1.22] }), C.white()],
-    [sph(0.36, { s: [0.95, 0.85, 1.0], p: [0, -0.08, 0.32] }), C.white()], // 가슴
-    [sph(0.34, { s: [1.0, 0.9, 1.0], p: [0, 0.02, -0.36] }), C.white()], // 엉덩이
-    [seg(V(0, 0.2, 0.42), V(0, 0.62, 0.6), 0.2), C.white()], // 목
-  ];
-  const neckMane = [[0, 0.7, 0.46, 0.15], [0, 0.56, 0.38, 0.15], [0, 0.42, 0.3, 0.14], [0, 0.29, 0.22, 0.12]];
-  neckMane.forEach(([x, y, z, r], i) => body.push([sph(r, { p: [x, y, z] }, 20), i % 2 ? C.tealD() : C.teal()]));
-  T.body = bundle(body);
-
-  // ---- 머리 (머리 중심 원점) ----
-  const head = [
-    [sph(HEAD_R, { s: [1, 0.95, 1] }, 32), C.white()],
-    [sph(0.28, { s: [0.92, 0.78, 0.95], p: [0, -0.15, 0.3] }), C.snout()], // 주둥이
-  ];
+  // 몸통·목·머리·귀·다리·발굽·갈기·꼬리는 이음새 없는 한 덩어리 스킨 메시(unico_mesh.js)
+  // 여기서는 그 표면 위에 붙는 얼굴 부품만 만든다 (표면을 찾아 정확히 밀착)
+  const { sdf } = makeSDF();
+  const HC = V(0, BODY_Y, 0).add(HEAD_AT); // 머리 중심(루트 기준)
+  const onFace = (dirLocal, inset = 0) => {
+    const pw = surfacePoint(sdf, HC, dirLocal);
+    const n = normalAt(sdf, pw);
+    return { p: pw.addScaledVector(n, -inset).sub(HC), n };
+  };
+  const head = [];
   for (const sx of [-1, 1]) {
-    head.push([sph(0.024, { p: [sx * 0.08, -0.11, 0.565] }, 10), C.eye()]); // 콧구멍
-    const cheekDir = V(sx * 0.32, -0.07, 0.24);
-    head.push([sph(0.085, { s: [1, 0.7, 0.3], q: outward(cheekDir), p: cheekDir.clone().normalize().multiplyScalar(HEAD_R * 0.97).toArray() }, 16), C.pink()]);
-    // 귀
-    head.push([cone(0.1, 0.27, { r: [0.1, 0, sx * -0.45], p: [sx * 0.24, 0.38, -0.05] }), C.white()]);
-    head.push([cone(0.055, 0.17, { r: [0.1, 0, sx * -0.45], p: [sx * 0.235, 0.37, -0.0] }), C.earIn()]);
+    const no = onFace(V(sx * 0.17, -0.25, 0.95), 0.012);
+    head.push([sph(0.026, { s: [1, 0.8, 0.6], q: outward(no.n), p: no.p.toArray() }, 10), C.eye()]); // 콧구멍
+    const ch = onFace(V(sx * 0.75, -0.2, 0.62), 0.01);
+    head.push([sph(0.09, { s: [1, 0.72, 0.28], q: outward(ch.n), p: ch.p.toArray() }, 16), C.pink()]); // 볼
+    // 귀 안쪽 (분홍)
+    head.push([sph(0.05, { s: [0.75, 1.9, 0.35], r: [0.25, 0, sx * -0.45], p: [sx * 0.242, 0.36, 0.0] }, 12), C.earIn()]);
   }
-  head.push([torus(0.065, 0.013, { r: [-0.35, 0, Math.PI], p: [0, -0.255, 0.49] }, Math.PI, 16), C.eye()]); // 미소
-  // 뿔 (앞으로 기울어진 금색 원뿔 + 주황 띠 2개)
-  const tilt = 0.32, hornBase = V(0, 0.36, 0.13), axis = V(0, Math.cos(tilt), Math.sin(tilt));
+  // 미소: 주둥이 아래쪽 표면을 따라 그린 곡선
+  const smile = [];
+  for (let i = 0; i <= 8; i++) {
+    const t = i / 8, x = -0.1 + 0.2 * t, y = -0.37 + Math.sin(t * Math.PI) * -0.03;
+    smile.push(onFace(V(x, y, 0.92), -0.004).p);
+  }
+  const curve = new THREE.CatmullRomCurve3(smile);
+  head.push([new THREE.TubeGeometry(curve, 16, 0.011, 6, false), C.eye()]);
+  // 뿔 (앞으로 기울어진 금색 나선 원뿔 + 주황 띠 2개), 뿌리를 정수리 표면에 박음
+  const tilt = 0.32, axis = V(0, Math.cos(tilt), Math.sin(tilt));
+  const hornBase = onFace(V(0, 1, 0.38), 0.03).p;
   const hornQ = new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), axis);
   head.push([cone(0.078, 0.42, { q: hornQ, p: hornBase.clone().addScaledVector(axis, 0.21).toArray() }, 24), C.gold()]);
-  for (const [t, R] of [[0.06, 0.068], [0.17, 0.05]]) {
+  for (const [t, R] of [[0.07, 0.066], [0.18, 0.048]]) {
     const ringQ = new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), axis);
     head.push([torus(R, 0.013, { q: ringQ, p: hornBase.clone().addScaledVector(axis, t).toArray() }, TWO_PI, 20), C.orange()]);
   }
-  // 갈기: 정수리→뒤통수 곱슬 + 앞머리
-  const mane = [[0, 0.37, -0.1, 0.17], [0, 0.25, -0.29, 0.17], [0, 0.06, -0.38, 0.16], [0.14, 0.33, 0.17, 0.1], [0.03, 0.39, 0.1, 0.095], [-0.12, 0.34, 0.03, 0.09]];
-  mane.forEach(([x, y, z, r], i) => head.push([sph(r, { p: [x, y, z] }, 20), i % 2 ? C.tealD() : C.teal()]));
   T.head = bundle(head);
 
-  // ---- 눈 (깜빡임용 별도 피벗, 원점 = 눈 높이) ----
+  // ---- 눈 (깜빡임용, 표면에 살짝 박힌 큰 검은 눈 + 하이라이트) ----
   const eyes = [];
   for (const sx of [-1, 1]) {
-    const dir = V(sx * 0.17, 0, 0.385).normalize();
-    const pos = dir.clone().multiplyScalar(HEAD_R * 0.93);
-    eyes.push([sph(0.085, { s: [0.82, 1.15, 0.42], q: outward(dir), p: pos.toArray() }, 20), C.eye()]);
-    eyes.push([sph(0.026, { p: pos.clone().addScaledVector(dir, 0.035).add(V(sx * -0.015 + 0.02, 0.035, 0)).toArray() }, 10), C.shine()]);
-    eyes.push([sph(0.012, { p: pos.clone().addScaledVector(dir, 0.034).add(V(sx * 0.02 - 0.01, -0.035, 0)).toArray() }, 8), C.shine()]);
+    const e = onFace(V(sx * 0.42, 0.05, 0.9), 0.018);
+    eyes.push([sph(0.088, { s: [0.82, 1.15, 0.42], q: outward(e.n), p: e.p.toArray() }, 20), C.eye()]);
+    eyes.push([sph(0.026, { p: e.p.clone().addScaledVector(e.n, 0.035).add(V(sx * -0.015 + 0.02, 0.035, 0)).toArray() }, 10), C.shine()]);
+    eyes.push([sph(0.012, { p: e.p.clone().addScaledVector(e.n, 0.034).add(V(sx * 0.02 - 0.01, -0.035, 0)).toArray() }, 8), C.shine()]);
   }
   T.eyes = bundle(eyes);
-
-  // ---- 다리 (피벗 = 고관절, 아래로) ----
-  T.leg = bundle([
-    [seg(V(0, 0.02, 0), V(0, -0.46, 0), 0.125), C.white()],
-    [cyl(0.135, 0.15, 0.15, { p: [0, -0.545, 0.01] }), C.hoof()],
-  ]);
-
-  // ---- 꼬리 (피벗 = 엉덩이) ----
-  const tail = [[0, 0, -0.06, 0.13], [0, 0.11, -0.19, 0.145], [0, 0.28, -0.25, 0.13], [0, 0.44, -0.21, 0.105], [0, 0.55, -0.12, 0.075]];
-  T.tail = bundle(tail.map(([x, y, z, r], i) => [sph(r, { p: [x, y, z] }, 20), i % 2 ? C.tealD() : C.teal()]));
 
   // ---- 소품 (머리/몸통 기준) ----
   T.sprout = bundle([
@@ -259,36 +268,41 @@ export class Unico {
    * @param opts.name 이름표, opts.outfit { hat: 'straw'|'helmet'|null, goggles, scarf: 'red'|'green'|'blue'|null, sprout }
    */
   constructor(assets, { name = '', labelColor = '#fff', labelBg, outfit = {}, palette = 'official' } = {}) {
+    if (!SKIN) throw new Error('loadUnicoMesh() 를 먼저 호출하세요');
     if (!TPL) TPL = buildTemplate();
     this.group = new THREE.Group();
     this.position = this.group.position;
     this.root = new THREE.Group(); // 회전(진행 방향)
     this.group.add(this.root);
-    this.bodyG = new THREE.Group();
+    // 뼈대: 몸통 → 머리 / 다리 4 / 꼬리 (기존 피벗과 같은 위치·이름이라 애니메이션 코드 그대로 사용)
+    this.bodyG = new THREE.Bone();
     this.bodyG.position.y = BODY_Y;
     this.root.add(this.bodyG);
-    this.bodyMesh = meshOf(TPL.body);
-    this.bodyG.add(this.bodyMesh);
-    // 머리
-    this.headG = new THREE.Group();
+    this.headG = new THREE.Bone();
     this.headG.position.copy(HEAD_AT);
     this.bodyG.add(this.headG);
+    this.legs = [[-0.25, 0.36], [0.25, 0.36], [-0.25, -0.38], [0.25, -0.38]].map(([x, z]) => {
+      const b = new THREE.Bone();
+      b.position.set(x, -0.2, z);
+      this.bodyG.add(b);
+      return b;
+    });
+    this.tailG = new THREE.Bone();
+    this.tailG.position.set(0, 0.12, -0.56);
+    this.bodyG.add(this.tailG);
+    this.root.updateMatrixWorld(true);
+    const bones = { body: this.bodyG, head: this.headG, legFL: this.legs[0], legFR: this.legs[1], legBL: this.legs[2], legBR: this.legs[3], tail: this.tailG };
+    this.skeleton = new THREE.Skeleton(BONES.map((n) => bones[n]));
+    this.skin = new THREE.SkinnedMesh(skinGeometry(palette), SKIN_MAT);
+    this.skin.castShadow = this.skin.receiveShadow = true;
+    this.skin.frustumCulled = false;
+    this.root.add(this.skin);
+    this.skin.bind(this.skeleton);
+    this.bodyMesh = new THREE.Object3D(); // (호환) 숨쉬기는 몸통 뼈 미세 이동으로 대체
+    // 얼굴 부품 (머리 뼈에 붙음)
     this.headG.add(meshOf(TPL.head));
     this.eyesG = meshOf(TPL.eyes);
     this.headG.add(this.eyesG);
-    // 다리 (FL, FR, BL, BR)
-    this.legs = [[-0.25, 0.36], [0.25, 0.36], [-0.25, -0.38], [0.25, -0.38]].map(([x, z]) => {
-      const g = new THREE.Group();
-      g.position.set(x, -0.2, z);
-      g.add(meshOf(TPL.leg));
-      this.bodyG.add(g);
-      return g;
-    });
-    // 꼬리
-    this.tailG = new THREE.Group();
-    this.tailG.position.set(0, 0.12, -0.56);
-    this.tailG.add(meshOf(TPL.tail));
-    this.bodyG.add(this.tailG);
     // 소품
     this.acc = {};
     const addAcc = (key, parent) => { const m = meshOf(TPL[key]); m.visible = false; parent.add(m); this.acc[key] = m; };
@@ -433,8 +447,8 @@ export class Unico {
     let bodyY = BODY_Y + bob, bodyPitch = Math.sin(ph * 2) * 0.03 * w, bodyRoll = 0;
     let headPitch = Math.sin(ph * 2 + 0.5) * 0.06 * w, headRoll = 0;
     // 숨쉬기
-    const breath = 1 + Math.sin(this.t * 2.1) * 0.012 * (1 - w);
-    this.bodyMesh.scale.set(breath, breath, 1);
+    const breath = Math.sin(this.t * 2.1) * 0.012 * (1 - w); // 숨쉬기: 가슴이 살짝 오르내림
+    bodyY += breath;
     // 대기 중 두리번
     if (!this.moving && !this.action) {
       this.lookYaw += (Math.sin(this.t * 0.45) * 0.35 - this.lookYaw) * Math.min(1, dt * 2);
