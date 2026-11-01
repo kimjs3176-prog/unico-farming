@@ -33,6 +33,8 @@ export class PointerNav {
     if (!g.tractor.driving) out.push({ objs: [g.tractor.model], pos: () => new THREE.Vector3(g.tractor.vehicle.x, 0, g.tractor.vehicle.z), stop: 2.7 });
     for (const tr of g.nature.trees) out.push({ objs: [tr.m], pos: () => new THREE.Vector3(tr.x, 0, tr.z), stop: 1.6 });
     for (const b of g.nature.bugs) if (b.g.visible) out.push({ objs: [b.g], pos: () => b.g.position.clone().setY(0), stop: 1.2, big: true });
+    for (const b of g.koat.booths) out.push({ objs: [b.model, b.npc.group], pos: () => b.front, stop: 0.6 });
+    out.push({ objs: [g.koat.desk.group], pos: () => g.koat.desk.group.position, stop: 1.8 });
     out.push({ objs: [g.rice.thresher], pos: () => new THREE.Vector3(LAYOUT.thresher.x, 0, LAYOUT.thresher.z), stop: 1.8 });
     const sensor = g.world.smartfarmModel?.getObjectByName('SensorPole');
     if (sensor) out.push({ objs: [sensor], pos: () => new THREE.Vector3(LAYOUT.sensor.x, 0, LAYOUT.sensor.z), stop: 1.8 });

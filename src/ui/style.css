@@ -154,3 +154,47 @@ button:disabled { opacity: 0.45; cursor: default; }
 .thresh-panel .t { font-weight: 800; margin: 6px 0; }
 .thresh-panel .mash { width: 100%; font-size: 22px; padding: 14px; touch-action: none; }
 @media (max-width: 600px) { .rice-panel { top: 210px; } }
+
+/* ---------------- KOAT 체험관 ---------------- */
+.panel.koat { border-top: 8px solid var(--div, #30b6aa); }
+.panel.koat h2 { color: #231916; }
+.koat-summary { background: #f4fbfa; border-radius: 14px; padding: 12px 14px; line-height: 1.6; margin-bottom: 8px; }
+.koat-teams { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.koat-teams span { background: #fff; border: 2px solid var(--div, #30b6aa); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
+.koat-game { background: #fff8e6; border-radius: 14px; padding: 12px 14px; line-height: 1.6; margin-bottom: 8px; }
+.koat-meta { font-size: 13px; color: #555; font-weight: 700; margin: 8px 0; }
+.koat-go { width: 100%; font-size: 17px; padding: 12px; margin-top: 8px; }
+.koat-how { margin: 0 0 10px; color: #444; }
+.koat-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.koat-score { font-size: 56px; font-weight: 900; text-align: center; color: var(--div); }
+.koat-score small { font-size: 20px; }
+.koat-score.fail { color: #999; }
+.koat-match { display: grid; grid-template-columns: 1fr 28px 1fr; gap: 6px; align-items: center; }
+.koat-match .col { display: flex; flex-direction: column; gap: 6px; }
+.koat-match .arrow { text-align: center; }
+.koat-match .pick { background: #fff; color: var(--ink); box-shadow: none; border: 3px solid #e5e5e5; text-align: left; font-size: 13px; padding: 10px; min-height: 52px; }
+.koat-match .pick.sel { border-color: var(--div); background: #fffbe8; }
+.koat-match .pick.used { background: #f4f4f4; }
+.koat-stage { background: #f7f7f7; border-radius: 14px; padding: 14px; line-height: 1.6; margin-bottom: 10px; font-size: 15px; }
+.koat-stage .tag { background: var(--div); color: #fff; border-radius: 8px; padding: 2px 8px; font-weight: 800; margin-right: 6px; }
+.koat-opt { background: #fff; color: var(--ink); box-shadow: none; border: 3px solid #e5e5e5; text-align: left; padding: 12px; font-size: 15px; }
+.koat-opt.right { border-color: #6dbb4f; background: #eef9e6; }
+.koat-opt.wrong { border-color: #e35d5d; background: #fdeeee; }
+.koat-progress { display: flex; gap: 6px; justify-content: center; margin-top: 10px; }
+.koat-progress i { width: 26px; height: 6px; border-radius: 3px; background: #e5e5e5; }
+.koat-progress i.on { background: var(--div); } .koat-progress i.cur { background: #f2c94c; }
+.koat-timer { position: relative; font-weight: 900; margin-bottom: 8px; height: 26px; background: #eee; border-radius: 13px; overflow: hidden; text-align: center; line-height: 26px; }
+.koat-timer i { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--div) 45%, transparent); z-index: 0; }
+.koat-seeds { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.koat-seeds .seed { background: #fbf5e8; box-shadow: none; border: 2px solid #eadfc8; font-size: 30px; padding: 8px 0; transition: transform 0.1s, opacity 0.2s; }
+.koat-seeds .seed.out { opacity: 0.25; transform: scale(0.8); border-color: #e35d5d; }
+.koat-insp .on-ok { background: #6dbb4f; box-shadow: none; } .koat-insp .on-ng { background: #e35d5d; box-shadow: none; }
+.koat-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.koat-cards .card { background: #fff; color: var(--ink); box-shadow: none; border: 3px solid #e5e5e5; padding: 14px 10px; min-height: 64px; font-size: 14px; }
+.koat-cards .card.on { border-color: #6dbb4f; background: #eef9e6; }
+.koat-stamps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+.koat-stamps .stamp { background: #fff; color: var(--ink); box-shadow: none; border: 3px dashed #ddd; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; font-size: 13px; }
+.koat-stamps .stamp .em { font-size: 30px; }
+.koat-stamps .stamp small { color: #777; font-size: 11px; font-weight: 600; }
+.koat-stamps .stamp.got { border: 3px solid var(--div); background: color-mix(in srgb, var(--div) 10%, white); }
+@media (max-width: 600px) { .koat-stamps { grid-template-columns: repeat(2, 1fr); } .koat-match { grid-template-columns: 1fr; } .koat-match .arrow { display: none; } }

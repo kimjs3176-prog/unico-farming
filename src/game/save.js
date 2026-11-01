@@ -5,7 +5,7 @@ export function saveGame(game) {
     const data = {
       v: SAVE_VERSION, at: Date.now(), name: game.playerName,
       farm: game.farm.sim.toJSON(), economy: game.economy.toJSON(), quests: game.quests.toJSON(), ranch: game.ranch.sim.toJSON(),
-      rice: game.rice.toJSON(), nature: game.nature.toJSON(), villagers: game.villagers.toJSON(), collection: game.collection.toJSON(),
+      rice: game.rice.toJSON(), nature: game.nature.toJSON(), villagers: game.villagers.toJSON(), collection: game.collection.toJSON(), koat: game.koat.toJSON(),
       world: { time: game.world.time, day: game.world.day },
       player: { x: game.player.position.x, z: game.player.position.z },
     };

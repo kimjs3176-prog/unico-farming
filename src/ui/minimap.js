@@ -32,6 +32,7 @@ export class Minimap {
     rect(L.market.x - 1.5, L.market.z - 0.6, L.market.x + 1.5, L.market.z + 0.6, '#e35d5d');
     c.fillStyle = '#6fc3e8'; c.beginPath(); c.arc(X(L.pond.x), Z(L.pond.z), L.pond.r * k, 0, 7); c.fill();
     const pd = L.paddy; rect(pd.x0, pd.z0, pd.x0 + pd.cols * (pd.size + pd.bund) + pd.bund, pd.z0 + pd.rows * (pd.size + pd.bund) + pd.bund, '#5fa3b0');
+    const kr = L.koat.rect; rect(kr[0], kr[1], kr[2], kr[3], 'rgba(48,182,170,0.55)');
     c.fillStyle = '#e0413a'; for (const o of L.orchard) { c.beginPath(); c.arc(X(o.x), Z(o.z), 2.2, 0, 7); c.fill(); }
     // 주민 (역할 색)
     const npcCol = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a3a9b0', kid: '#f28bb0' };
@@ -51,6 +52,7 @@ export class Minimap {
     c.fillText('장터', X(L.market.x), Z(L.market.z - 2));
     c.fillText('밭갈이', X(fd.x0 + fd.cols), Z(fd.z0 + fd.rows + 4));
     c.fillText('논', X(0), Z(pd.z0 - 1.5));
+    c.fillText('KOAT', X((kr[0] + kr[2]) / 2), Z((kr[1] + kr[3]) / 2) + 3);
     c.fillText('과수원', X(9), Z(-11.5));
   }
 }

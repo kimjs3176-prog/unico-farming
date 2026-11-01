@@ -6,6 +6,7 @@ const SPEED = 4.6;
 /** 로컬 플레이어 컨트롤러 */
 export class Player {
   constructor(assets, world, name) {
+    this.name = name;
     this.unico = new Unico(assets, { name: `⭐ ${name} (나)`, labelColor: '#ffffff', labelBg: 'rgba(36,157,146,0.95)', rig: 'biped' });
     this.world = world;
     this.group = this.unico.group;
@@ -32,6 +33,12 @@ export class Player {
   }
 
   get position() { return this.group.position; }
+
+  /** 칭호 (KOAT 스탬프 투어 완주 등) */
+  setTitle(title) {
+    this.title = title;
+    this.unico.setName(`⭐ ${this.name} (나) · 🏅${title}`, '#ffffff', 'rgba(36,157,146,0.95)');
+  }
 
   /** 클릭/탭 이동: pos() 위치까지 걸어가 stop 거리 안에 들면 멈춤. interact 면 도착 시 상호작용 */
   goTo(pos, stop = 0.2, interact = false) {

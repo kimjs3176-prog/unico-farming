@@ -5,6 +5,7 @@ import { VILLAGERS } from '../game/sim/villagers.js';
 import { RICE_STAGES, WATER_MAX } from '../game/sim/rice.js';
 
 const anyItem = (k) => CROPS[k] || PRODUCTS[k] || ITEMS[k];
+import { installKoatUI } from './koat_ui.js';
 
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 
@@ -76,6 +77,7 @@ export class UI {
     mk('💬', '말하기', () => this.chatInput.focus());
     mk('🛒', '장터', () => this.openMarket());
     mk('📖', '도감', () => this.openBook());
+    mk('🏢', '체험관', () => game.goKoat());
     this.bar.append(h('div', 'sep'));
     mk('🏡', '농장 방', () => this.openRooms());
     this.soundBtn = mk('🔊', '소리', () => { game.audio.enabled = !game.audio.enabled; this.soundBtn.firstChild.textContent = game.audio.enabled ? '🔊' : '🔇'; });
@@ -475,6 +477,7 @@ export class UI {
       '🐄 <b>목장</b> 동쪽 울타리 안 동물에게 사료를 주면 달걀·우유·양털이 생겨요',
       '📜 <b>퀘스트</b> Q 키. 보상을 받으면 레벨이 오르고 새 작물이 해금돼요',
       '🌦️ <b>날씨</b> 내 위치의 실제 날씨가 반영돼요. 비가 오면 밭에 자동으로 물이 뿌려지고, 눈이 오면 작물이 천천히 자라요 (상단 날씨 칩을 눌러 확인·체험)',
+      '🏢 <b>KOAT 체험관</b> 하단 🏢 버튼 또는 북동쪽 광장. 6개 본부(기술사업·벤처창업·종자사업·스마트농업·농기계검정·농업환경분석) 부스에서 미니게임으로 하는 일을 체험하고 스탬프를 모아요',
       '🌐 <b>메타버스</b> 같은 서버의 다른 유니코가 보이고 채팅할 수 있어요 (좌하단)',
       '💾 자동 저장(10초) · 로컬 브라우저 저장',
     ].map((t) => `<div class="row">${t}</div>`).join('')));
@@ -572,3 +575,5 @@ function pct(x, v) { return Math.round(((x - v.lo) / (v.hi - v.lo)) * 100); }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 import { LEVELS } from '../game/sim/quests.js';
 function LEVEL_PREV(q) { return LEVELS[q.level - 1] || 0; }
+
+installKoatUI(UI);

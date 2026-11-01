@@ -49,6 +49,7 @@ export const LAYOUT = {
     { pts: [[0.5, -2], [3.5, -3.4], [6, -5.2]], w: 2 },
     { pts: [[1, -14.5], [5, -16], [9, -19]], w: 2.2 },
     { pts: [[12, 9.6], [19, 11], [25.5, 13.6], [28.5, 15.2]], w: 2.4 },
+    { pts: [[9.5, -19.5], [14, -18.6], [20, -18.2], [25, -18.6]], w: 2.6 },
   ],
   // 소품 배치
   props: [
@@ -60,7 +61,16 @@ export const LAYOUT = {
     ['planter', -2.4, 7.4, Math.PI / 2], ['planter', 2.4, 7.4, Math.PI / 2], ['planter', -2.6, -7.6, 0],
   ],
   // 무작위 장식이 들어가면 안 되는 구역
-  reserved: [[-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5]],
+  // KOAT 체험관 (북동쪽): 본관 + 본부별 체험 부스 6 + 안내데스크
+  koat: {
+    rect: [13.5, -38.6, 36.5, -18.8], plaza: [15.5, -33, 34.5, -19.6],
+    hq: { x: 25, z: -35.2 }, desk: { x: 25, z: -29.3 }, gate: { x: 25, z: -19.6 },
+    booths: [
+      { id: 'tech', x: 17.2, z: -31.5, rot: Math.PI / 2 }, { id: 'venture', x: 17.2, z: -26.3, rot: Math.PI / 2 }, { id: 'seed', x: 17.2, z: -21.1, rot: Math.PI / 2 },
+      { id: 'smart', x: 32.8, z: -31.5, rot: -Math.PI / 2 }, { id: 'machine', x: 32.8, z: -26.3, rot: -Math.PI / 2 }, { id: 'env', x: 32.8, z: -21.1, rot: -Math.PI / 2 },
+    ],
+  },
+  reserved: [[13, -39, 37, -18.4], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5]],
 };
 
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
@@ -222,10 +232,25 @@ export class World {
       const pd = L.paddy, pw = pd.cols * pd.size + (pd.cols + 1) * pd.bund, ph = pd.rows * pd.size + (pd.rows + 1) * pd.bund;
       ctx.fillStyle = '#8a6b47';
       ctx.fillRect(P(pd.x0 - 0.4), P(pd.z0 - 0.4), M(pw + 0.8), M(ph + 0.8));
+      // KOAT 체험관 광장
+      const kp = L.koat.plaza;
+      ctx.fillStyle = '#d9d4c7';
+      ctx.fillRect(P(kp[0]), P(kp[1]), M(kp[2] - kp[0]), M(kp[3] - kp[1]));
       // 연못 모래 테두리
       ctx.fillStyle = '#d8c18c';
       ctx.beginPath(); ctx.arc(P(L.pond.x), P(L.pond.z), M(L.pond.r + 0.9), 0, 7); ctx.fill();
     });
+    // 광장 줄눈 + 중앙 엠블럼 원
+    {
+      const kp = L.koat.plaza;
+      ctx.strokeStyle = 'rgba(120,110,95,0.35)'; ctx.lineWidth = Math.max(1, M(0.04));
+      for (let x = kp[0]; x <= kp[2]; x += 1.2) { ctx.beginPath(); ctx.moveTo(P(x), P(kp[1])); ctx.lineTo(P(x), P(kp[3])); ctx.stroke(); }
+      for (let z = kp[1]; z <= kp[3]; z += 1.2) { ctx.beginPath(); ctx.moveTo(P(kp[0]), P(z)); ctx.lineTo(P(kp[2]), P(z)); ctx.stroke(); }
+      const cx = (kp[0] + kp[2]) / 2, cz = -26.3;
+      ctx.fillStyle = '#30b6aa'; ctx.beginPath(); ctx.arc(P(cx), P(cz), M(2.6), 0, 7); ctx.fill();
+      ctx.fillStyle = '#e9f7f5'; ctx.beginPath(); ctx.arc(P(cx), P(cz), M(2.1), 0, 7); ctx.fill();
+      ctx.fillStyle = '#6dbb4f'; ctx.beginPath(); ctx.arc(P(cx), P(cz), M(0.9), 0, 7); ctx.fill();
+    }
     // 굽는 AO: 나무·건물·소품 밑을 부드럽게 어둡게
     soft(M(0.6), () => {
       for (const a of this.aoSpots) {
@@ -325,9 +350,10 @@ export class World {
       const a = (i / 44) * Math.PI * 2 + rnd() * 0.1;
       const r = L.bounds - 2 + rnd() * 6;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (this.isReserved(x, z, 1.5)) continue;
       this.place(rnd() > 0.35 ? 'tree' : 'pine', x, z, rnd() * 6.28, 0.9 + rnd() * 0.5, { r: 0.6 });
     }
-    const spots = [[-8, -6], [-5, -9], [-11, 13], [2, 17], [-20, 4], [-28, -2], [30, 14], [20, 22], [-30, 22], [34, -4], [-18, 24], [-14, -18], [14, -24], [-22, 10]];
+    const spots = [[-8, -6], [-5, -9], [-11, 13], [2, 17], [-20, 4], [-28, -2], [30, 14], [20, 22], [-30, 22], [34, -4], [-18, 24], [-14, -18], [-22, 10]];
     for (const [x, z] of spots) this.place(rnd() > 0.3 ? 'tree' : 'pine', x, z, rnd() * 6.28, 0.9 + rnd() * 0.4, { r: 0.6 });
     for (let i = 0; i < 18; i++) {
       const x = (rnd() - 0.5) * 70, z = (rnd() - 0.5) * 70;

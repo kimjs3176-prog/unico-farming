@@ -51,6 +51,7 @@ export class SmartFarmView {
     g.ui.hideSmartfarm();
     g.audio.play(r.score >= 50 ? 'win' : 'bump');
     g.player.unico.playAction(r.score >= 50 ? 'cheer' : 'think', 2);
+    if (this.onFinish) { const cb = this.onFinish; this.onFinish = null; cb(r); return; } // KOAT 체험관에서 시작한 경우
     g.ui.result('📱 스마트팜 점검 결과', [`적정 환경 유지율: ${r.score}%`, `보상: +${r.money} 코인`, r.boostSeconds ? `🌱 작물 성장 ×${r.boost} 부스트 ${r.boostSeconds}초!` : '50% 이상이면 성장 부스트를 받아요']);
   }
 

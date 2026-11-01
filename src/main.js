@@ -27,6 +27,7 @@ import { RiceView } from './game/view/rice_view.js';
 import { NatureView } from './game/view/nature_view.js';
 import { Villagers } from './game/sim/villagers.js';
 import { Collection } from './game/sim/collection.js';
+import { KoatView } from './game/view/koat_view.js';
 
 class Game {
   constructor(canvas, assets, name) {
@@ -61,6 +62,7 @@ class Game {
     this.npcs = new NPCs(this);
     this.rice = new RiceView(this);
     this.nature = new NatureView(this);
+    this.koat = new KoatView(this);
     this.net = new Net(this);
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
@@ -116,12 +118,29 @@ class Game {
     this.nature.load(s.nature);
     this.villagers.load(s.villagers);
     this.collection.load(s.collection);
+    this.koat.load(s.koat);
+    if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원');
     if (s.world) { this.world.time = s.world.time; this.world.day = s.world.day; }
     if (s.player) this.player.position.set(s.player.x, 0, s.player.z);
     this.ui.toast('💾 저장된 농장을 불러왔어요');
   }
 
   resetSave() { clearSave(); location.reload(); }
+
+  /** KOAT 체험관 입구로 이동 */
+  goKoat() {
+    if (this.tractor.driving || this.smartfarm.active || this.nature.fishing || this.rice.threshing) return this.ui.toast('지금은 이동할 수 없어요');
+    this.ui.closePanel();
+    this.player.position.set(25, 0, -24);
+    this.player.unico.facing = Math.PI;
+    this.player.moveTarget = null;
+    this.followCam.yaw = 0;
+    this.followCam.pitch = 0.62;
+    this.followCam.distance = 13;
+    this.followCam.first = true;
+    this.audio.play('levelup');
+    this.ui.toast('🏢 KOAT 체험관에 도착! 본부별 부스에서 체험하고 안내데스크에서 스탬프를 확인하세요');
+  }
 
   /** 도감 등록 후: 진행 퀘스트, 카테고리 완성 보상 */
   afterCollect() {
@@ -172,6 +191,7 @@ class Game {
       pick(this.ranch.update(dt, pp));
       pick(this.rice.update(dt, pp));
       pick(this.nature.update(dt, pp));
+      pick(this.koat.update(dt, pp));
       this.pointer.update(dt, input);
       const arrived = this.player.arrivedInteract;
       this.player.arrivedInteract = false;
@@ -185,6 +205,7 @@ class Game {
       this.npcs.update(dt, pp);
       this.rice.update(dt, pp);
       this.nature.update(dt, pp);
+      this.koat.update(dt, pp);
       // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스로 돌려도 천천히 복귀)
       const behind = this.tractor.vehicle.heading + Math.PI;
       const dy = ((behind - this.followCam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;

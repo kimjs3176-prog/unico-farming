@@ -806,7 +806,80 @@ def fruit_tree():
     return root
 
 
+def koat_hq():
+    """KOAT 본관 (기획운영본부·홍보관): 흰 벽 + 청록 유리 커튼월 + 캐노피 + 간판 자리(SignBoard)"""
+    C.reset_scene()
+    root = empty("KoatHQ")
+    wall = material("hq_wall", "#f4f6f5", roughness=0.6)
+    glass = material("hq_glass", "#7fd0d6", roughness=0.15, metallic=0.2)
+    frame = material("hq_frame", "#2f6f6b", roughness=0.4, metallic=0.3)
+    teal = material("teal", roughness=0.5)
+    body = [
+        box("main", wall, loc=(0, 0, 2.6), size=(11.0, 6.0, 5.2)),
+        box("wing", wall, loc=(-4.2, 0.5, 1.6), size=(3.2, 5.2, 3.2)),
+        box("roof", frame, loc=(0, 0, 5.3), size=(11.4, 6.4, 0.25)),
+        box("roof_band", teal, loc=(0, F * 3.21, 5.0), size=(11.2, 0.05, 0.25)),
+        box("plinth", material("stone", roughness=0.9), loc=(0, 0, 0.12), size=(11.6, 6.6, 0.24)),
+    ]
+    b = join("HQBody", body, parent=root)
+    bevel(b, 0.04, 2)
+    # 커튼월 유리 + 멀리언
+    gl = [box("glass", glass, loc=(1.2, F * 3.02, 2.7), size=(7.6, 0.06, 4.2))]
+    for i in range(9):
+        gl.append(box("mullion", frame, loc=(1.2 - 3.8 + i * 0.95, F * 3.06, 2.7), size=(0.07, 0.06, 4.25)))
+    for z in (1.3, 2.7, 4.1):
+        gl.append(box("transom", frame, loc=(1.2, F * 3.06, z), size=(7.65, 0.06, 0.07)))
+    join("CurtainWall", gl, parent=root)
+    # 입구 캐노피 + 기둥 + 계단
+    ent = [
+        box("canopy", wall, loc=(1.2, F * 4.0, 3.1), size=(4.2, 2.2, 0.18)),
+        box("canopy_edge", teal, loc=(1.2, F * 5.1, 3.1), size=(4.2, 0.06, 0.2)),
+        cylinder("col1", frame, loc=(-0.6, F * 4.9, 1.55), radius=0.09, depth=3.1, segments=12),
+        cylinder("col2", frame, loc=(3.0, F * 4.9, 1.55), radius=0.09, depth=3.1, segments=12),
+        box("door", material("hq_door", "#3f8f8a", roughness=0.2, metallic=0.2), loc=(1.2, F * 3.05, 1.2), size=(2.0, 0.08, 2.4)),
+        box("step1", material("stone", roughness=0.9), loc=(1.2, F * 3.6, 0.08), size=(4.4, 1.2, 0.16)),
+    ]
+    e = join("Entrance", ent, parent=root)
+    bevel(e, 0.02, 2)
+    # 간판 자리 (게임에서 글자 텍스처를 씌움)
+    sign = box("SignBoard", material("hq_sign", "#ffffff", roughness=0.5), loc=(0, F * 3.08, 4.55), size=(6.0, 0.06, 0.7))
+    sign.parent = root
+    # 깃대 3개
+    for i, x in enumerate((-5.0, -4.2, -3.4)):
+        fp = [cylinder("pole", material("steel", roughness=0.3, metallic=0.6), loc=(x, F * 5.4, 3.0), radius=0.04, depth=6.0, segments=8),
+              box("flag", material(["flag_a", "flag_b", "flag_c"][i], ["#30b6aa", "#ffffff", "#6dbb4f"][i], roughness=0.7), loc=(x + 0.45, F * 5.4, 5.4), size=(0.85, 0.02, 0.55))]
+        join(f"Flag{i}", fp, parent=root)
+    return root
+
+
+def booth():
+    """본부 체험 부스 (파빌리온): 지붕 색은 게임에서 본부별로 바꿈(RoofTint), 간판(SignBoard)"""
+    C.reset_scene()
+    root = empty("Booth")
+    deck = material("booth_deck", "#d9c7a6", roughness=0.8)
+    post = material("booth_post", "#fafafa", roughness=0.5)
+    parts = [box("deck", deck, loc=(0, 0, 0.08), size=(4.2, 3.4, 0.16))]
+    for x in (-1.9, 1.9):
+        for y in (-1.5, 1.5):
+            parts.append(cylinder("post", post, loc=(x, y, 1.45), radius=0.07, depth=2.7, segments=12))
+    parts += [
+        box("back", post, loc=(0, 1.6, 1.4), size=(3.9, 0.1, 2.6)),
+        box("counter", material("wood", roughness=0.8), loc=(0, F * 0.9, 0.6), size=(2.6, 0.7, 0.9)),
+        box("counter_top", post, loc=(0, F * 0.9, 1.07), size=(2.75, 0.85, 0.06)),
+    ]
+    b = join("BoothBase", parts, parent=root)
+    bevel(b, 0.02, 2)
+    roof = [prism("roof", material("booth_roof", "#ffffff", roughness=0.6), loc=(0, 0, 2.8), width=4.8, depth=3.9, height=0.8),
+            box("trim", material("booth_roof", "#ffffff", roughness=0.6), loc=(0, F * 1.95, 2.75), size=(4.8, 0.06, 0.18))]
+    r = join("RoofTint", roof, parent=root)
+    bevel(r, 0.02, 1)
+    sign = box("SignBoard", material("booth_sign", "#ffffff", roughness=0.5), loc=(0, F * 1.98, 2.35), size=(3.2, 0.05, 0.62))
+    sign.parent = root
+    return root
+
+
 ASSETS = {
+    "koat_hq": koat_hq, "booth": booth,
     "crate": crate, "barrel": barrel, "lamp": lamp_post, "bench": bench, "mailbox": mailbox, "scarecrow": scarecrow,
     "thresher": thresher, "dock": dock, "planter": planter, "fruit_tree": fruit_tree,
     "grass_tuft": grass_tuft, "cloud": cloud,

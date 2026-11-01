@@ -7,7 +7,7 @@ import { enhanceMaterial } from './surface.js';
 export const ENV_MODELS = [
   'tree', 'pine', 'bush', 'rock', 'flowers', 'hay_bale', 'fence', 'barn', 'silo', 'windmill', 'smartfarm',
   'market', 'well', 'sign', 'coop', 'trough', 'plot', 'crops', 'cow', 'chicken', 'sheep', 'tractor', 'drone', 'wheelbarrow', 'cloud',
-  'crate', 'barrel', 'lamp', 'bench', 'mailbox', 'scarecrow', 'thresher', 'dock', 'planter', 'fruit_tree',
+  'crate', 'barrel', 'lamp', 'bench', 'mailbox', 'scarecrow', 'thresher', 'dock', 'planter', 'fruit_tree', 'koat_hq', 'booth',
 ];
 
 const BASE = (import.meta.env?.BASE_URL || '/') + 'models/';

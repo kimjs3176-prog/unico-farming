@@ -16,6 +16,8 @@ export const QUESTS = [
   { id: 'shake3',    title: '과일 나무',            desc: '과일 나무를 3번 흔들어 보세요',            event: 'shake',    goal: 3, reward: { money: 60, xp: 40 } },
   { id: 'friend2',   title: '이웃사촌',             desc: '주민 한 명과 하트 2개 친구가 되세요',       event: 'hearts',   goal: 2, reward: { money: 150, xp: 100 }, absolute: true },
   { id: 'book10',    title: '꼬마 박물학자',        desc: '도감에 10종을 등록하세요',                 event: 'book',     goal: 10, reward: { money: 300, xp: 200 }, absolute: true },
+  { id: 'koat1',     title: 'KOAT 체험관 방문',      desc: '체험관 부스에서 체험해 첫 스탬프를 받으세요 (🏢 버튼)', event: 'koatstamp', goal: 1, reward: { money: 100, xp: 60 } },
+  { id: 'koat6',     title: 'KOAT 스탬프 투어',      desc: '6개 본부 체험 스탬프를 모두 모으세요',    event: 'koatall',  goal: 6, reward: { money: 300, xp: 200 }, absolute: true },
   { id: 'rich',      title: '천 원의 농부',         desc: '보유 금액 1,000 코인 달성',               event: 'money',    goal: 1000, reward: { money: 200, xp: 150 }, absolute: true },
   { id: 'plow30',    title: '밭갈이 달인',          desc: '트랙터 미니게임에서 한 번에 30칸 이상 갈기', event: 'plowbest', goal: 30, reward: { money: 250, xp: 200 }, absolute: true },
 ];
