@@ -131,27 +131,38 @@ function buildTemplate(rig = 'quad') {
     const n = normalAt(sdf, pw);
     return { p: pw.addScaledVector(n, -inset).sub(HC), n };
   };
+  const FACE = RIGS[rig].face;
+  /** 머리 기준 origin 에서 dir 방향으로 표면을 찾아 붙임 (주둥이 부품은 주둥이 중심에서) */
+  const onFrom = (origin, dir, inset = 0) => {
+    const o = HC.clone().add(origin);
+    const pw = surfacePoint(sdf, o, dir);
+    const n = normalAt(sdf, pw);
+    return { p: pw.addScaledVector(n, -inset).sub(HC), n };
+  };
+  const SN = FACE ? V(...FACE.snout) : V(0, -0.15, 0.3);
   const head = [];
   for (const sx of [-1, 1]) {
-    const no = onFace(V(sx * 0.17, -0.25, 0.95), 0.012);
-    head.push([sph(0.026, { s: [1, 0.8, 0.6], q: outward(no.n), p: no.p.toArray() }, 10), C.eye()]); // 콧구멍
-    const ch = onFace(V(sx * 0.75, -0.2, 0.62), 0.01);
-    head.push([sph(0.09, { s: [1, 0.72, 0.28], q: outward(ch.n), p: ch.p.toArray() }, 16), C.pink()]); // 볼
+    // 콧구멍: 주둥이 앞쪽 위
+    const no = FACE ? onFrom(SN, V(sx * 0.32, 0.38, 1), 0.008) : onFace(V(sx * 0.17, -0.25, 0.95), 0.012);
+    head.push([sph(0.024, { s: [1, 0.75, 0.55], q: outward(no.n), p: no.p.toArray() }, 10), C.eye()]);
+    // 볼: 주둥이 양옆 머리 표면
+    const ch = onFace(FACE ? V(sx * FACE.cheek[0], FACE.cheek[1], FACE.cheek[2]) : V(sx * 0.75, -0.2, 0.62), 0.01);
+    head.push([sph(0.09, { s: [1, 0.72, 0.28], q: outward(ch.n), p: ch.p.toArray() }, 16), C.pink()]);
     // 귀 안쪽 (분홍)
-    const ear = rig === 'biped' ? [sx * 0.212, 0.32, 0.0] : [sx * 0.242, 0.36, 0.0];
+    const ear = FACE ? [sx * (FACE.ear[0] - 0.006), FACE.ear[1] - 0.01, FACE.ear[2] + 0.04] : [sx * 0.242, 0.36, 0.0];
     head.push([sph(0.05, { s: [0.75, 1.9, 0.35], r: [0.25, 0, sx * -0.45], p: ear }, 12), C.earIn()]);
   }
-  // 미소: 주둥이 아래쪽 표면을 따라 그린 곡선
+  // 미소: 주둥이 아래쪽 앞면을 따라 그린 곡선
   const smile = [];
   for (let i = 0; i <= 8; i++) {
-    const t = i / 8, x = -0.1 + 0.2 * t, y = -0.37 + Math.sin(t * Math.PI) * -0.03;
-    smile.push(onFace(V(x, y, 0.92), -0.004).p);
+    const t = i / 8, x = -0.11 + 0.22 * t, y = -0.32 - Math.sin(t * Math.PI) * 0.12;
+    smile.push((FACE ? onFrom(SN, V(x * 2.2, y, 1), -0.004) : onFace(V(x, -0.37 + Math.sin(t * Math.PI) * -0.03, 0.92), -0.004)).p);
   }
   const curve = new THREE.CatmullRomCurve3(smile);
   head.push([new THREE.TubeGeometry(curve, 16, 0.011, 6, false), C.eye()]);
-  // 뿔 (앞으로 기울어진 금색 나선 원뿔 + 주황 띠 2개), 뿌리를 정수리 표면에 박음
+  // 뿔 (앞으로 기울어진 금색 원뿔 + 주황 띠 2개), 뿌리를 정수리 표면에 박음
   const tilt = 0.32, axis = V(0, Math.cos(tilt), Math.sin(tilt));
-  const hornBase = onFace(V(0, 1, 0.38), 0.03).p;
+  const hornBase = onFace(FACE ? V(...FACE.horn) : V(0, 1, 0.38), 0.03).p;
   const hornQ = new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), axis);
   head.push([cone(0.078, 0.42, { q: hornQ, p: hornBase.clone().addScaledVector(axis, 0.21).toArray() }, 24), C.gold()]);
   for (const [t, R] of [[0.07, 0.066], [0.18, 0.048]]) {
@@ -160,13 +171,14 @@ function buildTemplate(rig = 'quad') {
   }
   T.head = bundle(head);
 
-  // ---- 눈 (깜빡임용, 표면에 살짝 박힌 큰 검은 눈 + 하이라이트) ----
+  // ---- 눈 (깜빡임용): 주둥이 위 이마 쪽에 양옆으로, 표면에 살짝 박힘 ----
   const eyes = [];
   for (const sx of [-1, 1]) {
-    const e = onFace(V(sx * 0.42, 0.05, 0.9), 0.018);
-    eyes.push([sph(0.088, { s: [0.82, 1.15, 0.42], q: outward(e.n), p: e.p.toArray() }, 20), C.eye()]);
-    eyes.push([sph(0.026, { p: e.p.clone().addScaledVector(e.n, 0.035).add(V(sx * -0.015 + 0.02, 0.035, 0)).toArray() }, 10), C.shine()]);
-    eyes.push([sph(0.012, { p: e.p.clone().addScaledVector(e.n, 0.034).add(V(sx * 0.02 - 0.01, -0.035, 0)).toArray() }, 8), C.shine()]);
+    const e = onFace(FACE ? V(sx * FACE.eye[0], FACE.eye[1], FACE.eye[2]) : V(sx * 0.42, 0.05, 0.9), 0.016);
+    const ey = FACE ? 0.075 : 0.088;
+    eyes.push([sph(ey, { s: [0.85, 1.2, 0.42], q: outward(e.n), p: e.p.toArray() }, 20), C.eye()]);
+    eyes.push([sph(0.024, { p: e.p.clone().addScaledVector(e.n, 0.03).add(V(sx * -0.012 + 0.018, 0.032, 0)).toArray() }, 10), C.shine()]);
+    eyes.push([sph(0.011, { p: e.p.clone().addScaledVector(e.n, 0.029).add(V(sx * 0.018 - 0.009, -0.03, 0)).toArray() }, 8), C.shine()]);
   }
   T.eyes = bundle(eyes);
 
@@ -198,8 +210,8 @@ function buildTemplate(rig = 'quad') {
   T.goggles = bundle(gog);
   // 스카프: 목 둘레 (몸통 뼈 기준). 두 발 유니코는 목이 곧게 서 있음
   const scarf = (m) => bundle(rig === 'biped' ? [
-    [torus(0.19, 0.05, { r: [Math.PI / 2 + 0.18, 0, 0], p: [0, 0.45, 0.03] }, TWO_PI, 28), m],
-    [cone(0.12, 0.22, { r: [Math.PI + 0.25, 0, 0], p: [0.06, 0.3, 0.22] }, 3), m],
+    [torus(0.23, 0.05, { r: [Math.PI / 2 + 0.12, 0, 0], p: [0, 0.55, 0.03] }, TWO_PI, 30), m],
+    [cone(0.11, 0.2, { r: [Math.PI + 0.2, 0, 0], p: [0.07, 0.42, 0.26] }, 3), m],
   ] : [
     [torus(0.215, 0.055, { r: [Math.PI / 2 + 0.55, 0, 0], p: [0, 0.38, 0.5] }, TWO_PI, 28), m],
     [cone(0.13, 0.24, { r: [Math.PI + 0.35, 0, 0], p: [0, 0.2, 0.68] }, 3), m],
@@ -378,7 +390,7 @@ export class Unico {
   setName(name, color = '#fff', bg) {
     if (this.label) { this.group.remove(this.label); this.label.userData.dispose(); }
     this.label = makeLabel(name, bg ? { color, bg } : { color });
-    this.label.position.y = 2.55;
+    this.label.position.y = this.biped ? 2.3 : 2.55;
     this.group.add(this.label);
   }
 
@@ -496,11 +508,11 @@ export class Unico {
           this.root.rotation.y = this.yaw + Math.min(1, a / 0.9) * TWO_PI;
           headPitch = -0.25;
           for (const l of legs) l.rotation.x = (1 - j) * (bp ? 0.25 : 0.4);
-          if (bp) { AL.rotation.set(0, 0, -2.6 + Math.sin(a * 18) * 0.15); AR.rotation.set(0, 0, 2.6 - Math.sin(a * 18) * 0.15); }
+          if (bp) { AL.rotation.set(-0.35, 0, -1.85 + Math.sin(a * 18) * 0.15); AR.rotation.set(-0.35, 0, 1.85 - Math.sin(a * 18) * 0.15); } // 머리가 커서 옆으로 만세
           break;
         }
         case 'wave': { // 손 흔들기
-          if (bp) { AR.rotation.set(-0.3, 0, 2.5 + Math.sin(a * 12) * 0.35); headRoll = -0.12; headPitch = -0.1; }
+          if (bp) { AR.rotation.set(-0.55, 0, 1.75 + Math.sin(a * 12) * 0.3); headRoll = -0.12; headPitch = -0.1; } // 머리 옆에서 손 흔들기
           else {
             bodyPitch = -0.38; bodyY += 0.12;
             legs[1].rotation.x = -1.4 + Math.sin(a * 12) * 0.35;
@@ -531,9 +543,9 @@ export class Unico {
     // ---- 탑승 (트랙터) ----
     if (this.riding) {
       if (bp) { // 의자에 앉아 두 손으로 핸들
-        bodyY = BODY_Y - 0.18;
+        bodyY = BODY_Y - 0.1;
         bodyPitch = 0;
-        for (const l of legs) { l.rotation.x = -1.45; l.scale.y = 1; }
+        for (const l of legs) { l.rotation.x = -1.4; l.scale.y = 1; }
         arms[0].rotation.set(-1.15, 0, 0.35); arms[1].rotation.set(-1.15, 0, -0.35);
         this.tailG.rotation.x = 0.4;
       } else {

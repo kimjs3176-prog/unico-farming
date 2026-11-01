@@ -20,7 +20,7 @@ export class Player {
     this.group.add(this.ring);
     const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.24, 4), new THREE.MeshBasicMaterial({ color: 0xfac03e }));
     arrow.rotation.x = Math.PI;
-    arrow.position.y = 3.3;
+    arrow.position.y = 3.0;
     this.arrow = arrow;
     this.group.add(arrow);
     this.markT = 0;
@@ -74,7 +74,7 @@ export class Player {
     const pulse = 1 + Math.sin(this.markT * 3) * 0.06;
     this.ring.scale.set(pulse, pulse, 1);
     this.ring.visible = !this.unico.riding;
-    this.arrow.position.y = (this.unico.riding ? 3.1 : 3.3) + Math.abs(Math.sin(this.markT * 3)) * 0.12;
+    this.arrow.position.y = (this.unico.riding ? 2.8 : 3.0) + Math.abs(Math.sin(this.markT * 3)) * 0.12;
     this.arrow.rotation.y += dt * 2;
   }
 }

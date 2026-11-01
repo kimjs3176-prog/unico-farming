@@ -135,7 +135,7 @@ export class TractorView {
     this.rider.group.position.set(0, 0, 0);
     this.rider.facing = v.heading;
     this.rider.update(dt, this.game.followCam.camera, this.game.world.daylight);
-    this.riderGroup.scale.setScalar(0.62);
+    this.riderGroup.scale.setScalar(0.72);
     const done = this.field.tick(dt);
     this.game.ui.updateMinigame({ time: this.field.time, score: this.field.score });
     if (done) { this.dismount(true); return null; }

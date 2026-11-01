@@ -24,11 +24,15 @@ export const RIGS = {
     bones: [['body', null, [0, 0.8, 0]], ['head', 'body', [0, 0.78, 0.66]], ['legFL', 'body', [-0.25, -0.2, 0.36]], ['legFR', 'body', [0.25, -0.2, 0.36]],
       ['legBL', 'body', [-0.25, -0.2, -0.38]], ['legBR', 'body', [0.25, -0.2, -0.38]], ['tail', 'body', [0, 0.12, -0.56]]],
     legLen: 0.6, headR: 0.42, bounds: [[-0.66, -0.03, -1.02], [0.66, 2.2, 1.28]],
+    face: null,
   },
+  // 이등신: 머리 높이 ≈ 몸통+다리 높이. 머리 중심 1.3m, 정수리 1.72m
   biped: {
-    bones: [['body', null, [0, 0.62, 0]], ['head', 'body', [0, 0.86, 0.06]], ['legL', 'body', [-0.15, -0.12, 0]], ['legR', 'body', [0.15, -0.12, 0]],
-      ['armL', 'body', [-0.3, 0.4, 0.02]], ['armR', 'body', [0.3, 0.4, 0.02]], ['tail', 'body', [0, 0, -0.28]]],
-    legLen: 0.5, headR: 0.38, bounds: [[-0.72, -0.03, -0.92], [0.72, 2.08, 0.82]],
+    bones: [['body', null, [0, 0.38, 0]], ['head', 'body', [0, 0.92, 0.04]], ['legL', 'body', [-0.14, -0.06, 0]], ['legR', 'body', [0.14, -0.06, 0]],
+      ['armL', 'body', [-0.27, 0.44, 0.02]], ['armR', 'body', [0.27, 0.44, 0.02]], ['tail', 'body', [0, 0.04, -0.25]]],
+    legLen: 0.32, headR: 0.44, bounds: [[-0.7, -0.03, -0.82], [0.7, 1.88, 0.86]],
+    // 얼굴 배치 (머리 중심 기준): 주둥이 중심, 눈 방향, 볼 방향
+    face: { snout: [0, -0.17, 0.3], eye: [0.36, 0.13, 0.92], cheek: [0.7, -0.22, 0.66], horn: [0, 1, 0.3], ear: [0.24, 0.38, -0.04] },
   },
 };
 /** 뼈의 루트 기준 위치 */
@@ -66,6 +70,22 @@ function cap(a, b, r) {
     return Math.hypot(pax - bax * h, pay - bay * h, paz - baz * h) - r;
   };
 }
+/** 둥근 원뿔: a(반지름 r1) → b(반지름 r2) 로 매끈하게 가늘어지는 캡슐 (Inigo Quilez sdRoundCone) */
+function rcone(a, b, r1, r2) {
+  const ba = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const l2 = ba[0] * ba[0] + ba[1] * ba[1] + ba[2] * ba[2], rr = r1 - r2, a2 = l2 - rr * rr, il2 = 1 / l2;
+  return (x, y, z) => {
+    const pa = [x - a[0], y - a[1], z - a[2]];
+    const yy = pa[0] * ba[0] + pa[1] * ba[1] + pa[2] * ba[2], zz = yy - l2;
+    const xv = [pa[0] * l2 - ba[0] * yy, pa[1] * l2 - ba[1] * yy, pa[2] * l2 - ba[2] * yy];
+    const x2 = xv[0] * xv[0] + xv[1] * xv[1] + xv[2] * xv[2], y2 = yy * yy * l2, z2 = zz * zz * l2;
+    const k = Math.sign(rr) * rr * rr * x2;
+    if (Math.sign(zz) * a2 * z2 > k) return Math.sqrt(x2 + z2) * il2 - r2;
+    if (Math.sign(yy) * a2 * y2 < k) return Math.sqrt(x2 + y2) * il2 - r1;
+    return (Math.sqrt(x2 * a2 * il2) + yy * rr) * il2 - r1;
+  };
+}
+
 /** 둥근 원기둥 (발굽) */
 function rcyl(c, r, hh, round) {
   return (x, y, z) => {
@@ -112,34 +132,32 @@ function primitivesBiped() {
   const P = [];
   const push = (f, k, slot, bone) => P.push({ f, k, slot, bone });
   const Hb = bonePos('biped', 'head');
-  // 몸통: 아래가 넓은 콩 모양 + 둥근 배
-  push(ell([0, 0.84, 0], [0.34, 0.4, 0.29]), 0, 'body', 'body');
-  push(sph([0, 0.68, 0.03], 0.32), 0.14, 'body', 'body');
-  // 목 → 머리 (뒤로 살짝 기울어 원본처럼 고개를 든 모습)
-  push(cap([0, 1.05, 0], [0, 1.28, 0.05], 0.19), 0.14, 'body', 'body');
-  push(ell([Hb.x, Hb.y, Hb.z], [0.38, 0.36, 0.37]), 0.12, 'body', 'head');
-  push(ell(add(Hb, [0, -0.13, 0.27]), [0.23, 0.19, 0.24]), 0.1, 'snout', 'head');
-  for (const sx of [-1, 1]) push(ell(add(Hb, [sx * 0.21, 0.32, -0.04]), [0.07, 0.15, 0.055], sx * -0.45), 0.06, 'body', 'head');
-  // 다리: 짧고 통통 + 청록 발굽
+  const F = RIGS.biped.face;
+  // 몸통: 짧고 통통한 콩 모양 + 둥근 배 (머리와 거의 같은 높이)
+  push(ell([0, 0.6, 0], [0.32, 0.37, 0.27]), 0, 'body', 'body');
+  push(sph([0, 0.52, 0.04], 0.29), 0.12, 'body', 'body');
+  // 큰 머리: 몸통 위에 얹혀 짧은 목으로 부드럽게 이어짐
+  push(ell([Hb.x, Hb.y, Hb.z], [0.44, 0.42, 0.42]), 0.14, 'body', 'head');
+  push(ell(add(Hb, F.snout), [0.25, 0.19, 0.22]), 0.09, 'snout', 'head');
+  for (const sx of [-1, 1]) push(ell(add(Hb, [sx * F.ear[0], F.ear[1], F.ear[2]]), [0.075, 0.16, 0.06], sx * -0.45), 0.06, 'body', 'head');
+  // 다리: 짧고 위가 굵게 가늘어지는 다리 + 청록 발굽
   for (const [sx, bone] of [[-1, 'legL'], [1, 'legR']]) {
-    push(cap([sx * 0.15, 0.55, 0], [sx * 0.15, 0.15, 0.02], 0.12), 0.1, 'body', bone);
-    push(rcyl([sx * 0.15, 0.075, 0.03], 0.135, 0.075, 0.035), 0.03, 'hoof', bone);
+    push(rcone([sx * 0.14, 0.36, 0], [sx * 0.14, 0.12, 0.02], 0.135, 0.11), 0.1, 'body', bone);
+    push(rcyl([sx * 0.14, 0.065, 0.03], 0.128, 0.065, 0.032), 0.03, 'hoof', bone);
   }
-  // 팔: 어깨에서 몸통과 떨어져 내려오는 팔 + 청록 손(발굽)
+  // 팔: 어깨에서 손까지 한 번에 매끈하게 가늘어지는 짧은 팔 + 둥근 청록 손
   for (const [sx, bone] of [[-1, 'armL'], [1, 'armR']]) {
-    const S = [sx * 0.3, 1.02, 0.02], E = [sx * 0.47, 0.82, 0.08], Hd = [sx * 0.52, 0.62, 0.13];
-    push(sph(S, 0.11), 0.08, 'body', bone);
-    push(cap(S, E, 0.085), 0.02, 'body', bone);
-    push(cap(E, Hd, 0.08), 0.02, 'body', bone);
-    push(sph([Hd[0], Hd[1] - 0.03, Hd[2] + 0.01], 0.1), 0.03, 'hoof', bone);
+    const S = [sx * 0.25, 0.83, 0.02], Hd = [sx * 0.47, 0.53, 0.1];
+    push(rcone(S, Hd, 0.1, 0.08), 0.07, 'body', bone);
+    push(sph([sx * 0.485, 0.5, 0.11], 0.092), 0.05, 'hoof', bone);
   }
-  // 갈기: 정수리 곱슬 → 등줄기로 흘러내림
-  const headMane = [[0, 0.33, -0.09, 0.15], [0, 0.22, -0.26, 0.15], [0, 0.05, -0.34, 0.145], [0.12, 0.3, 0.15, 0.09], [0.03, 0.35, 0.09, 0.085], [-0.11, 0.31, 0.03, 0.08]];
-  headMane.forEach(([x, y, z, r], i) => push(sph(add(Hb, [x, y, z]), r), 0.05, i % 2 ? 'maneD' : 'mane', 'head'));
-  [[0, 1.28, -0.24, 0.13], [0, 1.13, -0.28, 0.13], [0, 0.98, -0.29, 0.12], [0, 0.85, -0.28, 0.1]]
-    .forEach(([x, y, z, r], i) => push(sph([x, y, z], r), 0.05, i % 2 ? 'maneD' : 'mane', 'body'));
+  // 갈기: 정수리 곱슬 → 뒤통수 → 등
+  const headMane = [[0, 0.38, -0.1, 0.16], [0, 0.26, -0.3, 0.16], [0, 0.06, -0.4, 0.15], [0.13, 0.36, 0.15, 0.1], [0.03, 0.41, 0.08, 0.095], [-0.12, 0.37, 0.02, 0.09]];
+  headMane.forEach(([x, y, z, r], i) => push(sph(add(Hb, [x, y, z]), r), 0.06, i % 2 ? 'maneD' : 'mane', 'head'));
+  [[0, 0.98, -0.26, 0.12], [0, 0.84, -0.27, 0.11], [0, 0.71, -0.26, 0.09]]
+    .forEach(([x, y, z, r], i) => push(sph([x, y, z], r), 0.06, i % 2 ? 'maneD' : 'mane', 'body'));
   // 꼬리: 엉덩이 뒤에서 뒤·위로 말림
-  [[0, 0.6, -0.36, 0.1], [0, 0.55, -0.5, 0.12], [0, 0.6, -0.64, 0.11], [0, 0.74, -0.72, 0.09], [0, 0.9, -0.7, 0.07]]
+  [[0, 0.4, -0.31, 0.09], [0, 0.36, -0.43, 0.1], [0, 0.42, -0.55, 0.095], [0, 0.55, -0.61, 0.08], [0, 0.68, -0.59, 0.06]]
     .forEach(([x, y, z, r], i) => push(sph([x, y, z], r), i === 0 ? 0.07 : 0.05, i % 2 ? 'maneD' : 'mane', 'tail'));
   return P;
 }

@@ -7,8 +7,9 @@
 import fs from 'node:fs';
 import { buildUnicoGeometry, SLOTS } from '../src/game/unico_mesh.js';
 
-const STEP = 0.032;
+const STEPS = { quad: 0.032, biped: 0.022 }; // 주인공은 가는 팔다리가 매끈하도록 더 촘촘히
 for (const [rig, file] of [['quad', 'unico_body.bin'], ['biped', 'unico_biped.bin']]) {
+const STEP = STEPS[rig];
 const t = Date.now();
 const { geometry: g, slotWeights, stats } = buildUnicoGeometry(STEP, rig);
 const n = stats.verts, idx = g.index.array, ni = idx.length;
