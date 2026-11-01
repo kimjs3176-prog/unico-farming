@@ -303,7 +303,8 @@ export class Unico {
     this.root.updateMatrixWorld(true);
     this.skeleton = new THREE.Skeleton(R.bones.map((b) => boneMap[b[0]]));
     this.skin = new THREE.SkinnedMesh(skinGeometry(rig, palette), SKIN_MAT);
-    this.skin.castShadow = this.skin.receiveShadow = true;
+    this.skin.castShadow = true;
+    this.skin.receiveShadow = false; // 팔·귀가 몸에 드리운 자기 그림자가 얼룩처럼 보여 끔 (만화풍 깔끔한 음영)
     this.skin.frustumCulled = false;
     this.root.add(this.skin);
     this.skin.bind(this.skeleton);
