@@ -4,10 +4,15 @@ import { LAYOUT } from '../world.js';
 import { PRODUCTS, ANIMALS } from '../sim/crops.js';
 import { makeLabel } from '../label.js';
 
-/** 뼈대 애니메이션 모델(CC0, Quaternius)을 쓰는 동물. 없으면 기존 절차적 다리 흔들기 모델 사용 */
-const RIGGED = { cow: 'q_cow' };
-/** 뼈대 모델 키(m) — 머리 위 '!' 표시 높이 */
-const HEIGHT = { q_cow: 1.45, q_horse: 1.75, q_donkey: 1.3, q_alpaca: 1.6 };
+/**
+ * 동물 종류 → 모델. 젖소·양은 뼈대 애니메이션(CC0, Quaternius), 닭은 저폴리 암탉(blender hen, 코드로 다리·머리 움직임).
+ * 새 모델이 없으면 예전 모델(cow/sheep/chicken)로 대체
+ */
+const MODEL = { cow: 'q_cow', sheep: 'q_sheep', chicken: 'hen' };
+/** 모델 키(m) — 머리 위 '!' 표시 높이 */
+const HEIGHT = { q_cow: 1.45, q_sheep: 1.15, q_horse: 1.75, q_donkey: 1.3, q_alpaca: 1.6, hen: 0.75 };
+/** 걷기 동작 재생 속도 배율 (발이 미끄러지지 않게) */
+const WALK_RATE = { q_sheep: 1.7 };
 /** 목장 구경 동물(생산 없음, 쓰다듬기만) */
 const VISITORS = [
   { model: 'q_horse', name: '말', emoji: '🐴', speed: 1.1 },
@@ -45,24 +50,25 @@ export class RanchView {
       m.position.set(x, 0, z);
       m.rotation.y = Math.random() * Math.PI * 2;
       game.world.scene.add(m);
-      const e = { m, target: new THREE.Vector2(x, z), wait: Math.random() * 3, t: Math.random() * 10, speed };
+      const e = { m, model, target: new THREE.Vector2(x, z), wait: Math.random() * 3, t: Math.random() * 10, speed, walkRate: WALK_RATE[model] || 1 };
       if (rig) {
         Object.assign(e, { mixer: rig.mixer, clips: rig.clips });
         playClip(e, 'idle', 0);
         e.mixer.update(Math.random() * 3);
         e.height = HEIGHT[model] || 1.4;
       } else {
-        e.legs = ['LegFL', 'LegFR', 'LegBL', 'LegBR'].map((n) => m.getObjectByName(n)).filter(Boolean);
+        e.legs = ['LegFL', 'LegFR', 'LegBL', 'LegBR', 'LegL', 'LegR'].map((n) => m.getObjectByName(n)).filter(Boolean);
+        e.body = m.getObjectByName('Body');
         e.head = m.getObjectByName('Head');
       }
       return e;
     };
     this.ents = this.sim.animals.map((a) => {
-      const model = RIGGED[a.type] && game.assets.has(RIGGED[a.type]) ? RIGGED[a.type] : a.type;
+      const model = MODEL[a.type] && game.assets.has(MODEL[a.type]) ? MODEL[a.type] : a.type;
       const e = spawn(model, a.type === 'chicken' ? 1.2 : 0.8);
       e.a = a;
       e.mark = makeLabel('!', { color: '#231916', bg: '#ffe066', size: 40 });
-      e.mark.position.y = a.type === 'chicken' ? 1.2 : (e.height || 1.7) + 0.5;
+      e.mark.position.y = (HEIGHT[model] || e.height || (a.type === 'chicken' ? 0.7 : 1.7)) + 0.45;
       e.mark.visible = false;
       e.m.add(e.mark);
       return e;
@@ -90,7 +96,8 @@ export class RanchView {
       if (e.mixer) playClip(e, e.rest || 'idle');
       else {
         for (const l of e.legs) l.rotation.x *= 0.9;
-        if (e.head) e.head.rotation.x = Math.sin(e.t * 1.5) * 0.15 + 0.1; // 풀 뜯기
+        if (e.head && e.model === 'hen') e.head.rotation.x = Math.max(0, Math.sin(e.t * 2.3)) ** 6 * 0.9; // 콕콕 모이 쪼기
+        else if (e.head) e.head.rotation.x = Math.sin(e.t * 1.5) * 0.15 + 0.1; // 풀 뜯기
       }
     } else {
       const step = Math.min(d, e.speed * dt);
@@ -101,12 +108,13 @@ export class RanchView {
       e.m.rotation.y += diff * Math.min(1, dt * 4);
       if (e.mixer) playClip(e, 'walk');
       else {
-        e.legs.forEach((l, i) => (l.rotation.x = Math.sin(e.t * 6 + (i % 2) * Math.PI) * 0.5));
-        if (e.head) e.head.rotation.x = 0;
-        if (e.a?.type === 'chicken') p.y = Math.abs(Math.sin(e.t * 12)) * 0.08;
+        const hen = e.legs.length === 2;
+        e.legs.forEach((l, i) => (l.rotation.x = Math.sin(e.t * (hen ? 11 : 6) + (i % 2) * Math.PI) * (hen ? 0.6 : 0.5)));
+        if (e.head) e.head.rotation.x = hen ? Math.sin(e.t * 11) * 0.12 : 0; // 닭: 걸을 때 고개 까딱
+        if (e.a?.type === 'chicken') p.y = Math.abs(Math.sin(e.t * 11)) * (hen ? 0.03 : 0.08);
       }
     }
-    if (e.mixer) e.mixer.update(dt * (e.cur === 'walk' ? e.speed / 0.9 : 1));
+    if (e.mixer) e.mixer.update(dt * (e.cur === 'walk' ? (e.speed / 0.9) * (e.walkRate || 1) : 1));
   }
 
   pet(e) {

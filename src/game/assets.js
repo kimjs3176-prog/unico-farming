@@ -8,7 +8,7 @@ import { enhanceMaterial } from './surface.js';
 /** 블렌더에서 생성한 환경 GLB 목록 (public/models). 캐릭터 유니코는 src/game/unico.js 에서 코드로 생성 */
 export const ENV_MODELS = [
   'tree', 'pine', 'bush', 'rock', 'flowers', 'hay_bale', 'fence', 'smartfarm',
-  'market', 'sign', 'trough', 'plot', 'crops', 'chicken', 'sheep', 'tractor', 'drone', 'wheelbarrow', 'cloud',
+  'market', 'sign', 'trough', 'plot', 'crops', 'hen', 'tractor', 'drone', 'wheelbarrow', 'cloud',
   'crate', 'barrel', 'lamp', 'bench', 'mailbox', 'scarecrow', 'thresher', 'dock', 'planter', 'fruit_tree', 'koat_hq', 'booth',
 ];
 
@@ -19,7 +19,7 @@ export const ENV_MODELS = [
  */
 export const PACK_MODELS = ['q_farm', 'q_nature'];
 /** 뼈대 애니메이션이 있는 CC0 동물 (walk/idle/eat/look/run/jump) */
-export const ANIMATED_MODELS = ['q_cow', 'q_horse', 'q_donkey', 'q_alpaca', 'q_shiba'];
+export const ANIMATED_MODELS = ['q_cow', 'q_sheep', 'q_horse', 'q_donkey', 'q_alpaca', 'q_shiba'];
 
 const BASE = (import.meta.env?.BASE_URL || '/') + 'models/';
 
@@ -57,7 +57,7 @@ export class Assets {
       ...ANIMATED_MODELS.map(async (n) => {
         try {
           const gltf = await this.loader.loadAsync(`${BASE}${n}.glb`);
-          prepare(gltf.scene, { fur: true, spots: n === 'q_cow' ? 'Main' : null }); // 젖소: 얼룩무늬
+          prepare(gltf.scene, { fur: true, spots: n === 'q_cow' ? 'Main' : null }); // 젖소: 얼룩무늬 (양은 털 질감)
           this.scenes.set(n, gltf.scene);
           this.anims.set(n, gltf.animations);
         } catch (e) {

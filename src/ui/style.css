@@ -237,3 +237,12 @@ button:disabled { opacity: 0.45; cursor: default; }
 @media (max-width: 600px) { .objective { top: 96px; max-width: 58vw; } }
 /* 가방으로 날아가는 아이템 */
 .fly { position: fixed; z-index: 40; font-size: 30px; pointer-events: none; transition: transform 0.75s cubic-bezier(.5,-0.4,.7,1), opacity 0.75s; filter: drop-shadow(0 3px 2px rgba(0,0,0,0.25)); }
+
+/* 큰 지도 (미니맵 클릭 / M) */
+.minimap { cursor: pointer; transition: transform 0.15s; }
+.minimap:hover { transform: scale(1.04); }
+.map-panel { width: min(94vw, 500px); }
+.bigmap { display: block; width: 100%; height: auto; aspect-ratio: 1; border-radius: 20px; cursor: crosshair; border: 3px solid rgba(255,255,255,0.9); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05); }
+.map-places { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.map-places button { font-size: 14px; padding: 6px 10px; }
+.map-tip { margin: 8px 0 0; font-size: 13px; opacity: 0.75; text-align: center; }

@@ -470,6 +470,47 @@ def chicken():
     return root
 
 
+def hen():
+    """저폴리(면이 각진) 암탉 — CC0 Quaternius 동물들과 같은 결. 애니메이션은 코드에서 Body/Head/LegL/LegR 피벗을 움직임"""
+    C.reset_scene()
+    root = empty("Hen")
+    white, cream = material("white_feather", "#f7f3ea"), material("white_wing", "#ebe3d3")
+    red, beak, eye = material("hen_comb", "#e0413a"), material("hen_beak", "#f2a33a"), material("eye")
+    body = empty("Body", loc=(0, 0, 0.36), parent=root)
+    join("BodyMesh", [
+        sphere("body", white, loc=(0, 0.02, 0), radius=0.2, scale=(0.95, 1.35, 1.0), rot=(-10, 0, 0), segments=7, rings=5, smooth=False),
+        sphere("chest", white, loc=(0, F * 0.15, 0.05), radius=0.15, scale=(1, 1, 1.05), segments=7, rings=5, smooth=False),
+        cone("tail", white, loc=(0, 0.27, 0.15), radius=0.11, depth=0.28, rot=(-38, 0, 0), segments=5, smooth=False),
+        cone("tail_tip", cream, loc=(0, 0.33, 0.27), radius=0.06, depth=0.12, rot=(-30, 0, 0), segments=5, smooth=False),
+        sphere("wingL", cream, loc=(-0.175, 0.04, 0.02), radius=0.13, scale=(0.32, 1.25, 0.72), rot=(-12, 0, 0), segments=6, rings=4, smooth=False),
+        sphere("wingR", cream, loc=(0.175, 0.04, 0.02), radius=0.13, scale=(0.32, 1.25, 0.72), rot=(-12, 0, 0), segments=6, rings=4, smooth=False),
+    ], parent=body)
+    head = empty("Head", loc=(0, F * 0.2, 0.17), parent=body)
+    join("HeadMesh", [
+        cylinder("neck", white, loc=(0, 0, -0.02), radius=0.085, radius2=0.075, depth=0.16, segments=6, smooth=False),
+        sphere("head", white, loc=(0, F * 0.01, 0.08), radius=0.1, scale=(0.9, 1.05, 1), segments=7, rings=5, smooth=False),
+        cone("beak", beak, loc=(0, F * 0.135, 0.07), radius=0.032, depth=0.08, rot=(F * -90, 0, 0), segments=4, smooth=False),
+        sphere("comb1", red, loc=(0, F * 0.05, 0.18), radius=0.032, segments=5, rings=4, smooth=False),
+        sphere("comb2", red, loc=(0, F * 0.0, 0.195), radius=0.038, segments=5, rings=4, smooth=False),
+        sphere("comb3", red, loc=(0, 0.05, 0.18), radius=0.03, segments=5, rings=4, smooth=False),
+        sphere("wattleL", red, loc=(-0.015, F * 0.1, 0.0), radius=0.025, scale=(0.7, 1, 1.4), segments=5, rings=4, smooth=False),
+        sphere("wattleR", red, loc=(0.015, F * 0.1, 0.0), radius=0.025, scale=(0.7, 1, 1.4), segments=5, rings=4, smooth=False),
+        sphere("eyeL", eye, loc=(-0.08, F * 0.045, 0.1), radius=0.018, segments=5, rings=4, smooth=False),
+        sphere("eyeR", eye, loc=(0.08, F * 0.045, 0.1), radius=0.018, segments=5, rings=4, smooth=False),
+    ], parent=head)
+    for n, x in (("LegL", -0.07), ("LegR", 0.07)):
+        leg = empty(n, loc=(x, 0.03, -0.14), parent=body)
+        join(n + "Mesh", [
+            segment("thigh", white, (0, 0, 0.02), (0, 0, -0.07), 0.05, segments=6),
+            segment("shin", beak, (0, 0, -0.06), (0, 0, -0.22), 0.016, cap=False, segments=5),
+            box("toeF", beak, loc=(0, F * 0.05, -0.215), size=(0.02, 0.1, 0.012)),
+            box("toeL", beak, loc=(-0.035, F * 0.035, -0.215), size=(0.018, 0.08, 0.012), rot=(0, 0, 35)),
+            box("toeR", beak, loc=(0.035, F * 0.035, -0.215), size=(0.018, 0.08, 0.012), rot=(0, 0, -35)),
+            box("toeB", beak, loc=(0, 0.035, -0.215), size=(0.016, 0.05, 0.012)),
+        ], parent=leg)
+    return root
+
+
 def sheep():
     C.reset_scene()
     root = empty("Sheep")
@@ -887,6 +928,6 @@ ASSETS = {
     "fence": fence, "barn": barn, "silo": silo, "windmill": windmill, "smartfarm": greenhouse, "market": market_stall,
     "well": well, "sign": sign_post, "coop": coop, "trough": trough,
     "plot": soil_plot, "crops": crops,
-    "cow": cow, "chicken": chicken, "sheep": sheep,
+    "cow": cow, "chicken": chicken, "hen": hen, "sheep": sheep,
     "tractor": tractor, "drone": drone, "wheelbarrow": wheelbarrow,
 }

@@ -59,6 +59,10 @@ PACKS = {
     ],
 }
 
+# 뼈대 애니메이션이 있는 FBX → 애니메이션 포함 GLB (색·동작 정리는 optimize-cc0.mjs)
+# farm_cow 는 양에게 걷기 동작을 옮겨 주기 위한 원본(같은 뼈대 이름)
+ANIM_FBX = {"farm_sheep": "farm/Sheep.fbx", "farm_cow": "farm/Cow.fbx"}
+
 # 회전·분리해서 남길 부품 (원본 오브젝트 이름 접미사 → 게임 노드 이름)
 MOVING = {"_Blades": "Blades"}
 
@@ -138,6 +142,18 @@ def main(src, out):
             export_lights=False, export_cameras=False, export_extras=False,
         )
         print("내보냄:", pack)
+    for name, rel in ANIM_FBX.items():
+        path = os.path.join(src, rel)
+        if not os.path.exists(path):
+            continue
+        reset()
+        bpy.ops.import_scene.fbx(filepath=path)
+        bpy.ops.export_scene.gltf(
+            filepath=os.path.join(out, name + ".glb"), export_format="GLB", export_yup=True,
+            export_animations=True, export_animation_mode="ACTIONS", export_skins=True,
+            export_lights=False, export_cameras=False, export_extras=False,
+        )
+        print("내보냄(애니메이션):", name)
 
 
 if __name__ == "__main__":

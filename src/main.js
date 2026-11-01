@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Assets } from './game/assets.js';
-import { World } from './game/world.js';
+import { World, LAYOUT } from './game/world.js';
 import { Input } from './game/input.js';
 import { FollowCamera } from './game/camera.js';
 import { Player } from './game/player.js';
@@ -52,7 +52,6 @@ class Game {
     this.world = new World(assets, this.renderer, this.quality);
     this.postfx = new PostFX(this.renderer, this.world.scene, this.camera, this.quality);
     this.followCam = new FollowCamera(this.camera);
-    this.followCam.blockers = this.world.camBlockers;
     this.economy = new Economy();
     this.quests = new Quests();
     this.player = new Player(assets, this.world, name);
@@ -139,16 +138,35 @@ class Game {
   /** KOAT 체험관 입구로 이동 */
   goKoat() {
     if (this.tractor.driving || this.smartfarm.active || this.nature.fishing || this.rice.threshing) return this.ui.toast('지금은 이동할 수 없어요');
-    this.ui.closePanel();
-    this.player.position.set(25, 0, -24);
-    this.player.unico.facing = Math.PI;
-    this.player.moveTarget = null;
-    this.followCam.yaw = 0;
-    this.followCam.pitch = 0.62;
-    this.followCam.distance = 13;
-    this.followCam.first = true;
+    this.teleport(25, -24, { yaw: 0, pitch: 0.62, distance: 13, facing: Math.PI });
     this.audio.play('levelup');
     this.ui.toast('🏢 KOAT 체험관에 도착! 본부별 부스에서 체험하고 안내데스크에서 스탬프를 확인하세요');
+  }
+
+  /** 순간이동 (지도·체험관 버튼). 카메라는 현재 각도 유지가 기본 */
+  teleport(x, z, { yaw, pitch, distance, facing } = {}) {
+    this.ui.closePanel();
+    this.player.position.set(x, 0, z);
+    this.player.moveTarget = null;
+    if (facing !== undefined) this.player.unico.facing = facing;
+    if (yaw !== undefined) this.followCam.yaw = yaw;
+    if (pitch !== undefined) this.followCam.pitch = pitch;
+    if (distance !== undefined) this.followCam.distance = distance;
+    this.followCam.first = true;
+    this.fx.burst(x, 1.0, z, 0xbfe8ff, 16);
+    this.audio.play('plant');
+  }
+
+  /** 막힌 자리(건물·연못·울타리)면 가까운 빈자리를 나선형으로 찾음 */
+  findOpenSpot(x, z) {
+    const B = LAYOUT.bounds - 2;
+    x = Math.max(-B, Math.min(B, x)); z = Math.max(-B, Math.min(B, z));
+    if (!this.world.isBlocked(x, z, 0.5)) return { x, z };
+    for (let r = 0.8; r < 12; r += 0.8) for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+      const nx = x + Math.cos(a) * r, nz = z + Math.sin(a) * r;
+      if (Math.abs(nx) < B && Math.abs(nz) < B && !this.world.isBlocked(nx, nz, 0.5)) return { x: nx, z: nz };
+    }
+    return { x: 0, z: 6 };
   }
 
   /** 도감 등록 후: 진행 퀘스트, 카테고리 완성 보상 */
@@ -186,6 +204,7 @@ class Game {
     if (input.justPressed('KeyQ')) this.ui.panel ? this.ui.closePanel() : this.ui.openQuests();
     if (input.justPressed('Escape') && this.ui.panel) this.ui.closePanel();
     if (input.justPressed('KeyT')) this.ui.chatInput.focus();
+    if (input.pressed.has('KeyM') && (!this.ui.panel || this.ui.panel.dataset.kind === 'map')) this.minimap.openBig(); // 지도 열기/닫기
 
     const pp = this.player.position;
     this.world.update(dt, this.tractor.driving ? this.tractor.riderGroup.position : pp);
@@ -228,6 +247,8 @@ class Game {
     this.fx.update(dt);
     this.juice.update(dt, this.camera);
     SURF.time.value += dt;
+    SURF.seeCam.value.copy(this.camera.position);
+    SURF.seeTarget.value.copy(this.followCam.smooth);
     if (this.music.on) { const W = this.world.weatherCur || {}; this.music.setScene({ daylight: this.world.daylight, kind: this.world.weatherKind || 'clear', precip: W.precip || 0, wind: W.wind || 0.15 }); }
     SURF.wind.value = this.world.weatherCur?.wind ?? 0.15;
     // 눈 쌓임/녹음: 날씨가 바뀌면 서서히, 처음 접속했을 때 이미 눈이면 바로 덮인 상태

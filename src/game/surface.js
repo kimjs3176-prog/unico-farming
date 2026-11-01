@@ -7,7 +7,11 @@ import * as THREE from 'three';
  *  soil: 흙 알갱이 / hay: 짚 결 / metal: 결 / fur: 털 결 / 공통: 지면 가까이 접지 어둠(가짜 AO)
  */
 /** 모든 재질이 공유하는 시간·바람 (main 루프에서 갱신) */
-export const SURF = { time: { value: 0 }, wind: { value: 0.15 }, snow: { value: 0 } };
+export const SURF = {
+  time: { value: 0 }, wind: { value: 0.15 }, snow: { value: 0 },
+  // 시야 구멍: 카메라와 캐릭터 사이를 가리는 물체를 캐릭터 둘레만 점묘로 투명하게 (카메라를 당기지 않음)
+  seeCam: { value: new THREE.Vector3(0, 50, 0) }, seeTarget: { value: new THREE.Vector3() }, seeOn: { value: 1 },
+};
 
 const NOISE = /* glsl */ `
 varying vec3 vSW; varying vec3 vSN;
@@ -58,6 +62,9 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
     sh.uniforms.uSurfTime = SURF.time;
     sh.uniforms.uSurfWind = SURF.wind;
     sh.uniforms.uSurfSnow = SURF.snow;
+    sh.uniforms.uSeeCam = SURF.seeCam;
+    sh.uniforms.uSeeTarget = SURF.seeTarget;
+    sh.uniforms.uSeeOn = SURF.seeOn;
     let vs = 'varying vec3 vSW; varying vec3 vSN; varying vec3 vOP; uniform float uSurfTime; uniform float uSurfWind;\n' + sh.vertexShader;
     if (kind === 'foliage') {
       // 나무 잎: 바람에 흔들림 (높을수록 크게)
@@ -78,13 +85,25 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
       vSW = (modelMatrix * sw4).xyz;
       vOP = position; // 바인드 포즈 기준 좌표: 뼈대 애니메이션에도 무늬가 몸에 붙어 다님
       vSN = normalize(mat3(modelMatrix) * objectNormal);`);
-    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow;\n' + NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn;\n' + NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       ${KIND_CODE[kind] || KIND_CODE.base}
       ${spots ? `float spt = smoothstep(0.5, 0.53, sfbm(vOP * ${spots.toFixed(2)} + vec3(3.7, 1.3, 8.1)));
       #ifdef USE_COLOR
         spt *= step(0.8, vColor.r) * step(0.8, vColor.g) * step(vColor.b, 0.95); // 흰 몸통에만 (눈·주둥이·발굽 제외)
       #endif
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045, 0.04, 0.04), spt);` : ''}
+      ${kind !== 'fur' ? `// 시야 구멍: 카메라→캐릭터 선분 가까이에 있는 조각을 점묘(dither)로 버림
+      if (uSeeOn > 0.5 && vSW.y > 0.35) {
+        vec3 seg = uSeeTarget - uSeeCam; float segL = length(seg); vec3 sd = seg / max(segL, 1e-3);
+        float st = dot(vSW - uSeeCam, sd);
+        if (st > 0.0 && st < segL - 0.5) {
+          float sr = length(vSW - (uSeeCam + sd * st));
+          float sR = 1.3 + 1.5 * (st / segL);
+          float seeFade = 1.0 - smoothstep(sR * 0.82, sR, sr);
+          float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+          if (seeFade * 0.9 > ign) discard;
+        }
+      }` : ''}
       ${kind !== 'fur' ? `// 눈 오는 날: 위를 향한 면에 서서히 눈이 쌓임
       float snowCov = uSurfSnow * smoothstep(0.45, 0.85, vSN.y) * smoothstep(0.25, 0.6, sfbm(vSW * 1.7) + uSurfSnow * 0.35);
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 1.0), snowCov);` : ''}

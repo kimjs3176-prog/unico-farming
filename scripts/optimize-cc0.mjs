@@ -36,10 +36,12 @@ const ANIMALS = {
   'Donkey.gltf': { name: 'q_donkey', scale: 0.33, colors: {} },
   'Alpaca.gltf': { name: 'q_alpaca', scale: 0.3, colors: { Main: '#f3e6cf', Main_Light: '#fff8ea', Main_Dark: '#8f6a4c' } },
   'ShibaInu.gltf': { name: 'q_shiba', scale: 0.2, colors: { Main: '#e39a4a', Main_Light: '#fff3e2' } },
+  // 농장 팩 양: 걷기 동작이 없어 같은 뼈대의 농장 팩 소 걷기(회전만)를 빌려 옴
+  'farm_sheep.glb': { name: 'q_sheep', scale: 0.25, colors: { White: '#f7f2e8', Black: '#34302d' }, borrow: { file: 'farm_cow.glb', clips: { Walk: 'walk' } } },
   'Cow.gltf': { name: 'q_cow', scale: 0.3, colors: { Main: '#fbf7ef', Main_Light: '#3b3533', Muzzle: '#f2b0b8', Eye_White: '#ffffff' } },
 };
 // 게임에서 쓰는 동작만 남김 (용량 절약). 반려견만 달리기·앉기 사용
-const USE = { default: ['walk', 'idle', 'eat', 'look'], q_shiba: ['walk', 'idle', 'idle2', 'look', 'run', 'eat'] };
+const USE = { default: ['walk', 'idle', 'eat', 'look'], q_sheep: ['walk', 'idle'], q_shiba: ['walk', 'idle', 'idle2', 'look', 'run', 'eat'] };
 const CLIPS = { Walk: 'walk', Idle: 'idle', Idle_2: 'idle2', Eating: 'eat', Idle_Headlow: 'look', Idle_2_HeadLow: 'look', Gallop: 'run', Jump_toIdle: 'jump', Jump_ToIdle: 'jump' };
 
 const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); };
@@ -126,13 +128,54 @@ if (RAW) for (const f of ['q_farm.glb', 'q_nature.glb']) {
   await finish(doc, path.join(OUT, f));
 }
 
+const qmul = (a, b) => [
+  a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+  a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+  a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+  a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+];
+const qinv = (q) => [-q[0], -q[1], -q[2], q[3]];
+
+/**
+ * 다른 파일의 동작을 뼈 이름이 같은 노드에 복사 (회전 채널만 → 체격 차이에 안전).
+ * 원본 기본 자세 대비 변화량만 옮김: 대상 = 대상기본 × (원본기본⁻¹ × 원본동작)
+ */
+async function borrowClips(doc, srcPath, clips) {
+  const src = await io.read(srcPath);
+  const buf = doc.getRoot().listBuffers()[0];
+  const byName = new Map(doc.getRoot().listNodes().map((n) => [n.getName(), n]));
+  for (const a of src.getRoot().listAnimations()) {
+    const key = clips[a.getName().replace(/^.*\|/, '')];
+    if (!key) continue;
+    const anim = doc.createAnimation(key);
+    for (const ch of a.listChannels()) {
+      const tgt = byName.get(ch.getTargetNode()?.getName());
+      if (ch.getTargetPath() !== 'rotation' || !tgt) continue;
+      const sm = ch.getSampler();
+      const inp = doc.createAccessor().setType('SCALAR').setArray(sm.getInput().getArray().slice()).setBuffer(buf);
+      const srcRest = ch.getTargetNode().getRotation(), dstRest = tgt.getRotation();
+      const o = sm.getOutput().getArray().slice(), el = [];
+      for (let i = 0; i < o.length; i += 4) {
+        const q = qmul(dstRest, qmul(qinv(srcRest), [o[i], o[i + 1], o[i + 2], o[i + 3]]));
+        el.push(...q);
+      }
+      const out = doc.createAccessor().setType('VEC4').setArray(new Float32Array(el)).setBuffer(buf);
+      const smp = doc.createAnimationSampler().setInput(inp).setOutput(out).setInterpolation(sm.getInterpolation());
+      anim.addSampler(smp).addChannel(doc.createAnimationChannel().setTargetNode(tgt).setTargetPath('rotation').setSampler(smp));
+    }
+  }
+}
+
+const findSrc = (file) => [ANIM, RAW].filter(Boolean).map((d) => path.join(d, file)).find((p) => fs.existsSync(p));
+
 if (ANIM) for (const [file, cfg] of Object.entries(ANIMALS)) {
-  const p = path.join(ANIM, file);
-  if (!fs.existsSync(p)) { console.log('없음:', file); continue; }
+  const p = findSrc(file);
+  if (!p) { console.log('없음:', file); continue; }
   const doc = await io.read(p);
   const root = doc.getRoot();
+  if (cfg.borrow) { const bp = findSrc(cfg.borrow.file); if (bp) await borrowClips(doc, bp, cfg.borrow.clips); }
   for (const a of root.listAnimations()) {
-    const keep = CLIPS[a.getName()];
+    const keep = CLIPS[a.getName().replace(/^.*\|/, '')] || (Object.values(CLIPS).includes(a.getName()) ? a.getName() : null);
     const use = USE[cfg.name] || USE.default;
     if (!keep || !use.includes(keep) || root.listAnimations().some((b) => b !== a && b.getName() === keep)) a.dispose();
     else a.setName(keep);

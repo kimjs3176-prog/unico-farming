@@ -27,21 +27,10 @@ export class FollowCamera {
       Math.sin(this.pitch),
       Math.cos(this.yaw) * Math.cos(this.pitch),
     ).multiplyScalar(this.distance);
-    // 건물·나무 등에 가리면 카메라를 앞으로 당김 (부드럽게)
-    let want = this.distance;
-    if (this.blockers?.length) {
-      this.ray = this.ray || new THREE.Ray();
-      this.ray.origin.copy(this.smooth);
-      this.ray.direction.copy(off).normalize();
-      const hit = new THREE.Vector3();
-      for (const b of this.blockers) {
-        if (this.ray.intersectBox(b, hit)) {
-          const d = hit.distanceTo(this.smooth) - 0.5;
-          if (d < want) want = Math.max(2.2, d);
-        }
-      }
-    }
-    this.curDist = this.curDist === undefined ? want : this.curDist + (want - this.curDist) * Math.min(1, dt * (want < this.curDist ? 14 : 3));
+    // 가리는 물체가 있어도 카메라를 당기지 않음 → 물체 쪽에서 시야 구멍(surface.js)으로 비춰 보임.
+    // 휠 줌만 부드럽게 따라감
+    const want = this.distance;
+    this.curDist = this.curDist === undefined ? want : this.curDist + (want - this.curDist) * Math.min(1, dt * 8);
     off.setLength(this.curDist);
     this.camera.position.copy(this.smooth).add(off);
     this.camera.lookAt(this.smooth);

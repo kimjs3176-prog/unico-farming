@@ -79,8 +79,7 @@ export const LAYOUT = {
 
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
 // 애니메이션·상호작용이 있어 병합하면 안 되는 모델
-const CAM_BLOCK = new Set(['barn', 'silo', 'koat_hq', 'booth', 'market', 'coop', 'smartfarm', 'well', 'tree', 'pine', 'fruit_tree', 'windmill', 'tower_windmill', 'water_tower', 'open_barn']);
-const DYNAMIC = new Set(['windmill', 'tower_windmill', 'drone', 'smartfarm', 'fruit_tree', 'thresher', 'tractor', 'cow', 'sheep', 'chicken', 'cloud']);
+const DYNAMIC = new Set(['windmill', 'tower_windmill', 'drone', 'smartfarm', 'fruit_tree', 'thresher', 'tractor', 'hen', 'cloud']);
 const GREY = new THREE.Color(0x9aa4ae);
 
 export class World {
@@ -94,7 +93,6 @@ export class World {
     this.obstacles = []; // {x,z,r} 원형 충돌체
     this.aoSpots = []; // 지면에 구울 부드러운 그림자
     this.staticObjs = []; // 움직이지 않는 장식 → 재질별로 병합해 드로우콜 절감
-    this.camBlockers = []; // 카메라가 뚫고 들어가면 안 되는 큰 물체 (Box3)
     this.boxes = []; // {x0,z0,x1,z1}
     this.animated = []; // update(dt) 를 갖는 객체
     this.time = 0.33; // 하루 중 비율 (0=자정, 0.5=정오)
@@ -301,7 +299,6 @@ export class World {
     this.scene.add(m);
     if (!dynamic && !DYNAMIC.has(name)) this.staticObjs.push(m);
     const bb = new THREE.Box3().setFromObject(m), sz = bb.getSize(new THREE.Vector3()), cc = bb.getCenter(new THREE.Vector3());
-    if (CAM_BLOCK.has(name) || /^(tree|pine|birch|autumn|willow)_/.test(name)) this.camBlockers.push(bb.clone().expandByScalar(0.15));
     if (name !== 'cloud' && sz.y > 0.4) this.aoSpots.push({ x: cc.x, z: cc.z, rx: sz.x * 0.62 + 0.25, rz: sz.z * 0.62 + 0.25, k: Math.min(0.42, 0.16 + sz.y * 0.05) });
     if (collide) {
       const box = bb;
