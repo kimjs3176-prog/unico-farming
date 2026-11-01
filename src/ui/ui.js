@@ -80,7 +80,12 @@ export class UI {
     mk('🏢', '체험관', () => game.goKoat());
     this.bar.append(h('div', 'sep'));
     mk('🏡', '농장 방', () => this.openRooms());
-    this.soundBtn = mk('🔊', '소리', () => { game.audio.enabled = !game.audio.enabled; this.soundBtn.firstChild.textContent = game.audio.enabled ? '🔊' : '🔇'; });
+    this.soundBtn = mk('🔊', '소리', () => {
+      const st = game.audio.cycle();
+      if (st !== 'off') game.music.start();
+      this.soundBtn.firstChild.textContent = { all: '🔊', sfx: '🎵', off: '🔇' }[st];
+      this.toast({ all: '🔊 음악·효과음 켜짐', sfx: '🎵 음악 끔 (효과음만)', off: '🔇 소리 끔' }[st]);
+    });
     mk('📸', '찰칵', () => this.snapshot());
     root.append(this.bar);
     this.emoteMenu = null;

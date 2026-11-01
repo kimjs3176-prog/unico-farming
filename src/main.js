@@ -22,6 +22,7 @@ import { Juice } from './game/juice.js';
 import { PostFX } from './game/postfx.js';
 import { pickQuality } from './game/quality.js';
 import { SURF } from './game/surface.js';
+import { Music } from './game/music.js';
 import { WeatherService } from './game/weather.js';
 import { PointerNav } from './game/pointer.js';
 import { RiceView } from './game/view/rice_view.js';
@@ -45,6 +46,7 @@ class Game {
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
     this.input = new Input(canvas);
     this.audio = new Audio();
+    this.music = new Music(this.audio);
     this.world = new World(assets, this.renderer, this.quality);
     this.postfx = new PostFX(this.renderer, this.world.scene, this.camera, this.quality);
     this.followCam = new FollowCamera(this.camera);
@@ -219,6 +221,7 @@ class Game {
     this.fx.update(dt);
     this.juice.update(dt, this.camera);
     SURF.time.value += dt;
+    if (this.music.on) { const W = this.world.weatherCur || {}; this.music.setScene({ daylight: this.world.daylight, kind: this.world.weatherKind || 'clear', precip: W.precip || 0, wind: W.wind || 0.15 }); }
     SURF.wind.value = this.world.weatherCur?.wind ?? 0.15;
     this.minimap.update(dt);
     this.ui.updateHud();
@@ -255,7 +258,8 @@ async function boot() {
     const name = (nick.value.trim() || randomName()).slice(0, 12);
     document.getElementById('loading').remove();
     window.game = new Game(canvas, assets, name);
-    window.game.audio.play('click');
+    window.game.audio.play('click'); // 사용자 동작 안에서 오디오 시작
+    window.game.music.start();
   };
   btn.onclick = start;
   nick.addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });
