@@ -108,6 +108,7 @@ export class World {
     this._paintGround();
     this._batchStatic();
     this.scenery = new Scenery(this);
+    this.scenery.ridges = this.ridges;
     this.precip = new Precipitation(this.scene);
     // 날씨: target 은 실시간 날씨, cur 은 부드럽게 따라가는 현재값
     this.weatherTarget = { kind: 'clear', cloud: 0.15, precip: 0, fog: 0, wind: 0.15 };
@@ -388,7 +389,7 @@ export class World {
     // 연잎 (낚시 데크 반대편)
     if (Q) for (const [dx, dz, s] of [[-2.6, 1.2, 0.8], [-1.6, 2.6, 0.6], [-3.1, -0.6, 0.7], [-0.4, 3.3, 0.55], [1.4, 3.0, 0.65]]) {
       const lp = this.place('lilypad', L.pond.x + dx, L.pond.z + dz, rnd() * 6.28, s, { collide: false });
-      lp.position.y = 0.02; // 정적 병합 전에 수면 높이로
+      lp.position.y = 0.05; // 정적 병합 전에 수면 위로
     }
     for (let i = 0; i < 26; i++) {
       const x = (rnd() - 0.5) * 70, z = (rnd() - 0.5) * 70;
@@ -414,6 +415,18 @@ export class World {
     for (const [name, x, z, rot] of L.props) {
       const m = this.place(name, x, z, rot, 1, { r: name === 'lamp' ? 0.25 : name === 'bench' ? 0.7 : name === 'planter' ? 0.55 : 0.4 });
       if (name === 'lamp') m.traverse((o) => { if (o.isMesh && o.material.emissiveIntensity > 0 && !this.lampGlows.includes(o.material)) this.lampGlows.push(o.material); });
+    }
+    // 밤 가로등 불빛 웅덩이: 바닥에 부드러운 따뜻한 빛 (실제 광원 대신 가산 혼합 원판 → 가벼움)
+    const poolTex = radialTexture();
+    this.lampPools = [];
+    for (const [name, x, z] of L.props) {
+      if (name !== 'lamp') continue;
+      const pool = new THREE.Mesh(new THREE.PlaneGeometry(6.5, 6.5), new THREE.MeshBasicMaterial({ map: poolTex, color: 0xffc06a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+      pool.rotation.x = -Math.PI / 2;
+      pool.position.set(x, 0.04, z);
+      pool.renderOrder = 1;
+      this.scene.add(pool);
+      this.lampPools.push(pool);
     }
     this.place('scarecrow', L.scarecrow.x, L.scarecrow.z, 0.4, 1, { r: 0.35 });
     this.place('dock', L.dock.x, L.dock.z, L.dock.rot, 1, { collide: false });
@@ -498,18 +511,51 @@ export class World {
   }
 
   /** 원경 산맥: 안개에 묻히지 않는 푸른 실루엣으로 깊이감 (대기 원근) */
+  /**
+   * 원경 산맥: 세 겹 능선(가까울수록 짙은 초록, 멀수록 하늘색으로 흐려지는 대기 원근감).
+   * 매끈한 띠 메시 + 위로 갈수록 밝아지는 셰이더, 지평선 색은 하늘에서 매 프레임 받음
+   */
   _mountains() {
     const rnd = mulberry32(77);
-    const mats = [0x8fb5c9, 0x9fc2d2, 0xaecbd8].map((c) => new THREE.MeshBasicMaterial({ color: c, fog: false }));
-    for (let i = 0; i < 22; i++) {
-      const a = (i / 22) * Math.PI * 2 + rnd() * 0.15;
-      const r = 150 + rnd() * 40;
-      const h = 22 + rnd() * 30;
-      const m = new THREE.Mesh(new THREE.ConeGeometry(18 + rnd() * 20, h, 7), mats[i % 3]);
-      m.position.set(Math.cos(a) * r, h / 2 - 6, Math.sin(a) * r);
-      m.rotation.y = rnd() * 3;
+    const layers = [
+      { r: 125, base: 10, amp: 16, col: 0x5f9a62, haze: 0.28, seed: 1.3 },
+      { r: 165, base: 18, amp: 22, col: 0x6f97a8, haze: 0.5, seed: 4.1 },
+      { r: 210, base: 26, amp: 30, col: 0x8fb0c8, haze: 0.72, seed: 7.7 },
+    ];
+    this.ridges = []; // Scenery 가 만들어진 뒤 넘겨받아 지평선 색을 맞춤
+    layers.forEach((L, li) => {
+      const N = 220, pos = [], hgt = [], idx = [];
+      for (let i = 0; i <= N; i++) {
+        const a = (i / N) * Math.PI * 2;
+        // 여러 주파수 사인 합 → 부드러운 봉우리 (이음새 없게 정수 배 주파수)
+        let h = L.base;
+        for (const [f, w] of [[3, 0.5], [7, 0.3], [13, 0.18], [29, 0.08]]) h += L.amp * w * (0.5 + 0.5 * Math.sin(a * f + L.seed * f + rnd() * 0.02));
+        const x = Math.cos(a) * L.r, z = Math.sin(a) * L.r;
+        pos.push(x, -12, z, x, h, z);
+        hgt.push(0, 1, 0, 1);
+        if (i < N) { const k = i * 2; idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('hgt', new THREE.Float32BufferAttribute(hgt.slice(0, pos.length / 3), 1));
+      geo.setIndex(idx);
+      geo.computeVertexNormals(); // 주변광 차폐(GTAO) 패스가 법선을 읽으므로 필요
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { color: { value: new THREE.Color(L.col) }, horizon: { value: new THREE.Color(0xd6eeff) }, haze: { value: L.haze } },
+        vertexShader: 'attribute float hgt; varying float vH; varying float vY; void main(){ vH = hgt; vY = position.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+        fragmentShader: `uniform vec3 color, horizon; uniform float haze; varying float vH; varying float vY;
+          void main(){ float lift = smoothstep(-4.0, 40.0, vY);
+            vec3 c = color * (0.85 + 0.25 * lift);
+            float fogk = haze + (1.0 - haze) * (1.0 - smoothstep(-6.0, 24.0, vY)) * 0.55; // 산 아랫자락은 안개에 묻힘
+            gl_FragColor = vec4(mix(c, horizon, clamp(fogk, 0.0, 0.95)), 1.0); }`,
+        side: THREE.DoubleSide, fog: false, depthWrite: true,
+      });
+      const m = new THREE.Mesh(geo, mat);
+      m.renderOrder = -9 + li;
+      m.frustumCulled = false;
       this.scene.add(m);
-    }
+      this.ridges.push(mat);
+    });
   }
 
   _fenceRect(x0, z0, x1, z1, { gapZ = null } = {}) {
@@ -567,6 +613,7 @@ export class World {
 
   // ------------------------------------------------------------ 시간
   update(dt, focus = null) {
+    this.focusPos = focus;
     for (const a of this.animated) a.update(dt);
     if (this.groundTime) this.groundTime.value += dt;
     if (focus) {
@@ -613,6 +660,7 @@ export class World {
     for (const m of this.lampMaterials) m.emissiveIntensity = 1 + night * 3;
     const dusk = THREE.MathUtils.clamp(1 - daylight * 1.6, 0, 1);
     for (const m of this.lampGlows || []) m.emissiveIntensity = 0.15 + dusk * 3.2;
+    for (const p of this.lampPools || []) { p.material.opacity = dusk * 0.42; p.visible = dusk > 0.02; }
     this.rim.position.set(fx - Math.cos(sunA) * 50, 25, fz - 35);
     this.rim.target.position.set(fx, 0, fz);
     this.rim.intensity = 0.25 + daylight * 0.45;
@@ -624,6 +672,17 @@ export class World {
     const h = Math.floor(this.time * 24), m = Math.floor((this.time * 24 - h) * 60);
     return `${this.day}일차 ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
+}
+
+/** 가운데가 밝고 가장자리로 부드럽게 사라지는 원 (빛 웅덩이·빛 먼지) */
+export function radialTexture() {
+  if (radialTexture.tex) return radialTexture.tex;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return (radialTexture.tex = t);
 }
 
 /** 프로시저럴 잔디 텍스처 (두 톤 얼룩 + 미세 점) */

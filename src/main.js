@@ -142,6 +142,7 @@ class Game {
     this.renderer.shadowMap.needsUpdate = true;
     this.world.scenery?.setDensity(q.grass);
     if (rebuildPost) {
+      this.world.scenery?._water(); // 반사 연못은 화면 효과가 켜진 품질에서만
       this.postfx.dispose();
       this.postfx = new PostFX(this.renderer, this.world.scene, this.camera, q);
     }
@@ -342,6 +343,15 @@ class Game {
       this.followCam.update(dt, input, this.tractor.riderGroup.position);
     }
     this.cinema.update(dt); // 대화·컷신 연출 카메라 (따라가기 카메라 위에 섞음)
+    // 잔디를 눕히는 위치: 나, 반려견, 트랙터, 가장 가까운 다른 플레이어
+    const pu = this.world.scenery?.pushers?.value;
+    if (pu) {
+      const far = (v) => v.set(9999, 0.01, 9999);
+      if (this.tractor.driving) { const t = this.tractor.riderGroup.position; pu[0].set(t.x, 1.8, t.z); } else pu[0].set(pp.x, 0.85, pp.z);
+      const pe = this.pet.e?.m.position; if (pe) pu[1].set(pe.x, 0.5, pe.z); else far(pu[1]);
+      const tv = this.tractor.vehicle; if (!this.tractor.driving) pu[2].set(tv.x, 1.6, tv.z); else far(pu[2]);
+      const rm = this.net.remote.values().next().value; if (rm) { const q = rm.unico.group.position; pu[3].set(q.x, 0.85, q.z); } else far(pu[3]);
+    }
     this.ui.setPrompt(this.ui.panel ? null : prompt);
     this.net.update(dt);
     this.fx.update(dt);
