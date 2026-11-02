@@ -12,7 +12,7 @@ description: 유니코 팜 저장소의 3D 환경 에셋(Blender bpy 스크립�
 ## 환경 에셋 추가 (blender/build_environment.py)
 1. `C.reset_scene()` 로 시작하는 함수를 만들고 `empty("루트이름")` 아래에 파트를 둔다.
 2. 파트는 `sphere/box/cylinder/cone/segment/torus/prism` 으로 만들고 `join("MeshName", parts, parent=root)` 로 결합한다. 애니메이션이 필요한 파트(바퀴·날개·문)는 결합하지 말고 이름 있는 `empty` 피벗 아래에 둔다 (예: `WheelFL`, `Rotor1`, `Blades`).
-3. `ASSETS` 딕셔너리에 등록 → `python3 blender/build_all.py <이름>` → `public/models/<이름>.glb`, `blender/blend/<이름>.blend`.
+3. `ASSETS` 딕셔너리에 등록 → `python3 blender/build_all.py <이름>` → `public/models/<이름>.glb`, `blender/blend/<이름>.blend` → `npm run models:compress` (meshopt 압축, crops.glb 제외).
 4. 색은 `common.PALETTE` 키 또는 `#rrggbb`. 전방은 Blender -Y (glTF +Z).
 5. 게임에서는 `src/game/assets.js` 의 `ENV_MODELS` 에 이름을 추가하고 `world.place(name, x, z, rotY)` 로 배치한다.
 

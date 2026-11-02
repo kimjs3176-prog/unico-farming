@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Scenery } from './scenery.js';
 import { Precipitation } from './precip.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { enhanceMaterial } from './surface.js';
 
 /** 월드 레이아웃 상수 (m). +X 동쪽, +Z 남쪽, 스폰 (0,0,9) */
 export const LAYOUT = {
@@ -417,30 +418,59 @@ export class World {
     this.sun.position.set(30, 50, 20);
   }
 
-  /** 정적 장식을 재질별 한 메시로 병합 (technical-art: 반복 소품은 묶어서 그리기) */
+  /**
+   * 정적 장식을 한 메시로 병합 (technical-art: 반복 소품은 묶어서 그리기).
+   * 단색 재질은 모델 파일이 달라도 (질감 종류·거칠기·금속성)이 같으면 정점 색으로 한 번에 그림.
+   * 발광·투명·텍스처 재질은 재질 객체별로 따로 (밤 조명 밝기 조절 등).
+   */
   _batchStatic() {
     const buckets = new Map();
+    const plain = (m) => m.isMeshStandardMaterial && !m.map && !m.transparent && !(m.emissive && m.emissive.r + m.emissive.g + m.emissive.b > 0.01);
     for (const o of this.staticObjs) {
       o.updateMatrixWorld(true);
       o.traverse((m) => {
         if (!m.isMesh) return;
-        const key = m.material.uuid;
-        if (!buckets.has(key)) buckets.set(key, { mat: m.material, geos: [] });
-        const g = m.geometry.clone().applyMatrix4(m.matrixWorld);
-        for (const k of Object.keys(g.attributes)) if (!['position', 'normal'].includes(k)) g.deleteAttribute(k);
-        buckets.get(key).geos.push(g.index ? g.toNonIndexed() : g);
+        const mat = m.material, vc = plain(mat);
+        const key = vc ? `vc|${mat.userData.enhanced || 'none'}|${mat.roughness.toFixed(2)}|${mat.metalness.toFixed(2)}|${mat.side}|${mat.toneMapped}` : mat.uuid;
+        if (!buckets.has(key)) buckets.set(key, { mat, vc, geos: [] });
+        let g = m.geometry.clone().applyMatrix4(m.matrixWorld);
+        const src = mat.vertexColors ? g.attributes.color : null;
+        for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'color'].includes(k)) g.deleteAttribute(k);
+        if (g.index) g = g.toNonIndexed();
+        if (!g.attributes.normal) g.computeVertexNormals();
+        if (vc) { // 재질 색 × (있으면) 원래 정점 색
+          const n = g.attributes.position.count, arr = new Float32Array(n * 3), c = mat.color;
+          const sc = mat.vertexColors && g.attributes.color;
+          for (let i = 0; i < n; i++) {
+            arr[i * 3] = c.r * (sc ? sc.getX(i) : 1); arr[i * 3 + 1] = c.g * (sc ? sc.getY(i) : 1); arr[i * 3 + 2] = c.b * (sc ? sc.getZ(i) : 1);
+          }
+          g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+        } else if (!src) g.deleteAttribute('color');
+        buckets.get(key).geos.push(g);
       });
       this.scene.remove(o);
     }
-    for (const { mat, geos } of buckets.values()) {
+    let n = 0;
+    for (const { mat, vc, geos } of buckets.values()) {
       const merged = mergeGeometries(geos, false);
-      if (!merged) continue;
-      const mesh = new THREE.Mesh(merged, mat);
+      if (!merged) { console.warn('정적 병합 실패:', mat.name, geos.length); continue; }
+      let material = mat;
+      if (vc) {
+        material = mat.clone();
+        material.color.set(0xffffff);
+        material.vertexColors = true;
+        const kind = mat.userData.enhanced;
+        material.userData = {};
+        if (kind) enhanceMaterial(material, kind);
+      }
+      const mesh = new THREE.Mesh(merged, material);
       mesh.castShadow = mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
       this.scene.add(mesh);
+      n++;
     }
     this.staticObjs = [];
+    this.batchCount = n;
   }
 
   /** 표지판(sign 모델) 앞면에 글자 붙이기 — 위 판: 큰 글씨, 아래 판: 작은 글씨 */

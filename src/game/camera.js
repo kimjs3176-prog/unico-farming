@@ -19,10 +19,11 @@ export class FollowCamera {
       this.pitch = THREE.MathUtils.clamp(this.pitch + input.drag.dy * 0.004, 0.15, 1.2);
       this.distance = THREE.MathUtils.clamp(this.distance + input.wheel * 0.01, 4, 18);
     }
-    this.target.copy(targetPos).add(new THREE.Vector3(0, 1.1, 0));
+    this.target.copy(targetPos);
+    this.target.y += 1.1;
     if (this.first) { this.smooth.copy(this.target); this.first = false; }
     this.smooth.lerp(this.target, 1 - Math.pow(0.001, dt));
-    const off = new THREE.Vector3(
+    const off = (this._off ||= new THREE.Vector3()).set(
       Math.sin(this.yaw) * Math.cos(this.pitch),
       Math.sin(this.pitch),
       Math.cos(this.yaw) * Math.cos(this.pitch),

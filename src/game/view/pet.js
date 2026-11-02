@@ -42,7 +42,7 @@ export class Pet {
     this.vel += (want - this.vel) * Math.min(1, dt * 5);
     if (this.vel > 0.05 && d > 0.6) {
       const step = this.vel * dt;
-      const next = new THREE.Vector3(p.x + (dx / d) * step, 0, p.z + (dz / d) * step);
+      const next = (this._next ||= new THREE.Vector3()).set(p.x + (dx / d) * step, 0, p.z + (dz / d) * step);
       this.game.world.resolveCollision(next, 0.3);
       p.copy(next);
       const yaw = Math.atan2(dx, dz);

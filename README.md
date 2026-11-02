@@ -107,7 +107,7 @@ python3 blender/build_all.py                          # 환경 에셋 24종 → 
 
 Blender 실행파일로도 가능합니다: `blender -b -P blender/build_all.py -- tractor cow`
 
-외부 CC0 에셋(`public/models/q_*.glb`)은 원본 FBX/glTF 를 받아 `blender/import_cc0.py`(묶기) → `scripts/optimize-cc0.mjs`(재색칠·meshopt 압축) 순서로 만듭니다. 절차는 [docs/ASSETS_CC0.md](docs/ASSETS_CC0.md).
+Blender 로 다시 만든 뒤에는 `npm run models:compress` 로 압축합니다(1.4MB → 0.6MB). 외부 CC0 에셋(`public/models/q_*.glb`)은 원본 FBX/glTF 를 받아 `blender/import_cc0.py`(묶기) → `scripts/optimize-cc0.mjs`(재색칠·meshopt 압축) 순서로 만듭니다. 절차는 [docs/ASSETS_CC0.md](docs/ASSETS_CC0.md).
 
 ### 테스트 / 밸런스 점검
 
@@ -127,7 +127,7 @@ node scripts/balance.mjs   # 자원 유입·분당 수익·지배 전략·차익
 | Cloudflare Workers + Durable Objects 무료 플랜 (`deploy/cloudflare/`) | 방당 50명, 하루 약 100 플레이어·시간 | 일일 요청 한도(약 10만 요청, WebSocket 메시지 20개=1요청) 기준 추정. 유료 $5/월이면 약 100배 |
 | Vercel 무료 | 클라이언트만 | 서버리스는 WebSocket 상시 연결 불가 → 클라이언트는 Vercel, 서버는 Cloudflare/Fly.io/Render 등에 분리 |
 
-**렌더링 수치** (1280×800, 스폰 화면, 그림자 패스 포함): 고사양 드로우콜 약 990 · 삼각형 약 150만 · 그림자맵 3072, 저사양(모바일 자동) 드로우콜 약 590 · 삼각형 약 73만 · 그림자맵 1024·3프레임마다 갱신. 애니메이션 동물은 재질을 정점 색으로 구워 1마리당 한 번에 그립니다. 움직이지 않는 장식은 재질별로 병합하고, 캐릭터는 몸 전체가 한 번에 그려집니다.
+**렌더링 수치** (1280×800, 스폰 화면, 그림자 패스 포함): 고사양 드로우콜 약 810 · 삼각형 약 150만 · 그림자맵 3072, 저사양(모바일 자동) 드로우콜 약 510 · 삼각형 약 74만 · 그림자맵 1024·3프레임마다 갱신. 움직이지 않는 장식은 모델이 달라도 질감 종류가 같으면 정점 색으로 한 번에 그리고(재질 묶음 24개), 트랙터·닭·드론·체험관 부스 같은 움직이는 모델도 부품을 합치며, 애니메이션 동물은 1마리당 한 번에 그립니다. 모델 파일은 모두 meshopt 압축(약 3.5MB, 농작물 모델 제외). 움직이지 않는 장식은 재질별로 병합하고, 캐릭터는 몸 전체가 한 번에 그려집니다.
 
 수천 명 규모가 필요하면 Colyseus 같은 룸 서버나 서버 수평 확장(방을 서버별로 분산)이 필요합니다. 자세한 배포 절차는 [docs/DEPLOY.md](docs/DEPLOY.md) 참고.
 

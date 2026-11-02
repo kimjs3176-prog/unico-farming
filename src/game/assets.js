@@ -3,7 +3,15 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { loadUnicoMesh } from './unico.js';
-import { enhanceMaterial } from './surface.js';
+import { enhanceMaterial, kindOf } from './surface.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+/** 부품이 많은 움직이는 모델: 같은 부모 아래 같은 질감 종류의 부품을 정점 색으로 합쳐 그리기 횟수 감소 */
+const MERGE_PARTS = new Set(['hen', 'tractor', 'booth', 'koat_hq', 'drone', 'planter', 'thresher', 'smartfarm']);
+/** 작거나 멀리 보이는 모델: 질감 종류와 관계없이 부모별로 한 덩어리 (가장 큰 부품의 재질 질감을 따름) */
+const MERGE_LOOSE = new Set(['hen', 'drone', 'planter', 'booth']);
+/** 코드가 이름으로 찾아 따로 움직이거나 색을 바꾸는 부품 — 합치지 않음 */
+const KEEP_PART = /^(SignBoard|RoofTint|SensorPole|Canopy|Fruit|Blades|Rotor|Wheel|Steer|Plow|Drum)/;
 
 /** 블렌더에서 생성한 환경 GLB 목록 (public/models). 캐릭터 유니코는 src/game/unico.js 에서 코드로 생성 */
 export const ENV_MODELS = [
@@ -70,6 +78,8 @@ export class Assets {
       ...ENV_MODELS.map(async (n) => {
         try {
           const gltf = await this.loader.loadAsync(`${BASE}${n}.glb`);
+          gltf.scene.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh) dequantize(o.geometry); }); // 합치기 전에 압축 좌표 풀기
+          if (MERGE_PARTS.has(n)) mergeSiblings(gltf.scene, MERGE_LOOSE.has(n));
           prepare(gltf.scene);
           this.scenes.set(n, gltf.scene);
         } catch (e) {
@@ -132,6 +142,53 @@ function prepare(scene, { fur = false, spots = null } = {}) {
     o.castShadow = true;
     o.receiveShadow = true;
   });
+}
+
+/**
+ * 같은 부모 아래 단색 메시들을 (질감 종류·거칠기)별로 묶어 하나의 정점 색 메시로 합침.
+ * 이름으로 쓰이는 부품(KEEP_PART)과 그 하위, 발광·투명·텍스처 재질은 그대로 둠.
+ */
+export function mergeSiblings(root, loose = false) {
+  const keep = (o) => { for (let p = o; p && p !== root; p = p.parent) if (KEEP_PART.test(p.name)) return true; return false; };
+  const parents = new Set();
+  root.traverse((o) => { if (o.isMesh && o.parent) parents.add(o.parent); });
+  let merged = 0;
+  for (const parent of parents) {
+    const buckets = new Map();
+    for (const c of parent.children) {
+      const m = c.material;
+      if (!c.isMesh || c.isSkinnedMesh || c.children.length || keep(c) || !m?.isMeshStandardMaterial || m.map || m.transparent || m.vertexColors) continue;
+      if (m.emissive && m.emissive.r + m.emissive.g + m.emissive.b > 0.01) continue;
+      const key = loose ? `${m.side}` : `${kindOf(m.name)}|${(m.roughness ?? 1).toFixed(1)}|${(m.metalness ?? 0).toFixed(1)}|${m.side}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(c);
+    }
+    for (const list of buckets.values()) {
+      if (list.length < 2) continue;
+      const geos = list.map((c) => {
+        c.updateMatrix();
+        let g = c.geometry.clone().applyMatrix4(c.matrix);
+        for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+        if (g.index) g = g.toNonIndexed();
+        const col = c.material.color, n = g.attributes.position.count, arr = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) { arr[i * 3] = col.r; arr[i * 3 + 1] = col.g; arr[i * 3 + 2] = col.b; }
+        g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+        return g;
+      });
+      const geo = mergeGeometries(geos, false);
+      if (!geo) continue;
+      const main = list.reduce((a, c) => (c.geometry.attributes.position.count > a.geometry.attributes.position.count ? c : a));
+      const mat = main.material.clone();
+      mat.color.set(0xffffff);
+      mat.vertexColors = true;
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.name = `${main.name}_merged`;
+      for (const c of list) parent.remove(c);
+      parent.add(mesh);
+      merged += list.length - 1;
+    }
+  }
+  return merged;
 }
 
 /** meshopt 양자화(Int16 정규화) 속성을 Float32 로 풀기 — 정적 병합(applyMatrix4/merge)과 호환 */
