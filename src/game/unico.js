@@ -471,13 +471,19 @@ export class Unico {
     const walking = this.moving || speed > 0.3;
     this.walkBlend += ((walking ? 1 : 0) - this.walkBlend) * (1 - Math.exp(-dt * 10)); // 프레임 속도와 무관한 감쇠
     const LEG_LEN = this.legLen, BODY_Y = this.bodyY, bp = this.biped;
-    const AMP = bp ? 0.55 : 0.5; // 다리 최대 각도(rad)
+    // 이등신 종종걸음: 다리가 짧아 보폭만큼 정확히 디디면 초당 7번 넘게 다리를 휘저어 떨려 보이므로
+    // 걸음 수(케이던스)를 초당 1.5~3회로 제한하고, 빠를수록 다리를 크게 벌림 (발이 약간 미끄러지는 대신 자연스러운 리듬)
+    const sp01 = Math.min(1, speed / 4.6);
+    const ampT = bp ? 0.38 + 0.32 * sp01 : 0.42 + 0.18 * sp01; // 다리 최대 각도(rad)
+    this.walkAmp = (this.walkAmp ?? ampT) + (ampT - (this.walkAmp ?? ampT)) * (1 - Math.exp(-dt * 6));
+    const AMP = this.walkAmp;
     const stride = 2 * LEG_LEN * Math.sin(AMP); // 반주기 동안 디딘 발이 미는 거리
-    if (walking) this.walkPhase += (Math.max(speed, 1.2) / stride) * Math.PI * dt;
+    const cadence = THREE.MathUtils.clamp(Math.max(speed, 1.2) / (2 * stride), 1.5, bp ? 3.0 : 3.2); // 초당 걸음 주기
+    if (walking) this.walkPhase += TWO_PI * cadence * dt;
     const w = this.walkBlend, ph = this.walkPhase;
     const sw = Math.sin(ph) * AMP * w;
     const legs = this.legs, arms = this.arms;
-    const lift = Math.max(0, Math.cos(ph)) * 0.14 * w, lift2 = Math.max(0, -Math.cos(ph)) * 0.14 * w;
+    const lift = 0, lift2 = 0; // 다리 길이를 줄였다 늘리지 않음 (고무처럼 보임)
     for (const l of legs) l.rotation.set(0, 0, 0);
     if (bp) {
       // 두 발: 좌우 다리 교차, 팔은 반대로 흔들기
@@ -485,7 +491,7 @@ export class Unico {
       L.rotation.x = sw; Rl.rotation.x = -sw;
       L.scale.y = 1 - lift; Rl.scale.y = 1 - lift2;
       const [AL, AR] = arms;
-      AL.rotation.set(-sw * 0.9, 0, -0.12 * w); AR.rotation.set(sw * 0.9, 0, 0.12 * w);
+      AL.rotation.set(-sw * 0.85, 0, -0.14 * w); AR.rotation.set(sw * 0.85, 0, 0.14 * w);
       // 대기: 팔이 숨쉬듯 살짝
       if (w < 0.5) { const br = Math.sin(this.t * 2.1) * 0.04; AL.rotation.z -= br; AR.rotation.z += br; }
     } else {
@@ -496,13 +502,15 @@ export class Unico {
       FR.scale.y = BL.scale.y = 1 - lift2;
     }
     // 다리가 기울면 발끝 높이가 L(1-cosθ) 만큼 올라가므로 그만큼 몸을 내려 발을 땅에 붙임
-    const bob = -LEG_LEN * (1 - Math.cos(sw)) + (bp ? Math.abs(Math.sin(ph)) * 0.025 * w : 0);
+    // 다리를 벌리면 골반이 내려가고(발이 땅에 붙게), 한 발로 디디는 중간에는 살짝 튀어 오름 → 걸음마다 통통
+    const bob = -LEG_LEN * (1 - Math.cos(sw)) * (bp ? 0.65 : 1) + (bp ? Math.abs(Math.cos(ph)) * 0.018 * w * (0.5 + sp01) : 0);
     const s = Math.sin(ph);
     if (walking && Math.sign(s) !== Math.sign(this.lastSin)) this.onStep?.(pos.x, pos.z);
     this.lastSin = s;
 
-    let bodyY = BODY_Y + bob, bodyPitch = Math.sin(ph * 2) * 0.03 * w + (bp ? 0.06 * w : 0), bodyRoll = bp ? Math.sin(ph) * 0.05 * w : 0;
-    let headPitch = Math.sin(ph * 2 + 0.5) * 0.06 * w, headRoll = 0;
+    // 몸: 빠를수록 앞으로 기울고, 디딘 발 쪽으로 살짝 기우뚱. 머리는 몸의 흔들림을 반쯤 상쇄(시선 안정)
+    let bodyY = BODY_Y + bob, bodyPitch = Math.sin(ph * 2) * 0.025 * w + (bp ? (0.04 + 0.06 * sp01) * w : 0), bodyRoll = bp ? Math.sin(ph) * 0.045 * w : 0;
+    let headPitch = -Math.sin(ph * 2) * 0.02 * w - (bp ? 0.04 * sp01 * w : 0), headRoll = -bodyRoll * 0.5;
     const breath = Math.sin(this.t * 2.1) * 0.012 * (1 - w); // 숨쉬기: 가슴이 살짝 오르내림
     bodyY += breath;
     // 대기 중 두리번
