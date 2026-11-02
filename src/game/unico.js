@@ -310,6 +310,9 @@ export class Unico {
     this.bodyG = boneMap.body;
     this.headG = boneMap.head;
     this.tailG = boneMap.tail;
+    // 꼬리 사슬·갈기 (스프링 2차 동작). 예전 메시(뼈 없음)여도 동작하도록 있는 것만
+    this.tailChain = [boneMap.tail, boneMap.tail2, boneMap.tail3].filter(Boolean);
+    this.maneBones = [boneMap.maneH, boneMap.maneN].filter(Boolean);
     this.legs = this.biped ? [boneMap.legL, boneMap.legR] : [boneMap.legFL, boneMap.legFR, boneMap.legBL, boneMap.legBR];
     this.arms = this.biped ? [boneMap.armL, boneMap.armR] : [];
     this.root.updateMatrixWorld(true);
@@ -434,7 +437,49 @@ export class Unico {
 
   /** 자세 전환(감정표현 시작·끝, 트랙터 타고 내리기) 때 뼈 각도를 이전 자세에서 부드럽게 이어 줄 대상 */
   _poseBones() {
-    return this._pb ||= [this.bodyG, this.headG, this.tailG, ...this.legs, ...this.arms];
+    return this._pb ||= [this.bodyG, this.headG, ...this.legs, ...this.arms];
+  }
+
+  /**
+   * 꼬리·갈기 2차 동작: 몸의 회전·가감속·위아래 움직임을 늦게 따라가는 감쇠 스프링.
+   * 꼬리는 뿌리 → 중간 → 끝으로 갈수록 한 박자씩 늦게 휘어 채찍처럼 물결치고,
+   * 갈기는 출발·정지·점프 때 뒤로 쏠렸다 돌아오며 방향을 틀면 바깥으로 휘날림.
+   */
+  _secondary(dt, { speed, w, ph, bodyY, bodyRoll, tailBase }) {
+    if (!this.tailChain.length || dt <= 0) return;
+    const clamp = THREE.MathUtils.clamp;
+    // 몸의 움직임 측정 (프레임 사이 변화)
+    const yawRate = wrap(this.yaw - (this._sYaw ?? this.yaw)) / dt; this._sYaw = this.yaw;
+    const acc = (speed - (this._sSpd ?? speed)) / dt; this._sSpd = speed;
+    const wy = this.group.position.y + bodyY, vy = (wy - (this._sY ?? wy)) / dt; this._sY = wy;
+    this._accS = (this._accS ?? 0) + (clamp(acc, -40, 40) - (this._accS ?? 0)) * (1 - Math.exp(-dt * 12)); // 튀는 값 완화
+    const turn = clamp(-yawRate * 0.11, -0.7, 0.7), lag = clamp(-this._accS * 0.035, -0.45, 0.45), bounce = clamp(-vy * 0.35, -0.5, 0.5);
+    const sp = (this._springs ||= { tail: this.tailChain.map(() => ({ x: 0, vx: 0, y: 0, vy: 0 })), mane: this.maneBones.map(() => ({ x: 0, vx: 0, z: 0, vz: 0 })) });
+    // 반동 있는 스프링 (감쇠비 약 0.35~0.45), 큰 dt 는 나눠서 적분해 안정
+    const steps = Math.min(4, Math.ceil(dt / (1 / 60))), h = dt / steps;
+    const spring = (st, key, target, k, c) => { const v = 'v' + key; for (let i = 0; i < steps; i++) { st[v] += (k * (target - st[key]) - c * st[v]) * h; st[key] += st[v] * h; } };
+    // 꼬리: 걸을 때 엉덩이 따라 좌우로 살랑, 가만히 있으면 느긋하게 흔들
+    const swish = Math.sin(ph) * 0.22 * w + Math.sin(this.t * 1.7) * 0.12 * (1 - w);
+    let parentY = 0, parentX = 0;
+    this.tailChain.forEach((b, i) => {
+      const st = sp.tail[i];
+      const tx = (i === 0 ? tailBase - 0.06 * w + lag + bounce + Math.sin(this.t * 1.3) * 0.04 : 0) + parentX * 0.55;
+      const ty = (i === 0 ? turn + swish : 0) + parentY * 0.6;
+      spring(st, 'x', tx, 95 - i * 15, 7.5 - i);
+      spring(st, 'y', ty, 85 - i * 15, 7 - i);
+      st.x = clamp(st.x, -1.1, 1.1); st.y = clamp(st.y, -1.1, 1.1);
+      b.rotation.set(st.x, st.y, 0);
+      parentX = st.x; parentY = st.y;
+    });
+    // 갈기: 뒤통수·목덜미가 살짝 늦게 출렁
+    this.maneBones.forEach((b, i) => {
+      const st = sp.mane[i];
+      const tx = clamp(lag * 0.6 + bounce * 0.5 + Math.sin(ph * 2) * 0.05 * w, -0.35, 0.35);
+      const tz = clamp(-turn * 0.35 - bodyRoll * 0.8 + Math.sin(this.t * 1.1 + i) * 0.03, -0.35, 0.35);
+      spring(st, 'x', tx, 140, 9);
+      spring(st, 'z', tz, 130, 9);
+      b.rotation.set(st.x, 0, st.z);
+    });
   }
 
   update(dt, camera) {
@@ -519,7 +564,7 @@ export class Unico {
     } else this.lookYaw *= Math.exp(-dt * 6);
     let headYaw = this.lookYaw;
     // 꼬리
-    this.tailG.rotation.set(Math.sin(this.t * 1.7) * 0.08 - 0.05 * w, Math.sin(this.t * (2.2 + w * 4)) * (0.25 + 0.2 * w), 0);
+    let tailBase = 0; // 꼬리 뿌리 기본 각도 (탑승 시 들어 올림)
 
     // ---- 감정표현 ----
     if (this.action) {
@@ -572,18 +617,19 @@ export class Unico {
         bodyPitch = 0;
         for (const l of legs) { l.rotation.x = -1.4; l.scale.y = 1; }
         arms[0].rotation.set(-1.15, 0, 0.35); arms[1].rotation.set(-1.15, 0, -0.35);
-        this.tailG.rotation.x = 0.4;
+        tailBase = 0.4;
       } else {
         bodyY = BODY_Y - 0.28;
         bodyPitch = -0.25;
         legs[0].rotation.x = legs[1].rotation.x = -1.2;
         legs[2].rotation.x = legs[3].rotation.x = -1.45;
-        this.tailG.rotation.x = 0.6;
+        tailBase = 0.6;
       }
     }
     this.bodyG.position.y = bodyY;
     this.bodyG.rotation.set(bodyPitch, 0, bodyRoll);
     this.headG.rotation.set(headPitch, headYaw, headRoll);
+    this._secondary(dt, { speed, w, ph, bodyY, bodyRoll, tailBase });
     // ---- 자세 전환 보간: 감정표현·탑승 상태가 바뀌면 0.3초 동안 이전 자세에서 새 자세로 이어 줌 ----
     // (걷기 주기 자체에는 걸지 않아 발 디딤 타이밍은 그대로)
     const poseKey = `${this.action || ''}|${this.riding ? 1 : 0}`;

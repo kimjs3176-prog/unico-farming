@@ -22,14 +22,17 @@ export const BONES = ['body', 'head', 'legFL', 'legFR', 'legBL', 'legBR', 'tail'
 export const RIGS = {
   quad: {
     bones: [['body', null, [0, 0.8, 0]], ['head', 'body', [0, 0.78, 0.66]], ['legFL', 'body', [-0.25, -0.2, 0.36]], ['legFR', 'body', [0.25, -0.2, 0.36]],
-      ['legBL', 'body', [-0.25, -0.2, -0.38]], ['legBR', 'body', [0.25, -0.2, -0.38]], ['tail', 'body', [0, 0.12, -0.56]]],
+      ['legBL', 'body', [-0.25, -0.2, -0.38]], ['legBR', 'body', [0.25, -0.2, -0.38]], ['tail', 'body', [0, 0.12, -0.56]],
+      // 꼬리 사슬(뿌리→중간→끝)과 갈기(뒤통수·목덜미): 스프링으로 따라 움직이는 2차 동작용
+      ['tail2', 'tail', [0, 0.28, -0.25]], ['tail3', 'tail2', [0, 0.16, 0.04]], ['maneH', 'head', [0, 0.2, -0.3]], ['maneN', 'body', [0, 0.62, 0.42]]],
     legLen: 0.6, headR: 0.42, bounds: [[-0.66, -0.03, -1.02], [0.66, 2.2, 1.28]],
     face: null,
   },
   // 이등신: 머리 높이 ≈ 몸통+다리 높이. 머리 중심 1.3m, 정수리 1.72m
   biped: {
     bones: [['body', null, [0, 0.38, 0]], ['head', 'body', [0, 0.92, 0.04]], ['legL', 'body', [-0.14, -0.06, 0]], ['legR', 'body', [0.14, -0.06, 0]],
-      ['armL', 'body', [-0.27, 0.44, 0.02]], ['armR', 'body', [0.27, 0.44, 0.02]], ['tail', 'body', [0, 0.04, -0.25]]],
+      ['armL', 'body', [-0.27, 0.44, 0.02]], ['armR', 'body', [0.27, 0.44, 0.02]], ['tail', 'body', [0, 0.04, -0.25]],
+      ['tail2', 'tail', [0, 0, -0.3]], ['tail3', 'tail2', [0, 0.13, -0.06]], ['maneH', 'head', [0, 0.3, -0.25]], ['maneN', 'body', [0, 0.62, -0.22]]],
     legLen: 0.32, headR: 0.44, bounds: [[-0.7, -0.03, -0.82], [0.7, 1.88, 0.86]],
     // 얼굴 배치 (머리 중심 기준): 주둥이 중심, 눈 방향, 볼 방향
     face: { snout: [0, -0.17, 0.3], eye: [0.36, 0.13, 0.92], cheek: [0.7, -0.22, 0.66], horn: [0, 1, 0.3], ear: [0.24, 0.38, -0.04] },
@@ -43,7 +46,7 @@ export function bonePos(rig, name) {
 }
 export const SLOTS = ['body', 'snout', 'mane', 'maneD', 'hoof'];
 /** 관절 경계 폭(m): 작을수록 단단한 관절. 팔은 아주 좁게 (몸통이 따라 늘어나지 않게) */
-const SIGMA = { armL: 0.01, armR: 0.01, legL: 0.018, legR: 0.018, head: 0.03, tail: 0.02, body: 0.035 };
+const SIGMA = { armL: 0.01, armR: 0.01, legL: 0.018, legR: 0.018, head: 0.03, tail: 0.02, tail2: 0.02, tail3: 0.02, maneH: 0.025, maneN: 0.025, body: 0.035 };
 
 const B = new THREE.Vector3(0, BODY_Y, 0);
 const H = B.clone().add(HEAD_AT); // 머리 중심 (월드, 루트 기준)
@@ -121,12 +124,12 @@ function primitives() {
   });
   // 갈기: 정수리 → 뒤통수 → 목 뒤로 흐르는 곱슬 (머리/몸통 뼈)
   const headMane = [[0, 0.37, -0.1, 0.17], [0, 0.25, -0.29, 0.17], [0, 0.06, -0.38, 0.16], [0.14, 0.33, 0.17, 0.1], [0.03, 0.39, 0.1, 0.095], [-0.12, 0.34, 0.03, 0.09]];
-  headMane.forEach(([x, y, z, r], i) => push(sph(add(H, [x, y, z]), r), 0.05, i % 2 ? 'maneD' : 'mane', 'head'));
+  headMane.forEach(([x, y, z, r], i) => push(sph(add(H, [x, y, z]), r), 0.05, i % 2 ? 'maneD' : 'mane', i === 1 || i === 2 ? 'maneH' : 'head'));
   const neckMane = [[0, 0.7, 0.46, 0.15], [0, 0.56, 0.38, 0.15], [0, 0.42, 0.3, 0.14], [0, 0.29, 0.22, 0.12]];
-  neckMane.forEach(([x, y, z, r], i) => push(sph(add(B, [x, y, z]), r), 0.05, i % 2 ? 'maneD' : 'mane', 'body'));
+  neckMane.forEach(([x, y, z, r], i) => push(sph(add(B, [x, y, z]), r), 0.05, i % 2 ? 'maneD' : 'mane', 'maneN'));
   // 꼬리: 엉덩이에서 뒤로 나와 위로 말림
   const tail = [[0, 0, -0.06, 0.13], [0, 0.11, -0.19, 0.145], [0, 0.28, -0.25, 0.13], [0, 0.44, -0.21, 0.105], [0, 0.55, -0.12, 0.075]];
-  tail.forEach(([x, y, z, r], i) => push(sph(add(T, [x, y, z]), r), i === 0 ? 0.08 : 0.05, i % 2 ? 'maneD' : 'mane', 'tail'));
+  tail.forEach(([x, y, z, r], i) => push(sph(add(T, [x, y, z]), r), i === 0 ? 0.08 : 0.05, i % 2 ? 'maneD' : 'mane', ['tail', 'tail', 'tail2', 'tail3', 'tail3'][i]));
   return P;
 }
 
@@ -155,12 +158,12 @@ function primitivesBiped() {
   }
   // 갈기: 정수리 곱슬 → 뒤통수 → 등
   const headMane = [[0, 0.38, -0.1, 0.16], [0, 0.26, -0.3, 0.16], [0, 0.06, -0.4, 0.15], [0.13, 0.36, 0.15, 0.1], [0.03, 0.41, 0.08, 0.095], [-0.12, 0.37, 0.02, 0.09]];
-  headMane.forEach(([x, y, z, r], i) => push(sph(add(Hb, [x, y, z]), r), 0.06, i % 2 ? 'maneD' : 'mane', 'head'));
+  headMane.forEach(([x, y, z, r], i) => push(sph(add(Hb, [x, y, z]), r), 0.06, i % 2 ? 'maneD' : 'mane', i === 1 || i === 2 ? 'maneH' : 'head'));
   [[0, 0.98, -0.26, 0.12], [0, 0.84, -0.27, 0.11], [0, 0.71, -0.26, 0.09]]
-    .forEach(([x, y, z, r], i) => push(sph([x, y, z], r), 0.06, i % 2 ? 'maneD' : 'mane', 'body'));
+    .forEach(([x, y, z, r], i) => push(sph([x, y, z], r), 0.06, i % 2 ? 'maneD' : 'mane', 'maneN'));
   // 꼬리: 엉덩이 뒤에서 뒤·위로 말림
   [[0, 0.4, -0.31, 0.09], [0, 0.36, -0.43, 0.1], [0, 0.42, -0.55, 0.095], [0, 0.55, -0.61, 0.08], [0, 0.68, -0.59, 0.06]]
-    .forEach(([x, y, z, r], i) => push(sph([x, y, z], r), i === 0 ? 0.07 : 0.05, i % 2 ? 'maneD' : 'mane', 'tail'));
+    .forEach(([x, y, z, r], i) => push(sph([x, y, z], r), i === 0 ? 0.07 : 0.05, i % 2 ? 'maneD' : 'mane', ['tail', 'tail', 'tail2', 'tail3', 'tail3'][i]));
   return P;
 }
 
