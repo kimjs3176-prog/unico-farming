@@ -88,7 +88,7 @@ export class Pests {
       if (p.state === 'gone') { g.world.scene.remove(p.root); this.list.splice(this.list.indexOf(p), 1); continue; }
       if (p.state === 'flee') continue;
       const d = Math.hypot(p.root.position.x - pp.x, p.root.position.z - pp.z);
-      if (d < 3.6 && (!best || d < best.d)) best = { d: Math.min(0.2, d - 1), label: `👋 ${p.name} 쫓아내기`, key: 'shoo', onInteract: () => this.shoo(p) };
+      if (d < 3.6 && (!best || d < best.d)) best = { d: -0.5 + d * 0.01, label: `👋 ${p.name} 쫓아내기`, key: 'shoo', onInteract: () => this.shoo(p) };
     }
     return best;
   }
