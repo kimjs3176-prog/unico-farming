@@ -8,6 +8,7 @@ export function saveGame(game) {
       rice: game.rice.toJSON(), nature: game.nature.toJSON(), villagers: game.villagers.toJSON(), collection: game.collection.toJSON(), koat: game.koat.toJSON(),
       world: { time: game.world.time, day: game.world.day },
       player: { x: game.player.position.x, z: game.player.position.z },
+      flags: game.flags || {},
     };
     localStorage.setItem(KEY, JSON.stringify(data));
     return true;

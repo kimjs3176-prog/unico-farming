@@ -591,6 +591,10 @@ export class Unico {
           }
           break;
         }
+        case 'talk': // 말하기: 고개를 끄덕이며 한 손으로 손짓
+          headPitch = Math.sin(a * 7) * 0.07 - 0.04; headRoll = Math.sin(a * 2.6) * 0.07;
+          if (bp) AR.rotation.set(-0.55 + Math.sin(a * 4.5) * 0.18, 0, 0.3);
+          break;
         case 'heart': // 두 손을 가슴 앞에 모으고 흔들흔들
           headRoll = Math.sin(a * 5) * 0.25; bodyRoll = Math.sin(a * 5) * 0.06;
           if (bp) { AL.rotation.set(-1.2, 0, 0.55); AR.rotation.set(-1.2, 0, -0.55); }

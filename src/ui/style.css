@@ -264,3 +264,39 @@ button:disabled { opacity: 0.45; cursor: default; }
 .gfx-row.check { gap: 8px; }
 .gfx-row.check input { width: 18px; height: 18px; accent-color: var(--teal); }
 .gfx-tip { font-size: 13px; opacity: 0.8; margin: 10px 2px 0; }
+
+/* 대화창 */
+.dlg { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(94vw, 760px); display: flex; gap: 14px; align-items: stretch;
+  background: var(--panel); border: 4px solid var(--panel-edge); border-radius: 26px; padding: 14px 18px 14px 14px; box-shadow: var(--shadow); color: var(--brown);
+  animation: dlgin 0.28s cubic-bezier(.3,1.4,.5,1); z-index: 30; }
+.dlg.hidden { display: none; }
+@keyframes dlgin { from { opacity: 0; transform: translate(-50%, 24px) scale(0.96); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+.dlg-portrait { flex: 0 0 auto; width: 112px; height: 112px; border-radius: 20px; overflow: hidden; border: 3px solid var(--dlg-accent, #30b6aa); background: #cfe9f7; align-self: center; }
+.dlg-portrait canvas { width: 100%; height: 100%; display: block; }
+.dlg-main { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; }
+.dlg-name { display: flex; align-items: baseline; gap: 8px; margin: -30px 0 6px; }
+.dlg-name b { background: var(--dlg-accent, #30b6aa); color: #fff; font-family: Jua, sans-serif; font-weight: normal; font-size: 19px; padding: 4px 14px; border-radius: 14px; box-shadow: 0 3px 0 rgba(0,0,0,0.12); }
+.dlg-name small { font-size: 14px; opacity: 0.85; }
+.dlg-text { font-size: 19px; line-height: 1.55; min-height: 60px; white-space: pre-wrap; word-break: keep-all; }
+.dlg-next { position: absolute; right: 2px; bottom: -2px; font-style: normal; color: var(--dlg-accent, #30b6aa); opacity: 0; }
+.dlg.done:not(.has-choices) .dlg-next { opacity: 1; animation: dlgnext 0.8s ease-in-out infinite; }
+@keyframes dlgnext { 50% { transform: translateY(4px); } }
+.dlg-choices { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.dlg-choices:empty { display: none; }
+.dlg-choices button { text-align: left; font-size: 15px; padding: 8px 12px; background: var(--cream); color: var(--brown); border: 2px solid var(--panel-edge); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dlg-choices button:hover:not(:disabled) { border-color: var(--dlg-accent, #30b6aa); background: #fff; }
+.dlg-choices button:disabled { opacity: 0.5; }
+.dlg-choices .k { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: var(--dlg-accent, #30b6aa); color: #fff; font-size: 13px; }
+.dlg-choices small { width: 100%; padding-left: 30px; opacity: 0.7; font-size: 12px; }
+@media (max-width: 600px) { .dlg { bottom: 150px; padding: 10px 12px; gap: 10px; } .dlg-portrait { width: 76px; height: 76px; } .dlg-text { font-size: 16px; } }
+
+/* 컷신: 위아래 영화 띠 + 건너뛰기, 컷신 중에는 HUD 숨김 */
+.cine-bars { position: absolute; inset: 0; pointer-events: none; z-index: 25; }
+.cine-bars i { position: absolute; left: 0; right: 0; height: 0; background: #14100e; transition: height 0.6s cubic-bezier(.4,0,.2,1); }
+.cine-bars .top { top: 0; } .cine-bars .bot { bottom: 0; }
+.cine-skip { position: absolute; right: 18px; top: 18px; pointer-events: auto; opacity: 0; transition: opacity 0.4s; background: rgba(255,255,255,0.18); color: #fff; border: 1px solid rgba(255,255,255,0.35); font-size: 13px; padding: 6px 12px; }
+body.cine .cine-bars i { height: 9vh; }
+body.cine .cine-skip { opacity: 1; }
+body.cine .cine-skip:hover { background: rgba(255,255,255,0.3); }
+body.cine .hud-top, body.cine .actionbar, body.cine .chat, body.cine .minimap, body.cine .objective, body.cine .prompt, body.cine .fps-chip, body.cine .touch-btn { opacity: 0; pointer-events: none; transition: opacity 0.4s; }
+body.cine .dlg { bottom: calc(9vh + 14px); }

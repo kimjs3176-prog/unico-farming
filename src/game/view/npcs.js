@@ -5,6 +5,9 @@ import { VILLAGERS } from '../sim/villagers.js';
 import { CROPS } from '../sim/crops.js';
 
 const ROLE_ICON = { merchant: '🛒', researcher: '🔬', guide: '📣', granny: '🌾', kid: '🦋' };
+/** 대화창 이름표 색 (역할별) */
+const NPC_COLOR = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a07e5c', kid: '#f28bb0' };
+const BYE = { merchant: '좋은 거래였어! 또 와~', researcher: '데이터가 쌓이면 또 알려 줄게!', guide: '궁금한 거 있으면 언제든 불러 줘!', granny: '조심히 가거라, 아가.', kid: '다음에 또 같이 놀자!' };
 
 const OUTFITS = {
   merchant: { hat: 'straw', scarf: 'red' },
@@ -85,16 +88,52 @@ export class NPCs {
     return { d: hd, label: `💬 ${hit.n.name}와 대화 ${'❤️'.repeat(hearts)}${'🤍'.repeat(5 - hearts)}`, key: 'npc', onInteract: () => this.talk(hit) };
   }
 
-  talk(e) {
+  /** 대화창으로 대화: 서로 마주 보고, 카메라는 대화 구도로. 선택지로 부탁·선물·장터·퀘스트 */
+  async talk(e) {
     const g = this.game;
-    const line = LINES[e.id][e.lineIdx++ % LINES[e.id].length];
-    e.u.say(line, 4);
-    e.u.playAction('heart', 1);
-    g.audio.play('click');
+    if (g.dialogue.active) return;
+    const pp = g.player.position, np = e.u.group.position;
+    e.u.facing = Math.atan2(pp.x - np.x, pp.z - np.z);
+    g.player.unico.facing = Math.atan2(np.x - pp.x, np.z - pp.z);
+    g.cinema.focusTalk(pp, np);
+    g.cinema.hideLabelsOf(g.player.unico, e.u);
     const r = g.villagers.talk(e.id, g.world.day);
     if (r.gained) g.ui.toast(`💕 ${e.n.name}와(과) 오늘 첫 인사! 우정 +${r.gained}`);
     this.applyRewards(e, r);
-    g.ui.openVillager(e, line);
+    const id = e.id, color = NPC_COLOR[id] || '#30b6aa';
+    const who = () => ({ speaker: e.u, name: `${ROLE_ICON[id] || ''} ${e.n.name}`, color, sub: `우정 ${'❤️'.repeat(g.villagers.hearts(id))}${'🤍'.repeat(5 - g.villagers.hearts(id))}` });
+    let line = LINES[id][e.lineIdx++ % LINES[id].length];
+    let after = null;
+    for (let guard = 0; guard < 8; guard++) {
+      const req = g.villagers.requestFor(id, g.world.day, this.requestPool());
+      const v = g.villagers.state[id];
+      const choices = [];
+      if (!req.done) { const have = g.economy.count(req.item); choices.push({ label: `📝 부탁 들어주기`, note: `${g.villagers.describeRequest(req)} · 보유 ${have}/${req.n}`, value: 'req', disabled: have < req.n }); }
+      choices.push({ label: '🎁 선물하기', note: v.lastGift === g.world.day ? '오늘은 이미 선물했어요' : '', value: 'gift', disabled: v.lastGift === g.world.day });
+      if (id === 'merchant') choices.push({ label: '🛒 장터 열기', value: 'market' });
+      if (id === 'guide') choices.push({ label: '📜 할 일(퀘스트) 보기', value: 'quests' });
+      choices.push({ label: '💬 이야기 더 하기', value: 'more' }, { label: '👋 안녕!', value: 'bye' });
+      const c = await g.dialogue.say({ ...who(), text: line, choices: choices.slice(0, 4).concat(choices.length > 4 ? choices.slice(4) : []) });
+      if (c === 'more') { line = LINES[id][e.lineIdx++ % LINES[id].length]; continue; }
+      if (c === 'req') {
+        if (g.economy.take(req.item, req.n)) {
+          const rr = g.villagers.fulfill(id);
+          g.economy.earn(rr.reward);
+          g.audio.play('coin');
+          e.u.playAction('cheer', 1.2);
+          this.applyRewards(e, rr);
+          await g.dialogue.say({ ...who(), text: `정말 고마워! 덕분에 살았어 🙏 (+${rr.reward}🪙, 우정 +${rr.gained})`, emote: 'heart' });
+        }
+        continue;
+      }
+      if (c === 'bye') await g.dialogue.say({ ...who(), text: BYE[id] || '또 놀러 와!', emote: 'wave' });
+      else after = c;
+      break;
+    }
+    g.cinema.release();
+    if (after === 'gift') g.ui.openGiftPicker(e);
+    else if (after === 'market') g.ui.openMarket();
+    else if (after === 'quests') g.ui.openQuests();
   }
 
   /** 하트 단계 보상 지급 */

@@ -66,10 +66,11 @@ export const LAYOUT = {
   // KOAT 체험관 (북동쪽): 본관 + 본부별 체험 부스 6 + 안내데스크
   koat: {
     rect: [13.5, -38.6, 36.5, -18.8], plaza: [15.5, -33, 34.5, -19.6],
-    hq: { x: 25, z: -35.2 }, desk: { x: 25, z: -29.3 }, gate: { x: 25, z: -19.6 },
+    // 본관은 뒤로(정면 z≈-32.6), 부스 줄은 앞으로 당겨 안쪽 부스(기술사업·스마트농업) 앞에도 넉넉히 설 수 있게
+    hq: { x: 25, z: -36.6 }, desk: { x: 25, z: -29.3 }, gate: { x: 25, z: -19.6 },
     booths: [
-      { id: 'tech', x: 17.2, z: -31.5, rot: Math.PI / 2 }, { id: 'venture', x: 17.2, z: -26.3, rot: Math.PI / 2 }, { id: 'seed', x: 17.2, z: -21.1, rot: Math.PI / 2 },
-      { id: 'smart', x: 32.8, z: -31.5, rot: -Math.PI / 2 }, { id: 'machine', x: 32.8, z: -26.3, rot: -Math.PI / 2 }, { id: 'env', x: 32.8, z: -21.1, rot: -Math.PI / 2 },
+      { id: 'tech', x: 17.2, z: -30.6, rot: Math.PI / 2 }, { id: 'venture', x: 17.2, z: -25.7, rot: Math.PI / 2 }, { id: 'seed', x: 17.2, z: -20.8, rot: Math.PI / 2 },
+      { id: 'smart', x: 32.8, z: -30.6, rot: -Math.PI / 2 }, { id: 'machine', x: 32.8, z: -25.7, rot: -Math.PI / 2 }, { id: 'env', x: 32.8, z: -20.8, rot: -Math.PI / 2 },
     ],
   },
   // CC0 건물 (Quaternius): 물탱크, 트랙터 창고, 논 옆 방앗간 풍차

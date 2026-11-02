@@ -47,7 +47,7 @@ export class KoatView {
     const K = LAYOUT.koat, W = game.world;
     this.book = new StampBook();
     // 본관
-    this.hq = W.place('koat_hq', K.hq.x, K.hq.z, 0, 1);
+    this.hq = W.place('koat_hq', K.hq.x, K.hq.z, 0, 0.85); // 안쪽 부스 앞이 막히지 않게 조금 작게, 뒤로
     attachSign(this.hq, signTexture('한국농업기술진흥원 KOAT', '체험관 · 기획운영본부 · 홍보실', '#ffffff', '#1f6f69', 1536, 192));
     // 입구 표지
     const gateSign = W.place('sign', K.gate.x + 2.2, K.gate.z, 0.15, 1.3, { collide: false });
