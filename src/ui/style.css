@@ -246,3 +246,21 @@ button:disabled { opacity: 0.45; cursor: default; }
 .map-places { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .map-places button { font-size: 14px; padding: 6px 10px; }
 .map-tip { margin: 8px 0 0; font-size: 13px; opacity: 0.75; text-align: center; }
+
+/* 환경설정 (그래픽 품질) */
+.fps-chip { position: absolute; right: 12px; top: 214px; background: rgba(35,25,22,0.7); color: #fff; font-size: 12px; padding: 3px 9px; border-radius: 10px; display: none; pointer-events: none; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .fps-chip { top: 206px; } }
+.gfx-body h3 { margin: 12px 0 6px; font-size: 17px; color: var(--teal-d); display: flex; align-items: center; gap: 8px; }
+.gfx-fps { margin-left: auto; font-size: 13px; color: var(--brown); opacity: 0.75; font-weight: normal; }
+.gfx-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.gfx-preset { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; background: var(--cream); color: var(--brown); border: 2px solid var(--panel-edge); }
+.gfx-preset small { font-size: 11px; opacity: 0.8; }
+.gfx-preset.on { background: var(--teal); color: #fff; border-color: var(--teal-d); }
+.gfx-desc { margin: 6px 2px 0; font-size: 13px; opacity: 0.85; }
+.gfx-row { display: flex; align-items: center; gap: 10px; padding: 6px 2px; font-size: 15px; }
+.gfx-row input[type=range] { flex: 1; accent-color: var(--teal); }
+.gfx-row span { width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+.gfx-row select { margin-left: auto; font: inherit; padding: 4px 8px; border-radius: 10px; border: 2px solid var(--panel-edge); background: #fff; color: var(--brown); }
+.gfx-row.check { gap: 8px; }
+.gfx-row.check input { width: 18px; height: 18px; accent-color: var(--teal); }
+.gfx-tip { font-size: 13px; opacity: 0.8; margin: 10px 2px 0; }

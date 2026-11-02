@@ -1,9 +1,98 @@
-/** 기기별 그래픽 품질 프리셋 (?quality=low|high 로 강제 가능) */
-export function pickQuality() {
-  const q = new URLSearchParams(location.search).get('quality');
-  const mobile = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
-  const level = q || (mobile ? 'low' : 'high');
-  return level === 'low'
-    ? { level, grass: 3500, shadowMap: 1024, bloom: false, smaa: false, ao: false, tiltShift: false, pixelRatio: Math.min(devicePixelRatio, 1.5) }
-    : { level, grass: 9000, shadowMap: 3072, bloom: true, smaa: true, ao: true, tiltShift: true, pixelRatio: Math.min(devicePixelRatio, 2) };
+/**
+ * 그래픽 품질 설정 (환경설정 패널 · 자동 조절)
+ *  - 프리셋: 자동 / 낮음 / 보통 / 높음, 세부 항목을 바꾸면 '사용자 지정'
+ *  - 저장: localStorage (unico.gfx), 주소에 ?quality=low|medium|high 로 강제 가능
+ *  - 자동: 기기로 시작 단계를 고르고, 실제 FPS 가 낮으면 한 단계씩 내림
+ */
+
+export const PRESETS = {
+  low: { scale: 0.75, shadows: 'low', grass: 0.3, post: false, ao: false, tiltShift: false },
+  medium: { scale: 1, shadows: 'medium', grass: 0.65, post: true, ao: false, tiltShift: false },
+  high: { scale: 1, shadows: 'high', grass: 1, post: true, ao: true, tiltShift: true },
+};
+export const LEVELS = ['low', 'medium', 'high'];
+export const PRESET_INFO = {
+  auto: { name: '자동', desc: '기기에 맞춰 시작하고, 화면이 끊기면 알아서 한 단계씩 낮춰요' },
+  low: { name: '낮음', desc: '저사양 PC·오래된 노트북용. 해상도 75%, 가벼운 그림자, 후처리 끔' },
+  medium: { name: '보통', desc: '일반 노트북용. 그림자·블룸·안티앨리어싱, 주변광 차폐 끔' },
+  high: { name: '높음', desc: '게임용 PC용. 주변광 차폐·미니어처 초점까지 모든 효과' },
+  custom: { name: '사용자 지정', desc: '세부 항목을 직접 고른 상태' },
+};
+/** 그림자 단계: 그림자 맵 크기, 몇 프레임마다 갱신 */
+export const SHADOWS = {
+  off: { name: '끔', size: 0, every: 0 },
+  low: { name: '낮음', size: 1024, every: 3 },
+  medium: { name: '보통', size: 2048, every: 2 },
+  high: { name: '높음', size: 3072, every: 1 },
+};
+const KEY = 'unico.gfx';
+
+export function isMobileDevice() {
+  if (typeof matchMedia === 'undefined') return false;
+  return matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
+}
+
+/** 자동 모드의 시작 단계 */
+export function autoStartLevel(mobile = isMobileDevice()) {
+  return mobile ? 'low' : 'high';
+}
+
+export function loadSettings() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { /* 저장소 사용 불가 */ }
+  const base = { preset: 'auto', autoLevel: autoStartLevel(), showFps: false, ...PRESETS.high };
+  const out = { ...base, ...(s || {}) };
+  const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('quality') : null;
+  if (q && PRESETS[q]) Object.assign(out, PRESETS[q], { preset: q });
+  return out;
+}
+
+export function saveSettings(s) {
+  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* 무시 */ }
+}
+
+/** 프리셋 선택: 세부 항목을 그 프리셋 값으로 */
+export function applyPreset(s, preset) {
+  const level = preset === 'auto' ? s.autoLevel || autoStartLevel() : preset;
+  return { ...s, ...PRESETS[level], preset };
+}
+
+/** 설정 → 렌더러가 쓰는 품질 값 */
+export function resolveQuality(s, dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1) {
+  const d = s.preset === 'auto' || PRESETS[s.preset] ? { ...s, ...PRESETS[s.preset === 'auto' ? s.autoLevel : s.preset] } : s;
+  const sh = SHADOWS[d.shadows] || SHADOWS.medium;
+  const maxDpr = d.ao ? 2 : d.post ? 1.5 : 1;
+  const level = s.preset === 'auto' ? s.autoLevel : PRESETS[s.preset] ? s.preset : d.post ? (d.ao ? 'high' : 'medium') : 'low';
+  return {
+    level,
+    pixelRatio: Math.max(0.5, Math.min(dpr, maxDpr) * d.scale),
+    shadows: d.shadows, shadowMap: sh.size || 1024, shadowEvery: sh.every,
+    grass: d.grass, post: d.post, bloom: d.post, smaa: d.post, ao: d.ao, tiltShift: d.tiltShift,
+  };
+}
+
+/**
+ * 자동 품질 조절기: 프레임 시간을 모아 평균 FPS 가 기준보다 낮으면 한 단계 내림을 제안.
+ * 올리는 건 하지 않음(오르내림 반복 방지). 순수 로직 → tests/quality.test.js
+ */
+export class FpsGovernor {
+  constructor({ window = 4, minFps = 32, grace = 6 } = {}) {
+    this.window = window; this.minFps = minFps; this.grace = grace;
+    this.t = 0; this.frames = 0; this.fps = 60; this.cool = grace;
+  }
+
+  /** 탭 전환 등으로 측정을 처음부터 (유예 시간 포함) */
+  reset() { this.t = 0; this.frames = 0; this.cool = this.grace; }
+
+  /** 매 프레임 호출. 내려야 하면 true */
+  tick(dt) {
+    this.t += dt; this.frames++;
+    if (this.cool > 0) this.cool -= dt;
+    if (this.t < this.window) return false;
+    this.fps = this.frames / this.t;
+    this.t = 0; this.frames = 0;
+    if (this.cool > 0) return false;
+    if (this.fps < this.minFps) { this.cool = this.grace; return true; }
+    return false;
+  }
 }

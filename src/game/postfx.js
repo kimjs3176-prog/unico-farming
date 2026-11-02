@@ -65,6 +65,12 @@ export class PostFX {
     if (this.tiltH) { this.tiltH.uniforms.h.value = 1.6 / w; this.tiltV.uniforms.v.value = 1.6 / h; }
   }
 
+  dispose() {
+    this.composer.dispose?.();
+    this.gtao?.dispose?.();
+    this.bloom?.dispose?.();
+  }
+
   render() {
     if (this.enabled) this.composer.render();
     else this.renderer.render(this.scene, this.camera);

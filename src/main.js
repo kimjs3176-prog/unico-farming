@@ -21,7 +21,7 @@ import { Minimap } from './ui/minimap.js';
 import { randomName } from './game/names.js';
 import { Juice } from './game/juice.js';
 import { PostFX } from './game/postfx.js';
-import { pickQuality } from './game/quality.js';
+import { loadSettings, saveSettings, resolveQuality, applyPreset, FpsGovernor, LEVELS, PRESET_INFO } from './game/quality.js';
 import { SURF } from './game/surface.js';
 import { Music } from './game/music.js';
 import { Guide } from './game/guide.js';
@@ -38,7 +38,9 @@ class Game {
     this.playerName = name;
     this.assets = assets;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.quality = pickQuality();
+    this.gfx = loadSettings();
+    this.quality = resolveQuality(this.gfx);
+    this.governor = new FpsGovernor();
     this.renderer.setPixelRatio(this.quality.pixelRatio);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -51,6 +53,7 @@ class Game {
     this.music = new Music(this.audio);
     this.world = new World(assets, this.renderer, this.quality);
     this.postfx = new PostFX(this.renderer, this.world.scene, this.camera, this.quality);
+    this.postfx.enabled = this.quality.post;
     this.followCam = new FollowCamera(this.camera);
     this.economy = new Economy();
     this.quests = new Quests();
@@ -82,7 +85,9 @@ class Game {
     };
     this.saveTimer = 0;
     this.resize();
+    this.applyQuality(this.quality, { rebuildPost: false });
     window.addEventListener('resize', () => this.resize());
+    document.addEventListener('visibilitychange', () => this.governor.reset());
     this.restore();
     this.net.connect();
     // 현재 위치 실시간 날씨
@@ -104,6 +109,40 @@ class Game {
     this.timer = new THREE.Timer();
     this.timer.connect?.(document);
     this.renderer.setAnimationLoop(() => this.loop());
+  }
+
+  /** 환경설정에서 그래픽 설정을 바꿨을 때 (저장 + 즉시 적용) */
+  setGraphics(settings) {
+    this.gfx = settings;
+    saveSettings(settings);
+    const prev = this.quality;
+    const q = resolveQuality(settings);
+    const rebuildPost = prev.post !== q.post || prev.ao !== q.ao || prev.tiltShift !== q.tiltShift;
+    this.applyQuality(q, { rebuildPost });
+  }
+
+  applyQuality(q, { rebuildPost = false } = {}) {
+    this.quality = q;
+    this.world.quality = q;
+    this.renderer.setPixelRatio(q.pixelRatio);
+    // 그림자: 끄기/켜기, 해상도 바꾸면 그림자 맵 다시 만들기
+    const sun = this.world.sun;
+    sun.castShadow = q.shadows !== 'off';
+    if (sun.shadow.mapSize.x !== q.shadowMap) {
+      sun.shadow.mapSize.set(q.shadowMap, q.shadowMap);
+      sun.shadow.map?.dispose();
+      sun.shadow.map = null;
+    }
+    this.renderer.shadowMap.autoUpdate = q.shadowEvery <= 1;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.world.scenery?.setDensity(q.grass);
+    if (rebuildPost) {
+      this.postfx.dispose();
+      this.postfx = new PostFX(this.renderer, this.world.scene, this.camera, q);
+    }
+    this.postfx.enabled = q.post;
+    this.resize();
+    this.ui?.updateFps?.();
   }
 
   resize() {
@@ -148,6 +187,7 @@ class Game {
     this.ui.closePanel();
     this.player.position.set(x, 0, z);
     this.player.moveTarget = null;
+    this.player.vel?.set(0, 0, 0);
     if (facing !== undefined) this.player.unico.facing = facing;
     if (yaw !== undefined) this.followCam.yaw = yaw;
     if (pitch !== undefined) this.followCam.pitch = pitch;
@@ -198,7 +238,20 @@ class Game {
 
   loop() {
     this.timer.update();
-    const dt = Math.min(0.05, this.timer.getDelta());
+    const rawDt = this.timer.getDelta();
+    const dt = Math.min(0.05, rawDt);
+    this.fpsDt = rawDt;
+    // 자동 품질: 화면이 계속 끊기면 한 단계 낮춤 (탭을 숨겼다 돌아온 공백은 visibilitychange 에서 측정 초기화)
+    if (rawDt < 3 && this.governor.tick(rawDt)) {
+      this.ui.updateFps?.(this.governor.fps);
+      if (this.gfx.preset === 'auto') {
+        const i = LEVELS.indexOf(this.gfx.autoLevel);
+        if (i > 0) {
+          this.setGraphics(applyPreset({ ...this.gfx, autoLevel: LEVELS[i - 1] }, 'auto'));
+          this.ui.toast(`⚙️ 화면이 끊겨서 그래픽 품질을 '${PRESET_INFO[LEVELS[i - 1]].name}'(으)로 낮췄어요 (환경설정에서 바꿀 수 있어요)`);
+        }
+      }
+    } else if (this.governor.frames === 0) this.ui.updateFps?.(this.governor.fps);
     const input = this.input;
     if (input.justPressed('KeyI')) this.ui.panel ? this.ui.closePanel() : this.ui.openInventory();
     if (input.justPressed('KeyQ')) this.ui.panel ? this.ui.closePanel() : this.ui.openQuests();
@@ -265,11 +318,10 @@ class Game {
     }
     this.saveTimer += dt;
     if (this.saveTimer > 10) { this.saveTimer = 0; saveGame(this); }
-    // 저사양: 그림자 맵을 3프레임마다 갱신 (정적 장면이 대부분이라 체감 차이 작음)
-    if (this.quality.level === 'low') {
-      this.renderer.shadowMap.autoUpdate = false;
+    // 그림자 맵 갱신 주기 (낮음: 3프레임, 보통: 2프레임마다 — 정적 장면이 대부분이라 체감 차이 작음)
+    if (this.quality.shadowEvery > 1) {
       this.frameNo = (this.frameNo || 0) + 1;
-      if (this.frameNo % 3 === 0) this.renderer.shadowMap.needsUpdate = true;
+      if (this.frameNo % this.quality.shadowEvery === 0) this.renderer.shadowMap.needsUpdate = true;
     }
     this.postfx.render();
     input.endFrame();

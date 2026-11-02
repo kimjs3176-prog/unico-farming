@@ -39,15 +39,16 @@ export class Pet {
     if (this.petT > 0) this.petT -= dt;
     else if (d > 6) want = 5.2;
     else if (d > 2.2) want = 2.4;
-    this.vel += (want - this.vel) * Math.min(1, dt * 5);
+    this.vel += (want - this.vel) * (1 - Math.exp(-dt * 5));
     if (this.vel > 0.05 && d > 0.6) {
-      const step = this.vel * dt;
-      const next = (this._next ||= new THREE.Vector3()).set(p.x + (dx / d) * step, 0, p.z + (dz / d) * step);
-      this.game.world.resolveCollision(next, 0.3);
-      p.copy(next);
+      // 몸을 돌리면서 바라보는 방향으로 달림 (옆걸음 방지)
       const yaw = Math.atan2(dx, dz);
       const diff = ((yaw - e.m.rotation.y + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-      e.m.rotation.y += diff * Math.min(1, dt * 8);
+      e.m.rotation.y += diff * (1 - Math.exp(-dt * 7));
+      const step = this.vel * dt * Math.max(0.15, Math.cos(diff));
+      const next = (this._next ||= new THREE.Vector3()).set(p.x + Math.sin(e.m.rotation.y) * step, 0, p.z + Math.cos(e.m.rotation.y) * step);
+      this.game.world.resolveCollision(next, 0.3);
+      p.copy(next);
       playClip(e, this.vel > 3.6 ? 'run' : 'walk', 0.25);
       this.idleT = 0;
     } else {

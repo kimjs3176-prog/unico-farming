@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { Unico } from '../unico.js';
 import { LAYOUT } from '../world.js';
 import { VILLAGERS } from '../sim/villagers.js';
@@ -47,16 +48,30 @@ export class NPCs {
         const W = e.n.wander;
         if (!e.target || Math.hypot(e.target.x - p.x, e.target.z - p.z) < 0.3) {
           e.wait -= dt;
+          e.spd = 0;
           e.u.moving = false;
-          if (e.wait <= 0) { e.target = { x: W.x0 + Math.random() * (W.x1 - W.x0), z: W.z0 + Math.random() * (W.z1 - W.z0) }; e.wait = 2 + Math.random() * 4; }
+          if (e.wait <= 0) {
+            // 화분·수레·가로등 같은 장애물 위는 피해서 목적지 고르기
+            for (let k = 0; k < 10; k++) { const t = { x: W.x0 + Math.random() * (W.x1 - W.x0), z: W.z0 + Math.random() * (W.z1 - W.z0) }; if (!this.game.world.isBlocked(t.x, t.z, 0.8)) { e.target = t; break; } }
+            e.wait = 2 + Math.random() * 4;
+          }
         } else {
           const dx = e.target.x - p.x, dz = e.target.z - p.z, len = Math.hypot(dx, dz);
-          p.x += (dx / len) * 2.2 * dt; p.z += (dz / len) * 2.2 * dt;
+          // 출발할 때 천천히 붙는 속도, 도착할 때 감속 (도착 0.8m 전부터)
+          const want = 2.2 * Math.min(1, len / 0.8 + 0.25);
+          e.spd = (e.spd || 0) + (want - (e.spd || 0)) * (1 - Math.exp(-dt * 6));
+          const step = Math.min(len, e.spd * dt);
+          const nv = (this._nv ||= new THREE.Vector3()).set(p.x + (dx / len) * step, 0, p.z + (dz / len) * step);
+          this.game.world.resolveCollision(nv, 0.4); // 소품을 통과하지 않게
+          if (Math.hypot(nv.x - p.x, nv.z - p.z) < step * 0.3) e.blocked = (e.blocked || 0) + dt; else e.blocked = 0;
+          p.x = nv.x; p.z = nv.z;
+          if (e.blocked > 1.5) { e.blocked = 0; e.target = null; e.wait = 0.5; }
           e.u.facing = Math.atan2(dx, dz);
-          e.u.moving = true;
+          e.u.moving = e.spd > 0.4;
         }
       } else {
         e.u.moving = false;
+        e.spd = 0;
         if (d < 7) e.u.facing = Math.atan2(playerPos.x - p.x, playerPos.z - p.z);
       }
       e.idle = (e.idle || 0) + dt;

@@ -49,7 +49,7 @@ export class Player {
   update(dt, input, followCam) {
     const ax = this.frozen ? { x: 0, y: 0 } : input.axis();
     const { fwd, right } = followCam.basis();
-    const dir = new THREE.Vector3().addScaledVector(fwd, -ax.y).addScaledVector(right, ax.x);
+    const dir = (this._dir ||= new THREE.Vector3()).set(0, 0, 0).addScaledVector(fwd, -ax.y).addScaledVector(right, ax.x);
     if (dir.lengthSq() > 0.0001 || this.frozen) this.moveTarget = null; // 키보드/조이스틱 입력이 우선
     else if (this.moveTarget) {
       const t = this.moveTarget, goal = t.pos();
@@ -67,15 +67,26 @@ export class Player {
         if (t.stuck > 0.6) { if (t.interact && dist < t.stop + 1.5) this.arrivedInteract = true; this.moveTarget = null; dir.set(0, 0, 0); }
       }
     }
-    const moving = dir.lengthSq() > 0.0001;
-    if (moving) {
+    const wants = dir.lengthSq() > 0.0001;
+    if (wants) {
       dir.normalize();
       this.unico.facing = Math.atan2(dir.x, dir.z);
-      const next = this.group.position.clone().addScaledVector(dir, SPEED * dt);
+    }
+    // 가감속: 약 0.12초 만에 최고 속도, 손을 떼면 짧게 미끄러지듯 멈춤 (급출발·급정지 방지)
+    const vel = (this.vel ||= new THREE.Vector3());
+    const want = dir.multiplyScalar(wants ? SPEED : 0);
+    vel.lerp(want, 1 - Math.exp(-dt * (wants ? 16 : 20)));
+    if (!wants && vel.lengthSq() < 0.01) vel.set(0, 0, 0);
+    if (vel.lengthSq() > 0) {
+      const from = (this._from ||= new THREE.Vector3()).copy(this.group.position);
+      const next = (this._next ||= new THREE.Vector3()).copy(from).addScaledVector(vel, dt);
       this.world.resolveCollision(next, 0.45);
       this.group.position.copy(next);
+      // 벽에 막힌 만큼 속도도 줄여 다시 출발할 때 튀지 않게
+      if (dt > 0) { const real = next.distanceTo(from) / dt, sp = vel.length(); if (real < sp) vel.multiplyScalar(Math.max(0, real / sp)); }
     }
-    this.unico.moving = moving;
+    if (this.frozen) vel.set(0, 0, 0);
+    this.unico.moving = wants && vel.length() > 0.4;
     this.unico.update(dt, followCam.camera, this.world.daylight);
     this.group.visible = !this.hidden;
     this.markT += dt;

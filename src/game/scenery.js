@@ -98,7 +98,7 @@ export class Scenery {
          diffuseColor.rgb *= mix(0.42, 1.18, vGH);
          diffuseColor.rgb += vec3(0.06, 0.07, 0.0) * smoothstep(0.7, 1.0, vGH);`);
     };
-    const COUNT = this.world.quality?.grass ?? 9000;
+    const COUNT = 9000; // 최대치로 만들고 품질 설정에 따라 앞쪽 일부만 그림 (setDensity)
     const mesh = new THREE.InstancedMesh(geo, mat, COUNT);
     mesh.receiveShadow = true;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
@@ -123,6 +123,7 @@ export class Scenery {
       n++;
     }
     mesh.count = n;
+    this.grassTotal = n;
     mesh.instanceMatrix.needsUpdate = true;
     this.world.scene.add(mesh);
     this.grass = mesh;
@@ -143,7 +144,7 @@ export class Scenery {
     parts.push(center.index ? center : center);
     const geo = mergeGeometries(parts.map((g) => (g.index ? g : withIndex(g))));
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide });
-    const COUNT = this.world.quality?.level === 'low' ? 500 : 1400;
+    const COUNT = 1400;
     const mesh = new THREE.InstancedMesh(geo, mat, COUNT);
     const palette = [0xffffff, 0xffe066, 0xf3b7cf, 0xe35d5d, 0xb39ddb, 0x8ecae6];
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
@@ -171,6 +172,14 @@ export class Scenery {
     mesh.castShadow = false;
     mesh.receiveShadow = true;
     this.world.scene.add(mesh);
+    this.flowers = mesh;
+    this.flowerTotal = n;
+  }
+
+  /** 풀·들꽃 밀도 (0~1). 인스턴스는 무작위 순서라 앞쪽 일부만 그려도 고르게 줄어듦 */
+  setDensity(d) {
+    if (this.grass) this.grass.count = Math.round(this.grassTotal * d);
+    if (this.flowers) this.flowers.count = Math.round(this.flowerTotal * Math.min(1, 0.25 + d * 0.75));
   }
 
   _water() {

@@ -56,8 +56,9 @@ export const LAYOUT = {
   props: [
     ['lamp', 3.4, 7.6, 0], ['lamp', -1.9, -3, Math.PI], ['lamp', 1.9, -12.5, 0], ['lamp', -6, 10.8, Math.PI / 2], ['lamp', 6.5, 7.6, 0],
     ['lamp', -11, 3.4, Math.PI], ['lamp', 11.5, 5.4, 0], ['lamp', -1.9, -16, Math.PI],
-    ['bench', -3.2, 11.6, Math.PI], ['bench', 3.6, -12.4, 0], ['bench', -6.2, 16.2, -2.4],
-    ['crate', -2.4, -10.6, 0.3], ['crate', -2.6, -9.7, -0.2], ['barrel', 2.6, -10.9, 0], ['barrel', 16.2, -10.2, 0], ['barrel', 16.9, -9.6, 0],
+    ['bench', -3.2, 11.6, Math.PI], ['bench', 3.6, -12.4, 0], ['bench', -5.0, 17.1, -2.4],
+    // 장터 가판대 양옆은 길이 지나는 자리라 소품을 바깥으로 (통로 폭 1.4m 이상)
+    ['crate', -3.1, -10.4, 0.3], ['crate', -3.3, -9.4, -0.2], ['barrel', -3.4, -11.5, 0], ['barrel', 16.2, -10.2, 0], ['barrel', 16.9, -9.6, 0],
     ['crate', 8.7, -18.6, 0.4], ['barrel', 11.8, -19, 0], ['mailbox', 1.9, 11.2, 0],
     ['planter', -2.4, 7.4, Math.PI / 2], ['planter', 2.4, 7.4, Math.PI / 2], ['planter', -2.6, -7.6, 0],
   ],
@@ -73,9 +74,9 @@ export const LAYOUT = {
   },
   // CC0 건물 (Quaternius): 물탱크, 트랙터 창고, 논 옆 방앗간 풍차
   waterTower: { x: 31, z: -13 },
-  shed: { x: 33.4, z: 17 },
+  shed: { x: 35, z: 17 }, // 주차된 트랙터와 3m 띄움
   mill: { x: -15, z: -24 },
-  reserved: [[13, -39, 37, -18.4], [29.5, -14.5, 32.5, -11.5], [30.5, 14, 36.5, 20], [-18, -27, -12, -21], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5]],
+  reserved: [[13, -39, 37, -18.4], [29.5, -14.5, 32.5, -11.5], [32, 14, 38, 20], [-18, -27, -12, -21], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5]],
 };
 
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
@@ -300,6 +301,7 @@ export class World {
     this.scene.add(m);
     if (!dynamic && !DYNAMIC.has(name)) this.staticObjs.push(m);
     const bb = new THREE.Box3().setFromObject(m), sz = bb.getSize(new THREE.Vector3()), cc = bb.getCenter(new THREE.Vector3());
+    (this.placed ||= []).push({ name, x: cc.x, z: cc.z, hx: sz.x / 2, hz: sz.z / 2, h: sz.y, collide }); // 배치 점검용 기록
     if (name !== 'cloud' && sz.y > 0.4) this.aoSpots.push({ x: cc.x, z: cc.z, rx: sz.x * 0.62 + 0.25, rz: sz.z * 0.62 + 0.25, k: Math.min(0.42, 0.16 + sz.y * 0.05) });
     if (collide) {
       const box = bb;
@@ -374,14 +376,14 @@ export class World {
       const a = (i / 52) * Math.PI * 2 + rnd() * 0.1;
       const r = L.bounds - 2 + rnd() * 6;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      if (this.isReserved(x, z, 1.5)) continue;
+      if (this.isReserved(x, z, 1.5) || this.isBlocked(x, z, 2.0)) continue; // 나무끼리 겹치지 않게 간격
       const n = treeName(true);
       this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.5) * treeScale(n), { r: 0.6 });
     }
-    const spots = [[-8, -6], [-5, -9], [-11, 13], [-20, 4], [-28, -2], [30, 14], [20, 22], [-30, 22], [34, -4], [-18, 24], [-14, -18], [-22, 10]];
-    for (const [x, z] of spots) { const n = Q ? pick(['tree_1', 'tree_2', 'tree_3', 'tree_4', 'tree_5', 'birch_1', 'birch_2', 'autumn_1']) : treeName(false); this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.4) * treeScale(n), { r: 0.6 }); }
+    const spots = [[-8, -6], [-5, -9], [-11, 13], [-20, 4], [-28, -2], [30, 14], [20, 22], [-30, 22], [35.8, -4], [-18, 24], [-14, -18], [-22, 10]];
+    for (const [x, z] of spots) { if (this.isBlocked(x, z, 1.0)) continue; const n = Q ? pick(['tree_1', 'tree_2', 'tree_3', 'tree_4', 'tree_5', 'birch_1', 'birch_2', 'autumn_1']) : treeName(false); this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.4) * treeScale(n), { r: 0.6 }); }
     // 연못가 버드나무
-    if (Q) for (const [x, z] of [[-17.6, 15.5], [-16.5, 21.8]]) this.place(rnd() > 0.5 ? 'willow_1' : 'willow_2', x, z, rnd() * 6.28, 1.35, { r: 0.6 });
+    if (Q) for (const [x, z] of [[-17.6, 15.5], [-16.5, 21.8]]) if (!this.isBlocked(x, z, 1.6)) this.place(rnd() > 0.5 ? 'willow_1' : 'willow_2', x, z, rnd() * 6.28, 1.35, { r: 0.6 });
     // 연잎 (낚시 데크 반대편)
     if (Q) for (const [dx, dz, s] of [[-2.6, 1.2, 0.8], [-1.6, 2.6, 0.6], [-3.1, -0.6, 0.7], [-0.4, 3.3, 0.55], [1.4, 3.0, 0.65]]) {
       const lp = this.place('lilypad', L.pond.x + dx, L.pond.z + dz, rnd() * 6.28, s, { collide: false });
@@ -402,7 +404,7 @@ export class World {
     if (Q) for (let i = 0; i < 22; i++) {
       const a = rnd() * Math.PI * 2, r = L.bounds - 6 + rnd() * 5;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      if (this.isBlocked(x, z, 1.2) || this.isReserved(x, z, 1)) continue;
+      if (this.isBlocked(x, z, 1.9) || this.isReserved(x, z, 1)) continue; // 지나갈 틈(1.6m 이상) 남기기
       const n = pick(['stump', 'stump_moss', 'log', 'log_moss', 'plant_4', 'plant_5', 'bush_1', 'mossrock_4', 'grass_q', 'grass_q2']);
       this.place(n, x, z, rnd() * 6.28, 1, { collide: /log|stump/.test(n) });
     }

@@ -79,8 +79,16 @@ export class Net {
     for (const r of this.remote.values()) {
       const p = r.unico.group.position;
       const dx = r.target.x - p.x, dz = r.target.z - p.z, d = Math.hypot(dx, dz);
-      r.unico.moving = d > 0.05;
-      if (d > 0.001) { const k = Math.min(1, dt * 8); p.x += dx * k; p.z += dz * k; }
+      // 위치는 초당 SEND_HZ 번 오므로, 남은 거리를 다음 수신까지 일정한 속도로 걸어감
+      // (지수 보간은 받을 때마다 빨라졌다 느려져 고무줄처럼 보임). 너무 멀면 순간이동
+      if (d > 8) { p.x = r.target.x; p.z = r.target.z; r.spd = 0; }
+      else if (d > 0.001) {
+        const want = Math.min(9, d * SEND_HZ * 1.1);
+        r.spd = (r.spd || 0) + (want - (r.spd || 0)) * (1 - Math.exp(-dt * 10));
+        const step = Math.min(d, Math.max(r.spd, 0.6) * dt);
+        p.x += (dx / d) * step; p.z += (dz / d) * step;
+      } else r.spd = 0;
+      r.unico.moving = d > 0.08 && (r.spd || 0) > 0.4;
       r.unico.update(dt, g.followCam.camera, g.world.daylight);
     }
     if (!this.connected) return;

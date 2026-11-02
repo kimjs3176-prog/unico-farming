@@ -432,8 +432,18 @@ export class Unico {
   /** 호환용 (예전 스프라이트 포즈 API) */
   showPose() {}
 
+  /** 자세 전환(감정표현 시작·끝, 트랙터 타고 내리기) 때 뼈 각도를 이전 자세에서 부드럽게 이어 줄 대상 */
+  _poseBones() {
+    return this._pb ||= [this.bodyG, this.headG, this.tailG, ...this.legs, ...this.arms];
+  }
+
   update(dt, camera) {
     this.t += dt;
+    // 직전 프레임 자세 저장 (전환 보간용)
+    const bones = this._poseBones();
+    const prev = (this._prevPose ||= bones.map(() => [0, 0, 0, 1]));
+    bones.forEach((b, i) => { const q = prev[i]; q[0] = b.rotation.x; q[1] = b.rotation.y; q[2] = b.rotation.z; q[3] = b.scale.y; });
+    const prevBodyY = this.bodyG.position.y;
     // 이름표: 가까울 때만 또렷하게 (멀면 흐려져 화면이 복잡하지 않게). 내 캐릭터는 항상 표시
     if (this.label && !this.labelAlways && camera) {
       const d = camera.position.distanceTo(this.group.position);
@@ -449,7 +459,7 @@ export class Unico {
     }
 
     // 진행 방향으로 부드럽게 회전
-    this.yaw += wrap(this.facing - this.yaw) * Math.min(1, dt * 12);
+    this.yaw += wrap(this.facing - this.yaw) * (1 - Math.exp(-dt * 12));
     this.root.rotation.y = this.yaw;
 
     // ---- 걷기: 발이 미끄러지지 않도록 실제 이동 거리로 보행 위상을 진행 ----
@@ -459,7 +469,7 @@ export class Unico {
     this.lastPos.copy(pos);
     const speed = dt > 0 ? moved / dt : 0;
     const walking = this.moving || speed > 0.3;
-    this.walkBlend += ((walking ? 1 : 0) - this.walkBlend) * Math.min(1, dt * 10);
+    this.walkBlend += ((walking ? 1 : 0) - this.walkBlend) * (1 - Math.exp(-dt * 10)); // 프레임 속도와 무관한 감쇠
     const LEG_LEN = this.legLen, BODY_Y = this.bodyY, bp = this.biped;
     const AMP = bp ? 0.55 : 0.5; // 다리 최대 각도(rad)
     const stride = 2 * LEG_LEN * Math.sin(AMP); // 반주기 동안 디딘 발이 미는 거리
@@ -497,8 +507,8 @@ export class Unico {
     bodyY += breath;
     // 대기 중 두리번
     if (!this.moving && !this.action) {
-      this.lookYaw += (Math.sin(this.t * 0.45) * 0.35 - this.lookYaw) * Math.min(1, dt * 2);
-    } else this.lookYaw *= 1 - Math.min(1, dt * 6);
+      this.lookYaw += (Math.sin(this.t * 0.45) * 0.35 - this.lookYaw) * (1 - Math.exp(-dt * 2));
+    } else this.lookYaw *= Math.exp(-dt * 6);
     let headYaw = this.lookYaw;
     // 꼬리
     this.tailG.rotation.set(Math.sin(this.t * 1.7) * 0.08 - 0.05 * w, Math.sin(this.t * (2.2 + w * 4)) * (0.25 + 0.2 * w), 0);
@@ -566,6 +576,20 @@ export class Unico {
     this.bodyG.position.y = bodyY;
     this.bodyG.rotation.set(bodyPitch, 0, bodyRoll);
     this.headG.rotation.set(headPitch, headYaw, headRoll);
+    // ---- 자세 전환 보간: 감정표현·탑승 상태가 바뀌면 0.3초 동안 이전 자세에서 새 자세로 이어 줌 ----
+    // (걷기 주기 자체에는 걸지 않아 발 디딤 타이밍은 그대로)
+    const poseKey = `${this.action || ''}|${this.riding ? 1 : 0}`;
+    if (poseKey !== this._poseKey) { if (this._poseKey !== undefined) this._transT = 0.3; this._poseKey = poseKey; }
+    if (this._transT > 0) {
+      this._transT = Math.max(0, this._transT - dt);
+      const k = Math.max(1 - Math.exp(-dt * 10), 1 - this._transT / 0.3); // 끝날 때는 정확히 새 자세에 도달
+      bones.forEach((b, i) => {
+        const q = prev[i];
+        b.rotation.set(q[0] + wrap(b.rotation.x - q[0]) * k, q[1] + wrap(b.rotation.y - q[1]) * k, q[2] + wrap(b.rotation.z - q[2]) * k);
+        b.scale.y = q[3] + (b.scale.y - q[3]) * k;
+      });
+      this.bodyG.position.y = prevBodyY + (bodyY - prevBodyY) * k;
+    }
     // 눈 깜빡임
     this.nextBlink -= dt;
     let blink = 1;
