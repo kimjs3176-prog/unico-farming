@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { heightAt, HILLS, CHESTS } from './terrain.js';
 import { Scenery } from './scenery.js';
 import { Precipitation } from './precip.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -75,9 +76,19 @@ export const LAYOUT = {
   },
   // CC0 건물 (Quaternius): 물탱크, 트랙터 창고, 논 옆 방앗간 풍차
   waterTower: { x: 31, z: -13 },
+  // 양봉: 서쪽 들꽃 근처 벌통 3개
+  hives: [{ x: -18.2, z: 6.8 }, { x: -19.8, z: 4.9 }, { x: -17, z: 4.4 }],
+  // 양 몰이 들판 (밭 남쪽): 놀이 영역과 3면이 막힌 우리 (서쪽이 입구)
+  herd: { x0: 12.5, z0: 28, x1: 30, z1: 35.5, pen: { x0: 25, z0: 29.5, x1: 29.5, z1: 34 }, sign: { x: 13.6, z: 29 } },
   shed: { x: 35, z: 17 }, // 주차된 트랙터와 3m 띄움
   mill: { x: -15, z: -24 },
-  reserved: [[13, -39, 37, -18.4], [29.5, -14.5, 32.5, -11.5], [32, 14, 38, 20], [-18, -27, -12, -21], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5]],
+  reserved: [
+    // 언덕 전망대·숨은 보물 상자 자리 (나무가 막지 않게)
+    ...HILLS.map((H) => [H.lookout.x - 3.5, H.lookout.z - 3.5, H.lookout.x + 3.5, H.lookout.z + 3.5]),
+    ...CHESTS.map((c) => [c.x - 1.4, c.z - 1.4, c.x + 1.4, c.z + 1.4]),
+    [12, 27.5, 30.5, 36],
+    [-21, 3.4, -15.8, 8.2],
+    [13, -39, 37, -18.4], [29.5, -14.5, 32.5, -11.5], [32, 14, 38, 20], [-18, -27, -12, -21], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5]],
 };
 
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
@@ -146,8 +157,14 @@ export class World {
     const B = LAYOUT.bounds + 30;
     this.groundSize = B * 2;
     this.groundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(B * 2, B * 2), this.groundMat);
+    // 언덕이 있는 지면: 촘촘한 평면을 높이 함수로 들어 올림 (평면 로컬 (x,y) → 월드 (x,-y), 로컬 z → 월드 높이)
+    const gGeo = new THREE.PlaneGeometry(B * 2, B * 2, 220, 220);
+    const gp = gGeo.attributes.position;
+    for (let i = 0; i < gp.count; i++) gp.setZ(i, heightAt(gp.getX(i), -gp.getY(i)));
+    gGeo.computeVertexNormals();
+    const ground = new THREE.Mesh(gGeo, this.groundMat);
     ground.rotation.x = -Math.PI / 2;
+    this.groundMesh = ground;
     ground.receiveShadow = true;
     this.scene.add(ground);
     // 잔디 디테일(타일)을 칠한 지면 위에 곱해서 가까이서도 거칠어 보이지 않게
@@ -297,7 +314,8 @@ export class World {
   // ------------------------------------------------------------ 배치
   place(name, x, z, rotY = 0, scale = 1, { collide = true, r = null, dynamic = false } = {}) {
     const m = this.assets.clone(name);
-    m.position.set(x, 0, z);
+    const gy = heightAt(x, z);
+    m.position.set(x, gy > 0 ? gy - 0.08 : 0, z); // 비탈에서는 살짝 묻어 뜨지 않게
     m.rotation.y = rotY;
     m.scale.setScalar(scale);
     this.scene.add(m);
@@ -428,6 +446,14 @@ export class World {
       this.scene.add(pool);
       this.lampPools.push(pool);
     }
+    // 양 몰이 우리 (서쪽 입구만 열림)
+    const P = L.herd.pen;
+    for (let x = P.x0 + 1; x < P.x1; x += 2) { this.place('fence', x, P.z0, 0, 1, { collide: false }); this.place('fence', x, P.z1, 0, 1, { collide: false }); }
+    for (let z = P.z0 + 1; z < P.z1; z += 2) this.place('fence', P.x1, z, Math.PI / 2, 1, { collide: false });
+    const t = 0.25;
+    this.boxes.push({ x0: P.x0 - t, z0: P.z0 - t, x1: P.x1 + t, z1: P.z0 + t }, { x0: P.x0 - t, z0: P.z1 - t, x1: P.x1 + t, z1: P.z1 + t }, { x0: P.x1 - t, z0: P.z0, x1: P.x1 + t, z1: P.z1 });
+    this.herdSign = this.place('sign', L.herd.sign.x, L.herd.sign.z, 0.6, 1, { collide: false, dynamic: true });
+    this.signText(this.herdSign, '🐑 양 몰이', '양을 우리에 넣어요 →');
     this.place('scarecrow', L.scarecrow.x, L.scarecrow.z, 0.4, 1, { r: 0.35 });
     this.place('dock', L.dock.x, L.dock.z, L.dock.rot, 1, { collide: false });
     this._mountains();

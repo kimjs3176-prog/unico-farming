@@ -113,6 +113,10 @@ export class Audio {
       case 'thunder': this.noise(2.2, v * 2.2, { type: 'lowpass', freq: 180, q: 0.5 }); return this.noise(1.2, v * 1.4, { type: 'lowpass', freq: 600, q: 0.5, at: 0.1 });
       case 'levelup': return [523, 659, 784, 1046, 1319, 1568].forEach((f, i) => this.pluck(f, v * 1.1, i * 0.07, undefined, 1.4));
       case 'pop': return this.pluck(1319, v * 0.6, 0, undefined, 0.25);
+      case 'caw': this.tone(620, 0.16, 'sawtooth', v * 0.12, -260, { lp: 1800, rev: 0.2 }); return this.tone(560, 0.18, 'sawtooth', v * 0.1, -240, { lp: 1600, at: 0.22, rev: 0.2 });
+      case 'howl': return this.tone(330, 1.6, 'sine', v * 0.18, 140, { lp: 1200, rev: 0.5 });
+      case 'shoo': this.noise(0.25, v * 0.9, { type: 'bandpass', freq: 1800, q: 0.7 }); this.tone(180, 0.12, 'triangle', v * 0.4, -60, { rev: 0.05 }); return this.tone(170, 0.12, 'triangle', v * 0.4, -60, { at: 0.18, rev: 0.05 });
+      case 'bark': this.tone(520, 0.09, 'square', v * 0.12, -200, { lp: 1500, rev: 0.1 }); return this.tone(480, 0.1, 'square', v * 0.1, -180, { lp: 1400, at: 0.16, rev: 0.1 });
     }
   }
 }

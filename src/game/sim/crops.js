@@ -12,6 +12,7 @@ export const PRODUCTS = {
   egg:  { name: '달걀', emoji: '🥚', basePrice: 30, from: 'chicken', time: 60 },
   milk: { name: '우유', emoji: '🥛', basePrice: 60, from: 'cow',     time: 120 },
   wool: { name: '양털', emoji: '🧶', basePrice: 80, from: 'sheep',   time: 180 },
+  honey: { name: '꿀', emoji: '🍯', basePrice: 85, from: 'bee',     time: 150 },
 };
 
 export const FEED_PRICE = 15;

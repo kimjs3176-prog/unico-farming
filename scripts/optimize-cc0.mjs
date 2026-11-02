@@ -38,11 +38,14 @@ const ANIMALS = {
   'ShibaInu.gltf': { name: 'q_shiba', scale: 0.2, colors: { Main: '#e39a4a', Main_Light: '#fff3e2' } },
   // 농장 팩 양: 걷기 동작이 없어 같은 뼈대의 농장 팩 소 걷기(회전만)를 빌려 옴
   'farm_sheep.glb': { name: 'q_sheep', scale: 0.25, colors: { White: '#f7f2e8', Black: '#34302d' }, borrow: { file: 'farm_cow.glb', clips: { Walk: 'walk' } } },
+  // 밤에 목장·밭을 노리는 동물 (쫓아내기)
+  'Wolf.gltf': { name: 'q_wolf', scale: 0.26, colors: { Main: '#8a8f99', Main_Light: '#d9dce0' } },
+  'Fox.gltf': { name: 'q_fox', scale: 0.18, colors: {} },
   'Cow.gltf': { name: 'q_cow', scale: 0.3, colors: { Main: '#fbf7ef', Main_Light: '#3b3533', Muzzle: '#f2b0b8', Eye_White: '#ffffff' } },
 };
 // 게임에서 쓰는 동작만 남김 (용량 절약). 반려견만 달리기·앉기 사용
-const USE = { default: ['walk', 'idle', 'eat', 'look'], q_sheep: ['walk', 'idle'], q_shiba: ['walk', 'idle', 'idle2', 'look', 'run', 'eat'] };
-const CLIPS = { Walk: 'walk', Idle: 'idle', Idle_2: 'idle2', Eating: 'eat', Idle_Headlow: 'look', Idle_2_HeadLow: 'look', Gallop: 'run', Jump_toIdle: 'jump', Jump_ToIdle: 'jump' };
+const USE = { default: ['walk', 'idle', 'eat', 'look'], q_sheep: ['walk', 'idle'], q_wolf: ['walk', 'idle', 'run', 'look', 'attack'], q_fox: ['walk', 'idle', 'run', 'look', 'attack'], q_shiba: ['walk', 'idle', 'idle2', 'look', 'run', 'eat', 'jump'] };
+const CLIPS = { Attack: 'attack', Walk: 'walk', Idle: 'idle', Idle_2: 'idle2', Eating: 'eat', Idle_Headlow: 'look', Idle_2_HeadLow: 'look', Gallop: 'run', Jump_toIdle: 'jump', Jump_ToIdle: 'jump' };
 
 const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); };
 

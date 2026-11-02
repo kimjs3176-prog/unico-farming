@@ -16,7 +16,7 @@ const KEEP_PART = /^(SignBoard|RoofTint|SensorPole|Canopy|Fruit|Blades|Rotor|Whe
 /** 블렌더에서 생성한 환경 GLB 목록 (public/models). 캐릭터 유니코는 src/game/unico.js 에서 코드로 생성 */
 export const ENV_MODELS = [
   'tree', 'pine', 'bush', 'rock', 'flowers', 'hay_bale', 'fence', 'smartfarm',
-  'market', 'sign', 'trough', 'plot', 'crops', 'hen', 'tractor', 'drone', 'wheelbarrow', 'cloud',
+  'market', 'sign', 'trough', 'plot', 'crops', 'hen', 'crow', 'beehive', 'tractor', 'drone', 'wheelbarrow', 'cloud',
   'crate', 'barrel', 'lamp', 'bench', 'mailbox', 'scarecrow', 'thresher', 'dock', 'planter', 'fruit_tree', 'koat_hq', 'booth',
 ];
 
@@ -27,7 +27,7 @@ export const ENV_MODELS = [
  */
 export const PACK_MODELS = ['q_farm', 'q_nature'];
 /** 뼈대 애니메이션이 있는 CC0 동물 (walk/idle/eat/look/run/jump) */
-export const ANIMATED_MODELS = ['q_cow', 'q_sheep', 'q_horse', 'q_donkey', 'q_alpaca', 'q_shiba'];
+export const ANIMATED_MODELS = ['q_cow', 'q_sheep', 'q_wolf', 'q_fox', 'q_horse', 'q_donkey', 'q_alpaca', 'q_shiba'];
 
 const BASE = (import.meta.env?.BASE_URL || '/') + 'models/';
 

@@ -300,3 +300,14 @@ body.cine .cine-skip { opacity: 1; }
 body.cine .cine-skip:hover { background: rgba(255,255,255,0.3); }
 body.cine .hud-top, body.cine .actionbar, body.cine .chat, body.cine .minimap, body.cine .objective, body.cine .prompt, body.cine .fps-chip, body.cine .touch-btn { opacity: 0; pointer-events: none; transition: opacity 0.4s; }
 body.cine .dlg { bottom: calc(9vh + 14px); }
+
+/* 미니게임 캔버스 창 */
+.mg-wrap { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(20,14,10,0.35); z-index: 40; animation: panelin 0.3s; }
+.mg-box { position: relative; width: min(96vw, 760px); border: 5px solid var(--panel-edge); border-radius: 26px; overflow: hidden; box-shadow: var(--shadow); background: #fffaf0; }
+.mg-box canvas { display: block; width: 100%; height: auto; touch-action: none; cursor: pointer; }
+.mg-close { position: absolute; right: 10px; top: 70px; }
+
+/* 양 몰이 진행 표시 */
+.herd-hud { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 18px; padding: 8px 18px; font-family: Jua, sans-serif; font-size: 19px; color: var(--brown); box-shadow: var(--shadow); }
+.herd-hud.hidden { display: none; }
+.herd-hud b { color: var(--teal-d); } .herd-hud b.warn { color: #e8495a; }

@@ -18,6 +18,13 @@ export const QUESTS = [
   { id: 'book10',    title: '꼬마 박물학자',        desc: '도감에 10종을 등록하세요',                 event: 'book',     goal: 10, reward: { money: 300, xp: 200 }, absolute: true },
   { id: 'koat1',     title: 'KOAT 체험관 방문',      desc: '체험관 부스에서 체험해 첫 스탬프를 받으세요 (🏢 버튼)', event: 'koatstamp', goal: 1, reward: { money: 100, xp: 60 } },
   { id: 'koat6',     title: 'KOAT 스탬프 투어',      desc: '6개 본부 체험 스탬프를 모두 모으세요',    event: 'koatall',  goal: 6, reward: { money: 300, xp: 200 }, absolute: true },
+  { id: 'explore4',  title: '언덕 탐험가',          desc: '언덕 꼭대기 전망대 4곳을 모두 올라 보세요', event: 'lookout',  goal: 4, reward: { money: 250, xp: 180 }, absolute: true },
+  { id: 'chest3',    title: '보물 사냥꾼',          desc: '언덕·숲 가장자리의 숨은 보물 상자 3개 열기', event: 'chest',    goal: 3, reward: { money: 150, xp: 120 } },
+  { id: 'shoo5',     title: '농장 지킴이',          desc: '밭의 까마귀·목장의 여우와 늑대를 5번 쫓아내기', event: 'shoo', goal: 5, reward: { money: 150, xp: 120 } },
+  { id: 'petfeed3',  title: '좋은 보호자',          desc: '반려견에게 간식이나 작물을 3번 먹이기',   event: 'petfeed', goal: 3, reward: { money: 80, xp: 60 } },
+  { id: 'egg30',     title: '달걀 받기 달인',       desc: '달걀 받기 미니게임에서 한 번에 30점 이상', event: 'eggcatch', goal: 30, reward: { money: 150, xp: 120 }, absolute: true },
+  { id: 'herd6',     title: '양치기 유니코',        desc: '양 몰이에서 6마리를 모두 우리에 넣기',     event: 'herd',     goal: 6, reward: { money: 200, xp: 150 }, absolute: true },
+  { id: 'honey3',    title: '꿀벌 친구',            desc: '서쪽 들꽃 옆 벌통에서 꿀을 3번 거두기',    event: 'honey',    goal: 3, reward: { money: 120, xp: 90 } },
   { id: 'rich',      title: '천 원의 농부',         desc: '보유 금액 1,000 코인 달성',               event: 'money',    goal: 1000, reward: { money: 200, xp: 150 }, absolute: true },
   { id: 'plow30',    title: '밭갈이 달인',          desc: '트랙터 미니게임에서 한 번에 30칸 이상 갈기', event: 'plowbest', goal: 30, reward: { money: 250, xp: 200 }, absolute: true },
 ];

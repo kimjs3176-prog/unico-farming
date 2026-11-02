@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { heightAt } from './terrain.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeLabel } from './label.js';
 import { enhanceMaterial } from './surface.js';
@@ -484,6 +485,8 @@ export class Unico {
 
   update(dt, camera) {
     this.t += dt;
+    // 언덕: 장면에 바로 놓인 캐릭터는 지면 높이를 따라감 (트랙터 탑승 등 다른 물체에 붙으면 제외)
+    if (this.group.parent?.isScene) this.group.position.y = heightAt(this.group.position.x, this.group.position.z);
     // 직전 프레임 자세 저장 (전환 보간용)
     const bones = this._poseBones();
     const prev = (this._prevPose ||= bones.map(() => [0, 0, 0, 1]));
@@ -589,6 +592,15 @@ export class Unico {
             legs[0].rotation.x = -0.5;
             headPitch = 0.15;
           }
+          break;
+        }
+        case 'shoo': { // 쫓기: 두 팔을 머리 위로 크게 휘저으며 발을 쿵쿵
+          const st = Math.abs(Math.sin(a * 11));
+          bodyY += st * 0.07; headPitch = -0.22 + Math.sin(a * 22) * 0.05; bodyPitch = 0.08;
+          if (bp) {
+            AL.rotation.set(-0.5, 0, -1.75 + Math.sin(a * 20) * 0.45); AR.rotation.set(-0.5, 0, 1.75 - Math.sin(a * 20 + 1) * 0.45);
+            legs[0].rotation.x = Math.max(0, Math.sin(a * 11)) * 0.35; legs[1].rotation.x = Math.max(0, -Math.sin(a * 11)) * 0.35;
+          } else { legs[0].rotation.x = legs[1].rotation.x = -0.6 - st * 0.4; bodyPitch = -0.3; }
           break;
         }
         case 'talk': // 말하기: 고개를 끄덕이며 한 손으로 손짓

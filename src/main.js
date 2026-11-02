@@ -7,6 +7,10 @@ import { Player } from './game/player.js';
 import { FarmView } from './game/view/farm_view.js';
 import { RanchView } from './game/view/ranch_view.js';
 import { Pet } from './game/view/pet.js';
+import { ExploreView } from './game/view/explore_view.js';
+import { Pests } from './game/view/pests.js';
+import { Herding } from './game/view/herding.js';
+import { Bees } from './game/view/bees.js';
 import { Cinematics } from './game/cutscene.js';
 import { Dialogue } from './ui/dialogue.js';
 import { TractorView } from './game/view/tractor_view.js';
@@ -77,6 +81,10 @@ class Game {
     this.nature = new NatureView(this);
     this.koat = new KoatView(this);
     this.pet = new Pet(this);
+    this.explore = new ExploreView(this);
+    this.pests = new Pests(this);
+    this.herding = new Herding(this);
+    this.bees = new Bees(this);
     this.net = new Net(this);
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
@@ -173,6 +181,9 @@ class Game {
     this.villagers.load(s.villagers);
     this.collection.load(s.collection);
     this.koat.load(s.koat);
+    this.explore.load(s.explore);
+    this.bees.load(s.bees);
+    if (this.pet.ok) this.pet.load(s.pet);
     if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원');
     if (s.world) { this.world.time = s.world.time; this.world.day = s.world.day; }
     if (s.player) this.player.position.set(s.player.x, 0, s.player.z);
@@ -319,6 +330,10 @@ class Game {
       pick(this.nature.update(dt, pp));
       pick(this.koat.update(dt, pp));
       pick(this.pet.update(dt, pp));
+      pick(this.explore.update(dt, pp));
+      pick(this.pests.update(dt, pp));
+      pick(this.herding.update(dt, pp));
+      pick(this.bees.update(dt, pp));
       this.pointer.update(dt, input);
       const arrived = this.player.arrivedInteract;
       this.player.arrivedInteract = false;
@@ -336,6 +351,9 @@ class Game {
       this.nature.update(dt, pp);
       this.koat.update(dt, pp);
       this.pet.update(dt, this.tractor.riderGroup.position);
+      this.explore.update(dt, pp);
+      this.pests.update(dt, pp);
+      this.bees.update(dt, pp);
       // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스로 돌려도 천천히 복귀)
       const behind = this.tractor.vehicle.heading + Math.PI;
       const dy = ((behind - this.followCam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;

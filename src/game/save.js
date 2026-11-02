@@ -9,6 +9,9 @@ export function saveGame(game) {
       world: { time: game.world.time, day: game.world.day },
       player: { x: game.player.position.x, z: game.player.position.z },
       flags: game.flags || {},
+      explore: game.explore?.toJSON(),
+      bees: game.bees?.toJSON(),
+      pet: game.pet?.ok ? game.pet.toJSON() : undefined,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
     return true;

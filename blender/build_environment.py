@@ -511,6 +511,55 @@ def hen():
     return root
 
 
+def crow():
+    """저폴리 까마귀 — 밭 작물을 쪼아 먹는 새. 날갯짓·쪼기·통통 뛰기는 코드에서 Body/Head/WingL/WingR 피벗으로"""
+    C.reset_scene()
+    root = empty("Crow")
+    black, sheen = material("crow_black", "#2a2d3a"), material("crow_sheen", "#3d4560")
+    beak, eye = material("crow_beak", "#3a3a3a"), material("crow_eye", "#f2d36b")
+    body = empty("Body", loc=(0, 0, 0.2), parent=root)
+    join("BodyMesh", [
+        sphere("body", black, loc=(0, 0.02, 0), radius=0.13, scale=(0.85, 1.45, 0.9), rot=(-12, 0, 0), segments=7, rings=5, smooth=False),
+        cone("tail", sheen, loc=(0, 0.25, 0.04), radius=0.07, depth=0.2, rot=(-75, 0, 0), segments=4, smooth=False),
+    ], parent=body)
+    head = empty("Head", loc=(0, F * 0.15, 0.1), parent=body)
+    join("HeadMesh", [
+        sphere("head", black, loc=(0, F * 0.02, 0.03), radius=0.085, segments=7, rings=5, smooth=False),
+        cone("beak", beak, loc=(0, F * 0.12, 0.02), radius=0.028, depth=0.1, rot=(F * -90, 0, 0), segments=4, smooth=False),
+        sphere("eyeL", eye, loc=(-0.055, F * 0.05, 0.05), radius=0.014, segments=5, rings=4, smooth=False),
+        sphere("eyeR", eye, loc=(0.055, F * 0.05, 0.05), radius=0.014, segments=5, rings=4, smooth=False),
+    ], parent=head)
+    for n, sx in (("WingL", -1), ("WingR", 1)):
+        wing = empty(n, loc=(sx * 0.09, 0.0, 0.04), parent=body)
+        join(n + "Mesh", [
+            sphere("wing", sheen, loc=(sx * 0.1, 0.04, 0), radius=0.12, scale=(1.2, 1.4, 0.18), rot=(0, 0, sx * 8), segments=6, rings=4, smooth=False),
+            cone("tip", black, loc=(sx * 0.2, 0.17, 0), radius=0.05, depth=0.16, rot=(-80, 0, 0), segments=4, smooth=False),
+        ], parent=wing)
+    for n, x in (("LegL", -0.04), ("LegR", 0.04)):
+        leg = empty(n, loc=(x, 0.03, -0.1), parent=body)
+        join(n + "Mesh", [segment("shin", beak, (0, 0, 0), (0, 0, -0.1), 0.008, cap=False, segments=4),
+                          box("toe", beak, loc=(0, F * 0.03, -0.1), size=(0.012, 0.07, 0.008))], parent=leg)
+    return root
+
+
+def beehive():
+    """양봉 벌통: 층층이 쌓인 나무 상자 + 지붕 + 입구 판 + 받침 (저폴리)"""
+    C.reset_scene()
+    root = empty("Beehive")
+    wood, wood2, roof = material("hive_wood", "#e9c27a"), material("hive_wood_dark", "#c99a52"), material("hive_roof", "#d9534f")
+    parts = [box("stand", material("wood_dark"), loc=(0, 0, 0.12), size=(0.7, 0.6, 0.24))]
+    for i in range(3):
+        parts.append(box(f"box{i}", wood if i % 2 == 0 else wood2, loc=(0, 0, 0.36 + i * 0.26), size=(0.62, 0.52, 0.24)))
+        parts.append(box(f"band{i}", material("wood_dark"), loc=(0, F * 0.265, 0.27 + i * 0.26), size=(0.64, 0.02, 0.03)))
+    parts += [
+        prism("roof", roof, loc=(0, 0, 1.12), width=0.78, depth=0.68, height=0.2),
+        box("entry", material("eye"), loc=(0, F * 0.265, 0.3), size=(0.3, 0.02, 0.05)),
+        box("landing", wood2, loc=(0, F * 0.32, 0.27), size=(0.36, 0.12, 0.02)),
+    ]
+    join("HiveMesh", parts, parent=root)
+    return root
+
+
 def sheep():
     C.reset_scene()
     root = empty("Sheep")
@@ -928,6 +977,6 @@ ASSETS = {
     "fence": fence, "barn": barn, "silo": silo, "windmill": windmill, "smartfarm": greenhouse, "market": market_stall,
     "well": well, "sign": sign_post, "coop": coop, "trough": trough,
     "plot": soil_plot, "crops": crops,
-    "cow": cow, "chicken": chicken, "hen": hen, "sheep": sheep,
+    "cow": cow, "chicken": chicken, "hen": hen, "crow": crow, "beehive": beehive, "sheep": sheep,
     "tractor": tractor, "drone": drone, "wheelbarrow": wheelbarrow,
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { heightAt } from '../terrain.js';
 import { LAYOUT } from '../world.js';
 import { ITEMS } from '../sim/items.js';
 import { FishingSim, rollBug } from '../sim/fishing.js';
@@ -133,7 +134,8 @@ export class NatureView {
       b.phase += dt;
       const fly = b.kind !== 'bug_ladybug' && b.kind !== 'bug_beetle';
       const r = fly ? 1.6 : 0.3;
-      b.g.position.set(b.home.x + Math.sin(b.phase * 0.7) * r + Math.sin(b.phase * 1.9) * 0.4, (fly ? 0.7 + Math.sin(b.phase * 2.3) * 0.35 : 0.08), b.home.z + Math.cos(b.phase * 0.5) * r);
+      const bx = b.home.x + Math.sin(b.phase * 0.7) * r + Math.sin(b.phase * 1.9) * 0.4, bz = b.home.z + Math.cos(b.phase * 0.5) * r;
+      b.g.position.set(bx, heightAt(bx, bz) + (fly ? 0.7 + Math.sin(b.phase * 2.3) * 0.35 : 0.08), bz);
       b.g.rotation.y = b.phase * 0.7 + Math.PI / 2;
       const flap = fly ? Math.sin(b.phase * (b.kind === 'bug_dragonfly' ? 50 : 18)) * 0.9 : 0;
       b.l.rotation.y = flap; b.r.rotation.y = -flap;

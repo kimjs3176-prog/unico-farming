@@ -7,6 +7,7 @@ export const RICE_GRADE_MULT = [0, 0.8, 1.0, 1.3, 1.65, 2.1];
 
 export const ITEMS = {
   rice_seed: { name: '볍씨', emoji: '🌾', price: 30, cat: 'seed' },
+  pet_treat: { name: '강아지 간식', emoji: '🦴', price: 15, cat: 'seed' }, // 장터에서 사는 소모품 (도감·선물 제외)
   paddy: { name: '벼(탈곡 전)', emoji: '🌾', price: 40, cat: 'rice' },
   rice_1: { name: '쌀 ★', emoji: '🍚', price: 50, cat: 'rice' },
   rice_2: { name: '쌀 ★★', emoji: '🍚', price: 50, cat: 'rice' },

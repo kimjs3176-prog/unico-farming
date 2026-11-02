@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { heightAt } from './terrain.js';
 import { makeLabel } from './label.js';
 
 /** 간단 이펙트: 떠오르는 이모지, 물방울 */
@@ -49,7 +50,7 @@ export class FX {
     }
     for (let i = 0; i < 3; i++) {
       const m = new THREE.Mesh(this.dustGeo, this.dustMat.clone());
-      m.position.set(x + (Math.random() - 0.5) * 0.5, 0.08, z + (Math.random() - 0.5) * 0.5);
+      m.position.set(x + (Math.random() - 0.5) * 0.5, heightAt(x, z) + 0.08, z + (Math.random() - 0.5) * 0.5);
       this.scene.add(m);
       this.items.push({ obj: m, life: 0.45, vy: 0.5, grow: 2.2, fade: true });
     }

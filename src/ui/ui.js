@@ -444,6 +444,12 @@ export class UI {
       const fb5 = h('button', '', '5개'); fb5.disabled = eco.money < FEED_PRICE * 5; fb5.onclick = () => { eco.buyFeed(5); g.audio.play('coin'); render(); };
       fr.append(fb, fb5);
       seeds.append(fr);
+      const pt = ITEMS.pet_treat;
+      const ptr = h('div', 'row', `<span>${pt.emoji}</span><span class="nm">${pt.name} <span class="qty">보유 ${eco.count('pet_treat')}</span></span><span class="pr">${pt.price}🪙</span>`);
+      const pb1 = h('button', '', '1개'); pb1.disabled = eco.money < pt.price; pb1.onclick = () => { eco.buyItem('pet_treat', 1); g.audio.play('coin'); render(); };
+      const pb3 = h('button', '', '3개'); pb3.disabled = eco.money < pt.price * 3; pb3.onclick = () => { eco.buyItem('pet_treat', 3); g.audio.play('coin'); render(); };
+      ptr.append(pb1, pb3);
+      seeds.append(ptr);
       const rs = ITEMS.rice_seed;
       const rr = h('div', 'row', `<span>${rs.emoji}</span><span class="nm">${rs.name} <span class="qty">보유 ${eco.count('rice_seed')}</span></span><span class="pr">${rs.price}🪙</span>`);
       const rb1 = h('button', '', '1개'); rb1.disabled = eco.money < rs.price; rb1.onclick = () => { eco.buyItem('rice_seed', 1); g.audio.play('coin'); render(); };

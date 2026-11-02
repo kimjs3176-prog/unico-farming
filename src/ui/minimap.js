@@ -1,4 +1,5 @@
 import { LAYOUT } from '../game/world.js';
+import { HILLS } from '../game/terrain.js';
 
 /** 빠른 이동 장소 (지도 아래 버튼) — x,z 는 도착 지점(길 위) */
 export const PLACES = [
@@ -47,6 +48,17 @@ export class Minimap {
     c.beginPath(); c.roundRect(0, 0, S, S, 16 * ui); c.fill();
     const L = LAYOUT;
     const rect = (x0, z0, x1, z1, col) => { c.fillStyle = col; c.fillRect(X(x0), Z(z0), (x1 - x0) * k, (z1 - z0) * k); };
+    // 언덕: 등고선처럼 겹친 원 + 꼭대기 전망대
+    for (const H of HILLS) {
+      for (let ring = 3; ring >= 1; ring--) {
+        c.fillStyle = `rgba(${70 + ring * 6}, ${120 + ring * 8}, 60, ${0.14 + (3 - ring) * 0.08})`;
+        c.beginPath(); c.arc(X(H.x), Z(H.z), H.r * (ring / 3) * k, 0, 7); c.fill();
+      }
+      const seen = this.game.explore?.seen?.[H.id];
+      c.font = `${10 * ui}px sans-serif`; c.textAlign = 'center'; c.fillStyle = '#000';
+      c.fillText(seen ? '🔭' : '⛰️', X(H.x), Z(H.z) + 4 * ui);
+      if (ui > 1) { c.fillStyle = '#3d5a2a'; c.font = `bold ${8 * ui}px Jua, sans-serif`; c.fillText(H.name, X(H.x), Z(H.z) + 16 * ui); }
+    }
     // 흙길
     c.strokeStyle = 'rgba(232,210,160,0.9)'; c.lineCap = 'round'; c.lineJoin = 'round';
     for (const p of L.paths) { c.lineWidth = p.w * k; c.beginPath(); p.pts.forEach(([x, z], i) => (i ? c.lineTo(X(x), Z(z)) : c.moveTo(X(x), Z(z)))); c.stroke(); }
@@ -64,6 +76,9 @@ export class Minimap {
     // 주민 (역할 색)
     const npcCol = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a3a9b0', kid: '#f28bb0' };
     for (const e of this.game.npcs.list) { const p = e.u.group.position; c.fillStyle = npcCol[e.id] || '#fff'; c.beginPath(); c.arc(X(p.x), Z(p.z), 2.6 * ui, 0, 7); c.fill(); }
+    // 해로운 동물 (빨간 점)
+    c.fillStyle = '#e8495a';
+    for (const q of this.game.pests?.markers() || []) { c.beginPath(); c.arc(X(q.x), Z(q.z), 3.2 * ui, 0, 7); c.fill(); }
     // 다른 플레이어
     c.fillStyle = '#4a90d9';
     for (const r of this.game.net.remote.values()) { const p = r.unico.group.position; c.beginPath(); c.arc(X(p.x), Z(p.z), 2.5 * ui, 0, 7); c.fill(); }

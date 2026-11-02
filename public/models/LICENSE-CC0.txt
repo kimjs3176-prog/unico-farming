@@ -1,4 +1,4 @@
-q_farm.glb, q_nature.glb, q_cow.glb, q_horse.glb, q_donkey.glb, q_alpaca.glb, q_shiba.glb, q_sheep.glb
+q_farm.glb, q_nature.glb, q_cow.glb, q_horse.glb, q_donkey.glb, q_alpaca.glb, q_shiba.glb, q_sheep.glb, q_wolf.glb, q_fox.glb
 
 LowPoly models by Quaternius (https://quaternius.com)
 Farm Buildings Pack / Ultimate Nature Pack / Ultimate Animated Animal Pack / Farm Animal Pack

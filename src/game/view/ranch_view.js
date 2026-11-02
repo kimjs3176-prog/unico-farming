@@ -3,6 +3,7 @@ import { RanchSim } from '../sim/ranch.js';
 import { LAYOUT } from '../world.js';
 import { PRODUCTS, ANIMALS } from '../sim/crops.js';
 import { makeLabel } from '../label.js';
+import { playEggCatch } from '../../ui/minigames/egg_catch.js';
 
 /**
  * 동물 종류 → 모델. 젖소·양은 뼈대 애니메이션(CC0, Quaternius), 닭은 저폴리 암탉(blender hen, 코드로 다리·머리 움직임).
@@ -175,6 +176,17 @@ export class RanchView {
     if (e.mixer) e.mixer.update(dt * (e.cur === 'walk' ? Math.max(0.35, (e.vel || 0) / 0.9) * (e.walkRate || 1) : 1));
   }
 
+  async eggCatch() {
+    const g = this.game;
+    const r = await playEggCatch(g);
+    if (!r.eggs && !r.coins) return;
+    g.economy.addProduct('egg', r.eggs);
+    g.economy.earn(r.coins);
+    g.audio.play('coin');
+    g.ui.toast(`🥚 달걀 ${r.eggs}개 + ${r.coins}🪙 획득!${r.score >= r.best ? ' 🏆 최고 기록' : ''}`);
+    g.onEvent('eggcatch', r.score);
+  }
+
   pet(e) {
     const g = this.game;
     e.petT = 2.2;
@@ -186,7 +198,10 @@ export class RanchView {
   }
 
   update(dt, playerPos) {
-    for (const r of this.sim.tick(dt)) this.game.ui.toast(`${ANIMALS[r.type].emoji} ${PRODUCTS[r.product].name}이(가) 준비됐어요!`);
+    // 여우·늑대가 울타리에 붙어 있으면 동물들이 겁먹어 생산이 멈추고 그쪽을 바라봄
+    const threat = this.game.pests?.ranchThreat;
+    if (threat) for (const e of this._all || []) { e.rest = 'look'; e.wait = Math.max(e.wait, 1); }
+    for (const r of this.sim.tick(threat ? 0 : dt)) this.game.ui.toast(`${ANIMALS[r.type].emoji} ${PRODUCTS[r.product].name}이(가) 준비됐어요!`);
     let best = null, bd = 2.6;
     for (const e of this.ents) {
       e.mark.visible = !!e.a.product;
@@ -202,6 +217,9 @@ export class RanchView {
       if (dp < bd - 0.2) { bd = dp; best = e; }
     }
     this.near = best;
+    // 닭장 앞: 달걀 받기 미니게임
+    const C = LAYOUT.coop, dc = Math.hypot(C.x - 1.6 - playerPos.x, C.z - playerPos.z);
+    if (dc < 2.2 && (!best || dc < bd)) return { d: dc, label: '🥚 달걀 받기 미니게임', key: 'eggcatch', onInteract: () => this.eggCatch() };
     if (!best) return null;
     if (best.v) return { d: bd, label: `${best.v.emoji} ${best.v.name} 쓰다듬기`, key: 'pet', onInteract: () => this.pet(best) };
     const act = this.sim.actionFor(best.a);

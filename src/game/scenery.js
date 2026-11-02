@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { LAYOUT } from './world.js';
+import { heightAt } from './terrain.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 
 /** 하늘 돔(그라데이션), 구름, 지평선 언덕, 잔디 인스턴싱, 연못 물결 — 분위기 레이어 */
@@ -148,7 +149,7 @@ export class Scenery {
       if (no.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1)) continue;
       if (this.world.isBare(x, z) || this.world.isReserved(x, z, -0.5)) continue;
       if (this.world.isBlocked(x, z, 0.3)) continue;
-      p.set(x, 0, z);
+      p.set(x, heightAt(x, z), z);
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * Math.PI * 2);
       const sc = 0.6 + rnd() * 0.6;
       s.set(sc, sc * (0.8 + rnd() * 0.6), sc);
@@ -195,7 +196,7 @@ export class Scenery {
       if (Math.abs(x) > B || Math.abs(z) > B) continue;
       if (this.world.isBare(x, z) || this.world.isBlocked(x, z, 0.4) || this.world.isReserved(x, z, 0)) continue;
       if (Math.hypot(x - LAYOUT.pond.x, z - LAYOUT.pond.z) < LAYOUT.pond.r + 1) continue;
-      p.set(x, 0, z);
+      p.set(x, heightAt(x, z), z);
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 6.28);
       const s = 0.8 + rnd() * 0.6;
       sc.set(s, s, s);

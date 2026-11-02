@@ -8,12 +8,13 @@
 | `q_farm.glb` | 헛간, 사일로, 닭장, 우물, 물탱크, 트랙터 창고, 풍차 2종, 울타리 | Quaternius — Farm Buildings Pack | CC0 1.0 |
 | `q_nature.glb` | 나무(일반·소나무·자작·버드·단풍·설경), 덤불, 바위, 풀, 그루터기, 통나무, 연잎 | Quaternius — Ultimate Nature Pack | CC0 1.0 |
 | `q_cow.glb`, `q_horse.glb`, `q_donkey.glb`, `q_alpaca.glb`, `q_shiba.glb` | 뼈대 애니메이션 동물 (걷기·대기·풀 뜯기·두리번·달리기) | Quaternius — Ultimate Animated Animal Pack | CC0 1.0 |
+| `q_wolf.glb`, `q_fox.glb` | 늑대·여우 (걷기·달리기·두리번·으르렁) | Quaternius — Ultimate Animated Animal Pack | CC0 1.0 |
 | `q_sheep.glb` | 양 (대기 + 같은 뼈대의 농장 팩 소에서 옮겨 온 걷기) | Quaternius — Farm Animal Pack | CC0 1.0 |
 
 - 원본: <https://quaternius.com> (Farm Buildings / Ultimate Nature / Ultimate Animated Animal Pack)
 - 라이선스 전문: <https://creativecommons.org/publicdomain/zero/1.0/>
 
-닭(`hen.glb`)은 같은 저폴리 결로 이 저장소에서 직접 만든 모델입니다(`blender/build_environment.py` 의 `hen()`).
+닭(`hen.glb`)·까마귀(`crow.glb`)·벌통(`beehive.glb`)은 같은 저폴리 결로 이 저장소에서 직접 만든 모델입니다(`blender/build_environment.py` 의 `hen()`).
 유니코 캐릭터(코드 생성), 논·스마트팜·장터·트랙터 등 나머지 모델은 이 저장소의 Blender 스크립트(`blender/build_environment.py`)로 만든 것입니다.
 
 ## 변환 과정 (다시 만들기)

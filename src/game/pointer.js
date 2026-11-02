@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { heightAt } from './terrain.js';
 import { LAYOUT } from './world.js';
 
 /**
@@ -52,8 +53,10 @@ export class PointerNav {
       let o = hit.object;
       while (o) { const t = list.find((x) => x.objs.includes(o)); if (t) return { target: t }; o = o.parent; }
     }
-    const p = new THREE.Vector3();
-    if (!this.ray.ray.intersectPlane(this.ground, p)) return null;
+    // 언덕을 누르면 실제 지면 위치 (지면 메시와 교차), 없으면 평면
+    const gh = g.world.groundMesh ? this.ray.intersectObject(g.world.groundMesh, false)[0] : null;
+    const p = gh ? gh.point.clone() : new THREE.Vector3();
+    if (!gh && !this.ray.ray.intersectPlane(this.ground, p)) return null;
     // 밭 칸 위를 누르면 그 칸이 대상
     const tile = g.farm.tiles.find((t) => Math.abs(p.x - t.x) < 1.15 && Math.abs(p.z - t.z) < 1.15);
     if (tile) return { target: { pos: () => new THREE.Vector3(tile.x, 0, tile.z), stop: 0.35 } };
@@ -79,7 +82,7 @@ export class PointerNav {
     if (r.target) g.player.goTo(r.target.pos, r.target.stop, true);
     else g.player.goTo(() => r.point, 0.15, false);
     const p = r.target ? r.target.pos() : r.point;
-    this.marker.position.set(p.x, 0.04, p.z);
+    this.marker.position.set(p.x, heightAt(p.x, p.z) + 0.05, p.z);
     this.marker.visible = true;
     this.markerT = 0;
     g.audio.play('click', 0.4);
