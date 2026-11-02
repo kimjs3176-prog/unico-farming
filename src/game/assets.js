@@ -7,9 +7,9 @@ import { enhanceMaterial, kindOf } from './surface.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /** 부품이 많은 움직이는 모델: 같은 부모 아래 같은 질감 종류의 부품을 정점 색으로 합쳐 그리기 횟수 감소 */
-const MERGE_PARTS = new Set(['hen', 'tractor', 'booth', 'koat_hq', 'drone', 'planter', 'thresher', 'smartfarm']);
+const MERGE_PARTS = new Set(['hen', 'tractor', 'booth', 'koat_hq', 'drone', 'planter', 'thresher', 'smartfarm', 'crops']);
 /** 작거나 멀리 보이는 모델: 질감 종류와 관계없이 부모별로 한 덩어리 (가장 큰 부품의 재질 질감을 따름) */
-const MERGE_LOOSE = new Set(['hen', 'drone', 'planter', 'booth']);
+const MERGE_LOOSE = new Set(['hen', 'drone', 'planter', 'booth', 'crops']);
 /** 코드가 이름으로 찾아 따로 움직이거나 색을 바꾸는 부품 — 합치지 않음 */
 const KEEP_PART = /^(SignBoard|RoofTint|SensorPole|Canopy|Fruit|Blades|Rotor|Wheel|Steer|Plow|Drum)/;
 
