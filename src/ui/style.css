@@ -387,7 +387,8 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .thresh-panel .fill.ok { background: #6dbb4f; }
 .thresh-panel .fill.hot { background: #f2a33a; }
 .thresh-panel .fill.jam { background: #e8495a; }
-.thresh-panel.jam { animation: reelshake 0.12s infinite; }
+.thresh-panel.jam { animation: threshshake 0.12s infinite; }
+@keyframes threshshake { 0% { transform: translateX(calc(-50% - 4px)); } 50% { transform: translateX(calc(-50% + 4px)); } 100% { transform: translateX(-50%); } }
 .thresh-panel .drum { display: inline-block; }
 .thresh-panel .msg { font-size: 15px; color: #4f9a33; margin-left: 6px; }
 /* 스마트팜 돌발 상황 */
