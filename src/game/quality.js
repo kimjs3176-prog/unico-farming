@@ -37,10 +37,19 @@ export function autoStartLevel(mobile = isMobileDevice()) {
   return mobile ? 'low' : 'high';
 }
 
+/** 화면 글자·버튼 크기 (접근성): 3단계 */
+export const UI_SCALES = [{ v: 1, name: '보통' }, { v: 1.15, name: '크게' }, { v: 1.3, name: '아주 크게' }];
+/** 저장값을 허용 단계 중 가장 가까운 값으로 (잘못된 값이면 보통) */
+export function uiScaleOf(s) {
+  const v = +s?.uiScale;
+  if (!Number.isFinite(v)) return 1;
+  return UI_SCALES.reduce((a, b) => (Math.abs(b.v - v) < Math.abs(a.v - v) ? b : a)).v;
+}
+
 export function loadSettings() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { /* 저장소 사용 불가 */ }
-  const base = { preset: 'auto', autoLevel: autoStartLevel(), showFps: false, ...PRESETS.high };
+  const base = { preset: 'auto', autoLevel: autoStartLevel(), showFps: false, uiScale: 1, ...PRESETS.high };
   const out = { ...base, ...(s || {}) };
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('quality') : null;
   if (q && PRESETS[q]) Object.assign(out, PRESETS[q], { preset: q });

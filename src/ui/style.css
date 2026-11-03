@@ -12,6 +12,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe4ff; col
 #ui { position: fixed; inset: 0; pointer-events: none; }
 /* 화면 UI 는 클릭을 받되, 각 요소가 pointer-events: none 을 정하면 그것이 이기도록 우선순위 0 (:where) — 컷신 레터박스·카운트다운 같은 전체 화면 레이어가 클릭을 가로채지 않게 */
 :where(#ui) > * { pointer-events: auto; }
+/* 글자·버튼 크기 (환경설정): 화면 전체를 덮는 레이어는 제외 */
+:where(#ui) > :not(.cine-bars, .mg-count, .mg-wrap, .fly) { zoom: var(--ui-zoom, 1); }
 button { font-size: inherit; cursor: pointer; border: 0; border-radius: 14px; padding: 8px 14px; background: var(--teal); color: #fff; box-shadow: 0 4px 0 var(--teal-d); transition: transform 0.12s cubic-bezier(.3,1.6,.5,1), filter 0.12s; }
 button:hover:not(:disabled) { transform: translateY(-2px) scale(1.03); filter: brightness(1.05); }
 button:active:not(:disabled) { transform: translateY(3px) scale(0.98); box-shadow: 0 1px 0 var(--teal-d); }
@@ -60,10 +62,10 @@ button:disabled { opacity: 0.45; cursor: default; }
 .prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 30px; font-weight: 700; box-shadow: var(--shadow); display: flex; gap: 10px; align-items: center; white-space: nowrap; max-width: 92vw; }
 .prompt kbd { background: var(--gold); color: var(--ink); border-radius: 8px; padding: 2px 8px; font-weight: 900; }
 .prompt.hidden { display: none; }
-.toasts { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.toasts { position: absolute; top: calc(var(--hud-b, 52px) + 18px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; }
 .toast { background: var(--panel); border: 3px solid var(--panel-edge); color: var(--brown); padding: 8px 18px; border-radius: 22px; box-shadow: 0 4px 0 rgba(107,74,46,0.15); animation: toast 3.2s forwards; max-width: 92vw; font-size: 15px; }
 @keyframes toast { 0% { opacity: 0; transform: translateY(-14px) scale(0.9); } 8% { opacity: 1; transform: translateY(2px) scale(1.03); } 14% { transform: none; } 85% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
-.event-banner { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: var(--gold); color: var(--ink); font-weight: 900; padding: 6px 14px; border-radius: 20px; box-shadow: var(--shadow); }
+.event-banner { position: absolute; top: calc(var(--hud-b, 52px) + 4px); left: 50%; transform: translateX(-50%); background: var(--gold); color: var(--ink); font-weight: 900; padding: 6px 14px; border-radius: 20px; box-shadow: var(--shadow); }
 
 /* 모바일 컨트롤 */
 .joystick { position: absolute; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.35); border: 2px solid rgba(255,255,255,0.7); display: none; }
@@ -98,9 +100,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 .seed-grid button .q { display: block; font-size: 12px; color: #666; }
 
 /* 미니게임 HUD */
-.mini-hud { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 22px; border-radius: 16px; font-weight: 900; font-size: 20px; display: flex; gap: 22px; box-shadow: var(--shadow); }
+.mini-hud { position: absolute; top: calc(var(--hud-b, 52px) + 8px); left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 22px; border-radius: 16px; font-weight: 900; font-size: 20px; display: flex; gap: 22px; box-shadow: var(--shadow); }
 .mini-hud small { font-size: 12px; opacity: 0.7; display: block; font-weight: 500; }
-.smart-panel { position: absolute; right: 12px; top: 218px; background: var(--panel); border-radius: 18px; padding: 14px; width: min(92vw, 320px); box-shadow: var(--shadow); }
+.smart-panel { position: absolute; right: 12px; top: calc(var(--hud-b, 52px) + 166px); background: var(--panel); border-radius: 18px; padding: 14px; width: min(92vw, 320px); box-shadow: var(--shadow); }
 .smart-panel h3 { margin: 0 0 8px; color: var(--teal-d); }
 .gauge { margin-bottom: 8px; }
 .gauge .lbl { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; }
@@ -113,6 +115,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 /* 채팅 */
 .chat { position: absolute; left: 12px; bottom: 12px; width: min(70vw, 320px); }
+/* 글자를 키웠는데 화면이 좁으면 채팅을 아래 행동 막대 위로 올림 */
+@media (max-width: 1500px) { body.ui-big .chat { bottom: 92px; width: min(60vw, 280px); } }
 .chat .log { max-height: 120px; overflow: auto; font-size: 13px; display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
 .chat .log div { background: rgba(255,255,255,0.8); border-radius: 10px; padding: 3px 8px; width: fit-content; max-width: 100%; }
 .chat input { width: 100%; font: inherit; padding: 8px 10px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.8); background: rgba(255,255,255,0.85); }
@@ -120,8 +124,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 @media (max-width: 600px) { .chat { width: 46vw; } .chat .log { max-height: 70px; } .prompt { bottom: 140px; font-size: 13px; } }
 
 /* 미니맵 */
-.minimap { position: absolute; right: 12px; top: 56px; width: 150px; height: 150px; border-radius: 16px; box-shadow: var(--shadow); border: 3px solid rgba(255,255,255,0.9); }
-@media (max-width: 600px) { .minimap { width: 100px; height: 100px; top: 100px; } .smart-panel { top: 210px; right: 8px; } }
+.minimap { position: absolute; right: 12px; top: calc(var(--hud-b, 52px) + 4px); width: 150px; height: 150px; border-radius: 16px; box-shadow: var(--shadow); border: 3px solid rgba(255,255,255,0.9); }
+@media (max-width: 600px) { .minimap { width: 100px; height: 100px; } .smart-panel { top: calc(var(--hud-b, 96px) + 114px); right: 8px; } }
 
 /* 하단 액션바 */
 .actionbar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 4px; background: rgba(35,25,22,0.82); padding: 6px; border-radius: 20px; box-shadow: var(--shadow); backdrop-filter: blur(6px); }
@@ -170,16 +174,16 @@ button:disabled { opacity: 0.45; cursor: default; }
 .book-cell small { color: #777; font-size: 11px; }
 .book-cell.locked { opacity: 0.55; filter: grayscale(1); }
 /* 논 상태 패널 */
-.rice-panel { top: 218px; }
+.rice-panel { top: calc(var(--hud-b, 52px) + 166px); }
 .rice-panel .lbl-row { font-size: 12px; color: #555; font-weight: 700; margin-top: 4px; }
 /* 탈곡 */
-.thresh-panel { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); background: var(--panel); border-radius: 18px; padding: 14px 18px; width: min(92vw, 360px); box-shadow: var(--shadow); text-align: center; }
+.thresh-panel { position: absolute; left: 50%; top: calc(var(--hud-b, 52px) + 18px); transform: translateX(-50%); background: var(--panel); border-radius: 18px; padding: 14px 18px; width: min(92vw, 360px); box-shadow: var(--shadow); text-align: center; }
 .thresh-panel h3 { margin: 0 0 8px; color: var(--teal-d); }
 .thresh-panel .track.big { height: 22px; background: #eee; border-radius: 11px; overflow: hidden; }
 .thresh-panel .fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), #e48e00); transition: width 0.08s; }
 .thresh-panel .t { font-weight: 800; margin: 6px 0; }
 .thresh-panel .mash { width: 100%; font-size: 22px; padding: 14px; touch-action: none; }
-@media (max-width: 600px) { .rice-panel { top: 210px; } }
+@media (max-width: 600px) { .rice-panel { top: calc(var(--hud-b, 96px) + 114px); } }
 
 /* ---------------- KOAT 체험관 ---------------- */
 .panel.koat { border-top: 8px solid var(--div, #30b6aa); }
@@ -226,7 +230,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 @media (max-width: 600px) { .koat-stamps { grid-template-columns: repeat(2, 1fr); } .koat-match { grid-template-columns: 1fr; } .koat-match .arrow { display: none; } }
 
 /* 목표 안내 */
-.objective { position: absolute; left: 12px; top: 62px; background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 18px; padding: 8px 12px; box-shadow: 0 4px 0 rgba(107,74,46,0.15); color: var(--brown); display: flex; align-items: center; gap: 10px; max-width: min(70vw, 340px); cursor: pointer; animation: popin 0.4s cubic-bezier(.3,1.5,.5,1); }
+.objective { position: absolute; left: 12px; top: calc(var(--hud-b, 52px) + 10px); background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 18px; padding: 8px 12px; box-shadow: 0 4px 0 rgba(107,74,46,0.15); color: var(--brown); display: flex; align-items: center; gap: 10px; max-width: min(70vw, 340px); cursor: pointer; animation: popin 0.4s cubic-bezier(.3,1.5,.5,1); }
 .objective .ic { font-size: 22px; }
 .objective .tt { font-size: 15px; line-height: 1.2; }
 .objective .tt small { display: block; font-family: "Gowun Dodum", sans-serif; font-size: 12px; color: #8a7a66; }
@@ -235,7 +239,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .objective.done .dir { background: #6dbb4f; color: #fff; }
 .objective .bar { height: 5px; background: #eadfc8; border-radius: 3px; overflow: hidden; margin-top: 3px; }
 .objective .bar i { display: block; height: 100%; background: var(--teal); }
-@media (max-width: 600px) { .objective { top: 96px; max-width: 58vw; } }
+@media (max-width: 600px) { .objective { max-width: 58vw; } }
 /* 가방으로 날아가는 아이템 */
 .fly { position: fixed; z-index: 40; font-size: 30px; pointer-events: none; transition: transform 0.75s cubic-bezier(.5,-0.4,.7,1), opacity 0.75s; filter: drop-shadow(0 3px 2px rgba(0,0,0,0.25)); }
 
@@ -249,7 +253,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .map-tip { margin: 8px 0 0; font-size: 13px; opacity: 0.75; text-align: center; }
 
 /* 환경설정 (그래픽 품질) */
-.fps-chip { position: absolute; right: 12px; top: 214px; background: rgba(35,25,22,0.7); color: #fff; font-size: 12px; padding: 3px 9px; border-radius: 10px; display: none; pointer-events: none; font-variant-numeric: tabular-nums; }
+.fps-chip { position: absolute; right: 12px; top: calc(var(--hud-b, 52px) + 162px); background: rgba(35,25,22,0.7); color: #fff; font-size: 12px; padding: 3px 9px; border-radius: 10px; display: none; pointer-events: none; font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) { .fps-chip { top: 206px; } }
 .gfx-body h3 { margin: 12px 0 6px; font-size: 17px; color: var(--teal-d); display: flex; align-items: center; gap: 8px; }
 .gfx-fps { margin-left: auto; font-size: 13px; color: var(--brown); opacity: 0.75; font-weight: normal; }

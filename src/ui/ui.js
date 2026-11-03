@@ -7,7 +7,7 @@ import { RICE_STAGES, WATER_MAX } from '../game/sim/rice.js';
 const anyItem = (k) => CROPS[k] || PRODUCTS[k] || ITEMS[k];
 import { recordsHtml } from './minigame_frame.js';
 import { installKoatUI } from './koat_ui.js';
-import { PRESETS, PRESET_INFO, SHADOWS, applyPreset } from '../game/quality.js';
+import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf } from '../game/quality.js';
 
 /** 세부 항목이 어느 프리셋과 똑같은지 (아니면 사용자 지정) */
 function matchPreset(s) {
@@ -362,7 +362,17 @@ export class UI {
   }
 
   // ---------------------------------------------------------------- HUD
+  /** 위쪽 막대(HUD)가 끝나는 높이를 CSS 변수로: 글자 크기를 키워 버튼이 두 줄이 돼도 미니맵·목표·알림이 그 아래로 */
+  syncHudBottom() {
+    const r = this.top.getBoundingClientRect();
+    const z = +getComputedStyle(this.top).zoom || 1;
+    const b = Math.round(r.bottom / z);
+    if (b !== this._hudB && b > 0) { this._hudB = b; this.root.style.setProperty('--hud-b', `${b}px`); }
+  }
+
   updateHud() {
+    const now = performance.now();
+    if (!(now - (this._hudSync || 0) < 500)) { this._hudSync = now; this.syncHudBottom(); }
     const g = this.game;
     // 코인: 숫자가 굴러가며 바뀜
     const target = g.economy.money;
@@ -615,9 +625,12 @@ export class UI {
         <label class="gfx-row check"><input type="checkbox" data-k="ao" ${s.ao ? 'checked' : ''} ${s.post ? '' : 'disabled'}> 주변광 차폐 (구석 그늘, 가장 무거움)</label>
         <label class="gfx-row check"><input type="checkbox" data-k="tiltShift" ${s.tiltShift ? 'checked' : ''} ${s.post ? '' : 'disabled'}> 미니어처 초점 (위·아래 흐림)</label>
         <label class="gfx-row check"><input type="checkbox" data-k="showFps" ${s.showFps ? 'checked' : ''}> 화면에 FPS 표시</label>
+        <h3>🔤 글자·버튼 크기</h3>
+        <div class="gfx-presets ui-scales">${UI_SCALES.map((u) => `<button class="gfx-preset ${uiScaleOf(s) === u.v ? 'on' : ''}" data-ui="${u.v}" style="font-size:${Math.round(14 * u.v)}px"><b>${u.name}</b></button>`).join('')}</div>
         <p class="gfx-tip">💡 끊긴다면: 품질 '낮음' → 해상도 낮추기 → 그림자 끄기 순으로 시도해 보세요. 설정은 이 브라우저에 저장돼요.</p>`);
       p.append(body);
-      body.querySelectorAll('.gfx-preset').forEach((b) => (b.onclick = () => { g.setGraphics(applyPreset(g.gfx, b.dataset.p)); render(); }));
+      body.querySelectorAll('.gfx-preset[data-p]').forEach((b) => (b.onclick = () => { g.setGraphics(applyPreset(g.gfx, b.dataset.p)); render(); }));
+      body.querySelectorAll('[data-ui]').forEach((b) => (b.onclick = () => { g.setGraphics({ ...g.gfx, uiScale: +b.dataset.ui }); g.audio.play('click'); render(); }));
       body.querySelectorAll('[data-k]').forEach((el) => {
         const k = el.dataset.k;
         const commit = () => {

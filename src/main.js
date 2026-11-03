@@ -27,7 +27,7 @@ import { Minimap } from './ui/minimap.js';
 import { randomName } from './game/names.js';
 import { Juice } from './game/juice.js';
 import { PostFX } from './game/postfx.js';
-import { loadSettings, saveSettings, resolveQuality, applyPreset, FpsGovernor, LEVELS, PRESET_INFO } from './game/quality.js';
+import { loadSettings, saveSettings, resolveQuality, applyPreset, FpsGovernor, LEVELS, PRESET_INFO, uiScaleOf } from './game/quality.js';
 import { SURF } from './game/surface.js';
 import { Music } from './game/music.js';
 import { Guide } from './game/guide.js';
@@ -166,6 +166,15 @@ class Game {
     this.postfx.enabled = q.post;
     this.resize();
     this.ui?.updateFps?.();
+    this.applyUiScale();
+  }
+
+  /** 글자·버튼 크기: 화면 UI 요소마다 배율 (환경설정) */
+  applyUiScale() {
+    const v = uiScaleOf(this.gfx);
+    document.getElementById('ui')?.style.setProperty('--ui-zoom', String(v));
+    document.body.classList.toggle('ui-big', v > 1);
+    this.ui?.syncHudBottom?.();
   }
 
   resize() {

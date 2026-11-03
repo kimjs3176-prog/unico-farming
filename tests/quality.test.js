@@ -69,3 +69,13 @@ test('자동 조절기: 탭 전환 후 reset 하면 유예 시간부터 다시',
   for (let i = 0; i < 30; i++) down ||= g.tick(1 / 20); // 1.5초 느려도 유예 중
   assert.equal(down, false);
 });
+
+test('UI text size: three steps, invalid or missing values fall back to normal', async () => {
+  const { UI_SCALES, uiScaleOf } = await import('../src/game/quality.js');
+  assert.deepEqual(UI_SCALES.map((u) => u.v), [1, 1.15, 1.3]);
+  assert.equal(uiScaleOf({}), 1);
+  assert.equal(uiScaleOf({ uiScale: 'abc' }), 1);
+  assert.equal(uiScaleOf({ uiScale: 1.3 }), 1.3);
+  assert.equal(uiScaleOf({ uiScale: 1.2 }), 1.15, '가장 가까운 단계로');
+  assert.equal(uiScaleOf({ uiScale: 9 }), 1.3);
+});
