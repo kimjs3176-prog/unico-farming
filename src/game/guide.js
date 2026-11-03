@@ -20,6 +20,10 @@ function targetOf(id, g) {
     case 'rice1': return new THREE.Vector3(g.rice.paddies[0].x, 0, g.rice.paddies[0].z);
     case 'riceharv': return g.economy.count('paddy') ? new THREE.Vector3(L.thresher.x, 0, L.thresher.z) : new THREE.Vector3(g.rice.paddies[0].x, 0, g.rice.paddies[0].z);
     case 'fish1': case 'book10': return new THREE.Vector3(L.dock.x, 0, L.dock.z);
+    case 'fert3': return g.economy.count('compost') ? new THREE.Vector3(0, 0, 0) : new THREE.Vector3(L.craft.compost.x, 0, L.craft.compost.z);
+    case 'star3': case 'giant1': return new THREE.Vector3(0, 0, 0);
+    case 'process2': return new THREE.Vector3(L.craft.jars.x, 0, L.craft.jars.z);
+    case 'order3': return new THREE.Vector3(L.craft.board.x, 0, L.craft.board.z);
     case 'swim1': return new THREE.Vector3(L.lake.x + 2.5, 0, L.lake.z - 3.5);
     case 'lake1': case 'fight3': return new THREE.Vector3(L.lake.x, 0, (L.lake.pier[1].z0 + L.lake.pier[1].z1) / 2);
     case 'weed2': { const i = g.farm.sim.plots.findIndex((p) => p.weeds); return i >= 0 ? new THREE.Vector3(g.farm.tiles[i].x, 0, g.farm.tiles[i].z) : new THREE.Vector3(0, 0, 0); }

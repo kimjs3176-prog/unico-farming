@@ -10,6 +10,7 @@ import { CROPS } from '../src/game/sim/crops.js';
 
 test('farm: till -> plant -> water -> ready -> harvest', () => {
   const f = new FarmSim(2);
+  f.rng = () => 0.99; // 대왕 작물 확률 배제
   assert.equal(f.actionFor(0, false).type, 'till');
   assert.ok(f.till(0));
   assert.equal(f.actionFor(0, false).type, 'need_seed');
@@ -21,7 +22,9 @@ test('farm: till -> plant -> water -> ready -> harvest', () => {
   f.tick(CROPS.carrot.growTime);
   assert.equal(f.plots[0].state, 'ready');
   const r = f.harvest(0);
-  assert.deepEqual(r, { crop: 'carrot', amount: CROPS.carrot.yield });
+  assert.equal(r.crop, 'carrot');
+  assert.equal(r.stars, 3, '물이 계속 있었으면 특상품');
+  assert.equal(r.amount, CROPS.carrot.yield + 1);
   assert.equal(f.plots[0].state, 'tilled');
 });
 

@@ -41,6 +41,7 @@ import { KoatView } from './game/view/koat_view.js';
 import { LakeView } from './game/view/lake_view.js';
 import { Angling } from './game/sim/angling.js';
 import { WaterFX } from './game/waterfx.js';
+import { FarmCraftView } from './game/view/farmcraft_view.js';
 
 class Game {
   constructor(canvas, assets, name) {
@@ -91,6 +92,7 @@ class Game {
     this.herding = new Herding(this);
     this.bees = new Bees(this);
     this.lake = new LakeView(this);
+    this.farmcraft = new FarmCraftView(this);
     this.net = new Net(this);
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
@@ -190,6 +192,7 @@ class Game {
     this.explore.load(s.explore);
     this.bees.load(s.bees);
     this.angling.load(s.angling);
+    this.farmcraft.load(s.farmcraft);
     if (this.pet.ok) this.pet.load(s.pet);
     if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원');
     if (s.world) { this.world.time = s.world.time; this.world.day = s.world.day; }
@@ -346,6 +349,7 @@ class Game {
       pick(this.herding.update(dt, pp));
       pick(this.bees.update(dt, pp));
       pick(this.lake.update(dt, pp));
+      pick(this.farmcraft.update(dt, pp));
       this.pointer.update(dt, input);
       const arrived = this.player.arrivedInteract;
       this.player.arrivedInteract = false;
@@ -367,6 +371,7 @@ class Game {
       this.pests.update(dt, pp);
       this.bees.update(dt, pp);
       this.lake.update(dt, pp);
+      this.farmcraft.update(dt, pp);
       // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스로 돌려도 천천히 복귀)
       const behind = this.tractor.vehicle.heading + Math.PI;
       const dy = ((behind - this.followCam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;

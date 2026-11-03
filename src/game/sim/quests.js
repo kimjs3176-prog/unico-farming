@@ -31,6 +31,11 @@ export const QUESTS = [
   { id: 'dive3',     title: '물속 보물찾기',        desc: '호수의 반짝이는 곳에서 잠수해 보물 3번 찾기', event: 'dive',     goal: 3, reward: { money: 120, xp: 90 } },
   { id: 'fight3',    title: '손맛 장인',            desc: '낚시터에서 힘겨루기 끝에 큰 물고기 3마리 낚기', event: 'fightwin', goal: 3, reward: { money: 200, xp: 150 } },
   { id: 'lakereq',   title: '낚시꾼의 의뢰',        desc: '기록판의 오늘의 의뢰를 달성하고 낚시꾼에게 보고하기', event: 'lakereq', goal: 1, reward: { money: 150, xp: 120 } },
+  { id: 'fert3',     title: '기름진 흙',            desc: '밭에 퇴비를 3번 주세요 (장터에서 사거나 퇴비통에서 만들기)', event: 'fert', goal: 3, reward: { money: 80, xp: 60 } },
+  { id: 'star3',     title: '특상품 농부',          desc: '물·김매기·퇴비로 잘 돌봐 ⭐⭐⭐ 특상품을 수확하세요', event: 'star3', goal: 1, reward: { money: 120, xp: 90 } },
+  { id: 'process2',  title: '장독대 장인',          desc: '밭 서쪽 장독대에서 가공품 2개 만들기 (김치·주스·잼)', event: 'process', goal: 2, reward: { money: 150, xp: 120 } },
+  { id: 'order3',    title: '로컬푸드 납품',        desc: '주문 게시판의 주문을 3건 납품하세요',          event: 'order',    goal: 3, reward: { money: 200, xp: 150 } },
+  { id: 'giant1',    title: '대왕 작물',            desc: '아주 가끔 열리는 대왕 작물을 수확하세요 (퇴비 주면 확률 ↑)', event: 'giant', goal: 1, reward: { money: 300, xp: 200 } },
   { id: 'rich',      title: '천 원의 농부',         desc: '보유 금액 1,000 코인 달성',               event: 'money',    goal: 1000, reward: { money: 200, xp: 150 }, absolute: true },
   { id: 'plow30',    title: '밭갈이 달인',          desc: '트랙터 미니게임에서 한 번에 30칸 이상 갈기', event: 'plowbest', goal: 30, reward: { money: 250, xp: 200 }, absolute: true },
 ];

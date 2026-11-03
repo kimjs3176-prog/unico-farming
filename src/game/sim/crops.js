@@ -2,8 +2,8 @@
 export const CROPS = {
   carrot:     { name: '당근',   emoji: '🥕', seedPrice: 12, basePrice: 30,  growTime: 60,  unlockLevel: 1, yield: 2 },
   cabbage:    { name: '양배추', emoji: '🥬', seedPrice: 18, basePrice: 48,  growTime: 90,  unlockLevel: 2, yield: 2 },
-  tomato:     { name: '토마토', emoji: '🍅', seedPrice: 25, basePrice: 42,  growTime: 110, unlockLevel: 2, yield: 3 },
-  strawberry: { name: '딸기',   emoji: '🍓', seedPrice: 40, basePrice: 65,  growTime: 150, unlockLevel: 3, yield: 3 },
+  tomato:     { name: '토마토', emoji: '🍅', seedPrice: 25, basePrice: 42,  growTime: 110, unlockLevel: 2, yield: 3, regrow: 2 }, // 수확 후 다시 열림 (추가 2번)
+  strawberry: { name: '딸기',   emoji: '🍓', seedPrice: 40, basePrice: 65,  growTime: 150, unlockLevel: 3, yield: 3, regrow: 3 },
   corn:       { name: '옥수수', emoji: '🌽', seedPrice: 30, basePrice: 75,  growTime: 180, unlockLevel: 4, yield: 3 },
 };
 

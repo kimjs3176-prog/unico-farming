@@ -458,6 +458,10 @@ export class UI {
       const pb3 = h('button', '', '3개'); pb3.disabled = eco.money < pt.price * 3; pb3.onclick = () => { eco.buyItem('pet_treat', 3); g.audio.play('coin'); render(); };
       ptr.append(pb1, pb3);
       seeds.append(ptr);
+      const cp = ITEMS.compost;
+      const cpr = h('div', 'row', `<span>${cp.emoji}</span><span class="nm">${cp.name} <span class="qty">보유 ${eco.count('compost')}</span><br><small>퇴비통에서 직접 만들 수도 있어요</small></span><span class="pr">${cp.price}🪙</span>`);
+      for (const n of [1, 5]) { const b = h('button', '', `${n}개`); b.disabled = eco.money < cp.price * n; b.onclick = () => { eco.buyItem('compost', n); g.audio.play('coin'); render(); }; cpr.append(b); }
+      seeds.append(cpr);
       const rs = ITEMS.rice_seed;
       const rr = h('div', 'row', `<span>${rs.emoji}</span><span class="nm">${rs.name} <span class="qty">보유 ${eco.count('rice_seed')}</span></span><span class="pr">${rs.price}🪙</span>`);
       const rb1 = h('button', '', '1개'); rb1.disabled = eco.money < rs.price; rb1.onclick = () => { eco.buyItem('rice_seed', 1); g.audio.play('coin'); render(); };
@@ -465,6 +469,22 @@ export class UI {
       rr.append(rb1, rb3);
       seeds.append(rr);
       body.append(seeds);
+      // 농장 시설: 스프링클러(줄마다 자동 물주기), 장독 추가
+      const fc = g.farmcraft, sim = g.farm.sim;
+      body.append(h('h3', '', '🛠️ 농장 시설'));
+      const fac = h('div', 'rows');
+      const SPR = [400, 800, 1300];
+      const sr = sim.sprinklerRows;
+      const spr = h('div', 'row', `<span>💦</span><span class="nm">스프링클러 <span class="qty">${sr}/3줄</span><br><small>설치한 줄은 물이 마르면 자동으로 물을 줘요</small></span><span class="pr">${sr < 3 ? `${SPR[sr]}🪙` : '완료'}</span>`);
+      if (sr < 3) { const b = h('button', 'gold', `${sr + 1}번째 줄 설치`); b.disabled = eco.money < SPR[sr]; b.onclick = () => { if (eco.money < SPR[sim.sprinklerRows]) return; eco.money -= SPR[sim.sprinklerRows]; eco.stats.spent += SPR[sim.sprinklerRows]; sim.sprinklerRows++; g.audio.play('levelup'); this.toast(`💦 밭 ${sim.sprinklerRows}번째 줄에 스프링클러를 설치했어요!`); g.onEvent('sprinkler', sim.sprinklerRows); render(); }; spr.append(b); }
+      fac.append(spr);
+      if (fc) {
+        const jp = fc.proc.nextJarPrice;
+        const jr = h('div', 'row', `<span>🏺</span><span class="nm">장독 추가 <span class="qty">${fc.proc.jars}/4개</span><br><small>밭 서쪽 장독대에서 김치·잼·주스를 동시에 더 담가요</small></span><span class="pr">${jp ? `${jp}🪙` : '완료'}</span>`);
+        if (jp) { const b = h('button', 'gold', '장독 사기'); b.disabled = eco.money < jp; b.onclick = () => { if (eco.money < jp || !fc.proc.buyJar()) return; eco.money -= jp; eco.stats.spent += jp; g.audio.play('levelup'); this.toast('🏺 장독대에 장독을 하나 더 놓았어요!'); render(); }; jr.append(b); }
+        fac.append(jr);
+      }
+      body.append(fac);
       body.append(h('h3', '', '📈 오늘의 시세 · 판매 (매일 변동, 수요 이벤트 시 2배)'));
       const sells = h('div', 'rows');
       let any = false;
@@ -502,7 +522,7 @@ export class UI {
     add('🌾', '사료', eco.inventory.feed);
     for (const [k, n] of Object.entries(eco.inventory.items)) if (n) add(ITEMS[k].emoji, ITEMS[k].name, n);
     p.append(rows);
-    p.append(h('h3', '', `🌾 농사 숙련도 Lv.${this.game.rice.sim.skillLevel} (${this.game.rice.sim.skill}점) · 📖 도감 ${BOOK_CATS.map((c) => { const pr = this.game.collection.progress(c); return `${CATEGORY_NAMES[c]} ${pr.got}/${pr.total}`; }).join(' · ')}`));
+    p.append(h('h3', '', `🥕 밭농사 숙련도 Lv.${this.game.farm.sim.level} (${this.game.farm.sim.xp}점) · 🌾 논농사 숙련도 Lv.${this.game.rice.sim.skillLevel} (${this.game.rice.sim.skill}점) · 📖 도감 ${BOOK_CATS.map((c) => { const pr = this.game.collection.progress(c); return `${CATEGORY_NAMES[c]} ${pr.got}/${pr.total}`; }).join(' · ')}`));
     const s = eco.stats;
     p.append(h('h3', '', `누적 수입 ${s.earned.toLocaleString()} · 지출 ${s.spent.toLocaleString()} · 판매 ${s.sold}개`));
   }
@@ -527,15 +547,22 @@ export class UI {
     render();
   }
 
-  openSeedPicker(onPick) {
+  openSeedPicker(onPick, { fert = 0 } = {}) {
     const g = this.game, eco = g.economy;
     const p = this.openPanel('🌱 어떤 씨앗을 심을까요?');
+    let useFert = fert > 0;
+    if (fert > 0) {
+      const tg = h('label', 'row', `<span>🟫</span><span class="nm">퇴비도 함께 주기 <span class="qty">보유 ${fert}</span><br><small>30% 빨리 자라고 품질 ↑</small></span>`);
+      const cb = h('input'); cb.type = 'checkbox'; cb.checked = true; cb.onchange = () => { useFert = cb.checked; };
+      tg.append(cb);
+      const wrap = h('div', 'rows'); wrap.append(tg); p.append(wrap);
+    }
     const grid = h('div', 'seed-grid');
     for (const [k, c] of Object.entries(CROPS)) {
       const n = eco.inventory.seeds[k] || 0;
       if (!n) continue;
       const b = h('button', '', `${c.emoji} ${c.name}<span class="q">${n}개 · ${c.growTime}초 · ${c.basePrice}🪙</span>`);
-      b.onclick = () => { this.closePanel(); onPick(k); };
+      b.onclick = () => { this.closePanel(); onPick(k, useFert); };
       grid.append(b);
     }
     p.append(grid);

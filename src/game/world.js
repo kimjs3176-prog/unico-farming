@@ -92,6 +92,8 @@ export const LAYOUT = {
   // 양 몰이 들판 (밭 남쪽): 놀이 영역과 3면이 막힌 우리 (서쪽이 입구)
   herd: { x0: 12.5, z0: 28, x1: 30, z1: 35.5, pen: { x0: 25, z0: 29.5, x1: 29.5, z1: 34 }, sign: { x: 13.6, z: 29 } },
   shed: { x: 35, z: 17 }, // 주차된 트랙터와 3m 띄움
+  // 밭 서쪽 농사 시설: 퇴비통, 주문 게시판, 장독대(가공)
+  craft: { compost: { x: -9.7, z: -2.3 }, board: { x: -10.3, z: -4.6 }, jars: { x: -12.4, z: -7.3 } },
   mill: { x: -15, z: -24 },
   reserved: [
     // 언덕 전망대·숨은 보물 상자 자리 (나무가 막지 않게)
@@ -99,6 +101,7 @@ export const LAYOUT = {
     ...CHESTS.map((c) => [c.x - 1.4, c.z - 1.4, c.x + 1.4, c.z + 1.4]),
     [12, 27.5, 30.5, 36],
     [-19.5, 23.2, -1, 38.5], // 낚시터
+    [-14.2, -9.5, -7.4, -1.4], // 농사 시설 (나무가 가리지 않게)
     [-21, 3.4, -15.8, 8.2],
     [13, -39, 37, -18.4], [29.5, -14.5, 32.5, -11.5], [32, 14, 38, 20], [-18, -27, -12, -21], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5]],
 };
@@ -418,7 +421,7 @@ export class World {
       this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.5) * treeScale(n), { r: 0.6 });
     }
     const spots = [[-8, -6], [-5, -9], [-11, 13], [-20, 4], [-28, -2], [30, 14], [20, 22], [-30, 22], [35.8, -4], [-18, 24], [-14, -18], [-22, 10]];
-    for (const [x, z] of spots) { if (this.isBlocked(x, z, 1.0)) continue; const n = Q ? pick(['tree_1', 'tree_2', 'tree_3', 'tree_4', 'tree_5', 'birch_1', 'birch_2', 'autumn_1']) : treeName(false); this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.4) * treeScale(n), { r: 0.6 }); }
+    for (const [x, z] of spots) { if (this.isBlocked(x, z, 1.0) || this.isReserved(x, z, 0)) continue; const n = Q ? pick(['tree_1', 'tree_2', 'tree_3', 'tree_4', 'tree_5', 'birch_1', 'birch_2', 'autumn_1']) : treeName(false); this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.4) * treeScale(n), { r: 0.6 }); }
     // 연못가 버드나무
     if (Q) for (const [x, z] of [[-17.6, 15.5], [-16.5, 21.8]]) if (!this.isBlocked(x, z, 1.6)) this.place(rnd() > 0.5 ? 'willow_1' : 'willow_2', x, z, rnd() * 6.28, 1.35, { r: 0.6 });
     // 연잎 (낚시 데크 반대편)
