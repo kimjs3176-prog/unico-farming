@@ -10,7 +10,8 @@ h1, h2, h3, button, .chip, .prompt, .toast, .mini-hud, .koat-score, .event-banne
 html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe4ff; color: var(--ink); touch-action: none; }
 #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #ui { position: fixed; inset: 0; pointer-events: none; }
-#ui > * { pointer-events: auto; }
+/* 화면 UI 는 클릭을 받되, 각 요소가 pointer-events: none 을 정하면 그것이 이기도록 우선순위 0 (:where) — 컷신 레터박스·카운트다운 같은 전체 화면 레이어가 클릭을 가로채지 않게 */
+:where(#ui) > * { pointer-events: auto; }
 button { font-size: inherit; cursor: pointer; border: 0; border-radius: 14px; padding: 8px 14px; background: var(--teal); color: #fff; box-shadow: 0 4px 0 var(--teal-d); transition: transform 0.12s cubic-bezier(.3,1.6,.5,1), filter 0.12s; }
 button:hover:not(:disabled) { transform: translateY(-2px) scale(1.03); filter: brightness(1.05); }
 button:active:not(:disabled) { transform: translateY(3px) scale(0.98); box-shadow: 0 1px 0 var(--teal-d); }
@@ -294,9 +295,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 .cine-bars { position: absolute; inset: 0; pointer-events: none; z-index: 25; }
 .cine-bars i { position: absolute; left: 0; right: 0; height: 0; background: #14100e; transition: height 0.6s cubic-bezier(.4,0,.2,1); }
 .cine-bars .top { top: 0; } .cine-bars .bot { bottom: 0; }
-.cine-skip { position: absolute; right: 18px; top: 18px; pointer-events: auto; opacity: 0; transition: opacity 0.4s; background: rgba(255,255,255,0.18); color: #fff; border: 1px solid rgba(255,255,255,0.35); font-size: 13px; padding: 6px 12px; }
+.cine-skip { position: absolute; right: 18px; top: 18px; pointer-events: none; opacity: 0; transition: opacity 0.4s; background: rgba(255,255,255,0.18); color: #fff; border: 1px solid rgba(255,255,255,0.35); font-size: 13px; padding: 6px 12px; }
 body.cine .cine-bars i { height: 9vh; }
-body.cine .cine-skip { opacity: 1; }
+body.cine .cine-skip { opacity: 1; pointer-events: auto; }
 body.cine .cine-skip:hover { background: rgba(255,255,255,0.3); }
 body.cine .hud-top, body.cine .actionbar, body.cine .chat, body.cine .minimap, body.cine .objective, body.cine .prompt, body.cine .fps-chip, body.cine .touch-btn { opacity: 0; pointer-events: none; transition: opacity 0.4s; }
 body.cine .dlg { bottom: calc(9vh + 14px); }
