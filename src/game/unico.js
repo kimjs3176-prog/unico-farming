@@ -99,9 +99,14 @@ const SKIN_MAT = enhanceMaterial(new THREE.MeshStandardMaterial({ vertexColors: 
 const OFFICIAL = { body: 0xffffff, snout: 0xf7e1ec, mane: 0x30b6aa, maneD: 0x249d92, hoof: 0x2aa79b };
 
 /** 게임 시작 전 한 번 호출 (assets.loadAll) */
-export async function loadUnicoMesh(url, rig = 'quad') {
+/** key: 리그 이름 또는 '<리그>_lod' (멀리 있을 때 쓰는 저해상도) */
+export async function loadUnicoMesh(url, key = 'quad') {
   const ab = await (await fetch(url)).arrayBuffer();
-  SKINS[rig] = { ...parseUnicoBin(ab), byPalette: new Map() };
+  SKINS[key] = { ...parseUnicoBin(ab), byPalette: new Map() };
+  // 화면 밖 캐릭터는 그리지 않도록(절두체 컬링) 경계 구를 애니메이션 여유만큼 키움
+  const g = SKINS[key].geometry;
+  g.computeBoundingSphere();
+  g.boundingSphere.radius *= 1.45;
 }
 
 function skinGeometry(rig, paletteId) {
@@ -109,6 +114,7 @@ function skinGeometry(rig, paletteId) {
   if (!S.byPalette.has(paletteId)) {
     const g = S.geometry.clone(); // 속성 배열은 복사되지만 1회/팔레트
     g.setAttribute('color', colorAttribute(S.slotWeights, PALETTES[paletteId] || OFFICIAL));
+    g.boundingSphere = S.geometry.boundingSphere.clone();
     S.byPalette.set(paletteId, g);
   }
   return S.byPalette.get(paletteId);
@@ -225,7 +231,7 @@ function buildTemplate(rig = 'quad') {
 
 function meshOf(b) {
   const m = new THREE.Mesh(b.geo, b.mats.length === 1 ? b.mats[0] : b.mats);
-  m.castShadow = true;
+  m.castShadow = false; // 얼굴·소품은 작아서 그림자는 몸이 대신 (그림자 패스 부담 감소)
   m.receiveShadow = true;
   return m;
 }
@@ -321,9 +327,17 @@ export class Unico {
     this.skin = new THREE.SkinnedMesh(skinGeometry(rig, palette), SKIN_MAT);
     this.skin.castShadow = true;
     this.skin.receiveShadow = false; // 팔·귀가 몸에 드리운 자기 그림자가 얼룩처럼 보여 끔 (만화풍 깔끔한 음영)
-    this.skin.frustumCulled = false;
     this.root.add(this.skin);
     this.skin.bind(this.skeleton);
+    // 거리 LOD: 멀리 있으면 같은 뼈대를 쓰는 저해상도 메시로 (삼각형 약 1/4), 그림자는 가까울 때만
+    if (SKINS[rig + '_lod']) {
+      this.skinLod = new THREE.SkinnedMesh(skinGeometry(rig + '_lod', palette), SKIN_MAT);
+      this.skinLod.castShadow = false;
+      this.skinLod.receiveShadow = false;
+      this.skinLod.visible = false;
+      this.root.add(this.skinLod);
+      this.skinLod.bind(this.skeleton);
+    }
     this.bodyMesh = new THREE.Object3D(); // (호환) 숨쉬기는 몸통 뼈 미세 이동으로 대체
     // 얼굴 부품 (머리 뼈에 붙음)
     this.headG.add(meshOf(TPL.head));
@@ -493,11 +507,21 @@ export class Unico {
     bones.forEach((b, i) => { const q = prev[i]; q[0] = b.rotation.x; q[1] = b.rotation.y; q[2] = b.rotation.z; q[3] = b.scale.y; });
     const prevBodyY = this.bodyG.position.y;
     // 이름표: 가까울 때만 또렷하게 (멀면 흐려져 화면이 복잡하지 않게). 내 캐릭터는 항상 표시
-    if (this.label && !this.labelAlways && camera) {
+    if (camera) {
       const d = camera.position.distanceTo(this.group.position);
+      // 거리별 표현: 15m 넘으면 저해상도 몸, 24m 넘으면 그림자 끔, 40m 넘으면 얼굴 부품 생략 (경계에서 깜빡이지 않게 여유)
+      if (this.skinLod) {
+        const far = d > (this.isLod ? 14 : 16);
+        if (far !== this.isLod) { this.isLod = far; this.skin.visible = !far; this.skinLod.visible = far; }
+      }
+      this.skin.castShadow = d < 24;
+      const faceOn = d < (this.faceOff ? 36 : 40);
+      if (faceOn === !!this.faceOff) { this.faceOff = !faceOn; this.headG.children.forEach((c) => { if (c.isMesh) c.visible = faceOn; }); }
+      if (this.label && !this.labelAlways) {
       const a = THREE.MathUtils.clamp((22 - d) / 7, 0, 1);
       this.label.material.opacity = a;
       this.label.visible = a > 0.02;
+      }
     }
     if (this.action && this.t > this.actionUntil) this.action = null;
     if (this.bubble && this.t > this.bubbleUntil) { this.group.remove(this.bubble); this.bubble.userData.dispose(); this.bubble = null; }

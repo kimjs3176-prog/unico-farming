@@ -8,5 +8,11 @@ export default defineConfig({
       '/ws': { target: 'ws://localhost:8787', ws: true },
     },
   },
-  build: { target: 'es2022', sourcemap: false, chunkSizeWarningLimit: 1200 },
+  build: {
+    target: 'es2022',
+    sourcemap: false,
+    chunkSizeWarningLimit: 1200,
+    // three.js 는 따로 묶어 둠: 게임 코드만 바뀐 업데이트에서는 브라우저 캐시의 three 청크를 그대로 재사용
+    rollupOptions: { output: { manualChunks: (id) => (id.includes('node_modules/three') ? 'three' : undefined) } },
+  },
 });

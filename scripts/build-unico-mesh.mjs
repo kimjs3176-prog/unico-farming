@@ -7,9 +7,9 @@
 import fs from 'node:fs';
 import { buildUnicoGeometry, SLOTS } from '../src/game/unico_mesh.js';
 
-const STEPS = { quad: 0.032, biped: 0.022 }; // 주인공은 가는 팔다리가 매끈하도록 더 촘촘히
-for (const [rig, file] of [['quad', 'unico_body.bin'], ['biped', 'unico_biped.bin']]) {
-const STEP = STEPS[rig];
+// 주인공은 가는 팔다리가 매끈하도록 더 촘촘히. *_lod 는 멀리 있는 캐릭터용 저해상도 (삼각형 약 1/4)
+const BUILDS = [['quad', 'unico_body.bin', 0.032], ['biped', 'unico_biped.bin', 0.022], ['quad', 'unico_body_lod.bin', 0.062], ['biped', 'unico_biped_lod.bin', 0.046]];
+for (const [rig, file, STEP] of BUILDS) {
 const t = Date.now();
 const { geometry: g, slotWeights, stats } = buildUnicoGeometry(STEP, rig);
 const n = stats.verts, idx = g.index.array, ni = idx.length;

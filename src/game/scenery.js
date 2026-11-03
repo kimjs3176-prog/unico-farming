@@ -290,6 +290,21 @@ export class Scenery {
     water.position.set(L.x, 0.03, L.z);
     this.world.scene.add(water);
     this.water = water;
+    if (water.isReflector) {
+      // 반사 최적화: ① 한 프레임에 한 번만(주변광 차폐 패스가 수면을 다시 그릴 때 또 렌더하지 않게)
+      // ② 두 프레임에 한 번 갱신 ③ 반사에 거의 안 보이는 잔디·들꽃·빛 먼지는 빼고 그림
+      const reflect = water.onBeforeRender.bind(water);
+      let last = -1;
+      water.onBeforeRender = (r, sc, cam, ...rest) => {
+        const f = this.world.frameNo || 0;
+        if (f === last || (f - last < 2 && last >= 0)) return;
+        last = f;
+        const skip = [this.grass, this.flowers, this.motes].filter(Boolean);
+        skip.forEach((o) => (o.userData._rv = o.visible, o.visible = false));
+        reflect(r, sc, cam, ...rest);
+        skip.forEach((o) => (o.visible = o.userData._rv));
+      };
+    }
     // 연잎
     const padMat = new THREE.MeshStandardMaterial({ color: 0x4e9a3f, roughness: 0.9, side: THREE.DoubleSide });
     for (let i = 0; i < 6; i++) {

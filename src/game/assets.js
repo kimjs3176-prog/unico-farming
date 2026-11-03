@@ -46,6 +46,8 @@ export class Assets {
     await Promise.all([
       loadUnicoMesh(`${BASE}unico_body.bin`, 'quad').then(tick),
       loadUnicoMesh(`${BASE}unico_biped.bin`, 'biped').then(tick),
+      loadUnicoMesh(`${BASE}unico_body_lod.bin`, 'quad_lod').catch(() => {}),
+      loadUnicoMesh(`${BASE}unico_biped_lod.bin`, 'biped_lod').catch(() => {}),
       ...PACK_MODELS.map(async (n) => {
         try {
           const gltf = await this.loader.loadAsync(`${BASE}${n}.glb`);
@@ -120,7 +122,7 @@ export class Assets {
     if (!node) return new THREE.Group();
     const c = node.clone(true);
     c.position.set(0, 0, 0);
-    c.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    c.traverse((o) => { if (o.isMesh) o.castShadow = false; }); // 작물은 작고 많아서 그림자 생략 (접지 AO 로 충분)
     return c;
   }
 }

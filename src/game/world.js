@@ -158,7 +158,7 @@ export class World {
     this.groundSize = B * 2;
     this.groundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
     // 언덕이 있는 지면: 촘촘한 평면을 높이 함수로 들어 올림 (평면 로컬 (x,y) → 월드 (x,-y), 로컬 z → 월드 높이)
-    const gGeo = new THREE.PlaneGeometry(B * 2, B * 2, 220, 220);
+    const gGeo = new THREE.PlaneGeometry(B * 2, B * 2, 120, 120); // 약 1.2m 간격 (언덕이 반지름 8m 이상이라 충분)
     const gp = gGeo.attributes.position;
     for (let i = 0; i < gp.count; i++) gp.setZ(i, heightAt(gp.getX(i), -gp.getY(i)));
     gGeo.computeVertexNormals();
@@ -473,8 +473,10 @@ export class World {
       o.traverse((m) => {
         if (!m.isMesh) return;
         const mat = m.material, vc = plain(mat);
-        const key = vc ? `vc|${mat.userData.enhanced || 'none'}|${mat.roughness.toFixed(2)}|${mat.metalness.toFixed(2)}|${mat.side}|${mat.toneMapped}` : mat.uuid;
-        if (!buckets.has(key)) buckets.set(key, { mat, vc, geos: [] });
+        // 키 작은 장식(풀·꽃·덤불·작은 돌·연잎)은 그림자를 드리우지 않는 묶음으로 → 그림자 패스 삼각형 감소
+        const small = (o.userData.h ??= new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y) < 0.7;
+        const key = (small ? 'ns|' : '') + (vc ? `vc|${mat.userData.enhanced || 'none'}|${mat.roughness.toFixed(2)}|${mat.metalness.toFixed(2)}|${mat.side}|${mat.toneMapped}` : mat.uuid);
+        if (!buckets.has(key)) buckets.set(key, { mat, vc, geos: [], small });
         let g = m.geometry.clone().applyMatrix4(m.matrixWorld);
         const src = mat.vertexColors ? g.attributes.color : null;
         for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'color'].includes(k)) g.deleteAttribute(k);
@@ -493,7 +495,7 @@ export class World {
       this.scene.remove(o);
     }
     let n = 0;
-    for (const { mat, vc, geos } of buckets.values()) {
+    for (const { mat, vc, geos, small } of buckets.values()) {
       const merged = mergeGeometries(geos, false);
       if (!merged) { console.warn('정적 병합 실패:', mat.name, geos.length); continue; }
       let material = mat;
@@ -506,7 +508,7 @@ export class World {
         if (kind) enhanceMaterial(material, kind);
       }
       const mesh = new THREE.Mesh(merged, material);
-      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.castShadow = !small; mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
       this.scene.add(mesh);
       n++;
@@ -640,6 +642,7 @@ export class World {
   // ------------------------------------------------------------ 시간
   update(dt, focus = null) {
     this.focusPos = focus;
+    this.frameNo = (this.frameNo || 0) + 1; // 프레임 번호 (연못 반사 갱신 주기 등)
     for (const a of this.animated) a.update(dt);
     if (this.groundTime) this.groundTime.value += dt;
     if (focus) {

@@ -151,10 +151,12 @@ export class UI {
     const key = `${q.id}|${q.complete}|${q.count}|${dist === null ? '' : Math.round(dist)}`;
     if (key !== this.objKey) {
       this.objKey = key;
+      this._objDeg = null; // 새로 그린 화살표에 방향 다시 적용
       this.objective.innerHTML = `<span class="ic">${q.complete ? '🎁' : '🎯'}</span><div class="tt">${q.complete ? '보상 받기: ' : ''}${q.title}<small>${q.complete ? '눌러서 퀘스트 창 열기 (Q)' : q.desc}${!q.complete && dist !== null ? ` · ${Math.round(dist)}m` : ''}</small><div class="bar"><i style="width:${Math.round((q.count / q.goal) * 100)}%"></i></div></div>${dist !== null && !q.complete ? '<span class="dir">▲</span>' : q.complete ? '<span class="dir">✓</span>' : ''}`;
     }
     const dir = this.objective.querySelector('.dir');
-    if (dir && !q.complete) dir.style.transform = `rotate(${ang}deg)`;
+    const deg = Math.round(ang / 3) * 3; // 3도 단위로만 갱신
+    if (dir && !q.complete && deg !== this._objDeg) { this._objDeg = deg; dir.style.transform = `rotate(${deg}deg)`; }
   }
 
   /** 월드 위치에서 가방 버튼으로 아이콘이 날아감 */
@@ -361,22 +363,28 @@ export class UI {
       const el = this.moneyChip.querySelector('.money');
       if (diff > 0 && !el.classList.contains('bump')) { el.classList.add('bump'); setTimeout(() => el.classList.remove('bump'), 400); }
     }
-    this.moneyChip.querySelector('.money').textContent = Math.round(this.shownMoney).toLocaleString();
-    this.clockChip.querySelector('span').textContent = g.world.clockText();
+    // 값이 바뀔 때만 DOM 에 씀 (매 프레임 쓰면 스타일 재계산·레이아웃이 계속 일어남)
+    const el = (this._el ||= {
+      money: this.moneyChip.querySelector('.money'), clock: this.clockChip.querySelector('span'), lv: this.levelChip.querySelector('.lv'),
+      bar: this.levelChip.querySelector('.xpbar i'), xp: this.levelChip.querySelector('.xp'), boost: this.boostChip.querySelector('span'),
+    });
+    const put = (key, node, prop, v) => { if (this._hv?.[key] !== v) { (this._hv ||= {})[key] = v; if (prop === 'text') node.textContent = v; else if (prop === 'html') node.innerHTML = v; else node.style[prop] = v; } };
+    put('money', el.money, 'text', Math.round(this.shownMoney).toLocaleString());
+    put('clock', el.clock, 'text', g.world.clockText());
     const q = g.quests;
-    this.levelChip.querySelector('.lv').textContent = q.level;
+    put('lv', el.lv, 'text', String(q.level));
     const prev = q.level > 1 ? (q.nextXp === q.xp ? q.xp : LEVEL_PREV(q)) : 0;
     const pct = Math.min(100, Math.round(((q.xp - prev) / Math.max(1, q.nextXp - prev)) * 100));
-    this.levelChip.querySelector('.xpbar i').style.width = pct + '%';
-    this.levelChip.querySelector('.xp').textContent = `${q.xp}/${q.nextXp}`;
+    put('bar', el.bar, 'width', pct + '%');
+    put('xp', el.xp, 'text', `${q.xp}/${q.nextXp}`);
     const bl = g.smartfarm.boostLeft;
-    this.boostChip.style.display = bl > 0 ? '' : 'none';
-    if (bl > 0) this.boostChip.querySelector('span').textContent = `×${g.farm.sim.boost} ${Math.ceil(bl)}초`;
+    put('boostShow', this.boostChip, 'display', bl > 0 ? '' : 'none');
+    if (bl > 0) put('boost', el.boost, 'text', `×${g.farm.sim.boost} ${Math.ceil(bl)}초`);
     const ev = g.economy.event;
-    this.banner.style.display = ev ? '' : 'none';
-    if (ev) this.banner.textContent = '📈 ' + ev.name;
+    put('banShow', this.banner, 'display', ev ? '' : 'none');
+    if (ev) put('ban', this.banner, 'text', '📈 ' + ev.name);
     const n = q.active().filter((x) => x.complete).length;
-    this.btnQuest.innerHTML = `📜 퀘스트${n ? ` <b style="color:#d9534f">(${n})</b>` : ''} <span class="hint-kbd">(Q)</span>`;
+    put('quest', this.btnQuest, 'html', `📜 퀘스트${n ? ` <b style="color:#d9534f">(${n})</b>` : ''} <span class="hint-kbd">(Q)</span>`);
   }
 
   setPrompt(p) {

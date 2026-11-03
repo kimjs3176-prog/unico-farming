@@ -127,8 +127,11 @@ export function renderPortrait(game, unico, size = 192) {
   cam.position.set(head.x + fx * 2.3 + sideX * 0.55, head.y + 0.12, head.z + fz * 2.3 + sideZ * 0.55);
   cam.lookAt(head.x, head.y - 0.12, head.z);
   // 이름표·말풍선 숨기고 찍기
-  const hide = [unico.label, unico.bubble, unico.emote].filter(Boolean);
+  const hide = [unico.label, unico.bubble, unico.emote, unico.skinLod].filter(Boolean);
   hide.forEach((o) => (o.userData._v = o.visible, o.visible = false));
+  // 거리 LOD 로 숨겨진 고해상도 몸·얼굴도 초상화에서는 보이게
+  const show = [unico.skin, ...unico.headG.children.filter((c) => c.isMesh)];
+  show.forEach((o) => (o.userData._s = o.visible, o.visible = true));
   const prevRT = r.getRenderTarget();
   r.setRenderTarget(rt);
   r.clear();
@@ -137,6 +140,7 @@ export function renderPortrait(game, unico, size = 192) {
   r.readRenderTargetPixels(rt, 0, 0, size, size, px);
   r.setRenderTarget(prevRT);
   hide.forEach((o) => (o.visible = o.userData._v));
+  show.forEach((o) => (o.visible = o.userData._s));
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d'), img = ctx.createImageData(size, size);

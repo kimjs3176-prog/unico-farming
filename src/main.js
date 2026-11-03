@@ -169,7 +169,7 @@ class Game {
 
   restore() {
     const s = loadSave();
-    if (!s) { setTimeout(() => this.introCutscene(), 900); return; }
+    if (!s) { this.whenShown(() => setTimeout(() => this.introCutscene(), 700)); return; }
     this.flags = s.flags || {};
     this.farm.sim.load(s.farm);
     this.farm.refreshAll();
@@ -189,6 +189,10 @@ class Game {
     if (s.player) this.player.position.set(s.player.x, 0, s.player.z);
     this.ui.toast('💾 저장된 농장을 불러왔어요');
   }
+
+  /** 로딩 화면이 사라진 뒤 실행 (첫 접속 컷신 등) */
+  whenShown(fn) { if (this._shown) fn(); else (this._onShown ||= []).push(fn); }
+  shown() { this._shown = true; for (const fn of this._onShown || []) fn(); this._onShown = null; }
 
   resetSave() { clearSave(); location.reload(); }
 
@@ -417,14 +421,25 @@ async function boot() {
   if (lt) lt.textContent = '준비 완료! 닉네임을 정하고 입장하세요';
   btn.disabled = false;
   btn.textContent = '입장하기';
-  const start = () => {
+  let started = false;
+  const start = async () => {
+    if (started) return;
+    started = true;
     const name = (nick.value.trim() || randomName()).slice(0, 12);
     const ld = document.getElementById('loading');
-    ld.classList.add('out');
-    setTimeout(() => ld.remove(), 650);
     window.game = new Game(canvas, assets, name);
     window.game.audio.play('click'); // 사용자 동작 안에서 오디오 시작
     window.game.music.start();
+    // 첫 화면 끊김 방지: 로딩 화면 뒤에서 셰이더를 미리 컴파일(가능하면 병렬)하고 두 프레임 그린 뒤 보여 줌
+    btn.disabled = true;
+    if (lt) lt.textContent = '화면 준비 중…';
+    // (compileAsync 는 일부 환경에서 끝나지 않아 동기 compile 사용 + 안전장치: 길어도 로딩 화면은 내려감)
+    await new Promise((r) => requestAnimationFrame(r)); // '화면 준비 중' 문구가 먼저 보이게
+    try { window.game.renderer.compile(window.game.world.scene, window.game.camera); } catch { /* 첫 프레임에 컴파일 */ }
+    await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), new Promise((r) => setTimeout(r, 1500))]);
+    ld.classList.add('out');
+    setTimeout(() => ld.remove(), 650);
+    window.game.shown();
   };
   btn.onclick = start;
   nick.addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });

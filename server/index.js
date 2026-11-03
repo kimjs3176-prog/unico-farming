@@ -11,6 +11,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { Rooms } from './rooms.js';
 
@@ -20,7 +21,24 @@ const MAX_PLAYERS_PER_ROOM = Number(process.env.MAX_PLAYERS_PER_ROOM || 50);
 const MAX_ROOMS = Number(process.env.MAX_ROOMS || 20);
 const TICK_MS = 100;
 const DIST = path.join(__dirname, '..', 'dist');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.glb': 'model/gltf-binary', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.glb': 'model/gltf-binary', '.bin': 'application/octet-stream', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg' };
+// 압축해서 보낼 형식 (이미지·소리·폰트는 이미 압축되어 있어 제외)
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.svg', '.glb', '.bin']);
+/** 정적 파일 캐시: 파일별로 한 번만 읽고 압축(br/gzip)해 메모리에 보관 (수정 시각이 바뀌면 다시) */
+const fileCache = new Map();
+function loadStatic(file, st) {
+  const hit = fileCache.get(file);
+  if (hit && hit.mtime === st.mtimeMs) return hit;
+  const raw = fs.readFileSync(file);
+  const ext = path.extname(file);
+  const e = { mtime: st.mtimeMs, raw, etag: `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"` };
+  if (COMPRESSIBLE.has(ext) && raw.length > 1024) {
+    e.br = zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length } });
+    e.gz = zlib.gzipSync(raw, { level: 9 });
+  }
+  fileCache.set(file, e);
+  return e;
+}
 
 const rooms = new Rooms({ maxPlayers: MAX_PLAYERS_PER_ROOM, maxRooms: MAX_ROOMS });
 
@@ -36,8 +54,23 @@ const server = http.createServer((req, res) => {
   if (!file.startsWith(DIST)) { res.writeHead(403); return res.end(); }
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, 'index.html');
   if (!fs.existsSync(file)) { res.writeHead(404); return res.end('빌드 결과가 없습니다. npm run build 를 먼저 실행하세요.'); }
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': file.endsWith('.glb') ? 'public, max-age=86400' : 'no-cache' });
-  fs.createReadStream(file).pipe(res);
+  const st = fs.statSync(file);
+  const e = loadStatic(file, st);
+  // 해시가 붙은 빌드 결과(/assets/)는 영구 캐시, 나머지(모델·index.html)는 ETag 로 재검증(바뀌지 않았으면 304)
+  const headers = {
+    'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
+    'Cache-Control': url.pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
+    ETag: e.etag,
+    Vary: 'Accept-Encoding',
+  };
+  if (req.headers['if-none-match'] === e.etag) { res.writeHead(304, headers); return res.end(); }
+  const accept = String(req.headers['accept-encoding'] || '');
+  let body = e.raw;
+  if (e.br && /\bbr\b/.test(accept)) { body = e.br; headers['Content-Encoding'] = 'br'; }
+  else if (e.gz && /\bgzip\b/.test(accept)) { body = e.gz; headers['Content-Encoding'] = 'gzip'; }
+  headers['Content-Length'] = body.length;
+  res.writeHead(200, headers);
+  res.end(req.method === 'HEAD' ? undefined : body);
 });
 
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
