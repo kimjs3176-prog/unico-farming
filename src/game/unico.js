@@ -287,7 +287,7 @@ function applyPalette(root, id) {
 
 // 감정표현 → 머리 위 아이콘
 // 행동별 손에 드는 도구 (두 발 캐릭터 오른손)
-const PROP_OF = { hoe: 'hoe', water: 'can', net: 'net', cast: 'rod', fishwait: 'rod', reel: 'rod' };
+const PROP_OF = { hoe: 'hoe', water: 'can', net: 'net', cast: 'rod', fishwait: 'rod', reel: 'rod', brush: 'brush' };
 const HAND_R = [0.215, -0.32, 0.09]; // 오른팔 뼈 기준 손 위치
 
 /** 손 도구 (팔 뼈 로컬 좌표: 팔을 내리고 있을 때 -y 가 손끝 방향, +z 가 앞) */
@@ -320,6 +320,14 @@ function makeProp(kind) {
     const mesh = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.26, 12, 1, true), new THREE.MeshStandardMaterial({ color: 0xf4f7ee, transparent: true, opacity: 0.55, side: THREE.DoubleSide, roughness: 0.9 }));
     mesh.rotation.z = Math.PI / 2; mesh.position.set(0.13, -0.82, 0);
     g.add(handle, hoop, mesh);
+  } else if (kind === 'brush') { // 가축 빗: 나무 손잡이 + 솔
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.16, 6), wood);
+    handle.position.y = -0.06;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.05, 0.09), new THREE.MeshStandardMaterial({ color: 0xb5824e, roughness: 0.7 }));
+    head.position.set(0, -0.16, 0.02);
+    const bristle = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.04, 0.07), new THREE.MeshStandardMaterial({ color: 0xf1e6c8, roughness: 1 }));
+    bristle.position.set(0, -0.2, 0.02);
+    g.add(handle, head, bristle);
   } else if (kind === 'rod') { // 낚싯대 (끝 위치: userData.tip)
     const dir = new THREE.Vector3(0, -0.25, 0.97).normalize();
     const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.022, 1.8, 6).translate(0, 0.9, 0), new THREE.MeshStandardMaterial({ color: 0xc9a35a, roughness: 0.5 }));
@@ -796,6 +804,13 @@ export class Unico {
           const ten = this.reelTension, cr = a * (ten > 0.05 ? 13 : 4);
           bodyPitch = -0.12 - ten * 0.2; headPitch = 0.05 - ten * 0.1; bodyRoll = Math.sin(a * 9) * 0.03 * ten;
           if (bp) { AR.rotation.set(-0.85 - ten * 0.25 + Math.sin(a * 21) * 0.03 * ten, 0, 0.1); AL.rotation.set(-1.05 + Math.sin(cr) * 0.18, 0, -0.3 + Math.cos(cr) * 0.12); legs[0].rotation.x = 0.35; legs[1].rotation.x = -0.32; }
+          break;
+        }
+        case 'brush': { // 빗질: 앞으로 숙여 쓱쓱 (팔을 앞뒤로 길게)
+          const st = Math.sin(a * 9);
+          bodyPitch = 0.28 + st * 0.04; headPitch = 0.3; bodyY -= 0.03; headRoll = st * 0.04;
+          if (bp) { AR.rotation.set(-1.05 + st * 0.32, 0, 0.12 - st * 0.08); AL.rotation.set(-0.75, 0, -0.35); legs[0].rotation.x = 0.3; legs[1].rotation.x = -0.25; }
+          else headPitch = 0.5 + st * 0.1;
           break;
         }
         case 'lift': { // 낚은 물고기를 머리 위로 번쩍

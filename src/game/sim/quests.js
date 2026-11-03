@@ -36,6 +36,11 @@ export const QUESTS = [
   { id: 'process2',  title: '장독대 장인',          desc: '밭 서쪽 장독대에서 가공품 2개 만들기 (김치·주스·잼)', event: 'process', goal: 2, reward: { money: 150, xp: 120 } },
   { id: 'order3',    title: '로컬푸드 납품',        desc: '주문 게시판의 주문을 3건 납품하세요',          event: 'order',    goal: 3, reward: { money: 200, xp: 150 } },
   { id: 'giant1',    title: '대왕 작물',            desc: '아주 가끔 열리는 대왕 작물을 수확하세요 (퇴비 주면 확률 ↑)', event: 'giant', goal: 1, reward: { money: 300, xp: 200 } },
+  { id: 'care5',     title: '다정한 목장지기',      desc: '목장 동물을 빗질하거나 쓰다듬어 주기 5번',     event: 'animalcare', goal: 5, reward: { money: 80, xp: 60 } },
+  { id: 'heart3',    title: '단짝 가축',            desc: '목장 동물 한 마리와 하트 3개 만들기',          event: 'animalheart', goal: 3, reward: { money: 150, xp: 120 }, absolute: true },
+  { id: 'buyanimal', title: '새 식구',              desc: '축사 앞 우리 목장에서 새끼 가축 들이기',       event: 'buyanimal', goal: 1, reward: { money: 100, xp: 80 } },
+  { id: 'rprocess2', title: '치즈 공방 견습생',      desc: '목장 가공소에서 치즈·털실 같은 가공품 2개 만들기', event: 'rprocess', goal: 2, reward: { money: 150, xp: 120 } },
+  { id: 'rgold1',    title: '목장의 보물',          desc: '하트 4개 동물에게서 황금 달걀 같은 특별한 생산물 받기', event: 'rgold', goal: 1, reward: { money: 250, xp: 180 } },
   { id: 'rich',      title: '천 원의 농부',         desc: '보유 금액 1,000 코인 달성',               event: 'money',    goal: 1000, reward: { money: 200, xp: 150 }, absolute: true },
   { id: 'plow30',    title: '밭갈이 달인',          desc: '트랙터 미니게임에서 한 번에 30칸 이상 갈기', event: 'plowbest', goal: 30, reward: { money: 250, xp: 200 }, absolute: true },
 ];

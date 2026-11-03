@@ -73,6 +73,7 @@ export class Minimap {
     c.fillStyle = '#6fc3e8'; c.beginPath(); c.arc(X(L.pond.x), Z(L.pond.z), L.pond.r * k, 0, 7); c.fill();
     c.beginPath(); c.arc(X(L.lake.x), Z(L.lake.z), L.lake.r * k, 0, 7); c.fill();
     for (const b of L.lake.pier) rect(b.x0, b.z0, b.x1, b.z1, '#b08457');
+    rect(L.ranchWork.x - 1.4, L.ranchWork.z - 1.4, L.ranchWork.x + 1.4, L.ranchWork.z + 1.4, '#f2c84b');
     rect(L.craft.jars.x - 1.7, L.craft.jars.z - 0.8, L.craft.jars.x + 1.7, L.craft.jars.z + 0.8, '#5a3523');
     rect(L.craft.compost.x - 0.6, L.craft.compost.z - 0.6, L.craft.compost.x + 0.6, L.craft.compost.z + 0.6, '#4a3322');
     rect(L.lake.shop.x - 1.2, L.lake.shop.z - 1.2, L.lake.shop.x + 1.2, L.lake.shop.z + 1.2, '#3a8fd8');

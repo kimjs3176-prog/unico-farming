@@ -45,25 +45,41 @@ export const RECIPES = {
 export const JAR_PRICES = [0, 0, 500, 1200]; // 장독 1·2개는 기본, 3·4번째 구매
 export const MAX_JARS = 4;
 
+/** 목장 가공소(치즈 공방) 레시피: 목장 숙련도로 해금 */
+export const RANCH_RECIPES = {
+  goods_cheese: { input: { milk: 2 }, time: 100, level: 1 },
+  goods_yarn: { input: { wool: 2 }, time: 90, level: 1 },
+  goods_castella: { input: { egg: 3, honey: 1 }, time: 120, level: 2 },
+  goods_yogurt: { input: { milk: 1, strawberry: 1 }, time: 70, level: 2 },
+  goods_butter: { input: { milk: 3 }, time: 130, level: 3 },
+  goods_scarf: { input: { goods_yarn: 2 }, time: 150, level: 4 },
+};
+export const WORKSHOP_PRICES = [0, 0, 700, 1600];
+
+/** 숙성 슬롯 가공기 (장독대·치즈 공방 공통) */
 export class Processor {
-  constructor() { this.jars = 2; this.slots = Array.from({ length: MAX_JARS }, () => null); }
-  /** 재료가 충분한가 (economy.count) */
-  static canMake(id, count) { return Object.entries(RECIPES[id].input).every(([k, n]) => count(k) >= n); }
+  constructor({ recipes = RECIPES, prices = JAR_PRICES, jars = 2 } = {}) {
+    this.recipes = recipes; this.prices = prices;
+    this.jars = jars; this.slots = Array.from({ length: MAX_JARS }, () => null);
+  }
+  /** 재료가 충분한가 (economy.count) — 장독대 레시피 기준 (호환) */
+  static canMake(id, count, recipes = RECIPES) { return Object.entries(recipes[id].input).every(([k, n]) => count(k) >= n); }
+  canMake(id, count) { return Processor.canMake(id, count, this.recipes); }
   freeSlot() { for (let i = 0; i < this.jars; i++) if (!this.slots[i]) return i; return -1; }
   /** 담그기 (재료는 호출 쪽에서 차감) */
   start(i, id) { if (i < 0 || i >= this.jars || this.slots[i]) return false; this.slots[i] = { id, t: 0 }; return true; }
   tick(dt) {
     const done = [];
-    this.slots.forEach((s, i) => { if (s && s.t < RECIPES[s.id].time) { s.t += dt; if (s.t >= RECIPES[s.id].time) done.push(i); } });
+    this.slots.forEach((s, i) => { if (s && s.t < this.recipes[s.id].time) { s.t += dt; if (s.t >= this.recipes[s.id].time) done.push(i); } });
     return done;
   }
-  isDone(i) { const s = this.slots[i]; return !!s && s.t >= RECIPES[s.id].time; }
+  isDone(i) { const s = this.slots[i]; return !!s && s.t >= this.recipes[s.id].time; }
   /** 다 된 가공품 꺼내기 → 아이템 id */
   collect(i) { if (!this.isDone(i)) return null; const id = this.slots[i].id; this.slots[i] = null; return id; }
   buyJar() { if (this.jars >= MAX_JARS) return false; this.jars++; return true; }
-  get nextJarPrice() { return this.jars < MAX_JARS ? JAR_PRICES[this.jars] : null; }
+  get nextJarPrice() { return this.jars < MAX_JARS ? this.prices[this.jars] : null; }
   toJSON() { return { jars: this.jars, slots: this.slots }; }
-  load(d) { if (!d) return; this.jars = Math.min(MAX_JARS, d.jars || 2); (d.slots || []).forEach((s, i) => { if (i < MAX_JARS) this.slots[i] = s && RECIPES[s.id] ? s : null; }); }
+  load(d) { if (!d) return; this.jars = Math.min(MAX_JARS, d.jars || 2); (d.slots || []).forEach((s, i) => { if (i < MAX_JARS) this.slots[i] = s && this.recipes[s.id] ? s : null; }); }
 }
 
 // ---------------------------------------------------------------- 주문서

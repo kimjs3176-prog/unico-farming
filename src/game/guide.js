@@ -20,6 +20,10 @@ function targetOf(id, g) {
     case 'rice1': return new THREE.Vector3(g.rice.paddies[0].x, 0, g.rice.paddies[0].z);
     case 'riceharv': return g.economy.count('paddy') ? new THREE.Vector3(L.thresher.x, 0, L.thresher.z) : new THREE.Vector3(g.rice.paddies[0].x, 0, g.rice.paddies[0].z);
     case 'fish1': case 'book10': return new THREE.Vector3(L.dock.x, 0, L.dock.z);
+    case 'care5': case 'heart3': return new THREE.Vector3(22, 0, 2);
+    case 'buyanimal': return new THREE.Vector3(L.ranchWork.barn.x, 0, L.ranchWork.barn.z);
+    case 'rprocess2': return new THREE.Vector3(L.ranchWork.x - 2, 0, L.ranchWork.z);
+    case 'rgold1': return new THREE.Vector3(22, 0, 2);
     case 'fert3': return g.economy.count('compost') ? new THREE.Vector3(0, 0, 0) : new THREE.Vector3(L.craft.compost.x, 0, L.craft.compost.z);
     case 'star3': case 'giant1': return new THREE.Vector3(0, 0, 0);
     case 'process2': return new THREE.Vector3(L.craft.jars.x, 0, L.craft.jars.z);

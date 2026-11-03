@@ -101,6 +101,7 @@ class Game {
     this.fx.onPop = (t, p) => { if (!/[❤️🌿]/u.test(t)) this.ui.flyToBag(t, p); };
     this.world.onNewDay = (day) => {
       const ev = this.economy.newDay();
+      this.ranch.sim.newDay(day);
       this.ui.toast(`🌅 ${day}일차 아침! 장터 시세가 바뀌었어요`);
       if (ev) this.ui.toast('📈 ' + ev.name);
     };
@@ -183,7 +184,7 @@ class Game {
     this.farm.refreshAll();
     this.economy.load(s.economy);
     this.quests.load(s.quests);
-    this.ranch.sim.load(s.ranch);
+    this.ranch.load(s.ranch);
     this.rice.load(s.rice);
     this.nature.load(s.nature);
     this.villagers.load(s.villagers);

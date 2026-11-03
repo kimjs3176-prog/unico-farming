@@ -334,3 +334,6 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .reel-hud .rh-tip b { color: #e8495a; }
 .reel-hud .rh-hold { width: 100%; padding: 12px; font-size: 20px; border-radius: 16px; touch-action: none; user-select: none; -webkit-user-select: none; }
 .reel-hud.reeling .rh-hold { transform: scale(0.97); filter: brightness(0.92); }
+
+/* 목장 동물 이름 바꾸기 */
+.name-input { font-family: Jua, sans-serif; font-size: 16px; width: 9em; padding: 2px 8px; border: 2px solid var(--panel-edge); border-radius: 10px; background: #fffdf5; color: var(--brown); }

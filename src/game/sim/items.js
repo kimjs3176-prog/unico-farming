@@ -40,6 +40,16 @@ export const ITEMS = {
   goods_jam: { name: '딸기잼', emoji: '🫙', price: 290, cat: 'goods' },
   goods_corntea: { name: '옥수수수염차', emoji: '🍵', price: 320, cat: 'goods' },
   goods_honeyjam: { name: '딸기 꿀절임', emoji: '🍯', price: 330, cat: 'goods' },
+  // 목장: 하트 4개 이상인 동물이 가끔 주는 특별한 생산물 + 치즈 공방 가공품
+  egg_gold: { name: '황금 달걀', emoji: '🥚', price: 160, cat: 'ranch' },
+  milk_gold: { name: '특급 우유', emoji: '🍼', price: 230, cat: 'ranch' },
+  wool_gold: { name: '고급 양털', emoji: '🧶', price: 280, cat: 'ranch' },
+  goods_cheese: { name: '치즈', emoji: '🧀', price: 190, cat: 'goods' },
+  goods_yarn: { name: '털실', emoji: '🧵', price: 230, cat: 'goods' },
+  goods_castella: { name: '카스텔라', emoji: '🍰', price: 260, cat: 'goods' },
+  goods_yogurt: { name: '딸기 요거트', emoji: '🍨', price: 175, cat: 'goods' },
+  goods_butter: { name: '버터', emoji: '🧈', price: 280, cat: 'goods' },
+  goods_scarf: { name: '털목도리', emoji: '🧣', price: 620, cat: 'goods' },
   // 물속 보물 (호수에서 잠수)
   clam: { name: '민물조개', emoji: '🐚', price: 45, cat: 'treasure' },
   pearl: { name: '민물 진주', emoji: '⚪', price: 350, cat: 'treasure' },
@@ -57,6 +67,6 @@ export const ITEMS = {
   fruit_persimmon: { name: '감', emoji: '🟠', price: 55, cat: 'fruit' },
 };
 
-export const CATEGORY_NAMES = { goods: '가공품', treasure: '물속 보물', fish: '물고기', bug: '곤충', fruit: '과일', rice: '쌀', seed: '씨앗' };
+export const CATEGORY_NAMES = { ranch: '특별 생산물', goods: '가공품', treasure: '물속 보물', fish: '물고기', bug: '곤충', fruit: '과일', rice: '쌀', seed: '씨앗' };
 
 export const itemsOf = (cat) => Object.keys(ITEMS).filter((k) => ITEMS[k].cat === cat);

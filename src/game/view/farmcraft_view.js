@@ -215,62 +215,10 @@ export class FarmCraftView {
 
   // ------------------------------------------------------------ 장독대
   openJars() {
-    const g = this.game, eco = g.economy, P = this.proc;
-    const p = g.ui.openPanel('🏺 장독대 — 농산물 가공');
-    const render = () => {
-      p.querySelectorAll('.body').forEach((e) => e.remove());
-      const body = h('div', 'body');
-      body.append(h('div', 'chip', `🌾 밭농사 숙련도 Lv.${this.farmLevel} · 장독 ${P.jars}개${P.nextJarPrice ? ` (장터에서 장독 추가 ${P.nextJarPrice}🪙)` : ''}`));
-      const slots = h('div', 'rows');
-      for (let i = 0; i < P.jars; i++) {
-        const s = P.slots[i];
-        if (!s) { slots.append(h('div', 'row', `<span>🏺</span><span class="nm">장독 ${i + 1} · 비어 있음</span>`)); continue; }
-        const it = ITEMS[s.id], done = P.isDone(i);
-        const r = h('div', 'row', `<span>${it.emoji}</span><span class="nm">${it.name}<br><small>${done ? '다 익었어요!' : `숙성 ${Math.floor((s.t / RECIPES[s.id].time) * 100)}% · ${Math.ceil(RECIPES[s.id].time - s.t)}초 남음`}</small></span>`);
-        if (done) {
-          const b = h('button', 'gold', '꺼내기');
-          b.onclick = () => {
-            const id = P.collect(i);
-            eco.addItem(id, 1);
-            this.addXp(15);
-            g.audio.play('harvest'); g.player.unico.playAction('pull', 0.7);
-            g.fx.pop(this.jars[i].m.position.x, this.jars[i].m.position.z, ITEMS[id].emoji);
-            g.ui.toast(`🏺 ${ITEMS[id].name} 완성! 장터에서 ${eco.sellPrice(id)}🪙에 팔거나 주문에 납품할 수 있어요`);
-            g.onEvent('process');
-            render();
-          };
-          r.append(b);
-        }
-        slots.append(r);
-      }
-      body.append(slots);
-      body.append(h('h3', '', '📜 담글 수 있는 것 (재료 → 가공품, 그냥 팔 때보다 비싸요)'));
-      const rows = h('div', 'rows');
-      for (const [id, R] of Object.entries(RECIPES)) {
-        const it = ITEMS[id], locked = this.farmLevel < R.level;
-        const need = Object.entries(R.input).map(([k, n]) => `${info(k).emoji}${info(k).name} ${eco.count(k)}/${n}`).join(' · ');
-        const raw = Object.entries(R.input).reduce((a, [k, n]) => a + (CROPS[k]?.basePrice ?? PRODUCTS[k]?.basePrice ?? 0) * n, 0);
-        const r = h('div', 'row', `<span>${it.emoji}</span><span class="nm">${it.name} <span class="qty">${it.price}🪙 (재료값 ${raw})</span><br><small>${need} · ${R.time}초</small></span>`);
-        const b = h('button', '', locked ? `숙련 Lv.${R.level}` : '담그기');
-        const slot = P.freeSlot();
-        b.disabled = locked || slot < 0 || !Processor.canMake(id, (k) => eco.count(k));
-        b.onclick = () => {
-          const sl = P.freeSlot();
-          if (sl < 0 || !Processor.canMake(id, (k) => eco.count(k))) return;
-          for (const [k, n] of Object.entries(R.input)) eco.take(k, n);
-          P.start(sl, id);
-          g.audio.play('plant'); g.player.unico.playAction('plant', 1.0);
-          g.ui.toast(`🏺 장독 ${sl + 1}에 ${it.name}을(를) 담갔어요 (${R.time}초)`);
-          render();
-        };
-        r.append(b);
-        rows.append(r);
-      }
-      body.append(rows);
-      p.append(body);
-    };
-    render();
-    this._jarTimer = setInterval(() => { if (g.ui.panel === p) render(); else clearInterval(this._jarTimer); }, 1000);
+    processorPanel(this.game, {
+      title: '🏺 장독대 — 농산물 가공', proc: this.proc, level: () => this.farmLevel, levelName: '밭농사', unit: '장독',
+      shopNote: '장터에서 장독 추가', addXp: (n) => this.addXp(n), event: 'process', anchor: (i) => this.jars[i].m.position,
+    });
   }
 
   // ------------------------------------------------------------ 주문서
@@ -308,4 +256,66 @@ export class FarmCraftView {
     };
     render();
   }
+}
+
+/**
+ * 숙성 가공 창 (장독대·치즈 공방 공통): 슬롯 상태·꺼내기, 레시피 목록·담그기
+ * @param o { title, proc: Processor, level(): 숙련 레벨, levelName, unit: '장독'|'숙성 칸', shopNote, addXp(n), event, anchor(i): 효과 위치 }
+ */
+export function processorPanel(g, o) {
+  const eco = g.economy, P = o.proc;
+  const p = g.ui.openPanel(o.title);
+  const render = () => {
+    p.querySelectorAll('.body').forEach((e) => e.remove());
+    const body = h('div', 'body');
+    body.append(h('div', 'chip', `${o.levelName} 숙련도 Lv.${o.level()} · ${o.unit} ${P.jars}개${P.nextJarPrice ? ` (${o.shopNote} ${P.nextJarPrice}🪙)` : ''}`));
+    const slots = h('div', 'rows');
+    for (let i = 0; i < P.jars; i++) {
+      const s = P.slots[i];
+      if (!s) { slots.append(h('div', 'row', `<span>⬜</span><span class="nm">${o.unit} ${i + 1} · 비어 있음</span>`)); continue; }
+      const it = ITEMS[s.id], R = P.recipes[s.id], done = P.isDone(i);
+      const r = h('div', 'row', `<span>${it.emoji}</span><span class="nm">${it.name}<br><small>${done ? '다 됐어요!' : `숙성 ${Math.floor((s.t / R.time) * 100)}% · ${Math.ceil(R.time - s.t)}초 남음`}</small></span>`);
+      if (done) {
+        const b = h('button', 'gold', '꺼내기');
+        b.onclick = () => {
+          const id = P.collect(i);
+          eco.addItem(id, 1);
+          o.addXp(15);
+          g.audio.play('harvest'); g.player.unico.playAction('pull', 0.7);
+          const at = o.anchor?.(i); if (at) g.fx.pop(at.x, at.z, ITEMS[id].emoji);
+          g.ui.toast(`${ITEMS[id].emoji} ${ITEMS[id].name} 완성! 장터에서 ${eco.sellPrice(id)}🪙에 팔거나 주문에 납품할 수 있어요`);
+          g.onEvent(o.event);
+          render();
+        };
+        r.append(b);
+      }
+      slots.append(r);
+    }
+    body.append(slots);
+    body.append(h('h3', '', '📜 만들 수 있는 것 (재료 → 가공품, 그냥 팔 때보다 비싸요)'));
+    const rows = h('div', 'rows');
+    for (const [id, R] of Object.entries(P.recipes)) {
+      const it = ITEMS[id], locked = o.level() < R.level;
+      const need = Object.entries(R.input).map(([k, n]) => `${info(k).emoji}${info(k).name} ${eco.count(k)}/${n}`).join(' · ');
+      const raw = Object.entries(R.input).reduce((a, [k, n]) => a + (CROPS[k]?.basePrice ?? PRODUCTS[k]?.basePrice ?? ITEMS[k]?.price ?? 0) * n, 0);
+      const r = h('div', 'row', `<span>${it.emoji}</span><span class="nm">${it.name} <span class="qty">${it.price}🪙 (재료값 ${raw})</span><br><small>${need} · ${R.time}초</small></span>`);
+      const b = h('button', '', locked ? `숙련 Lv.${R.level}` : '담그기');
+      b.disabled = locked || P.freeSlot() < 0 || !P.canMake(id, (k) => eco.count(k));
+      b.onclick = () => {
+        const sl = P.freeSlot();
+        if (sl < 0 || !P.canMake(id, (k) => eco.count(k))) return;
+        for (const [k, n] of Object.entries(R.input)) eco.take(k, n);
+        P.start(sl, id);
+        g.audio.play('plant'); g.player.unico.playAction('plant', 1.0);
+        g.ui.toast(`${it.emoji} ${o.unit} ${sl + 1}에 ${it.name}을(를) 담갔어요 (${R.time}초)`);
+        render();
+      };
+      r.append(b);
+      rows.append(r);
+    }
+    body.append(rows);
+    p.append(body);
+  };
+  render();
+  const timer = setInterval(() => { if (g.ui.panel === p) render(); else clearInterval(timer); }, 1000);
 }
