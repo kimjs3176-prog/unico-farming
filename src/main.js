@@ -40,6 +40,7 @@ import { Collection } from './game/sim/collection.js';
 import { KoatView } from './game/view/koat_view.js';
 import { LakeView } from './game/view/lake_view.js';
 import { Angling } from './game/sim/angling.js';
+import { WaterFX } from './game/waterfx.js';
 
 class Game {
   constructor(canvas, assets, name) {
@@ -71,6 +72,7 @@ class Game {
     this.dialogue = new Dialogue(this, document.getElementById('ui'));
     this.flags = {};
     this.fx = new FX(this.world.scene);
+    this.waterfx = new WaterFX(this.world.scene, this.world.scenery, this.quality);
     this.player.unico.onStep = (x, z) => this.fx.dust(x, z);
     this.farm = new FarmView(this);
     this.ranch = new RanchView(this);
@@ -384,6 +386,7 @@ class Game {
     this.ui.setPrompt(this.ui.panel ? null : prompt);
     this.net.update(dt);
     this.fx.update(dt);
+    this.waterfx.update(dt, this.camera, this.renderer);
     this.juice.update(dt, this.camera);
     SURF.time.value += dt;
     SURF.seeCam.value.copy(this.camera.position);

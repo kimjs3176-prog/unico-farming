@@ -70,9 +70,6 @@ export class NatureView {
     this.fishShadow.scale.set(0.6, 1.4, 1);
     this.fishShadow.visible = false;
     scene.add(this.fishShadow);
-    this.ripple = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.2, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
-    this.ripple.rotation.x = -Math.PI / 2;
-    scene.add(this.ripple);
     this.lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
     this.line = new THREE.Line(this.lineGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 }));
     this.line.visible = false;
@@ -152,8 +149,6 @@ export class NatureView {
         consider(lk.pier ? 0.05 : 0.15, { label: `🎣 낚시터에서 낚시하기${bait ? ` · 🪱떡밥 ${bait}` : ''}`, key: 'fish', onInteract: () => this.startFishing(playerPos, lk) });
       }
     }
-    this.ripple.material.opacity = Math.max(0, this.ripple.material.opacity - dt * 1.5);
-    this.ripple.scale.multiplyScalar(1 + dt * 2.5);
     return best;
   }
 
@@ -232,10 +227,12 @@ export class NatureView {
     g.ui.toast(bait ? `🪱 떡밥을 달았어요 (남은 ${g.economy.count('bait')}) · 찌가 쑥 들어가면 E/탭으로 당기기!` : '🎣 찌가 쑥 들어갈 때 E 또는 화면을 눌러 당기세요! (톡톡 건드리는 건 가짜 입질)');
   }
 
+  /** 찌·물고기 물결: 수면 파문 (크면 물방울도) */
   splash(scale = 1, at = this.spot) {
-    this.ripple.position.set(at.x, 0.06, at.z);
-    this.ripple.scale.setScalar(scale);
-    this.ripple.material.opacity = 0.9;
+    const W = this.game.waterfx;
+    if (!W) return;
+    W.ripple(at.x, at.z, Math.min(1.5, scale * 0.55));
+    if (scale >= 1.5) W.spray(at.x, 0.05, at.z, Math.round(scale * 7), { up: 1.6 + scale * 0.4, spread: 0.5, size: 0.05 });
   }
 
   /** 낚싯대 끝 (손에 든 도구) */
@@ -274,7 +271,7 @@ export class NatureView {
       const k = Math.min(1, Math.max(0, (f.t - 0.42) / 0.5));
       this.bobber.position.lerpVectors(tip, this.spot, k);
       this.bobber.position.y = k <= 0 ? tip.y : THREE.MathUtils.lerp(tip.y, 0.06, k) + Math.sin(k * Math.PI) * 1.1;
-      if (k >= 1) { f.phase = 'wait'; this.splash(1); g.audio.play('water', 0.5); u.playAction('fishwait', 0); }
+      if (k >= 1) { f.phase = 'wait'; this.splash(1.5); g.audio.play('stroke', 0.4); u.playAction('fishwait', 0); }
     }
     if (f.phase === 'fight') return this._updateFight(dt, tip);
     // 물고기 그림자가 찌 쪽으로 다가옴
@@ -345,8 +342,8 @@ export class NatureView {
     this.fishShadow.position.set(this.bobber.position.x, 0.04, this.bobber.position.z);
     this.fishShadow.rotation.z = Math.atan2(f.dir.x, f.dir.z) + sway * 0.4;
     this.fishShadow.scale.set(0.8, 1.9, 1);
-    if (F.surging && Math.random() < dt * 10) { g.fx.burst(this.bobber.position.x, 0.15, this.bobber.position.z, 0xe8f8ff, 3); }
-    if (ev === 'surge') { this.splash(1.8, this.bobber.position); g.audio.play('water', 0.6); g.juice.shake(0.12); }
+    if (F.surging && Math.random() < dt * 14) { g.waterfx.spray(this.bobber.position.x, 0.05, this.bobber.position.z, 4, { up: 2.0, spread: 0.6, size: 0.05 }); g.waterfx.ripple(this.bobber.position.x, this.bobber.position.z, 0.5); }
+    if (ev === 'surge') { g.waterfx.splash(this.bobber.position.x, this.bobber.position.z, 0.8); g.audio.play('splash', 0.5); g.juice.shake(0.12); }
     // 낚싯대 휨·줄 색 (텐션)
     const rp = u.props.rod;
     if (rp) rp.rotation.x = 0.15 + F.tension * 0.5 + Math.sin(f.fightT * 25) * 0.03 * F.tension;
@@ -424,7 +421,7 @@ export class NatureView {
     u.playAction('lift', 1.8);
     this._showCatch(r.fish, r.size);
     g.juice.pop(g.player.group, 0.2);
-    g.fx.burst(g.player.position.x, 0.3, g.player.position.z, 0xdff4ff, 12);
+    if (this.spot) g.waterfx.splash(this.spot.x, this.spot.z, 0.7); // 물고기를 끌어 올린 자리
     let extra = '';
     if (f?.lake) {
       g.onEvent('lakefish');

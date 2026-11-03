@@ -104,6 +104,8 @@ export class Audio {
       case 'click': return this.pluck(1568, v * 0.45, 0, undefined, 0.18);
       case 'dig': this.noise(0.18, v * 1.2, { freq: 420, q: 0.8 }); return this.tone(110, 0.16, 'triangle', v * 0.8, -40, { lp: 900, rev: 0.1 });
       case 'plant': this.noise(0.08, v * 0.5, { freq: 900 }); return this.pluck(784, v * 0.7, 0.05);
+      case 'splash': this.noise(0.5, v * 1.1, { type: 'bandpass', freq: 850, q: 0.6 }); this.noise(0.35, v * 0.7, { type: 'highpass', freq: 3200, q: 0.4, at: 0.04 }); return this.tone(150, 0.2, 'sine', v * 0.5, -70, { rev: 0.15 });
+      case 'stroke': return this.noise(0.2, v * 0.8, { type: 'bandpass', freq: 1100 + Math.random() * 700, q: 0.9 });
       case 'water': this.noise(0.35, v * 0.7, { type: 'highpass', freq: 2200, q: 0.4 }); this.pluck(1175, v * 0.4, 0.05, undefined, 0.3); return this.pluck(1568, v * 0.35, 0.14, undefined, 0.3);
       case 'harvest': this.pluck(784, v, 0); this.pluck(988, v, 0.08); return this.pluck(1319, v, 0.16);
       case 'coin': this.pluck(1976, v * 0.7, 0, undefined, 0.35); return this.pluck(2637, v * 0.6, 0.07, undefined, 0.45);

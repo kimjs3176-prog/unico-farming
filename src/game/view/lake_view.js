@@ -66,14 +66,6 @@ export class LakeView {
     W.scene.add(this.jumper);
     this.jumpT = 3;
     this.jump = null;
-    // 물결 고리 (튀어 오를 때·떨어질 때)
-    this.ripples = [0, 1, 2].map(() => {
-      const r = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.27, 28), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
-      r.rotation.x = -Math.PI / 2;
-      W.scene.add(r);
-      return r;
-    });
-    this.ri = 0;
     // 물속 보물: 반짝이는 자리 + 올라오는 물방울 (헤엄쳐 가서 잠수하면 조개·진주·코인)
     const glintMat = new THREE.MeshBasicMaterial({ color: 0xfff6c0, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending });
     const bubMat = new THREE.MeshBasicMaterial({ color: 0xe8f8ff, transparent: true, opacity: 0.75, depthWrite: false });
@@ -93,15 +85,23 @@ export class LakeView {
     const P = game.player;
     P.onSwim = (on) => {
       const p = P.position;
-      game.fx.burst(p.x, 0.2, p.z, 0xdff4ff, on ? 14 : 8);
-      this.splash(p.x, p.z, on ? 1.6 : 1);
-      game.audio.play('water', on ? 0.6 : 0.35);
+      this.splash(p.x, p.z, on ? 1.5 : 0.7); // 뛰어들 때 크게 첨벙, 나올 때 작게
+      game.audio.play('splash', on ? 0.9 : 0.4);
       if (on) {
         game.onEvent('swim');
         if (!game.flags.swimTip) { game.flags.swimTip = true; game.ui.toast('🏊 첨벙! 헤엄치는 중이에요. 물속에서 반짝이는 곳에 가면 잠수해서 보물을 찾을 수 있어요 (E)'); }
       }
     };
-    P.unico.onStroke = (x, z) => { this.splash(x, z, 0.7); if (Math.random() < 0.5) game.fx.burst(x, 0.12, z, 0xe8f8ff, 3); };
+    // 헤엄: 팔을 저을 때마다 좌우 번갈아 물을 퍼 올리고, 발차기 물보라 + 첨벙 소리
+    this.strokeSide = 1;
+    P.unico.onStroke = (x, z) => {
+      const sp = Math.min(1.3, (P.vel?.length() || 0) / 2.2);
+      this.strokeSide = -this.strokeSide;
+      game.waterfx.stroke(x, z, P.unico.yaw, this.strokeSide, sp);
+      if (this.strokeSide > 0) game.waterfx.kick(x, z, P.unico.yaw, sp);
+      game.audio.play('stroke', 0.25 + sp * 0.3);
+    };
+    this.wakeT = 0;
     // 물속을 천천히 헤엄치는 그림자 3마리
     const shMat = new THREE.MeshBasicMaterial({ color: 0x163040, transparent: true, opacity: 0.35, depthWrite: false });
     this.shadows = [0, 1, 2].map((i) => {
@@ -131,8 +131,8 @@ export class LakeView {
     const g = this.game, P = g.player, u = P.unico;
     P.frozen = true;
     u.playAction('dive', 1.4);
-    g.audio.play('water', 0.7);
-    this.splash(P.position.x, P.position.z, 1.4);
+    g.audio.play('splash', 0.8);
+    this.splash(P.position.x, P.position.z, 1.2);
     this.diving = { t: 0, tr };
   }
 
@@ -142,8 +142,8 @@ export class LakeView {
     tr.g.visible = false;
     tr.respawn = 35 + Math.random() * 40;
     const p = P.position;
-    g.fx.burst(p.x, 0.3, p.z, 0xdff4ff, 16);
-    this.splash(p.x, p.z, 1.8);
+    this.splash(p.x, p.z, 1.1); // 물 위로 푸하!
+    g.audio.play('splash', 0.5);
     const r = Math.random();
     let text;
     if (r < 0.07) { g.economy.addItem('pearl', 1); text = `${ITEMS.pearl.emoji} 반짝반짝 ${ITEMS.pearl.name}!`; g.audio.play('levelup'); }
@@ -182,19 +182,23 @@ export class LakeView {
     return null;
   }
 
-  splash(x, z, s = 1) {
-    const r = this.ripples[this.ri++ % this.ripples.length];
-    r.position.set(x, 0.05, z);
-    r.scale.setScalar(s);
-    r.material.opacity = 0.85;
-  }
+  /** 첨벙 (물방울·물보라·파문) */
+  splash(x, z, s = 1) { this.game.waterfx?.splash(x, z, s); }
 
   update(dt, pp) {
     const g = this.game, K = LAYOUT.lake;
     this.t += dt;
     const close = Math.hypot(pp.x - K.x, pp.z - K.z) < 32;
-    // 물결 고리 퍼지기
-    for (const r of this.ripples) if (r.material.opacity > 0) { r.material.opacity = Math.max(0, r.material.opacity - dt * 0.9); r.scale.multiplyScalar(1 + dt * 1.6); }
+    // 헤엄치는 동안: 몸 뒤로 이어지는 물결 자국(항적), 제자리에서는 잔잔한 파문 + 가끔 물방울
+    const P = g.player;
+    if (P.swimming && !this.diving) {
+      const sp = P.vel?.length() || 0;
+      if ((this.wakeT -= dt) <= 0) {
+        const y = P.unico.yaw;
+        if (sp > 0.6) { g.waterfx.ripple(pp.x - Math.sin(y) * 0.35, pp.z - Math.cos(y) * 0.35, 0.3 + sp * 0.12); this.wakeT = 0.17; }
+        else { g.waterfx.ripple(pp.x, pp.z, 0.22); if (Math.random() < 0.5) g.waterfx.spray(pp.x, 0.08, pp.z, 3, { up: 0.9, spread: 0.35, size: 0.04, ttl: 0.6 }); this.wakeT = 0.75; }
+      }
+    }
     // 물고기 그림자 헤엄
     for (const s of this.shadows) {
       s.m.visible = close;
@@ -211,7 +215,7 @@ export class LakeView {
       if (!g.world.onDeck(x, z, -1)) {
         this.jump = { x, z, t: 0, yaw: Math.random() * 6.28, dur: 0.75 + Math.random() * 0.3, hgt: 0.6 + Math.random() * 0.5 };
         this.jumper.visible = true;
-        this.splash(x, z, 1.2);
+        g.waterfx.spray(x, 0.05, z, 10, { up: 2.4, spread: 0.4, size: 0.05 }); g.waterfx.ripple(x, z, 0.7);
         if (Math.hypot(pp.x - x, pp.z - z) < 14) g.audio.play('water', 0.25);
       }
       this.jumpT = 4 + Math.random() * 6;
@@ -222,7 +226,7 @@ export class LakeView {
       this.jumper.position.set(j.x + Math.sin(j.yaw) * fwd, 0.03 + Math.sin(Math.min(1, k) * Math.PI) * j.hgt, j.z + Math.cos(j.yaw) * fwd);
       this.jumper.rotation.set(0, j.yaw - Math.PI / 2, (0.5 - k) * 2.2);
       this.jumper.userData.tail.rotation.y = Math.sin(this.t * 30) * 0.5;
-      if (k >= 1) { this.jumper.visible = false; this.splash(this.jumper.position.x, this.jumper.position.z, 1.4); this.jump = null; }
+      if (k >= 1) { this.jumper.visible = false; this.splash(this.jumper.position.x, this.jumper.position.z, 0.6); if (Math.hypot(pp.x - j.x, pp.z - j.z) < 14) g.audio.play('splash', 0.25); this.jump = null; }
     }
     // 물속 보물: 반짝임·물방울, 헤엄쳐 가까이 가면 잠수
     for (const tr of this.treasures) {
@@ -236,7 +240,7 @@ export class LakeView {
     if (this.diving) {
       const dv = this.diving;
       dv.t += dt;
-      if (dv.t > 0.3 && dv.t < 1.1 && Math.random() < dt * 8) g.fx.burst(pp.x + (Math.random() - 0.5) * 0.4, 0.1, pp.z + (Math.random() - 0.5) * 0.4, 0xe8f8ff, 2);
+      if (dv.t > 0.3 && dv.t < 1.1 && Math.random() < dt * 8) { const bx = pp.x + (Math.random() - 0.5) * 0.5, bz = pp.z + (Math.random() - 0.5) * 0.5; g.waterfx.spray(bx, 0.05, bz, 2, { up: 0.7, spread: 0.1, size: 0.05, ttl: 0.4 }); g.waterfx.ripple(bx, bz, 0.15); } // 보글보글
       if (dv.t >= 1.4) { this.diving = null; this._diveDone(dv.tr); }
       return { d: -1, label: '🤿 잠수 중… 보글보글', key: 'diving' };
     }

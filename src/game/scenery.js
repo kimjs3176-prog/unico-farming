@@ -4,6 +4,8 @@ import { heightAt } from './terrain.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries as mergeGeo } from 'three/addons/utils/BufferGeometryUtils.js';
 
+const RIPPLES = 16; // 동시에 퍼지는 파문 수
+
 /** 하늘 돔(그라데이션), 구름, 지평선 언덕, 잔디 인스턴싱, 연못 물결 — 분위기 레이어 */
 export class Scenery {
   constructor(world) {
@@ -222,6 +224,13 @@ export class Scenery {
     if (this.flowers) this.flowers.count = Math.round(this.flowerTotal * Math.min(1, 0.25 + d * 0.75));
   }
 
+  /** 수면에 파문 (amp 0.2 잔잔 ~ 1.5 크게 첨벙) */
+  addRipple(x, z, amp = 1) {
+    if (!this.ripples) return;
+    const r = this.ripples[this._ri = ((this._ri || 0) + 1) % RIPPLES];
+    r.set(x, z, this.clock.value, amp);
+  }
+
   _water() {
     if (this.water) { this.world.scene.remove(this.water); this.water.dispose?.(); this.water.geometry.dispose(); }
     const L = LAYOUT.pond;
@@ -230,29 +239,82 @@ export class Scenery {
     // 물가 거품·깊이색에 쓰는 중심·반지름은 정점 속성으로
     const waters = [LAYOUT.pond, LAYOUT.lake];
     const q = this.world.quality || {};
+    // 물결 고리 (헤엄·찌·물고기·잠수가 만든 파문): x, z, 시작 시각, 세기. 링 버퍼
+    this.ripples ||= Array.from({ length: RIPPLES }, () => new THREE.Vector4(0, 0, -99, 0));
+    this.clock ||= { value: 0 };
     const shared = {
-      uTime: this.waterUniform, deep: { value: new THREE.Color(0x2f86b8) }, shallow: { value: new THREE.Color(0x7fd3e8) },
+      uTime: this.waterUniform, uClock: this.clock, uRip: { value: this.ripples },
+      uRain: (this.rainU ||= { value: 0 }), uDay: (this.dayU ||= { value: 1 }), sunDir: (this.sunU ||= { value: new THREE.Vector3(0.4, 0.8, 0.3) }),
+      deep: { value: new THREE.Color(0x1f6f9e) }, shallow: { value: new THREE.Color(0x7fd3e8) },
       skyCol: { value: new THREE.Color(0xd6eeff) },
     };
     this.waterShared = shared;
-    // 잔물결 법선·프레넬·물가 거품·깊이색 (반사 있는 고사양/보통, 없는 저사양 공통 부분)
+    // 수면: 바람 방향 물결 5겹(해석적 기울기) + 잔물결 노이즈 + 파문·빗방울 고리 → 법선,
+    // 깊이색·물속 산란·물가 거품(얼룩진 띠)·햇빛 반짝임 (반사 있는 고사양/보통, 없는 저사양 공통)
     const COMMON = /* glsl */`
-      uniform float uTime; uniform vec3 deep, shallow, skyCol;
+      uniform float uTime, uClock, uRain, uDay; uniform vec3 deep, shallow, skyCol, sunDir;
+      uniform vec4 uRip[${RIPPLES}];
       varying vec3 vW; varying vec3 vPool; // xy: 중심(x,z), z: 반지름
-      vec2 ripple(vec2 p){ return vec2(sin(p.x*3.1+uTime*1.7)+sin(p.y*2.3-uTime*1.3)+sin((p.x+p.y)*5.3+uTime*2.4)*0.5,
-                                       cos(p.y*3.7+uTime*1.5)+sin(p.x*1.9+uTime*1.1)+cos((p.x-p.y)*4.7-uTime*2.1)*0.5); }
-      vec3 waterBase(out float fres, out float foam){
+      float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hsh(i), hsh(i + vec2(1, 0)), u.x), mix(hsh(i + vec2(0, 1)), hsh(i + vec2(1, 1)), u.x), u.y); }
+      // 방향 물결 하나: xy = 기울기, z = 높이
+      vec3 wv(vec2 p, vec2 d, float k, float sp, float a){ float ph = dot(d, p) * k + uTime * sp; return vec3(d * (a * k * cos(ph)), a * sin(ph)); }
+      // 파문 세기(거품용)를 함께 돌려줌
+      vec3 surface(vec2 p, out float rfoam){
+        vec3 s = wv(p, vec2(0.80, 0.60), 1.9, 1.6, 0.030) + wv(p, vec2(-0.45, 0.89), 2.7, 1.9, 0.020)
+               + wv(p, vec2(0.97, -0.24), 4.3, 2.6, 0.011) + wv(p, vec2(-0.70, -0.71), 6.1, 3.1, 0.007)
+               + wv(p, vec2(0.30, 0.95), 9.7, 4.2, 0.004);
+        // 잔물결: 흘러가는 노이즈의 기울기 (유한 차분)
+        vec2 q = p * 3.2 + vec2(uTime * 0.35, uTime * 0.22); float e = 0.12;
+        float n0 = vnoise(q), nx = vnoise(q + vec2(e, 0.0)), nz = vnoise(q + vec2(0.0, e));
+        s.xy += vec2(nx - n0, nz - n0) / e * 0.012;
+        rfoam = 0.0;
+        // 파문: 퍼져 나가는 고리 2~3겹, 시간이 지날수록 약해짐
+        for (int i = 0; i < ${RIPPLES}; i++) {
+          vec4 r = uRip[i]; float age = uClock - r.z;
+          if (age < 0.0 || age > 3.2 || r.w <= 0.0) continue;
+          vec2 dv = p - r.xy; float d = length(dv) + 1e-4;
+          float front = 0.12 + age * 1.15, x = d - front;
+          float env = exp(-x * x * 7.0) * step(x, 0.35) * exp(-age * 1.15) * r.w;
+          s.xy += dv / d * (cos(x * 15.0) * 15.0 * 0.018 * env);
+          rfoam += exp(-x * x * 40.0) * exp(-age * 3.0) * r.w;
+        }
+        // 빗방울: 0.8m 칸마다 무작위 시각에 작은 고리
+        if (uRain > 0.01) {
+          vec2 c = floor(p / 0.8), lp = fract(p / 0.8) - 0.5 - (vec2(hsh(c), hsh(c + 7.3)) - 0.5) * 0.6;
+          float on = step(hsh(c + 3.1), uRain);
+          float age = fract(uClock * 0.9 + hsh(c + 1.7)) / 0.9;
+          float d = length(lp) * 0.8, x = d - age * 0.35;
+          float env = exp(-x * x * 700.0) * exp(-age * 3.0) * on;
+          s.xy += (lp / (length(lp) + 1e-4)) * cos(x * 50.0) * 0.6 * env;
+          rfoam += env * 0.45; // 빗방울 고리가 하얗게 반짝
+        }
+        return s;
+      }
+      vec3 waterBase(out float fres, out float foam, out vec2 slope){
         vec2 center = vPool.xy; float radius = vPool.z;
-        float d = distance(vW.xz, center), edge = smoothstep(radius * 0.25, radius, d);
+        float d = distance(vW.xz, center), edgeD = radius - d;
+        float rfoam; vec3 s = surface(vW.xz, rfoam);
+        slope = s.xy;
         vec3 V = normalize(cameraPosition - vW);
-        vec2 rp = ripple(vW.xz);
-        vec3 N = normalize(vec3(rp.x * 0.06, 1.0, rp.y * 0.06));
-        fres = 0.12 + 0.88 * pow(1.0 - max(dot(V, N), 0.0), 4.0);
-        float wave = 0.5 + 0.5 * sin(d * 18.0 - uTime * 2.2);
-        foam = smoothstep(radius - 0.55, radius - 0.08, d) * (0.45 + 0.55 * wave);
-        vec3 base = mix(deep, shallow, edge * 0.85);
-        float spec = pow(max(dot(reflect(-V, N), normalize(vec3(0.4, 0.8, 0.3))), 0.0), 60.0);
-        return base + spec * 0.35;
+        vec3 N = normalize(vec3(-s.x * 1.4, 1.0, -s.y * 1.4));
+        fres = 0.06 + 0.94 * pow(1.0 - max(dot(V, N), 0.0), 5.0);
+        // 깊이: 물가는 얕고 밝은 청록, 가운데는 깊은 파랑 (반경이 큰 호수가 더 깊게)
+        float depth = smoothstep(0.0, radius * 0.75, edgeD);
+        vec3 base = mix(shallow, deep * (radius > 5.0 ? 0.85 : 1.0), depth);
+        // 물결 마루에 햇빛이 비쳐 살짝 밝아지는 산란
+        base += vec3(0.05, 0.16, 0.14) * clamp(s.z * 14.0 + 0.3, 0.0, 1.0) * uDay * (1.0 - depth * 0.4);
+        // 물가 거품: 노이즈로 얼룩진 띠가 밀려왔다 빠짐
+        float surge = 0.5 + 0.5 * sin(uTime * 1.3 - d * 2.0);
+        float band = smoothstep(0.75 + surge * 0.25, 0.05, edgeD + (vnoise(vW.xz * 2.6 + uTime * 0.25) - 0.5) * 0.45);
+        float breakup = smoothstep(0.35, 0.75, vnoise(vW.xz * 7.0 - uTime * 0.4));
+        foam = clamp(band * (0.35 + 0.65 * breakup) + rfoam * (0.5 + 0.5 * breakup), 0.0, 1.0);
+        // 햇빛 반짝임 (넓은 하이라이트 + 잘게 부서지는 반짝이)
+        vec3 L = normalize(sunDir);
+        float sd = max(dot(reflect(-V, N), L), 0.0);
+        float glit = pow(sd, 220.0) * smoothstep(0.74, 0.86, vnoise(vW.xz * 18.0 + uTime * 1.7)) * 3.2;
+        return base + (pow(sd, 48.0) * 0.45 + glit) * uDay * vec3(1.0, 0.96, 0.85);
       }`;
     const geo = mergeGeo(waters.map((W) => {
       const c = new THREE.CircleGeometry(W.r, W.r > 5 ? 80 : 64).translate(W.x, -W.z, 0); // 수면은 x 축으로 -90° 눕힘 → 로컬 y = -월드 z
@@ -273,12 +335,11 @@ export class Scenery {
             void main(){ vPool = pool; vUv = textureMatrix * vec4(position, 1.0); vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
           fragmentShader: `uniform vec3 color; uniform sampler2D tDiffuse; varying vec4 vUv; ${COMMON}
             void main(){
-              float fres, foam; vec3 base = waterBase(fres, foam);
-              vec2 rp = ripple(vW.xz) * 0.012;
-              vec4 uv = vUv; uv.xy += rp * uv.w;
+              float fres, foam; vec2 slope; vec3 base = waterBase(fres, foam, slope);
+              vec4 uv = vUv; uv.xy += slope * 0.35 * uv.w; // 물결만큼 반사가 일렁임
               vec3 refl = texture2DProj(tDiffuse, uv).rgb;
-              vec3 c = mix(base, refl * 0.92, clamp(fres * 0.85 + 0.15, 0.0, 0.92));
-              c = mix(c, vec3(1.0), foam * 0.55);
+              vec3 c = mix(base, refl * 0.95, clamp(fres * 0.9 + 0.12, 0.0, 0.9));
+              c = mix(c, vec3(0.97, 0.99, 1.0), foam * 0.7);
               gl_FragColor = vec4(c, 1.0);
               #include <tonemapping_fragment>
               #include <colorspace_fragment>
@@ -291,8 +352,8 @@ export class Scenery {
         uniforms: shared, fog: false,
         vertexShader: `attribute vec3 pool; varying vec3 vW; varying vec3 vPool; void main(){ vPool = pool; vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
         fragmentShader: `${COMMON}
-          void main(){ float fres, foam; vec3 base = waterBase(fres, foam);
-            vec3 c = mix(base, skyCol, fres * 0.7); c = mix(c, vec3(1.0), foam * 0.55); gl_FragColor = vec4(c, 1.0);
+          void main(){ float fres, foam; vec2 slope; vec3 base = waterBase(fres, foam, slope);
+            vec3 c = mix(base, skyCol, clamp(fres * 0.8, 0.0, 0.85)); c = mix(c, vec3(0.97, 0.99, 1.0), foam * 0.7); gl_FragColor = vec4(c, 1.0);
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
           }`,
@@ -362,6 +423,13 @@ export class Scenery {
     this.windUniform.value = this.t;
     this.windStrength.value = weather.wind;
     this.waterUniform.value = this.t * (1 + weather.wind * 2 + weather.precip * 2);
+    if (this.clock) {
+      this.clock.value += dt;
+      this.rainU.value = Math.min(1, (weather.precip || 0) * 1.2);
+      this.dayU.value = Math.max(0.08, daylight);
+      this.sunU.value.copy(sunPos).normalize();
+      if (this.sunU.value.y < 0.05) this.sunU.value.set(-0.3, 0.6, 0.5); // 밤: 달빛 방향 (약하게)
+    }
     const visible = Math.round(3 + weather.cloud * (this.clouds.length - 3));
     this.clouds.forEach((c, i) => {
       c.visible = i < visible;
