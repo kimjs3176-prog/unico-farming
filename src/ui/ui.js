@@ -216,7 +216,7 @@ export class UI {
     }
   }
 
-  // ---------------------------------------------------------------- 주민 대화 (동물의 숲풍)
+  // ---------------------------------------------------------------- 주민 대화
   openVillager(e, line) {
     const g = this.game, v = g.villagers, id = e.id, info = VILLAGERS[id];
     const p = this.openPanel(`🦄 ${e.n.name}`);

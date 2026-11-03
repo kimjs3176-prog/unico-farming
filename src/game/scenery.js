@@ -170,7 +170,7 @@ export class Scenery {
     this.grass = mesh;
   }
 
-  /** 들꽃: 꽃잎 5장 + 줄기, 색은 인스턴스별 (동물의 숲 들판 느낌) */
+  /** 들꽃: 꽃잎 5장 + 줄기, 색은 인스턴스별 (알록달록한 들판) */
   _flowers(rnd) {
     const parts = [];
     const stem = new THREE.CylinderGeometry(0.012, 0.012, 0.22, 3, 1, true);

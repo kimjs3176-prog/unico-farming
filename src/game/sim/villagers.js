@@ -2,7 +2,7 @@ import { ITEMS } from './items.js';
 import { CROPS, PRODUCTS } from './crops.js';
 
 /**
- * 동물의 숲풍 주민: 우정도(0~100, 하트 5개), 하루 한 번 인사, 선물, 오늘의 부탁
+ * 마을 주민: 우정도(0~100, 하트 5개), 하루 한 번 인사, 선물, 오늘의 부탁
  */
 export const VILLAGERS = {
   merchant: { name: '장터 유니코', likes: ['fruit_apple', 'tomato', 'egg'], personality: '활발' },

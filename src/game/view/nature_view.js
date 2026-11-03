@@ -11,7 +11,7 @@ const FRUIT_COLOR = { fruit_apple: 0xe0413a, fruit_peach: 0xf7a8a0, fruit_pear: 
 const BUG_COLOR = { bug_butterfly: 0xffffff, bug_swallowtail: 0xf6d64a, bug_dragonfly: 0xe0413a, bug_ladybug: 0xd93025, bug_beetle: 0x5a3a22, bug_firefly: 0xd8ff6a };
 
 /**
- * 동물의 숲풍 자연 요소
+ * 자연 요소
  * - 과일 나무: 하루 한 번 흔들면 열매가 떨어짐 (가끔 곤충·코인)
  * - 나비/잠자리(낮), 반딧불이(밤): 가까이 가서 잡기
  * - 연못 낚시: 찌, 물고기 그림자, 입질 타이밍

@@ -22,11 +22,11 @@ export const LAYOUT = {
   tractorHome: { x: 28.5, z: 17, heading: -Math.PI / 2 },
   windmill: { x: -27, z: 15 },
   pond: { x: -12, z: 18, r: 4.5 },
-  // 사쿠나히메풍 논 (3x2), 탈곡장, 허수아비
+  // 논 (3x2), 탈곡장, 허수아비
   paddy: { cols: 3, rows: 2, size: 3.6, bund: 0.7, x0: -6.8, z0: -25.6 },
   thresher: { x: 10.2, z: -20.5 },
   scarecrow: { x: -8.6, z: -23 },
-  // 동물의 숲풍 과수원, 낚시 데크
+  // 과수원, 낚시 데크
   orchard: [
     { x: 7, z: -9, fruit: 'fruit_apple' }, { x: 10.5, z: -6.5, fruit: 'fruit_peach' },
     { x: 7.5, z: -4, fruit: 'fruit_pear' }, { x: 10.5, z: -1.5, fruit: 'fruit_persimmon' },

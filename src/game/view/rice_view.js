@@ -7,7 +7,7 @@ const CLUMPS = 5; // 한 논에 5x5 포기
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _c = new THREE.Color();
 const GREEN = [new THREE.Color(0x9fdc6a), new THREE.Color(0x6fbf45), new THREE.Color(0x5aa83a), new THREE.Color(0xe8c24a)];
 
-/** 사쿠나히메풍 논: 논두렁, 물 높이, 벼 포기(성장 단계별), 잡초, 탈곡장 */
+/** 논: 논두렁, 물 높이, 벼 포기(성장 단계별), 잡초, 탈곡장 */
 export class RiceView {
   constructor(game) {
     this.game = game;

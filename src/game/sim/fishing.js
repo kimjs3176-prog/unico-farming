@@ -1,7 +1,7 @@
 import { ITEMS, itemsOf } from './items.js';
 
 /**
- * 동물의 숲풍 낚시: 찌를 던지면 기다렸다가 '입질'(찌가 쑥 들어감) 순간에 맞춰 당기기
+ * 낚시: 찌를 던지면 기다렸다가 '입질'(찌가 쑥 들어감) 순간에 맞춰 당기기
  * 상태: idle → waiting(가짜 입질 nibble 0~2회) → bite(반응 창) → caught | escaped
  */
 export const BITE_WINDOW = 0.75; // 초
