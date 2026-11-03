@@ -137,7 +137,7 @@ export function mgResult(g, o) {
 }
 
 /** 패널 위로 꽃가루 */
-function confetti(p, n) {
+export function confetti(p, n) {
   const cols = ['#fac03e', '#30b6aa', '#e8495a', '#8e7cc3', '#6dbb4f', '#ffffff'];
   for (let i = 0; i < n; i++) {
     const c = h('i', 'mg-confetti');

@@ -394,3 +394,65 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .smart-ev { min-height: 0; max-height: 0; overflow: hidden; background: #fff1d6; color: #9a4a00; border-radius: 10px; font-family: Jua, sans-serif; font-size: 15px; text-align: center; transition: all 0.25s; }
 .smart-ev.show { max-height: 60px; padding: 6px 10px; margin: 6px 0; animation: mgwarn 0.4s 3 alternate; }
 .mg-records { margin-top: 6px; }
+
+/* ---------------- KOAT 체험관 미니게임 ---------------- */
+.koat-runhead { display: flex; justify-content: space-between; align-items: center; min-height: 22px; margin-bottom: 6px; font-family: Jua, sans-serif; }
+.koat-runhead .combo { color: #e8742a; animation: mgstar 0.3s; }
+.koat-runhead .koat-progress { margin: 0; }
+.koat-progress i.miss { background: #e35d5d; }
+.koat-timer.warn { color: #e8495a; animation: mgwarn 0.5s infinite alternate; }
+.koat-runbody { min-height: 120px; }
+.koat-runbody.enter { animation: koatin 0.35s cubic-bezier(.2,1.4,.4,1); }
+@keyframes koatin { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+.koat-choices { display: grid; gap: 8px; margin-top: 8px; }
+.koat-choices:has(.okc) { grid-template-columns: 1fr 1fr; }
+.koat-choices .koat-opt { font-size: 16px; min-height: 52px; transition: transform 0.08s; }
+.koat-choices .koat-opt:active { transform: scale(0.97); }
+.koat-choices .koat-opt kbd { font-size: 12px; }
+.koat-choices .okc { border-color: #9fd88a; } .koat-choices .ngc { border-color: #f2a1a1; }
+.koat-choices .koat-opt:disabled { opacity: 1; }
+.koat-why { max-height: 0; overflow: hidden; border-radius: 12px; font-size: 14px; line-height: 1.5; transition: all 0.25s; }
+.koat-why.show { max-height: 90px; padding: 8px 12px; margin-top: 8px; }
+.koat-why.ok { background: #eef9e6; color: #2f6b1d; } .koat-why.ng { background: #fdeeee; color: #9a2f2f; }
+.panel.shake { animation: panelshake 0.12s 3; }
+@keyframes panelshake { 0% { transform: translate(calc(-50% - 5px), -50%); } 50% { transform: translate(calc(-50% + 5px), -50%); } 100% { transform: translate(-50%, -50%); } }
+.koat-review { max-height: 220px; overflow: auto; font-size: 13px; }
+/* 창업 로켓 트랙 */
+.koat-rocket { position: relative; margin: 4px 0 12px; }
+.koat-rocket .track { display: flex; justify-content: space-between; background: #f3f3f3; border-radius: 999px; padding: 4px 6px; font-size: 11px; }
+.koat-rocket .track span { opacity: 0.45; } .koat-rocket .track span.past { opacity: 1; color: var(--div); } .koat-rocket .track span.now { opacity: 1; font-weight: 900; }
+.koat-rocket i { position: absolute; top: -18px; font-style: normal; font-size: 22px; transition: left 0.6s cubic-bezier(.3,1.4,.5,1); }
+/* 기술이전 연결선 */
+.koat-match { position: relative; }
+.koat-lines { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.koat-lines .draw { stroke-dasharray: 600; stroke-dashoffset: 600; animation: koatdraw 0.45s ease-out forwards; }
+@keyframes koatdraw { to { stroke-dashoffset: 0; } }
+/* 종자 컨베이어 */
+.koat-belt { position: relative; height: 170px; border-radius: 14px; overflow: hidden; background: linear-gradient(#e9e2d3, #d8cdb6); border: 3px solid #b9aa8c; touch-action: none; }
+.koat-belt .rollers { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(0,0,0,0.06) 0 18px, transparent 18px 36px); }
+.koat-belt.shake { animation: reelshake 0.1s 2; }
+.koat-belt .seed { position: absolute; left: 0; width: 48px; height: 48px; padding: 0; font-size: 30px; border-radius: 50%; background: #fbf5e8; border: 2px solid #eadfc8; box-shadow: 0 3px 0 rgba(0,0,0,0.12); }
+.koat-belt .seed.got { transform: scale(1.4) !important; opacity: 0; transition: all 0.25s; border-color: #6dbb4f; }
+.koat-belt .seed.oops { background: #fdd; border-color: #e35d5d; transition: all 0.25s; opacity: 0.4; }
+.koat-float { position: absolute; font-family: Jua, sans-serif; font-size: 18px; pointer-events: none; animation: koatfloat 0.7s ease-out forwards; white-space: nowrap; }
+.koat-float.ok { color: #2f8f1d; } .koat-float.ng { color: #d33; }
+@keyframes koatfloat { to { transform: translateY(-36px); opacity: 0; } }
+/* 농기계 검정 게이지 */
+.koat-insp1 { background: #f7f7f7; border-radius: 14px; padding: 12px 14px; }
+.koat-insp1 .nm { font-family: Jua, sans-serif; font-size: 20px; }
+.koat-insp1 .std { color: #666; margin: 2px 0 10px; }
+.koat-meter .scale { position: relative; height: 22px; background: #f6d0d0; border-radius: 11px; overflow: hidden; }
+.koat-meter .scale .ok { position: absolute; top: 0; bottom: 0; background: #bfe6ae; }
+.koat-meter .scale .lim { position: absolute; top: 0; bottom: 0; width: 3px; background: #231916; }
+.koat-meter .scale .needle { position: absolute; top: -2px; bottom: -2px; width: 6px; border-radius: 3px; background: var(--div); box-shadow: 0 0 0 2px #fff; left: 0; animation: koatneedle 0.9s cubic-bezier(.3,1.5,.5,1) forwards; }
+@keyframes koatneedle { to { left: var(--to); } }
+.koat-meter .read { text-align: right; margin-top: 4px; } .koat-meter .read b { font-size: 24px; font-family: Jua, sans-serif; }
+.koat-meter.text { display: flex; align-items: center; gap: 10px; font-size: 22px; }
+/* 저탄소 카드 */
+.koat-bigcard { background: #fff; border: 3px solid var(--div); border-radius: 18px; padding: 26px 16px; text-align: center; font-family: Jua, sans-serif; font-size: 22px; box-shadow: 0 6px 0 rgba(0,0,0,0.08); }
+/* 결과: 스탬프 쾅 */
+.koat-result { position: relative; overflow: hidden; }
+.koat-result .koat-score b { font-family: Jua, sans-serif; }
+.koat-stampfx { position: absolute; right: 18px; top: 58px; width: 104px; height: 104px; border-radius: 50%; border: 5px solid #d33a3a; color: #d33a3a; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-14deg); background: rgba(255,255,255,0.6); font-family: Jua, sans-serif; animation: koatstamp 0.45s cubic-bezier(.5,0,.6,1.4) both; }
+.koat-stampfx span { font-size: 30px; } .koat-stampfx b { font-size: 14px; } .koat-stampfx small { font-size: 10px; letter-spacing: 2px; }
+@keyframes koatstamp { 0% { transform: scale(3) rotate(-30deg); opacity: 0; } 70% { transform: scale(0.9) rotate(-12deg); opacity: 1; } 100% { transform: scale(1) rotate(-14deg); opacity: 1; } }

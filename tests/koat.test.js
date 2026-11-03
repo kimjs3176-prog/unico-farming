@@ -47,7 +47,7 @@ test('inspection verdicts', () => {
 
 test('low-carbon cards', () => {
   const r = makeCarbonRound(seeded(5));
-  assert.equal(r.length, 6);
+  assert.equal(r.length, 8);
   const goods = new Set(r.map((c, i) => (c.good ? i : -1)).filter((i) => i >= 0));
   assert.equal(scoreCarbon(r, goods), 100);
   assert.equal(scoreCarbon(r, new Set(r.map((_, i) => i))), 50);
@@ -63,4 +63,20 @@ test('stamp tour: pass threshold, completion reward once', () => {
   assert.ok(b.complete);
   assert.equal(b.claim().money, 1000);
   assert.equal(b.claim(), null);
+});
+
+test('run scoring: accuracy first, speed bonus only for correct answers', async () => {
+  const { scoreRun, scoreConveyor, makeConveyor, VENTURE_STAGES } = await import('../src/game/sim/koat.js');
+  assert.equal(scoreRun([]), 0);
+  assert.equal(scoreRun([{ ok: true, left: 1 }, { ok: true, left: 1 }]), 100);
+  assert.equal(scoreRun([{ ok: true, left: 0 }, { ok: true, left: 0 }]), 85);
+  assert.equal(scoreRun([{ ok: false, left: 1 }, { ok: false, left: 1 }]), 0, '틀린 문제는 빨라도 0점');
+  assert.ok(scoreRun([{ ok: true, left: 0.5 }, { ok: false, left: 0 }]) >= PASS_SCORE - 15);
+  // 컨베이어: 다 골라내면 100, 실수는 감점, 음수 없음
+  assert.equal(scoreConveyor(10, 0, 10), 100);
+  assert.ok(scoreConveyor(10, 3, 10) < 100);
+  assert.equal(scoreConveyor(0, 5, 10), 0);
+  const seq = makeConveyor(seeded(9));
+  assert.ok(seq.some((x) => x.kind !== 'good') && seq.some((x) => x.kind === 'good'));
+  assert.ok(VENTURE_STAGES.every((s) => s.why));
 });

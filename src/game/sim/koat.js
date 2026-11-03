@@ -73,10 +73,10 @@ export function scoreMatch(round, answers) {
 
 // ---------------------------------------------------------------- 벤처창업: 단계별 지원 고르기
 export const VENTURE_STAGES = [
-  { stage: '예비창업', situation: '“스마트팜 상추로 샐러드 구독을 하고 싶어요!” 아이디어만 있는 예비 창업자', options: ['유망 아이디어 발굴·창업 교육', '해외 수출 박람회 참가', '대규모 공장 증설 자금'], answer: 0 },
-  { stage: '창업', situation: '법인을 세웠지만 농촌 현장과 사업 경험이 부족한 초기 기업', options: ['농촌 현장 창업보육·전문가 멘토링', '상장(IPO) 컨설팅', '기술 특허 무효 심판'], answer: 0 },
-  { stage: '성장', situation: '제품은 좋은데 팔 곳과 투자금이 부족한 성장 단계 기업', options: ['판로개척·투자유치 지원', '아이디어 경진대회 재참가', '창업 교육 다시 듣기'], answer: 0 },
-  { stage: '그린바이오', situation: '미생물·곤충 등 생명소재로 신제품을 만드는 바이오 벤처', options: ['그린바이오 상용화·벤처캠퍼스 입주 지원', '트랙터 구입 보조', '논 물대기 컨설팅'], answer: 0 },
+  { stage: '예비창업', situation: '“스마트팜 상추로 샐러드 구독을 하고 싶어요!” 아이디어만 있는 예비 창업자', options: ['유망 아이디어 발굴·창업 교육', '해외 수출 박람회 참가', '대규모 공장 증설 자금'], answer: 0, why: '아이디어 단계에서는 사업 모델을 다듬는 발굴·교육이 먼저예요.' },
+  { stage: '창업', situation: '법인을 세웠지만 농촌 현장과 사업 경험이 부족한 초기 기업', options: ['농촌 현장 창업보육·전문가 멘토링', '상장(IPO) 컨설팅', '기술 특허 무효 심판'], answer: 0, why: '초기 기업은 현장 보육과 멘토링으로 시행착오를 줄여요.' },
+  { stage: '성장', situation: '제품은 좋은데 팔 곳과 투자금이 부족한 성장 단계 기업', options: ['판로개척·투자유치 지원', '아이디어 경진대회 재참가', '창업 교육 다시 듣기'], answer: 0, why: '성장 단계에는 판로와 투자 연결이 필요해요.' },
+  { stage: '그린바이오', situation: '미생물·곤충 등 생명소재로 신제품을 만드는 바이오 벤처', options: ['그린바이오 상용화·벤처캠퍼스 입주 지원', '트랙터 구입 보조', '논 물대기 컨설팅'], answer: 0, why: '그린바이오 벤처캠퍼스에서 실증·상용화를 도와요.' },
 ];
 export function makeStagesRound(rng = Math.random) {
   return VENTURE_STAGES.map((s) => { const order = shuffle([0, 1, 2], rng); return { ...s, options: order.map((i) => s.options[i]), answer: order.indexOf(s.answer) }; });
@@ -136,7 +136,7 @@ export const CARBON_CARDS = [
   { text: '논에 물을 늘 깊게 가둬 두기', good: false, why: '메탄이 많이 나와요' },
   { text: '노후 경유 양수기 공회전', good: false, why: '연료 낭비와 배출이 늘어요' },
 ];
-export function makeCarbonRound(rng = Math.random, n = 6) {
+export function makeCarbonRound(rng = Math.random, n = 8) {
   const goods = shuffle(CARBON_CARDS.filter((c) => c.good), rng).slice(0, Math.ceil(n / 2));
   const bads = shuffle(CARBON_CARDS.filter((c) => !c.good), rng).slice(0, Math.floor(n / 2));
   return shuffle([...goods, ...bads], rng);
@@ -145,6 +145,30 @@ export function makeCarbonRound(rng = Math.random, n = 6) {
 export function scoreCarbon(round, chosen) {
   const correct = round.filter((c, i) => chosen.has(i) === c.good).length;
   return Math.round((correct / round.length) * 100);
+}
+
+// ---------------------------------------------------------------- 공통 점수 (빠르게 하나씩 판단하는 체험)
+/**
+ * results: [{ ok: 맞혔나, left: 남은 시간 비율 0..1 }]
+ * 정확도 85점 + 맞힌 문제를 빨리 풀수록 최대 15점
+ */
+export function scoreRun(results) {
+  if (!results.length) return 0;
+  const ok = results.filter((r) => r.ok);
+  const speed = ok.length ? ok.reduce((a, r) => a + Math.max(0, Math.min(1, r.left)), 0) / results.length : 0;
+  return Math.min(100, Math.round((ok.length / results.length) * 85 + speed * 15));
+}
+
+/** 종자 컨베이어: 불량을 골라낸 수(hit), 좋은 종자를 버린 수(wrong), 지나간 불량 전체(total) */
+export function scoreConveyor(hit, wrong, total) {
+  if (total <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round(((hit - wrong * 0.7) / total) * 100)));
+}
+
+/** 컨베이어에 흘려보낼 종자 순서 (불량 35%) */
+export function makeConveyor(rng = Math.random, n = 34) {
+  const bads = ['cracked', 'diseased', 'stone', 'weed'];
+  return Array.from({ length: n }, (_, i) => ({ id: i, kind: rng() < 0.38 ? bads[Math.floor(rng() * bads.length)] : 'good' }));
 }
 
 // ---------------------------------------------------------------- 스탬프 투어
