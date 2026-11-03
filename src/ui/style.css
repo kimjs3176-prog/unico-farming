@@ -337,3 +337,60 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 
 /* 목장 동물 이름 바꾸기 */
 .name-input { font-family: Jua, sans-serif; font-size: 16px; width: 9em; padding: 2px 8px; border: 2px solid var(--panel-edge); border-radius: 10px; background: #fffdf5; color: var(--brown); }
+
+/* ---------------- 미니게임 공통 연출 ---------------- */
+.mg-intro .mg-rules { display: grid; gap: 8px; margin: 6px 0 10px; }
+.mg-rule { display: flex; align-items: center; gap: 12px; background: #fff8e6; border-radius: 14px; padding: 9px 12px; }
+.mg-rule span { font-size: 26px; width: 36px; text-align: center; }
+.mg-rule p { margin: 0; font-size: 15px; line-height: 1.4; }
+.mg-keys { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 10px; }
+.mg-keys span { background: var(--ink, #231916); color: #fff; border-radius: 10px; padding: 4px 10px; font-size: 13px; font-family: Jua, sans-serif; }
+.mg-goal { text-align: center; font-size: 14px; line-height: 1.8; margin-bottom: 10px; }
+.mg-go { width: 100%; font-size: 22px; padding: 14px; animation: mgpulse 1.4s ease-in-out infinite; }
+.mg-go small { font-size: 13px; opacity: 0.8; }
+@keyframes mgpulse { 50% { transform: scale(1.03); } }
+.mg-stars { letter-spacing: 1px; white-space: nowrap; }
+.mg-stars i { font-style: normal; color: #d8cfbd; }
+.mg-stars i.on { color: #fac03e; text-shadow: 0 0 6px rgba(250, 192, 62, 0.6); }
+.mg-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 30; }
+.mg-count span { font-family: Jua, sans-serif; font-size: 150px; color: #fff; -webkit-text-stroke: 6px #231916; paint-order: stroke; text-shadow: 0 10px 0 rgba(0,0,0,0.18); opacity: 1; animation: mgcount 0.65s cubic-bezier(.2,1.6,.4,1); }
+.mg-count span.go { font-size: 110px; color: #fac03e; }
+@keyframes mgcount { 0% { transform: scale(1.8); opacity: 0.35; } 35% { transform: scale(0.92); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+.mg-result { text-align: center; overflow: hidden; }
+.mg-result .mg-score b { font-family: Jua, sans-serif; font-size: 72px; color: var(--teal-d, #1f8f86); line-height: 1; }
+.mg-result .mg-score small { font-size: 22px; margin-left: 4px; }
+.mg-starrow { font-size: 44px; margin: 4px 0; }
+.mg-starrow i.pop { animation: mgstar 0.45s cubic-bezier(.2,1.8,.4,1); display: inline-block; }
+@keyframes mgstar { 0% { transform: scale(0.2) rotate(-60deg); } 100% { transform: scale(1) rotate(0); } }
+.mg-grade { font-family: Jua, sans-serif; font-size: 24px; min-height: 30px; opacity: 0; transform: translateY(6px); transition: all 0.3s; }
+.mg-grade.show { opacity: 1; transform: none; }
+.mg-ribbon { display: inline-block; background: #e8495a; color: #fff; font-family: Jua, sans-serif; padding: 5px 16px; border-radius: 999px; margin-bottom: 6px; animation: mgcount 0.6s both; }
+.mg-best { font-size: 13px; opacity: 0.75; margin: 8px 0; }
+.mg-btns { display: flex; gap: 8px; justify-content: center; }
+.mg-btns button { flex: 1; font-size: 18px; padding: 11px; }
+.mg-confetti { position: absolute; top: -10px; width: 9px; height: 14px; border-radius: 2px; pointer-events: none; animation: mgconf 1.9s ease-in forwards; }
+@keyframes mgconf { to { transform: translate(var(--dx), 620px) rotate(var(--rot)); opacity: 0.2; } }
+.koat-stars { font-size: 36px; }
+/* 남은 시간 경고 */
+.mini-hud .tm.warn, .smart-timer.warn, .thresh-panel.warn .t b { color: #ff6b7a; animation: mgwarn 0.5s ease-in-out infinite alternate; }
+@keyframes mgwarn { to { transform: scale(1.15); } }
+.mini-hud .prog { display: block; height: 6px; border-radius: 4px; background: rgba(255,255,255,0.2); margin-top: 3px; overflow: hidden; }
+.mini-hud .prog b { display: block; height: 100%; width: 0; background: #fac03e; transition: width 0.2s; }
+.mini-hud .stk.hot { color: #ffb347; }
+.mini-hud .k.bump { display: inline-block; animation: mgstar 0.3s; }
+.herd-hud.pulse { border-color: #e8495a; }
+.herd-hud .pips { color: #30b6aa; letter-spacing: 2px; font-size: 14px; }
+/* 탈곡: 초록 구간, 과열 */
+.thresh-panel .track { position: relative; }
+.thresh-panel .band { position: absolute; top: 0; bottom: 0; background: rgba(109, 187, 79, 0.35); border-left: 2px solid #4f9a33; border-right: 2px solid #4f9a33; }
+.thresh-panel .fill { position: relative; transition: width 0.06s linear, background 0.15s; }
+.thresh-panel .fill.ok { background: #6dbb4f; }
+.thresh-panel .fill.hot { background: #f2a33a; }
+.thresh-panel .fill.jam { background: #e8495a; }
+.thresh-panel.jam { animation: reelshake 0.12s infinite; }
+.thresh-panel .drum { display: inline-block; }
+.thresh-panel .msg { font-size: 15px; color: #4f9a33; margin-left: 6px; }
+/* 스마트팜 돌발 상황 */
+.smart-ev { min-height: 0; max-height: 0; overflow: hidden; background: #fff1d6; color: #9a4a00; border-radius: 10px; font-family: Jua, sans-serif; font-size: 15px; text-align: center; transition: all 0.25s; }
+.smart-ev.show { max-height: 60px; padding: 6px 10px; margin: 6px 0; animation: mgwarn 0.4s 3 alternate; }
+.mg-records { margin-top: 6px; }

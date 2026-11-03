@@ -1,5 +1,6 @@
 import { SmartFarmSim, SMART_TIME } from '../sim/smartfarm.js';
 import { LAYOUT } from '../world.js';
+import { mgIntro, mgResult, mgTick } from '../../ui/minigame_frame.js';
 
 /** 스마트팜: 센서 폴 근처에서 환경제어 미니게임 */
 export class SmartFarmView {
@@ -17,26 +18,37 @@ export class SmartFarmView {
     g.farm.sim.boost = this.t < this.boostUntil ? this.boostMult : 1;
     if (this.active) {
       const done = this.sim.tick(dt);
-      g.ui.updateSmartfarm(this.sim);
+      if (this.sim.newEvent) { g.ui.smartEvent?.(this.sim.newEvent.name); g.audio.play('bump', 0.4); this.sim.newEvent = null; }
+      g.ui.updateSmartfarm(this.sim, mgTick(g, this.sim.time, this.tickRef));
       if (done) this.finish();
       return { d: -1, label: '스마트팜 제어 중… 패널의 버튼으로 환경을 맞추세요', key: 'smart' };
     }
     const S = LAYOUT.sensor;
     const ds = Math.hypot(S.x - playerPos.x, S.z - playerPos.z);
     if (ds < 3) {
-      return { d: ds, label: '스마트팜 환경 제어 (미니게임)', key: 'smart', onInteract: () => this.start() };
+      return { d: ds, label: '스마트팜 환경 제어 (미니게임)', key: 'smart', onInteract: () => this.begin() };
     }
     return null;
   }
 
-  start() {
+  begin() {
+    mgIntro(this.game, {
+      id: 'smart', icon: '📱', title: '스마트팜 환경 제어', unit: '점', th: [50, 70, 90],
+      rules: [['🎯', `${SMART_TIME}초 동안 온도·습도·CO₂ 를 모두 <b>초록 범위</b>에 맞춰요`], ['🎛️', '난방·환기·분무·CO₂ 공급 버튼으로 조절 (환기는 셋 다 낮춰요)'], ['⚡', '햇볕·소나기·찬바람 같은 돌발 상황이 생겨요. 알림을 보고 재빨리!']],
+      controls: ['패널 버튼 클릭/탭'],
+      onStart: () => this.start({ events: true }),
+    });
+  }
+
+  start(opts = {}) {
     const g = this.game;
     this.active = true;
-    this.sim.start();
+    this.tickRef = {};
+    this.sim.start(opts);
     g.player.frozen = true;
     g.player.unico.playAction('tablet', 0);
     g.ui.showSmartfarm(this.sim, (key) => { this.sim.act(key); g.audio.play('click'); });
-    g.ui.toast(`📱 ${SMART_TIME}초 동안 온도·습도·CO₂ 를 녹색 범위에 유지하세요!`);
+    if (!opts.events) g.ui.toast(`📱 ${SMART_TIME}초 동안 온도·습도·CO₂ 를 녹색 범위에 유지하세요!`);
   }
 
   finish() {
@@ -52,7 +64,11 @@ export class SmartFarmView {
     g.audio.play(r.score >= 50 ? 'win' : 'bump');
     g.player.unico.playAction(r.score >= 50 ? 'cheer' : 'think', 2);
     if (this.onFinish) { const cb = this.onFinish; this.onFinish = null; cb(r); return; } // KOAT 체험관에서 시작한 경우
-    g.ui.result('📱 스마트팜 점검 결과', [`적정 환경 유지율: ${r.score}%`, `보상: +${r.money} 코인`, r.boostSeconds ? `🌱 작물 성장 ×${r.boost} 부스트 ${r.boostSeconds}초!` : '50% 이상이면 성장 부스트를 받아요']);
+    mgResult(g, {
+      id: 'smart', icon: '📱', title: '스마트팜 점검 결과', score: r.score, unit: '점', th: [50, 70, 90],
+      lines: [`🎯 적정 환경 유지 ${this.sim.good.toFixed(1)}초 / ${SMART_TIME}초`, `🪙 보상 +${r.money}`, r.boostSeconds ? `🌱 밭 작물 성장 ×${r.boost} 부스트 ${r.boostSeconds}초!` : '50점 이상이면 밭 작물 성장 부스트를 받아요'],
+      onRetry: () => this.begin(),
+    });
   }
 
   get boostLeft() { return Math.max(0, this.boostUntil - this.t); }

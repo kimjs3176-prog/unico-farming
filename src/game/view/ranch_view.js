@@ -11,6 +11,7 @@ import { makeLabel } from '../label.js';
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 const BABY = { cow: '송아지', sheep: '어린 양', chicken: '병아리' };
 import { playEggCatch } from '../../ui/minigames/egg_catch.js';
+import { mgResult } from '../../ui/minigame_frame.js';
 
 /**
  * 동물 종류 → 모델. 젖소·양은 뼈대 애니메이션(CC0, Quaternius), 닭은 저폴리 암탉(blender hen, 코드로 다리·머리 움직임).
@@ -238,12 +239,16 @@ export class RanchView {
   async eggCatch() {
     const g = this.game;
     const r = await playEggCatch(g);
-    if (!r.eggs && !r.coins) return;
+    if (!r.over) return;
     g.economy.addProduct('egg', r.eggs);
     g.economy.earn(r.coins);
     g.audio.play('coin');
-    g.ui.toast(`🥚 달걀 ${r.eggs}개 + ${r.coins}🪙 획득!${r.score >= r.best ? ' 🏆 최고 기록' : ''}`);
     g.onEvent('eggcatch', r.score);
+    mgResult(g, {
+      id: 'egg', icon: '🥚', title: '달걀 받기 결과', score: r.score, unit: '점', th: [15, 30, 45], prevBest: r.prev,
+      lines: [`🔗 최대 ${r.maxCombo} 연속`, `🥚 달걀 +${r.eggs} · 🪙 +${r.coins}`],
+      onRetry: () => this.eggCatch(),
+    });
   }
 
   pet(e) {

@@ -1,3 +1,4 @@
+import { starsHtml, starsFor } from './minigame_frame.js';
 import {
   DIVISIONS, PASS_SCORE, TOUR_REWARD, makeMatchRound, scoreMatch, makeStagesRound, scoreStages, makeSortRound, scoreSort, SEED_KINDS,
   makeInspectRound, scoreInspect, makeCarbonRound, scoreCarbon,
@@ -37,6 +38,7 @@ export function installKoatUI(UI) {
     p.classList.add('koat');
     p.style.setProperty('--div', hex(d.color));
     p.append(h('div', `koat-score ${r.passed ? 'pass' : 'fail'}`, `${score}<small>점</small>`));
+    p.append(h('div', 'mg-starrow koat-stars', starsHtml(starsFor(score, [PASS_SCORE, 85, 100]))));
     p.append(h('div', 'koat-meta', r.passed ? (r.newStamp ? `🎉 ${d.name} 스탬프 획득! (${g.koat.book.count}/${DIVISIONS.length})` : '👍 통과!') : `조금만 더! ${PASS_SCORE}점 이상이면 스탬프를 받아요`));
     if (lines.length) p.append(h('div', 'rows', lines.map((t) => `<div class="row">${t}</div>`).join('')));
     const row = h('div', 'koat-btns');

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
 import { heightAt } from '../terrain.js';
 import { playClip } from './ranch_view.js';
+import { mgIntro, mgCountdown, mgResult, mgTick } from '../../ui/minigame_frame.js';
 
 const DUR = 70, N = 6;
 
@@ -25,13 +26,24 @@ export class Herding {
   prompt(pp) {
     if (this.active) return null;
     const S = LAYOUT.herd.sign, d = Math.hypot(S.x - pp.x, S.z - pp.z);
-    return d < 2.4 ? { d, label: `🐑 양 몰이 미니게임 (최고 ${this.best}마리)`, key: 'herd', onInteract: () => this.start() } : null;
+    return d < 2.4 ? { d, label: `🐑 양 몰이 미니게임 (최고 ${this.best}마리)`, key: 'herd', onInteract: () => this.begin() } : null;
+  }
+
+  begin() {
+    mgIntro(this.game, {
+      id: 'herd', icon: '🐑', title: '양 몰이', unit: '마리', th: [3, 5, 6], countdown: false,
+      rules: [['🐑', `흩어진 양 ${N}마리를 ${DUR}초 안에 오른쪽 우리로 몰아요 (입구는 서쪽)`], ['🏃', '양은 나와 콩이를 피해 달아나요. 뒤에서 살살 밀어 주세요'], ['⏱️', '모두 넣으면 남은 시간만큼 보너스']],
+      controls: ['WASD·방향키', '조이스틱', '화면 클릭 이동'],
+      onStart: () => this.start(),
+    });
   }
 
   start() {
     const g = this.game, H = LAYOUT.herd, P = H.pen;
     if (!g.assets.has('q_sheep')) return;
-    this.active = true; this.t = 0; this.done = false;
+    this.active = true; this.t = 0; this.done = false; this.counting = true; this.tickRef = {};
+    g.player.frozen = true;
+    mgCountdown(g).then(() => { this.counting = false; g.player.frozen = false; });
     this.sheep = [];
     for (let i = 0; i < N; i++) {
       const rig = g.assets.cloneAnimated('q_sheep');
@@ -50,13 +62,13 @@ export class Herding {
     fc.pitch = 0.82; fc.distance = 17;
     g.player.position.set(H.sign.x + 1.5, 0, H.sign.z + 1.2);
     g.audio.play('win', 0.5);
-    g.ui.toast('🐑 양들을 오른쪽 우리 입구(서쪽)로 몰아 주세요! 콩이도 도와줄 거예요');
     this.hud.classList.remove('hidden');
   }
 
   update(dt, pp) {
     if (!this.active) return this.prompt(pp);
     const g = this.game, H = LAYOUT.herd, P = H.pen;
+    if (this.counting) { for (const s of this.sheep) s.mixer.update(dt); return { d: -1, label: '🐑 준비…', key: 'herd' }; }
     if (!this.done) this.t += dt;
     const chasers = [{ x: pp.x, z: pp.z, r: 3.4, k: 1 }];
     const pet = g.pet?.e?.m.position;
@@ -113,7 +125,10 @@ export class Herding {
     }
     this.penned = penned;
     const left = Math.max(0, DUR - this.t);
-    this.hud.innerHTML = `🐑 우리에 넣은 양 <b>${penned}/${N}</b> · ⏱ <b class="${left < 15 ? 'warn' : ''}">${Math.ceil(left)}초</b>`;
+    const warn = !this.done && mgTick(g, left, this.tickRef);
+    const html = `🐑 우리에 넣은 양 <b>${penned}/${N}</b> <span class="pips">${'●'.repeat(penned)}${'○'.repeat(N - penned)}</span> · ⏱ <b class="${left < 15 ? 'warn' : ''}">${Math.ceil(left)}초</b>`;
+    if (html !== this._hudHtml) { this._hudHtml = html; this.hud.innerHTML = html; }
+    this.hud.classList.toggle('pulse', warn);
     if (!this.done && (penned === N || left <= 0)) this.finish();
     return null;
   }
@@ -127,10 +142,15 @@ export class Herding {
     g.economy.earn(coins);
     g.audio.play(n === N ? 'levelup' : 'win');
     g.player.unico.playAction('cheer', 2);
-    if (n > this.best) { this.best = n; safeSet('unico.herd.best', String(n)); }
-    g.ui.toast(n === N ? `🏆 양 몰이 성공! 모두 ${N}마리 · 🧶 양털 ${n} + ${coins}🪙 (시간 보너스 ${bonus})` : `🐑 ${n}마리를 우리에 넣었어요 · 🧶 양털 ${n} + ${coins}🪙`);
+    const prev = this.best;
+    if (n > this.best) this.best = n;
     g.onEvent('herd', n);
-    setTimeout(() => this.cleanup(), 2600);
+    this._cl = setTimeout(() => this.cleanup(), 2600);
+    setTimeout(() => mgResult(g, {
+      id: 'herd', icon: '🐑', title: n === N ? '양 몰이 성공!' : '양 몰이 결과', score: n, unit: '마리', th: [3, 5, 6], prevBest: prev,
+      lines: [`🧶 양털 +${n} · 🪙 +${n * 25}`, bonus ? `⏱️ 남은 시간 보너스 +${bonus}🪙` : `모두 넣으면 남은 시간만큼 보너스`, `총 보상 <b>+${coins}🪙</b>`],
+      onRetry: () => { clearTimeout(this._cl); this.cleanup(); this.begin(); },
+    }), 900);
   }
 
   cleanup() {
@@ -144,4 +164,3 @@ export class Herding {
 }
 
 function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
-function safeSet(k, v) { try { localStorage.setItem(k, v); } catch { /* 무시 */ } }

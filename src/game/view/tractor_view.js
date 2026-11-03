@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FieldSim, Vehicle, TRACTOR_TIME } from '../sim/tractor.js';
+import { mgIntro, mgCountdown, mgResult, mgTick, starsFor } from '../../ui/minigame_frame.js';
 import { LAYOUT } from '../world.js';
 
 /** 트랙터: 탑승/운전 + 밭갈이 미니게임 */
@@ -59,6 +60,16 @@ export class TractorView {
     this.cells.instanceColor.needsUpdate = true;
   }
 
+  /** 시작 카드 → 올라타기 → 3·2·1 → 출발 */
+  begin() {
+    mgIntro(this.game, {
+      id: 'tractor', icon: '🚜', title: '트랙터 밭갈이', unit: '칸', th: [15, 30, 45], countdown: false,
+      rules: [['🟫', `${TRACTOR_TIME}초 안에 쟁기로 밭 칸을 최대한 많이 갈아요`], ['🔥', '쉬지 않고 이어서 갈면 연속 보너스 (끊기지 않게!)'], ['🪨', '바위에 부딪히면 시간 -3초']],
+      controls: ['W/S 전진·후진', 'A/D 회전', 'SPACE 쟁기', '화면 버튼'],
+      onStart: () => this.mount(),
+    });
+  }
+
   mount() {
     const g = this.game;
     this.driving = true;
@@ -74,10 +85,13 @@ export class TractorView {
     g.player.hidden = false;
     this.obstacle.r = 0;
     this.field.start();
+    this.field.running = false; // 3·2·1 동안은 멈춤
+    this.counting = true;
+    this.streak = 0; this.maxStreak = 0; this.lastPlow = -9; this.tickRef = {};
     this.resetCells();
     g.audio.play('engine');
     g.ui.showMinigame('tractor', { time: TRACTOR_TIME, score: 0, max: this.field.cols * this.field.rows - this.field.rocks.size });
-    g.ui.toast('🚜 트랙터 밭갈이! W 전진 · S 후진 · A/D 좌우 회전 · SPACE 쟁기 올림/내림 · E 내리기. 60초 안에 최대한 많이 갈아보세요');
+    mgCountdown(g).then(() => { if (!this.driving) return; this.counting = false; this.field.start(); this.resetCells(); });
   }
 
   dismount(finished = false) {
@@ -92,13 +106,19 @@ export class TractorView {
     this.obstacle.r = 1.8;
     g.ui.hideMinigame();
     if (finished) {
-      const reward = this.field.reward();
+      const F = this.field, stars = starsFor(F.score, [15, 30, 45]);
+      const streakBonus = this.maxStreak * 3, starBonus = [0, 0, 30, 80][stars];
+      const reward = F.reward() + streakBonus + starBonus;
       g.economy.earn(reward);
       g.onEvent('tractor');
-      g.onEvent('plowbest', this.field.score);
+      g.onEvent('plowbest', F.score);
       g.player.unico.playAction('cheer', 2);
       g.audio.play('win');
-      g.ui.result('🚜 밭갈이 완료!', [`갈아낸 칸: ${this.field.score}칸`, `바위 충돌: ${this.field.hits}회`, `보상: +${reward} 코인`]);
+      mgResult(g, {
+        id: 'tractor', icon: '🚜', title: '밭갈이 결과', score: F.score, unit: '칸', th: [15, 30, 45],
+        lines: [`🔥 최대 연속 ${this.maxStreak}칸 · 보너스 +${streakBonus}🪙`, `🪨 바위 충돌 ${F.hits}회`, `${starBonus ? `⭐ 별 보너스 +${starBonus}🪙 · ` : ''}총 보상 <b>+${reward}🪙</b>`],
+        onRetry: () => this.begin(),
+      });
     } else this.field.running = false;
   }
 
@@ -106,10 +126,10 @@ export class TractorView {
     const v = this.vehicle;
     if (!this.driving) {
       const d = Math.hypot(v.x - playerPos.x, v.z - playerPos.z);
-      if (d < 3.2) return { d, label: '🚜 트랙터 타기 (밭갈이 미니게임)', key: 'tractor', onInteract: () => this.mount() };
+      if (d < 3.2) return { d, label: '🚜 트랙터 타기 (밭갈이 미니게임)', key: 'tractor', onInteract: () => this.begin() };
       return null;
     }
-    const ax = input.axis();
+    const ax = this.counting ? { x: 0, y: 0 } : input.axis();
     const prevX = v.x, prevZ = v.z;
     v.step(dt, -ax.y, ax.x);
     // 경계/장애물 (연못, 건물)
@@ -121,7 +141,16 @@ export class TractorView {
     const px = v.x - Math.sin(v.heading) * 2.3, pz = v.z - Math.cos(v.heading) * 2.3;
     if (this.plowDown && Math.abs(v.speed) > 0.5) {
       const i = this.field.plowAt(px, pz);
-      if (i >= 0) { this.cells.setColorAt(i, new THREE.Color(0x6b4430)); this.cells.instanceColor.needsUpdate = true; this.game.audio.play('dig', 0.3); }
+      if (i >= 0) {
+        this.cells.setColorAt(i, new THREE.Color(0x6b4430)); this.cells.instanceColor.needsUpdate = true; this.game.audio.play('dig', 0.3);
+        // 연속 갈기: 1.2초 안에 다음 칸을 갈면 이어짐
+        const now = TRACTOR_TIME - this.field.time;
+        this.streak = now - this.lastPlow < 1.2 ? this.streak + 1 : 1;
+        this.lastPlow = now;
+        if (this.streak > this.maxStreak) this.maxStreak = this.streak;
+        if (this.streak % 10 === 0) { this.game.audio.play('pop'); this.game.fx.pop(px, pz, `🔥${this.streak}`); }
+        this.game.fx.burst(px, 0.3, pz, 0x8a6a45, 4);
+      }
     }
     if (this.field.isRock(v.x + Math.sin(v.heading) * 1.2, v.z + Math.cos(v.heading) * 1.2) && Math.abs(v.speed) > 1) {
       v.speed *= -0.2; v.pedal = 0; v.x = prevX; v.z = prevZ; this.field.hits++; this.field.time = Math.max(0, this.field.time - 3);
@@ -137,7 +166,9 @@ export class TractorView {
     this.rider.update(dt, this.game.followCam.camera, this.game.world.daylight);
     this.riderGroup.scale.setScalar(0.72);
     const done = this.field.tick(dt);
-    this.game.ui.updateMinigame({ time: this.field.time, score: this.field.score });
+    const TT = TRACTOR_TIME - this.field.time;
+    if (TT - this.lastPlow > 1.2 && this.streak) this.streak = 0;
+    this.game.ui.updateMinigame({ time: this.field.time, score: this.field.score, streak: this.streak, warn: !this.counting && mgTick(this.game, this.field.time, this.tickRef) });
     if (done) { this.dismount(true); return null; }
     if (input.justPressed('KeyE') || input.interactTap) { this.dismount(false); return null; }
     return { label: `쟁기 ${this.plowDown ? '내림 🟢' : '올림 ⚪'} · SPACE 전환 · E 내리기`, key: 'driving' };

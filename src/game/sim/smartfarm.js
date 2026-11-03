@@ -1,6 +1,14 @@
 /** 스마트팜 환경제어 미니게임: 온도/습도/CO2 를 목표 범위 안에 유지 */
 export const SMART_TIME = 30;
 
+/** 돌발 상황 (events 를 켜면 6~9초마다 하나씩, 5초 동안) */
+export const SMART_EVENTS = [
+  { key: 'heat', name: '🌡️ 한낮 햇볕이 뜨거워요! 온도가 올라가요 → 환기', apply: (v, dt) => (v.temp.value += 0.9 * dt) },
+  { key: 'rain', name: '🌧️ 소나기! 습도가 확 올라가요 → 환기', apply: (v, dt) => (v.humidity.value += 3.5 * dt) },
+  { key: 'cold', name: '❄️ 찬바람이 들어와요! 온도가 내려가요 → 난방', apply: (v, dt) => (v.temp.value -= 0.8 * dt) },
+  { key: 'grow', name: '🌱 작물이 쑥쑥! CO₂를 많이 써요 → CO₂ 공급', apply: (v, dt) => (v.co2.value -= 45 * dt) },
+];
+
 export class SmartFarmSim {
   constructor(rng = Math.random) {
     this.rng = rng;
@@ -21,8 +29,9 @@ export class SmartFarmSim {
     this.drift = { temp: 0, humidity: 0, co2: 0 };
   }
 
-  start() {
+  start({ events = false } = {}) {
     this.time = SMART_TIME; this.good = 0; this.running = true;
+    this.events = events; this.event = null; this.nextEvent = 6 + this.rng() * 3; this.newEvent = null;
     for (const k of Object.keys(this.drift)) this.drift[k] = (this.rng() - 0.5) * 2;
     this.vars.temp.value = 24; this.vars.humidity.value = 60; this.vars.co2.value = 800;
   }
@@ -46,6 +55,13 @@ export class SmartFarmSim {
     this.vars.temp.value += this.drift.temp * dt * 1.4;
     this.vars.humidity.value += this.drift.humidity * dt * 4;
     this.vars.co2.value += this.drift.co2 * dt * 60 - dt * 12; // 작물이 CO2 를 소비
+    if (this.events) {
+      if (this.event) { this.event.apply(this.vars, dt); if ((this.eventLeft -= dt) <= 0) this.event = null; }
+      else if ((this.nextEvent -= dt) <= 0 && this.time > 6) {
+        this.event = SMART_EVENTS[Math.floor(this.rng() * SMART_EVENTS.length)];
+        this.eventLeft = 5; this.nextEvent = 6 + this.rng() * 3; this.newEvent = this.event;
+      }
+    }
     for (const v of Object.values(this.vars)) v.value = Math.min(v.hi, Math.max(v.lo, v.value));
     if (this.allGood()) this.good += dt;
     this.time -= dt;

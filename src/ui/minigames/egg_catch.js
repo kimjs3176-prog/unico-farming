@@ -43,7 +43,7 @@ export function playEggCatch(game) {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       if (st.started && !st.over) {
         st.t += dt;
-        if (st.t >= DUR) { st.over = true; game.audio.play('win'); }
+        if (st.t >= DUR) { st.over = true; game.audio.play('win'); setTimeout(finish, 1400); }
         st.spawn -= dt;
         const lvl = st.t / DUR;
         if (st.spawn <= 0) { layEgg(); if (Math.random() < lvl * 0.5) layEgg(); st.spawn = 0.95 - lvl * 0.55; }
@@ -159,7 +159,7 @@ export function playEggCatch(game) {
       window.removeEventListener('keydown', kd, true); window.removeEventListener('keyup', ku, true);
       wrap.remove();
       game.player.frozen = false;
-      const res = { score: st.score, eggs: st.over ? Math.floor(st.score / 5) : 0, coins: st.over ? st.score * 2 : 0, best: Math.max(best, st.score) };
+      const res = { score: st.score, eggs: st.over ? Math.floor(st.score / 5) : 0, coins: st.over ? st.score * 2 : 0, best: Math.max(best, st.score), prev: best, over: st.over, maxCombo: st.maxCombo };
       if (st.over) try { localStorage.setItem('unico.egg.best', String(res.best)); } catch { /* 무시 */ }
       resolve(res);
     }

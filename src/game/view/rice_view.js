@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { mgIntro, mgResult, mgTick } from '../../ui/minigame_frame.js';
+
+const THRESH_TIME = 6;
+const THRESH_BAND = [0.55, 0.9]; // 알맞은 드럼 속도
 import { RiceSim, RICE_STAGES, WATER_MAX, thresh } from '../sim/rice.js';
 import { LAYOUT } from '../world.js';
 import { ITEMS } from '../sim/items.js';
@@ -130,7 +134,7 @@ export class RiceView {
     if (dT < 2.4) {
       const n = this.game.economy.count('paddy');
       this.game.ui.hideRice?.();
-      return { d: dT, label: n ? `탈곡하기 (벼 ${n}단)` : '탈곡기 (벼를 수확해 오세요)', key: 'thresh', onInteract: n ? () => this.startThreshing() : null };
+      return { d: dT, label: n ? `탈곡하기 (벼 ${n}단)` : '탈곡기 (벼를 수확해 오세요)', key: 'thresh', onInteract: n ? () => this.beginThreshing() : null };
     }
     if (i < 0) { this.game.ui.hideRice?.(); return null; }
     const s = this.sim.paddies[i];
@@ -167,32 +171,55 @@ export class RiceView {
     this.dirty = true;
   }
 
-  // ---- 탈곡: 연타로 드럼 게이지를 유지 (5초) ----
-  startThreshing() {
-    const g = this.game;
-    this.threshing = { t: 0, gauge: 0, sum: 0 };
-    g.player.frozen = true;
-    g.player.unico.playAction('cheer', 0);
-    g.ui.showThresh?.(() => this.mash());
-    g.ui.toast('⚙️ 탈곡! E 키 또는 화면 버튼을 빠르게 연타해 드럼을 돌리세요');
+  // ---- 탈곡: 연타로 드럼 속도를 초록 구간(알맞은 속도)에 유지. 너무 빨리 밟으면 과열돼 잠깐 멈춤 ----
+  beginThreshing() {
+    mgIntro(this.game, {
+      id: 'thresh', icon: '⚙️', title: '탈곡', unit: '%', th: [40, 70, 90],
+      rules: [['👊', `${THRESH_TIME}초 동안 연타해서 탈곡기 드럼을 돌려요`], ['🟩', '게이지를 <b>초록 구간</b>에 오래 둘수록 낟알이 잘 떨어져요'], ['🔥', '끝까지 차면 과열! 잠깐 멈추니 조절하세요']],
+      controls: ['E · 스페이스 연타', '화면 버튼 연타'],
+      onStart: () => this.startThreshing(),
+    });
   }
 
-  mash() { if (this.threshing) { this.threshing.gauge = Math.min(1, this.threshing.gauge + 0.11); this.game.audio.play('click', 0.3); } }
+  startThreshing() {
+    const g = this.game;
+    this.threshing = { t: 0, gauge: 0, inBand: 0, jam: 0, tick: {}, grain: 0 };
+    g.player.frozen = true;
+    g.player.unico.playAction('cheer', 0);
+    g.ui.showThresh?.(() => this.mash(), THRESH_BAND);
+  }
+
+  mash() {
+    const th = this.threshing;
+    if (!th || th.jam > 0) return;
+    th.gauge = Math.min(1, th.gauge + 0.1);
+    this.game.audio.play('click', 0.3);
+    if (th.gauge >= 0.98) { // 과열
+      th.jam = 0.8; th.gauge = 0.3;
+      this.game.audio.play('bump', 0.7); this.game.juice.shake(0.25);
+    }
+  }
 
   updateThreshing(dt) {
     const th = this.threshing, g = this.game;
     if (g.input.justPressed('KeyE') || g.input.justPressed('Space') || g.input.interactTap) this.mash();
     th.t += dt;
-    th.gauge = Math.max(0, th.gauge - dt * 0.4);
-    th.sum += th.gauge * dt;
-    g.ui.updateThresh?.(th.gauge, 5 - th.t);
-    if (th.t >= 5) this.finishThreshing();
-    return { d: -1, label: '⚙️ 탈곡 중! 연타하세요', key: 'thresh' };
+    if (th.jam > 0) th.jam -= dt;
+    th.gauge = Math.max(0, th.gauge - dt * 0.45);
+    const ok = th.gauge >= THRESH_BAND[0] && th.gauge <= THRESH_BAND[1] && th.jam <= 0;
+    if (ok) {
+      th.inBand += dt;
+      th.grain -= dt;
+      if (th.grain <= 0) { th.grain = 0.12; const T = LAYOUT.thresher; g.fx.burst(T.x + (Math.random() - 0.5), 1.0, T.z + (Math.random() - 0.5), 0xf2d16b, 3); }
+    }
+    g.ui.updateThresh?.(th.gauge, THRESH_TIME - th.t, { ok, jam: th.jam > 0, eff: th.inBand / Math.max(0.01, th.t), warn: mgTick(g, THRESH_TIME - th.t, th.tick) });
+    if (th.t >= THRESH_TIME) this.finishThreshing();
+    return { d: -1, label: th.jam > 0 ? '🔥 과열! 잠깐 멈췄어요' : ok ? '🌾 좋아요! 그 속도 유지!' : th.gauge > THRESH_BAND[1] ? '⚠️ 너무 빨라요! 살살' : '👊 더 빨리 연타!', key: 'thresh' };
   }
 
   finishThreshing() {
     const g = this.game, th = this.threshing;
-    const eff = th.sum / 5 / 0.75; // 평균 게이지 0.75 이상이면 최고 효율
+    const eff = th.inBand / THRESH_TIME / 0.75; // 75% 이상 시간을 초록 구간에 두면 최고 효율
     const made = {};
     for (const b of this.batches) {
       const grade = RiceSim.grade(b.q);
@@ -208,8 +235,11 @@ export class RiceView {
     g.ui.hideThresh?.();
     g.onEvent('thresh');
     g.audio.play('win');
-    const lines = Object.entries(made).map(([gr, n]) => `${ITEMS['rice_' + gr].name} × ${n}`);
-    g.ui.result('🍚 탈곡 완료!', [`탈곡 효율 ${Math.round(Math.min(1, eff) * 100)}%`, ...lines, `농사 숙련도 Lv.${this.sim.skillLevel} (수확할수록 품질이 잘 올라요)`]);
+    const lines = Object.entries(made).map(([gr, n]) => `🍚 ${ITEMS['rice_' + gr].name} × ${n}`);
+    mgResult(g, {
+      id: 'thresh', icon: '⚙️', title: '탈곡 완료', score: Math.round(Math.min(1, eff) * 100), unit: '%', th: [40, 70, 90],
+      lines: [`🟩 초록 구간 ${th.inBand.toFixed(1)}초 / ${THRESH_TIME}초`, ...lines, `🌾 논농사 숙련도 Lv.${this.sim.skillLevel}`],
+    });
   }
 
   toJSON() { return { ...this.sim.toJSON(), batches: this.batches }; }

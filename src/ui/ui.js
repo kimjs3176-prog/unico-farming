@@ -5,6 +5,7 @@ import { VILLAGERS } from '../game/sim/villagers.js';
 import { RICE_STAGES, WATER_MAX } from '../game/sim/rice.js';
 
 const anyItem = (k) => CROPS[k] || PRODUCTS[k] || ITEMS[k];
+import { recordsHtml } from './minigame_frame.js';
 import { installKoatUI } from './koat_ui.js';
 import { PRESETS, PRESET_INFO, SHADOWS, applyPreset } from '../game/quality.js';
 
@@ -323,20 +324,30 @@ export class UI {
   }
   hideRice() { this.ricePanel?.remove(); this.ricePanel = null; this.riceHtml = null; }
 
-  showThresh(onMash) {
+  showThresh(onMash, band = [0.55, 0.9]) {
     this.hideThresh();
     const p = h('div', 'thresh-panel');
-    p.innerHTML = '<h3>⚙️ 탈곡</h3><div class="track big"><div class="fill"></div></div><div class="t"></div>';
+    p.innerHTML = `<h3><span class="drum">⚙️</span> 탈곡 <small class="msg"></small></h3><div class="track big"><div class="band" style="left:${band[0] * 100}%;width:${(band[1] - band[0]) * 100}%"></div><div class="fill"></div></div><div class="t"></div>`;
+    this._drumA = 0;
     const b = h('button', 'gold mash', '👊 연타!');
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); onMash(); });
     p.append(b);
     this.root.append(p);
     this.threshPanel = p;
   }
-  updateThresh(gauge, left) {
-    if (!this.threshPanel) return;
-    this.threshPanel.querySelector('.fill').style.width = `${Math.round(gauge * 100)}%`;
-    this.threshPanel.querySelector('.t').textContent = `남은 시간 ${Math.max(0, left).toFixed(1)}초`;
+  updateThresh(gauge, left, s = {}) {
+    const P = this.threshPanel;
+    if (!P) return;
+    const f = P.querySelector('.fill');
+    f.style.width = `${Math.round(gauge * 100)}%`;
+    f.className = `fill ${s.jam ? 'jam' : s.ok ? 'ok' : gauge > 0.9 ? 'hot' : ''}`;
+    this._drumA = (this._drumA + gauge * 40) % 360;
+    P.querySelector('.drum').style.transform = `rotate(${this._drumA}deg)`;
+    const msg = s.jam ? '🔥 과열!' : s.ok ? '좋아요!' : '';
+    const m = P.querySelector('.msg'); if (m.textContent !== msg) m.textContent = msg;
+    P.querySelector('.t').innerHTML = `남은 시간 <b>${Math.max(0, left).toFixed(1)}</b>초 · 효율 ${Math.round(Math.min(1, (s.eff || 0) / 0.75) * 100)}%`;
+    P.classList.toggle('warn', !!s.warn);
+    P.classList.toggle('jam', !!s.jam);
   }
   hideThresh() { this.threshPanel?.remove(); this.threshPanel = null; }
 
@@ -530,9 +541,10 @@ export class UI {
   openQuests() {
     const g = this.game;
     const p = this.openPanel('📜 퀘스트');
+    const rec = h('div', 'mg-records', `<h3>🎮 미니게임 최고 기록</h3><div class="rows">${recordsHtml()}</div>`);
     const render = () => {
-      p.querySelectorAll('.rows').forEach((e) => e.remove());
-      const rows = h('div', 'rows');
+      p.querySelectorAll('.qrows').forEach((e) => e.remove());
+      const rows = h('div', 'rows qrows');
       for (const q of g.quests.active()) {
         const r = h('div', `row quest${q.complete ? ' done' : ''}`, `<div style="flex:1"><div class="nm">${q.title}</div><div class="desc">${q.desc}</div><div class="bar"><i style="width:${Math.round((q.count / q.goal) * 100)}%"></i></div></div><span class="qty">${q.count}/${q.goal}</span>`);
         const b = h('button', q.complete ? 'gold' : 'ghost', q.complete ? `보상 +${q.reward.money}🪙` : `+${q.reward.money}🪙 ${q.reward.xp}XP`);
@@ -542,8 +554,9 @@ export class UI {
         rows.append(r);
       }
       if (!rows.children.length) rows.append(h('div', 'row', '🎉 모든 퀘스트를 완료했어요!'));
-      p.append(rows);
+      p.insertBefore(rows, rec);
     };
+    p.append(rec);
     render();
   }
 
@@ -659,7 +672,8 @@ export class UI {
   // ---------------------------------------------------------------- 미니게임 HUD
   showMinigame(kind, s) {
     this.hideMinigame();
-    this.miniHud = h('div', 'mini-hud', `<div><small>남은 시간</small><span class="t">${Math.ceil(s.time)}</span>s</div><div><small>갈아낸 칸</small><span class="s">${s.score}</span>/${s.max}</div>`);
+    this.miniHud = h('div', 'mini-hud', `<div class="tm"><small>남은 시간</small><span class="t">${Math.ceil(s.time)}</span>s</div><div><small>갈아낸 칸</small><span class="s">${s.score}</span>/${s.max}<i class="prog"><b></b></i></div><div class="stk"><small>연속</small><span class="k">0</span>🔥</div>`);
+    this.miniMax = s.max;
     this.root.append(this.miniHud);
     // 마우스/터치용 운전 버튼 (누르고 있는 동안 동작)
     const inp = this.game.input;
@@ -691,7 +705,15 @@ export class UI {
     this.drivePad = pad;
     this.bar.style.display = 'none';
   }
-  updateMinigame(s) { if (this.miniHud) { this.miniHud.querySelector('.t').textContent = Math.ceil(s.time); this.miniHud.querySelector('.s').textContent = s.score; } }
+  updateMinigame(s) {
+    const H = this.miniHud;
+    if (!H) return;
+    const t = Math.ceil(s.time), k = s.streak || 0;
+    if (t !== this._mgT) { this._mgT = t; H.querySelector('.t').textContent = t; }
+    if (s.score !== this._mgS) { this._mgS = s.score; H.querySelector('.s').textContent = s.score; H.querySelector('.prog b').style.width = `${Math.min(100, (s.score / (this.miniMax || 1)) * 100)}%`; }
+    if (k !== this._mgK) { this._mgK = k; const el = H.querySelector('.k'); el.textContent = k; H.querySelector('.stk').classList.toggle('hot', k >= 10); el.classList.remove('bump'); void el.offsetWidth; if (k > 1) el.classList.add('bump'); }
+    H.querySelector('.tm').classList.toggle('warn', !!s.warn);
+  }
   hideMinigame() {
     this.miniHud?.remove(); this.miniHud = null;
     this.drivePad?.remove(); this.drivePad = null;
@@ -712,14 +734,24 @@ export class UI {
     const acts = h('div', 'smart-actions');
     for (const [k, a] of Object.entries(sim.actions)) { const b = h('button', '', a.name); b.onclick = () => onAct(k); acts.append(b); }
     p.append(acts);
+    this.smartEv = h('div', 'smart-ev', '');
+    p.append(this.smartEv);
     this.smartTimer = h('div', 'smart-timer', '');
     p.append(this.smartTimer);
     this.root.append(p);
     this.smart = p;
     this.updateSmartfarm(sim);
   }
-  updateSmartfarm(sim) {
+  /** 스마트팜 돌발 상황 알림 */
+  smartEvent(text) {
+    if (!this.smartEv) return;
+    this.smartEv.textContent = text;
+    this.smartEv.classList.remove('show'); void this.smartEv.offsetWidth; this.smartEv.classList.add('show');
+  }
+  updateSmartfarm(sim, warn = false) {
     if (!this.smart) return;
+    this.smartTimer.classList.toggle('warn', warn);
+    if (this.smartEv && !sim.event && this.smartEv.classList.contains('show')) this.smartEv.classList.remove('show');
     for (const [k, v] of Object.entries(sim.vars)) {
       const g = this.gauges[k];
       g.classList.toggle('bad', !sim.inRange(v));
