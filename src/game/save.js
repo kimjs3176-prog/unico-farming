@@ -11,6 +11,7 @@ export function saveGame(game) {
       flags: game.flags || {},
       explore: game.explore?.toJSON(),
       bees: game.bees?.toJSON(),
+      angling: game.angling?.toJSON(),
       pet: game.pet?.ok ? game.pet.toJSON() : undefined,
     };
     localStorage.setItem(KEY, JSON.stringify(data));

@@ -20,6 +20,11 @@ function targetOf(id, g) {
     case 'rice1': return new THREE.Vector3(g.rice.paddies[0].x, 0, g.rice.paddies[0].z);
     case 'riceharv': return g.economy.count('paddy') ? new THREE.Vector3(L.thresher.x, 0, L.thresher.z) : new THREE.Vector3(g.rice.paddies[0].x, 0, g.rice.paddies[0].z);
     case 'fish1': case 'book10': return new THREE.Vector3(L.dock.x, 0, L.dock.z);
+    case 'swim1': return new THREE.Vector3(L.lake.x + 2.5, 0, L.lake.z - 3.5);
+    case 'lake1': case 'fight3': return new THREE.Vector3(L.lake.x, 0, (L.lake.pier[1].z0 + L.lake.pier[1].z1) / 2);
+    case 'weed2': { const i = g.farm.sim.plots.findIndex((p) => p.weeds); return i >= 0 ? new THREE.Vector3(g.farm.tiles[i].x, 0, g.farm.tiles[i].z) : new THREE.Vector3(0, 0, 0); }
+    case 'dive3': { const t = g.lake?.treasures.find((x) => x.g.visible); return t ? t.g.position.clone() : new THREE.Vector3(L.lake.x, 0, L.lake.z); }
+    case 'lakereq': return g.angling.today(g.world.day).done ? new THREE.Vector3(L.npcs.fisher.x, 0, L.npcs.fisher.z) : new THREE.Vector3(L.lake.board.x, 0, L.lake.board.z);
     case 'bug1': { const b = nearestBug(); return b ? b.clone().setY(0) : null; }
     case 'shake3': return new THREE.Vector3(L.orchard[0].x, 0, L.orchard[0].z);
     case 'friend2': return new THREE.Vector3(L.npcs.granny.x, 0, L.npcs.granny.z);

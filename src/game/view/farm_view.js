@@ -2,11 +2,25 @@ import * as THREE from 'three';
 import { FarmSim } from '../sim/farm.js';
 import { LAYOUT } from '../world.js';
 import { CROPS } from '../sim/crops.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /** 경작지 3D 표현 + 근접 상호작용 */
 // 갈지 않은 밭: 거친 흙 (지면 페인트 위에 살짝 진하게)
 /** 한 칸 안 세 포기 위치 (삼각형) */
 const PLANT_SPOTS = [[-0.42, -0.3], [0.42, -0.3], [0, 0.42]];
+
+/** 잡초 (가늘고 뾰족한 풀 다발) */
+const WEED_GEO = (() => {
+  const parts = [];
+  for (let k = 0; k < 7; k++) {
+    const c = new THREE.ConeGeometry(0.045, 0.32 + (k % 3) * 0.08, 4);
+    c.rotateZ(((k % 2) - 0.5) * 0.5).rotateY(k * 0.9);
+    c.translate(Math.cos(k * 2.1) * 0.12, 0.16, Math.sin(k * 2.1) * 0.12);
+    parts.push(c);
+  }
+  return mergeGeometries(parts);
+})();
+const WEED_MAT = new THREE.MeshStandardMaterial({ color: 0x5e8f2e, roughness: 0.9 });
 
 const EMPTY_MAT = new THREE.MeshStandardMaterial({ color: 0x8d6a45, roughness: 1, transparent: true, opacity: 0.85 });
 
@@ -15,6 +29,7 @@ export class FarmView {
     this.game = game;
     const { cols, rows, tile, origin } = LAYOUT.farm;
     this.sim = new FarmSim(cols * rows);
+    this.sim.weedChance = 1 / 160; // 자라는 밭에 가끔 잡초 (호미로 김매기)
     this.tiles = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -45,6 +60,13 @@ export class FarmView {
   refresh(i) {
     const t = this.tiles[i], p = this.sim.plots[i];
     t.plot.visible = p.state !== 'empty';
+    if (p.weeds && !t.weeds) {
+      t.weeds = new THREE.Group();
+      for (const [dx, dz] of [[-0.7, 0.55], [0.65, 0.2], [-0.05, -0.75], [0.75, -0.65]]) { const w = new THREE.Mesh(WEED_GEO, WEED_MAT); w.position.set(dx, 0.12, dz); w.rotation.y = dx * 5; t.weeds.add(w); }
+      t.weeds.position.set(t.x, 0, t.z);
+      this.game.world.scene.add(t.weeds);
+    }
+    if (t.weeds) t.weeds.visible = !!p.weeds;
     t.empty.visible = p.state === 'empty';
     // 물 준 흙은 어둡게
     t.plot.traverse((o) => { if (o.isMesh && !o.userData.mat) { o.userData.mat = o.material.clone(); o.material = o.userData.mat; o.userData.base = o.material.color.clone(); } });
@@ -105,8 +127,34 @@ export class FarmView {
     });
   }
 
+  /** 그 칸을 바라보기 */
+  face(i) { const t = this.tiles[i], p = this.game.player.position; this.game.player.unico.facing = Math.atan2(t.x - p.x, t.z - p.z); }
+
+  /** 호미질: 칸을 바라보고 n번 내리찍기(흙 튐·소리), 끝나면 done */
+  hoe(i, n, done) {
+    const g = this.game, u = g.player.unico, t = this.tiles[i];
+    this.face(i);
+    g.player.frozen = true;
+    u.playAction('hoe', n * 0.6 + 0.05);
+    u.onHit = (kind) => {
+      if (kind !== 'hoe') return;
+      const p = g.player.position, f = u.facing;
+      const hx = p.x + Math.sin(f) * 0.75, hz = p.z + Math.cos(f) * 0.75;
+      g.fx.burst(hx, 0.15, hz, 0x7a5636, 7);
+      g.audio.play('dig', 0.7);
+      g.juice.shake(0.08);
+    };
+    this.job = { t: 0, dur: n * 0.6 + 0.05, done: () => { u.onHit = null; g.player.frozen = false; done(); } };
+    void t;
+  }
+
   update(dt, playerPos) {
     this._animateCrops(dt);
+    if (this.job) {
+      this.job.t += dt;
+      if (this.job.t >= this.job.dur) { const j = this.job; this.job = null; j.done(); }
+      else return { d: -1, label: '⛏️ 호미질 중…', key: 'hoeing' };
+    }
     const stagesBefore = this.sim.plots.map((_, i) => `${this.sim.stage(i)}${this.sim.plots[i].water > 0}`);
     this.sim.tick(dt);
     this.sim.plots.forEach((_, i) => { if (`${this.sim.stage(i)}${this.sim.plots[i].water > 0}` !== stagesBefore[i]) this.refresh(i); });
@@ -130,15 +178,23 @@ export class FarmView {
 
   interact(i, type) {
     const g = this.game;
-    if (type === 'till') { this.sim.till(i); g.onEvent('till'); g.audio.play('dig'); g.juice.shake(0.2); g.player.unico.playAction('think', 0.6); }
+    const t = this.tiles[i];
+    if (type === 'till') this.hoe(i, 2, () => { this.sim.till(i); g.onEvent('till'); });
+    else if (type === 'weed') this.hoe(i, 3, () => {
+      this.sim.weed(i); g.onEvent('weed'); g.audio.play('harvest', 0.6);
+      g.fx.pop(t.x, t.z, '🌿'); g.ui.toast('🌿 김매기 완료! 흙이 부드러워져 한동안 더 잘 자라요');
+    });
     else if (type === 'plant') g.ui.openSeedPicker((crop) => {
-      if (g.economy.useSeed(crop) && this.sim.plant(i, crop)) { g.onEvent('plant'); g.audio.play('plant'); g.ui.toast(`${CROPS[crop].emoji} ${CROPS[crop].name} 씨앗을 심었어요`); }
+      if (g.economy.useSeed(crop) && this.sim.plant(i, crop)) {
+        g.onEvent('plant'); g.audio.play('plant'); g.ui.toast(`${CROPS[crop].emoji} ${CROPS[crop].name} 씨앗을 심었어요`);
+        this.face(i); g.player.unico.playAction('plant', 1.0); g.fx.burst(t.x, 0.25, t.z, 0x8a6a45, 6);
+      }
     });
     else if (type === 'need_seed') g.ui.toast('씨앗이 없어요. 장터에서 씨앗을 구매하세요 🛒');
-    else if (type === 'water') { this.sim.water(i); g.onEvent('water'); g.audio.play('water'); g.player.unico.playAction('water', 1.4); g.fx.sprinkle(this.tiles[i].x, this.tiles[i].z); }
+    else if (type === 'water') { this.sim.water(i); g.onEvent('water'); g.audio.play('water'); this.face(i); g.player.unico.playAction('water', 1.4); g.fx.sprinkle(this.tiles[i].x, this.tiles[i].z); }
     else if (type === 'harvest') {
       const r = this.sim.harvest(i);
-      if (r) { g.economy.addCrop(r.crop, r.amount); g.onEvent('harvest', r.amount); g.audio.play('harvest'); g.player.unico.playAction('cheer', 1.2); g.juice.pop(g.player.group, 0.18); g.ui.toast(`${CROPS[r.crop].emoji} ${CROPS[r.crop].name} ×${r.amount} 수확!`); g.fx.pop(this.tiles[i].x, this.tiles[i].z, CROPS[r.crop].emoji); }
+      if (r) { g.economy.addCrop(r.crop, r.amount); g.onEvent('harvest', r.amount); g.audio.play('harvest'); this.face(i); g.player.unico.playAction('pull', 0.75); setTimeout(() => { if (g.player.unico.action === 'pull') g.player.unico.playAction('cheer', 0.9); }, 700); g.juice.pop(g.player.group, 0.18); g.ui.toast(`${CROPS[r.crop].emoji} ${CROPS[r.crop].name} ×${r.amount} 수확!`); g.fx.pop(this.tiles[i].x, this.tiles[i].z, CROPS[r.crop].emoji); }
     }
   }
 }

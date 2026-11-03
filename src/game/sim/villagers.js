@@ -9,6 +9,7 @@ export const VILLAGERS = {
   researcher: { name: '연구원 유니코', likes: ['strawberry', 'fish_catfish', 'bug_beetle', 'rice_5'], personality: '똑똑' },
   guide: { name: '안내 유니코', likes: ['carrot', 'milk', 'fruit_peach'], personality: '다정' },
   granny: { name: '할머니 유니코', likes: ['rice_3', 'rice_4', 'rice_5', 'fruit_persimmon', 'cabbage'], personality: '느긋' },
+  fisher: { name: '낚시꾼 유니코', likes: ['fish_trout', 'fish_mandarin', 'fruit_pear', 'clam'], personality: '느긋' },
   kid: { name: '꼬마 유니코', likes: ['bug_butterfly', 'bug_ladybug', 'fish_goldfish', 'corn'], personality: '장난' },
 };
 

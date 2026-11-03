@@ -5,7 +5,7 @@ import { DIVISIONS, divisionById, StampBook } from '../sim/koat.js';
 import { makeLabel } from '../label.js';
 
 /** 간판 텍스처 (캔버스) */
-function signTexture(text, sub, bg = '#ffffff', fg = '#231916', w = 1024, h = 192) {
+export function signTexture(text, sub, bg = '#ffffff', fg = '#231916', w = 1024, h = 192) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const g = c.getContext('2d');
@@ -22,7 +22,7 @@ function signTexture(text, sub, bg = '#ffffff', fg = '#231916', w = 1024, h = 19
 }
 
 /** 모델 안 SignBoard 박스 앞면에 글자 판을 붙임 (GLB 에 UV 가 없어 별도 평면) */
-function attachSign(model, tex, aspect) {
+export function attachSign(model, tex, aspect) {
   const sb = model.getObjectByName('SignBoard');
   if (!sb) return;
   model.updateMatrixWorld(true);

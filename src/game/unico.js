@@ -265,6 +265,7 @@ export const PALETTES = {
   guide: { body: 0xe6f6e8, snout: 0xd8f0dc, mane: 0x6dbb4f, maneD: 0x58a33c, hoof: 0x58a33c },
   granny: { body: 0xf1ede6, snout: 0xf0e2da, mane: 0xbfc4ca, maneD: 0xa3a9b0, hoof: 0x8f959c },
   kid: { body: 0xffe8f0, snout: 0xffd6e4, mane: 0xf28bb0, maneD: 0xe06e98, hoof: 0xe06e98 },
+  fisher: { body: 0xe8f1fa, snout: 0xdbe8f5, mane: 0x3a7bd5, maneD: 0x2b62b0, hoof: 0x2b62b0 },
 };
 const SWAP = { white: 'body', snout: 'snout', teal: 'mane', tealD: 'maneD', hoof: 'hoof' };
 
@@ -285,6 +286,55 @@ function applyPalette(root, id) {
 }
 
 // 감정표현 → 머리 위 아이콘
+// 행동별 손에 드는 도구 (두 발 캐릭터 오른손)
+const PROP_OF = { hoe: 'hoe', water: 'can', net: 'net', cast: 'rod', fishwait: 'rod', reel: 'rod' };
+const HAND_R = [0.215, -0.32, 0.09]; // 오른팔 뼈 기준 손 위치
+
+/** 손 도구 (팔 뼈 로컬 좌표: 팔을 내리고 있을 때 -y 가 손끝 방향, +z 가 앞) */
+function makeProp(kind) {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x9a6a3e, roughness: 0.8 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x9aa3ab, roughness: 0.35, metalness: 0.7 });
+  if (kind === 'hoe') { // 호미: 짧은 나무 자루 + ㄱ자로 꺾인 쇠 날
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.028, 0.3, 8), wood);
+    handle.rotation.x = Math.PI / 2; handle.position.z = 0.1;
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.12, 6), metal);
+    neck.position.set(0, -0.05, 0.27);
+    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 3), metal);
+    blade.scale.set(1, 1, 0.25); blade.rotation.x = Math.PI; blade.position.set(0, -0.17, 0.3);
+    g.add(handle, neck, blade);
+  } else if (kind === 'can') { // 물뿌리개
+    const tin = new THREE.MeshStandardMaterial({ color: 0x5aa9d6, roughness: 0.4, metalness: 0.3 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.11, 0.17, 14), tin);
+    body.rotation.x = Math.PI / 2; body.position.set(0, -0.12, 0.02);
+    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.022, 0.24, 6), tin);
+    spout.position.set(0, -0.26, 0.11); spout.rotation.x = -0.6;
+    const rose = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.02, 0.03, 10), tin);
+    rose.position.set(0, -0.36, 0.18); rose.rotation.x = -0.6;
+    g.add(body, spout, rose);
+  } else if (kind === 'net') { // 곤충채
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.75, 6), wood);
+    handle.position.y = -0.3;
+    const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.012, 6, 20), metal);
+    hoop.position.y = -0.82; hoop.rotation.y = Math.PI / 2;
+    const mesh = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.26, 12, 1, true), new THREE.MeshStandardMaterial({ color: 0xf4f7ee, transparent: true, opacity: 0.55, side: THREE.DoubleSide, roughness: 0.9 }));
+    mesh.rotation.z = Math.PI / 2; mesh.position.set(0.13, -0.82, 0);
+    g.add(handle, hoop, mesh);
+  } else if (kind === 'rod') { // 낚싯대 (끝 위치: userData.tip)
+    const dir = new THREE.Vector3(0, -0.25, 0.97).normalize();
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.022, 1.8, 6).translate(0, 0.9, 0), new THREE.MeshStandardMaterial({ color: 0xc9a35a, roughness: 0.5 }));
+    rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    rod.position.copy(dir).multiplyScalar(-0.12);
+    const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 10), metal);
+    reel.rotation.z = Math.PI / 2; reel.position.set(-0.04, -0.03, 0.05);
+    const tip = new THREE.Object3D(); tip.position.copy(dir).multiplyScalar(1.68);
+    g.add(rod, reel, tip);
+    g.userData.tip = tip; g.userData.rod = rod;
+  }
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+
 const EMOTE_ICON = { cheer: '🎉', heart: '❤️', wave: '👋', think: '❓', water: '💧', tablet: '📱', present: '📊', megaphone: '📣', lab: '🧪' };
 
 export class Unico {
@@ -373,6 +423,13 @@ export class Unico {
       return f;
     });
 
+    this.props = {}; // 손 도구 (필요할 때 만듦)
+    this.holding = null; // 행동과 무관하게 계속 드는 도구 (낚시 중 낚싯대)
+    this.swimming = false; // 물속 (수영 자세, 몸이 물에 잠김)
+    this.sink = 0;
+    this.reelTension = 0; // 감기 자세: 팽팽할수록 뒤로 버팀
+    this.onHit = null; // 호미 내리찍기·채 휘두르기 순간 (흙·물보라 효과)
+
     this.facing = 0;
     this.yaw = 0;
     this.moving = false;
@@ -431,6 +488,7 @@ export class Unico {
     }
     this.action = name;
     this.actionT = 0;
+    this._hitCyc = undefined;
     this.actionUntil = seconds > 0 ? this.t + seconds : Infinity;
     const icon = EMOTE_ICON[name];
     if (icon) {
@@ -445,6 +503,27 @@ export class Unico {
   clearAction() {
     if (this.riding) { this.riding = false; this.setOutfit({ hat: this._savedHat ?? null }); }
     this.action = null;
+  }
+
+  /** 손 도구 (두 발 캐릭터만) */
+  prop(kind) {
+    if (!this.biped) return null;
+    if (!this.props[kind]) {
+      const m = makeProp(kind);
+      m.position.set(...HAND_R);
+      m.visible = false;
+      this.arms[1].add(m);
+      this.props[kind] = m;
+    }
+    return this.props[kind];
+  }
+
+  /** 낚싯대 끝 월드 위치 */
+  rodTip(out) {
+    const r = this.props.rod;
+    if (!r || !r.visible) return null;
+    this.root.updateMatrixWorld(true);
+    return r.userData.tip.getWorldPosition(out);
   }
 
   /** 호환용 (예전 스프라이트 포즈 API) */
@@ -500,7 +579,10 @@ export class Unico {
   update(dt, camera) {
     this.t += dt;
     // 언덕: 장면에 바로 놓인 캐릭터는 지면 높이를 따라감 (트랙터 탑승 등 다른 물체에 붙으면 제외)
-    if (this.group.parent?.isScene) this.group.position.y = heightAt(this.group.position.x, this.group.position.z);
+    // 수영: 몸이 물에 잠김 (잠수 중에는 더 깊이)
+    const sinkT = this.swimming ? (this.action === 'dive' ? -0.68 - Math.sin(Math.min(1, this.actionT / 1.3) * Math.PI) * 1.3 : -0.68) : 0;
+    this.sink += (sinkT - this.sink) * (1 - Math.exp(-dt * (this.swimming ? 5 : 8)));
+    if (this.group.parent?.isScene) this.group.position.y = heightAt(this.group.position.x, this.group.position.z) + this.sink;
     // 직전 프레임 자세 저장 (전환 보간용)
     const bones = this._poseBones();
     const prev = (this._prevPose ||= bones.map(() => [0, 0, 0, 1]));
@@ -517,8 +599,11 @@ export class Unico {
       this.skin.castShadow = d < 24;
       const faceOn = d < (this.faceOff ? 36 : 40);
       if (faceOn === !!this.faceOff) { this.faceOff = !faceOn; this.headG.children.forEach((c) => { if (c.isMesh) c.visible = faceOn; }); }
+      // 카메라 바로 앞(3m 안)에서는 이름표·감정 아이콘이 화면을 가리지 않게 흐리게
+      const near = THREE.MathUtils.clamp((d - 1.8) / 1.6, 0, 1);
+      if (this.emote) this.emote.visible = near > 0.3;
       if (this.label && !this.labelAlways) {
-      const a = THREE.MathUtils.clamp((22 - d) / 7, 0, 1);
+      const a = THREE.MathUtils.clamp((22 - d) / 7, 0, 1) * near;
       this.label.material.opacity = a;
       this.label.visible = a > 0.02;
       }
@@ -577,7 +662,7 @@ export class Unico {
     // 다리를 벌리면 골반이 내려가고(발이 땅에 붙게), 한 발로 디디는 중간에는 살짝 튀어 오름 → 걸음마다 통통
     const bob = -LEG_LEN * (1 - Math.cos(sw)) * (bp ? 0.65 : 1) + (bp ? Math.abs(Math.cos(ph)) * 0.018 * w * (0.5 + sp01) : 0);
     const s = Math.sin(ph);
-    if (walking && Math.sign(s) !== Math.sign(this.lastSin)) this.onStep?.(pos.x, pos.z);
+    if (walking && !this.swimming && Math.sign(s) !== Math.sign(this.lastSin)) this.onStep?.(pos.x, pos.z);
     this.lastSin = s;
 
     // 몸: 빠를수록 앞으로 기울고, 디딘 발 쪽으로 살짝 기우뚱. 머리는 몸의 흔들림을 반쯤 상쇄(시선 안정)
@@ -647,8 +732,102 @@ export class Unico {
           headPitch = -0.2 + Math.sin(a * 6) * 0.1; headYaw = Math.sin(a * 3) * 0.3;
           if (bp) AR.rotation.set(-1.5 + Math.sin(a * 6) * 0.15, 0, 0.2);
           break;
+        case 'hoe': { // 호미질: 높이 들었다가 땅에 콱 내리찍기 (0.6초 주기)
+          const T = 0.6, u = (a % T) / T, cyc = Math.floor(a / T);
+          const up = u < 0.55 ? 1 - (1 - u / 0.55) ** 2 : u < 0.68 ? 1 - (u - 0.55) / 0.13 : 0;
+          const ax = -0.45 - up * 2.0;
+          const lean = u >= 0.55 && u < 0.85 ? Math.sin((u - 0.55) / 0.3 * Math.PI) : 0;
+          bodyPitch = 0.12 + lean * 0.32 - up * 0.08; bodyY -= lean * 0.06; headPitch = 0.38 - up * 0.15;
+          if (bp) { AR.rotation.set(ax, 0, 0.12); AL.rotation.set(ax + 0.15, 0, -0.35); legs[0].rotation.x = 0.28; legs[1].rotation.x = -0.22; }
+          else { headPitch = 0.5 + lean * 0.3; }
+          if (u >= 0.66 && this._hitCyc !== cyc) { this._hitCyc = cyc; this.onHit?.('hoe'); }
+          break;
+        }
+        case 'plant': { // 쪼그려 앉아 씨앗 넣고 토닥토닥
+          const pat = Math.max(0, Math.sin(a * 11)) * 0.18;
+          bodyY -= 0.12; bodyPitch = 0.42; headPitch = 0.42;
+          if (bp) { AR.rotation.set(-0.55 + pat, 0, -0.08); AL.rotation.set(-0.5 - pat * 0.5, 0, 0.08); legs[0].rotation.x = 0.4; legs[1].rotation.x = -0.4; }
+          else headPitch = 0.6 + pat;
+          break;
+        }
+        case 'pull': { // 수확: 허리 숙여 잡고 → 쑥 뽑아 들어 올리기
+          const k = Math.min(1, a / 0.35), y = a < 0.35 ? 0 : Math.min(1, (a - 0.35) / 0.18);
+          bodyPitch = 0.5 * k * (1 - y) - 0.22 * y; bodyY += y * 0.1 * Math.max(0, 1 - (a - 0.53) * 3); headPitch = 0.45 * (1 - y) - 0.25 * y;
+          if (bp) { const ax = -0.65 * (1 - y) - 2.3 * y; AR.rotation.set(ax, 0, 0.15 * y); AL.rotation.set(ax, 0, -0.15 * y); legs[0].rotation.x = 0.3 * (1 - y); legs[1].rotation.x = -0.3 * (1 - y); }
+          break;
+        }
+        case 'push': { // 나무 흔들기: 두 손으로 줄기를 밀었다 당겼다
+          const sh = Math.sin(a * 15);
+          bodyPitch = 0.16 + sh * 0.09; headPitch = -0.08 + sh * 0.05; bodyRoll = sh * 0.04;
+          if (bp) { AR.rotation.set(-1.4 + sh * 0.18, 0, -0.12); AL.rotation.set(-1.4 + sh * 0.18, 0, 0.12); legs[0].rotation.x = 0.38; legs[1].rotation.x = -0.32; }
+          else { legs[0].rotation.x = legs[1].rotation.x = -0.9 + sh * 0.2; bodyPitch = -0.3; }
+          break;
+        }
+        case 'net': { // 곤충채 휘두르기: 뒤에서 앞으로 크게 한 번
+          const k = Math.min(1, a / 0.42), e = k < 0.45 ? k / 0.45 : 1;
+          const sw = k < 0.45 ? 0 : (k - 0.45) / 0.55;
+          const ax = -2.5 * e + 2.2 * sw;
+          headYaw = 0.35 - sw * 0.6; bodyPitch = sw * 0.2; headPitch = sw * 0.25;
+          if (bp) { AR.rotation.set(ax, 0, 0.5 - sw * 0.4); AL.rotation.set(-0.4, 0, -0.3); legs[0].rotation.x = 0.3 * sw; }
+          if (k >= 0.8 && this._hitCyc !== -2) { this._hitCyc = -2; this.onHit?.('net'); }
+          break;
+        }
+        case 'scatter': { // 모이·사료 뿌리기: 왼손 그릇, 오른손으로 휙휙
+          const fl = Math.sin(a * 7);
+          headPitch = 0.3; bodyPitch = 0.08 + Math.max(0, fl) * 0.05;
+          if (bp) { AL.rotation.set(-1.05, 0, 0.35); AR.rotation.set(-0.7 - Math.max(0, fl) * 0.9, 0, 0.25 - fl * 0.2); }
+          break;
+        }
+        case 'cast': { // 낚싯대 던지기: 머리 뒤로 젖혔다가 앞으로 휙
+          const back = Math.min(1, a / 0.32), thr = a < 0.32 ? 0 : Math.min(1, (a - 0.32) / 0.16);
+          const ax = -0.9 - back * 1.9 * (1 - thr) + thr * 0.05;
+          bodyPitch = -0.14 * back * (1 - thr) + 0.14 * thr; headPitch = -0.2 * (1 - thr) + 0.12 * thr;
+          if (bp) { AR.rotation.set(ax, 0, 0.15); AL.rotation.set(-0.9, 0, -0.2); legs[0].rotation.x = 0.25; legs[1].rotation.x = -0.2; }
+          if (thr >= 1 && this._hitCyc !== -3) { this._hitCyc = -3; this.onHit?.('cast'); }
+          break;
+        }
+        case 'fishwait': { // 찌 바라보며 기다리기 (살랑살랑)
+          const sw2 = Math.sin(a * 1.6);
+          headPitch = 0.12 + Math.sin(a * 0.7) * 0.04; bodyRoll = sw2 * 0.02; headRoll = sw2 * 0.04;
+          if (bp) { AR.rotation.set(-0.95 + Math.sin(a * 2.3) * 0.03, 0, 0.1); AL.rotation.set(-0.85, 0, -0.25); }
+          break;
+        }
+        case 'reel': { // 힘겨루기: 뒤로 버티며 오른손으로 릴을 감음
+          const ten = this.reelTension, cr = a * (ten > 0.05 ? 13 : 4);
+          bodyPitch = -0.12 - ten * 0.2; headPitch = 0.05 - ten * 0.1; bodyRoll = Math.sin(a * 9) * 0.03 * ten;
+          if (bp) { AR.rotation.set(-0.85 - ten * 0.25 + Math.sin(a * 21) * 0.03 * ten, 0, 0.1); AL.rotation.set(-1.05 + Math.sin(cr) * 0.18, 0, -0.3 + Math.cos(cr) * 0.12); legs[0].rotation.x = 0.35; legs[1].rotation.x = -0.32; }
+          break;
+        }
+        case 'lift': { // 낚은 물고기를 머리 위로 번쩍
+          bodyY += Math.abs(Math.sin(a * 6)) * 0.05; headPitch = -0.3;
+          if (bp) { AR.rotation.set(-0.4, 0, 2.2); AL.rotation.set(-0.4, 0, -2.2); }
+          break;
+        }
         default: break;
       }
+    }
+    // ---- 수영: 몸을 앞으로 눕히고 개헤엄 (팔 교대로 젓기 + 발차기), 얼굴은 물 위로 ----
+    if (this.swimming) {
+      const m = Math.min(1, speed / 2), f = 2.6 + m * 4.5;
+      const st = this.t * f;
+      bodyPitch = 0.75 + Math.sin(st * 2) * 0.03; bodyRoll = Math.sin(st) * 0.08 * m; headPitch = -0.72; headRoll = -bodyRoll * 0.6;
+      bodyY = BODY_Y + Math.sin(st * 2) * 0.03;
+      if (this.action === 'dive') { bodyPitch = 1.45; headPitch = 0.2; }
+      if (bp) {
+        arms[0].rotation.set(-1.25 + Math.sin(st) * (0.4 + m * 0.5), 0, -0.45);
+        arms[1].rotation.set(-1.25 + Math.sin(st + Math.PI) * (0.4 + m * 0.5), 0, 0.45);
+        legs[0].rotation.x = 0.5 + Math.sin(st * 2.4) * 0.35; legs[1].rotation.x = 0.5 + Math.sin(st * 2.4 + Math.PI) * 0.35;
+      } else { legs.forEach((l, i) => (l.rotation.x = Math.sin(st * 2 + i * 1.6) * 0.6)); }
+      if (m > 0.2 && Math.sign(Math.sin(st)) !== Math.sign(this._swimS ?? 0)) this.onStroke?.(pos.x, pos.z);
+      this._swimS = Math.sin(st);
+    }
+    // 손 도구 보이기
+    const want = this.holding || (this.swimming ? null : PROP_OF[this.action]);
+    if (want !== this._propShown) {
+      for (const [k, m] of Object.entries(this.props)) m.visible = false;
+      const pm = want ? this.prop(want) : null;
+      if (pm) pm.visible = true;
+      this._propShown = want;
     }
     // ---- 탑승 (트랙터) ----
     if (this.riding) {
@@ -672,7 +851,7 @@ export class Unico {
     this._secondary(dt, { speed, w, ph, bodyY, bodyRoll, tailBase });
     // ---- 자세 전환 보간: 감정표현·탑승 상태가 바뀌면 0.3초 동안 이전 자세에서 새 자세로 이어 줌 ----
     // (걷기 주기 자체에는 걸지 않아 발 디딤 타이밍은 그대로)
-    const poseKey = `${this.action || ''}|${this.riding ? 1 : 0}`;
+    const poseKey = `${this.action || ''}|${this.riding ? 1 : 0}|${this.swimming ? 1 : 0}`;
     if (poseKey !== this._poseKey) { if (this._poseKey !== undefined) this._transT = 0.3; this._poseKey = poseKey; }
     if (this._transT > 0) {
       this._transT = Math.max(0, this._transT - dt);
@@ -696,7 +875,7 @@ export class Unico {
     if (this.biped) this.shadow.scale.set(0.95 * shs, 0.85 * shs, 1);
     else this.shadow.scale.set(0.95 * shs, 1.45 * shs, 1);
     this.shadow.material.opacity = 0.42 * shs;
-    this.shadow.visible = !this.riding;
+    this.shadow.visible = !this.riding && !this.swimming;
     this.legs.forEach((leg, i) => {
       const f = this.footShadows[i];
       const a = leg.rotation.x;
@@ -705,7 +884,7 @@ export class Unico {
       const k = Math.max(0, 1 - Math.max(0, footY) * 6);
       f.material.opacity = 0.55 * k;
       f.scale.setScalar(0.2 * (0.7 + 0.3 * k));
-      f.visible = !this.riding;
+      f.visible = !this.riding && !this.swimming;
     });
   }
 

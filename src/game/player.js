@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Unico } from './unico.js';
 
 const SPEED = 4.6;
+const SWIM_SPEED = 2.4;
 
 /** 로컬 플레이어 컨트롤러 */
 export class Player {
@@ -29,6 +30,7 @@ export class Player {
     this.group.position.set(0, 0, 9);
     this.velocity = new THREE.Vector3();
     this.frozen = false; // 미니게임/UI 중 이동 금지
+    this.swimming = false;
     this.hidden = false;
     world.scene.add(this.group);
   }
@@ -74,18 +76,22 @@ export class Player {
     }
     // 가감속: 약 0.12초 만에 최고 속도, 손을 떼면 짧게 미끄러지듯 멈춤 (급출발·급정지 방지)
     const vel = (this.vel ||= new THREE.Vector3());
-    const want = dir.multiplyScalar(wants ? SPEED : 0);
+    const want = dir.multiplyScalar(wants ? (this.swimming ? SWIM_SPEED : SPEED) : 0);
     vel.lerp(want, 1 - Math.exp(-dt * (wants ? 16 : 20)));
     if (!wants && vel.lengthSq() < 0.01) vel.set(0, 0, 0);
     if (vel.lengthSq() > 0) {
       const from = (this._from ||= new THREE.Vector3()).copy(this.group.position);
       const next = (this._next ||= new THREE.Vector3()).copy(from).addScaledVector(vel, dt);
-      this.world.resolveCollision(next, 0.45);
+      this.world.resolveCollision(next, 0.45, { swim: true }); // 호수는 헤엄쳐 들어감
       this.group.position.copy(next);
       // 벽에 막힌 만큼 속도도 줄여 다시 출발할 때 튀지 않게
       if (dt > 0) { const real = next.distanceTo(from) / dt, sp = vel.length(); if (real < sp) vel.multiplyScalar(Math.max(0, real / sp)); }
     }
     if (this.frozen) vel.set(0, 0, 0);
+    // 수영: 물가에서 조금 들어가면 헤엄 자세 (나올 때는 조금 더 얕은 곳까지 헤엄 → 경계에서 깜빡이지 않게)
+    const p = this.group.position;
+    const sw = this.world.inSwimWater(p.x, p.z, this.swimming ? 0.25 : 0.55);
+    if (sw !== this.swimming) { this.swimming = sw; this.unico.swimming = sw; this.onSwim?.(sw); }
     this.unico.moving = wants && vel.length() > 0.4;
     this.unico.update(dt, followCam.camera, this.world.daylight);
     this.group.visible = !this.hidden;

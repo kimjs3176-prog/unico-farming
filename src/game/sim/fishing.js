@@ -9,22 +9,47 @@ export const BITE_WINDOW = 0.75; // 초
 export class FishingSim {
   constructor(rng = Math.random) { this.rng = rng; this.state = 'idle'; }
 
-  cast({ night = false, raining = false, paddy = false } = {}) {
+  /**
+   * 찌 던지기
+   * @param ctx.lake 낚시터(호수)면 호수 전용 물고기 등장, ctx.rare 희귀 확률 배수(낚싯대·떡밥), ctx.bait 떡밥: 입질이 빨라짐
+   */
+  cast({ night = false, raining = false, paddy = false, lake = false, cold = false, rare = 1, bait = false } = {}) {
     this.state = 'waiting';
     this.t = 0;
-    this.biteAt = 2 + this.rng() * 4;
-    this.nibbles = Math.floor(this.rng() * 3);
+    this.biteAt = bait ? 1.2 + this.rng() * 2.2 : 2 + this.rng() * 4;
+    this.nibbles = Math.floor(this.rng() * (bait ? 2 : 3));
     this.nextNibble = this.biteAt * (0.3 + this.rng() * 0.3);
-    this.ctx = { night, raining, paddy };
+    this.ctx = { night, raining, paddy, lake, cold, rare };
     this.fish = this.roll();
     return this.fish;
   }
 
-  /** 등장 물고기 추첨: 희귀도 가중치, 밤·비 오는 날은 희귀 확률 증가 */
+  /** 지금 이 자리에서 나올 수 있는 물고기 */
+  pool() {
+    const c = this.ctx;
+    return itemsOf('fish').filter((k) => {
+      const it = ITEMS[k];
+      if (it.where === 'lake' && !c.lake) return false; // 호수 전용
+      if (c.lake && (k === 'fish_snail' || k === 'fish_loach' || k === 'fish_minnow')) return false; // 얕은 물 생물은 연못·논에서
+      if (it.night && !c.night) return false;
+      if (k === 'fish_snail') return c.paddy || this.rng() < 0.5;
+      return true;
+    });
+  }
+
+  /** 등장 물고기 추첨: 희귀도 가중치, 밤·비 오는 날·좋은 낚싯대·떡밥은 희귀 확률 증가 */
   roll() {
-    const pool = itemsOf('fish').filter((k) => (k === 'fish_snail' ? this.ctx.paddy || this.rng() < 0.5 : true));
-    const boost = (this.ctx.night ? 1.6 : 1) * (this.ctx.raining ? 1.4 : 1);
-    const weights = pool.map((k) => { const r = ITEMS[k].rarity; return r === 1 ? 10 : r === 2 ? 4 * boost : r === 3 ? 1.2 * boost : 0.25 * boost; });
+    const c = this.ctx;
+    const pool = this.pool();
+    const boost = (c.night ? 1.6 : 1) * (c.raining ? 1.4 : 1) * (c.rare || 1);
+    const weights = pool.map((k) => {
+      const it = ITEMS[k], r = it.rarity;
+      let w = r === 1 ? 10 : r === 2 ? 4 * boost : r === 3 ? 1.2 * boost : 0.25 * boost;
+      if (it.legend) w *= 0.5 * (c.rare || 1); // 전설: 좋은 장비일수록 확 늘어남
+      if (it.cold) w *= c.cold ? 2.5 : 0.3;
+      if (it.rain && c.raining) w *= 2.5;
+      return w;
+    });
     let x = this.rng() * weights.reduce((a, b) => a + b, 0);
     for (let i = 0; i < pool.length; i++) { x -= weights[i]; if (x <= 0) return pool[i]; }
     return pool[0];

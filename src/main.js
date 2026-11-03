@@ -38,6 +38,8 @@ import { NatureView } from './game/view/nature_view.js';
 import { Villagers } from './game/sim/villagers.js';
 import { Collection } from './game/sim/collection.js';
 import { KoatView } from './game/view/koat_view.js';
+import { LakeView } from './game/view/lake_view.js';
+import { Angling } from './game/sim/angling.js';
 
 class Game {
   constructor(canvas, assets, name) {
@@ -78,6 +80,7 @@ class Game {
     this.collection = new Collection();
     this.npcs = new NPCs(this);
     this.rice = new RiceView(this);
+    this.angling = new Angling();
     this.nature = new NatureView(this);
     this.koat = new KoatView(this);
     this.pet = new Pet(this);
@@ -85,6 +88,7 @@ class Game {
     this.pests = new Pests(this);
     this.herding = new Herding(this);
     this.bees = new Bees(this);
+    this.lake = new LakeView(this);
     this.net = new Net(this);
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
@@ -183,6 +187,7 @@ class Game {
     this.koat.load(s.koat);
     this.explore.load(s.explore);
     this.bees.load(s.bees);
+    this.angling.load(s.angling);
     if (this.pet.ok) this.pet.load(s.pet);
     if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원');
     if (s.world) { this.world.time = s.world.time; this.world.day = s.world.day; }
@@ -338,6 +343,7 @@ class Game {
       pick(this.pests.update(dt, pp));
       pick(this.herding.update(dt, pp));
       pick(this.bees.update(dt, pp));
+      pick(this.lake.update(dt, pp));
       this.pointer.update(dt, input);
       const arrived = this.player.arrivedInteract;
       this.player.arrivedInteract = false;
@@ -358,6 +364,7 @@ class Game {
       this.explore.update(dt, pp);
       this.pests.update(dt, pp);
       this.bees.update(dt, pp);
+      this.lake.update(dt, pp);
       // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스로 돌려도 천천히 복귀)
       const behind = this.tractor.vehicle.heading + Math.PI;
       const dy = ((behind - this.followCam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;

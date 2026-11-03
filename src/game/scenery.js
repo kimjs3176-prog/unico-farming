@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { LAYOUT } from './world.js';
 import { heightAt } from './terrain.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
+import { mergeGeometries as mergeGeo } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /** 하늘 돔(그라데이션), 구름, 지평선 언덕, 잔디 인스턴싱, 연못 물결 — 분위기 레이어 */
 export class Scenery {
@@ -146,6 +147,7 @@ export class Scenery {
       tries++;
       const x = (rnd() - 0.5) * 2 * B, z = (rnd() - 0.5) * 2 * B;
       if (Math.hypot(x - LAYOUT.pond.x, z - LAYOUT.pond.z) < LAYOUT.pond.r + 1.5) continue;
+      if (Math.hypot(x - LAYOUT.lake.x, z - LAYOUT.lake.z) < LAYOUT.lake.r + 1.6) continue;
       if (no.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1)) continue;
       if (this.world.isBare(x, z) || this.world.isReserved(x, z, -0.5)) continue;
       if (this.world.isBlocked(x, z, 0.3)) continue;
@@ -196,6 +198,7 @@ export class Scenery {
       if (Math.abs(x) > B || Math.abs(z) > B) continue;
       if (this.world.isBare(x, z) || this.world.isBlocked(x, z, 0.4) || this.world.isReserved(x, z, 0)) continue;
       if (Math.hypot(x - LAYOUT.pond.x, z - LAYOUT.pond.z) < LAYOUT.pond.r + 1) continue;
+      if (Math.hypot(x - LAYOUT.lake.x, z - LAYOUT.lake.z) < LAYOUT.lake.r + 1.2) continue;
       p.set(x, heightAt(x, z), z);
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 6.28);
       const s = 0.8 + rnd() * 0.6;
@@ -223,19 +226,23 @@ export class Scenery {
     if (this.water) { this.world.scene.remove(this.water); this.water.dispose?.(); this.water.geometry.dispose(); }
     const L = LAYOUT.pond;
     this.waterUniform = { value: 0 };
+    // 연못 + 낚시터 호수를 한 메시로: 같은 수면 높이라 반사(거울 카메라) 렌더 1번으로 둘 다 비춤.
+    // 물가 거품·깊이색에 쓰는 중심·반지름은 정점 속성으로
+    const waters = [LAYOUT.pond, LAYOUT.lake];
     const q = this.world.quality || {};
     const shared = {
       uTime: this.waterUniform, deep: { value: new THREE.Color(0x2f86b8) }, shallow: { value: new THREE.Color(0x7fd3e8) },
-      center: { value: new THREE.Vector2(L.x, L.z) }, radius: { value: L.r }, skyCol: { value: new THREE.Color(0xd6eeff) },
+      skyCol: { value: new THREE.Color(0xd6eeff) },
     };
     this.waterShared = shared;
     // 잔물결 법선·프레넬·물가 거품·깊이색 (반사 있는 고사양/보통, 없는 저사양 공통 부분)
     const COMMON = /* glsl */`
-      uniform float uTime; uniform vec3 deep, shallow, skyCol; uniform vec2 center; uniform float radius;
-      varying vec3 vW;
+      uniform float uTime; uniform vec3 deep, shallow, skyCol;
+      varying vec3 vW; varying vec3 vPool; // xy: 중심(x,z), z: 반지름
       vec2 ripple(vec2 p){ return vec2(sin(p.x*3.1+uTime*1.7)+sin(p.y*2.3-uTime*1.3)+sin((p.x+p.y)*5.3+uTime*2.4)*0.5,
                                        cos(p.y*3.7+uTime*1.5)+sin(p.x*1.9+uTime*1.1)+cos((p.x-p.y)*4.7-uTime*2.1)*0.5); }
       vec3 waterBase(out float fres, out float foam){
+        vec2 center = vPool.xy; float radius = vPool.z;
         float d = distance(vW.xz, center), edge = smoothstep(radius * 0.25, radius, d);
         vec3 V = normalize(cameraPosition - vW);
         vec2 rp = ripple(vW.xz);
@@ -247,7 +254,12 @@ export class Scenery {
         float spec = pow(max(dot(reflect(-V, N), normalize(vec3(0.4, 0.8, 0.3))), 0.0), 60.0);
         return base + spec * 0.35;
       }`;
-    const geo = new THREE.CircleGeometry(L.r, 64);
+    const geo = mergeGeo(waters.map((W) => {
+      const c = new THREE.CircleGeometry(W.r, W.r > 5 ? 80 : 64).translate(W.x, -W.z, 0); // 수면은 x 축으로 -90° 눕힘 → 로컬 y = -월드 z
+      const n = c.attributes.position.count;
+      c.setAttribute('pool', new THREE.BufferAttribute(new Float32Array(n * 3).map((_, i) => [W.x, W.z, W.r][i % 3]), 3));
+      return c;
+    }));
     let water;
     if (q.post !== false && q.level !== 'low') {
       // 실제 반사: 거울 카메라로 연못 위 장면을 렌더 (연못이 화면에 있을 때만 그려짐)
@@ -257,8 +269,8 @@ export class Scenery {
         shader: {
           name: 'PondReflector',
           uniforms: { color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null }, ...shared },
-          vertexShader: `uniform mat4 textureMatrix; varying vec4 vUv; varying vec3 vW;
-            void main(){ vUv = textureMatrix * vec4(position, 1.0); vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+          vertexShader: `uniform mat4 textureMatrix; attribute vec3 pool; varying vec4 vUv; varying vec3 vW; varying vec3 vPool;
+            void main(){ vPool = pool; vUv = textureMatrix * vec4(position, 1.0); vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
           fragmentShader: `uniform vec3 color; uniform sampler2D tDiffuse; varying vec4 vUv; ${COMMON}
             void main(){
               float fres, foam; vec3 base = waterBase(fres, foam);
@@ -277,7 +289,7 @@ export class Scenery {
       // 저사양: 반사 대신 하늘색을 프레넬로 섞음
       water = new THREE.Mesh(geo, new THREE.ShaderMaterial({
         uniforms: shared, fog: false,
-        vertexShader: `varying vec3 vW; void main(){ vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        vertexShader: `attribute vec3 pool; varying vec3 vW; varying vec3 vPool; void main(){ vPool = pool; vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
         fragmentShader: `${COMMON}
           void main(){ float fres, foam; vec3 base = waterBase(fres, foam);
             vec3 c = mix(base, skyCol, fres * 0.7); c = mix(c, vec3(1.0), foam * 0.55); gl_FragColor = vec4(c, 1.0);
@@ -287,7 +299,7 @@ export class Scenery {
       }));
     }
     water.rotation.x = -Math.PI / 2;
-    water.position.set(L.x, 0.03, L.z);
+    water.position.set(0, 0.03, 0);
     this.world.scene.add(water);
     this.water = water;
     if (water.isReflector) {

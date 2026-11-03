@@ -25,6 +25,12 @@ export const QUESTS = [
   { id: 'egg30',     title: '달걀 받기 달인',       desc: '달걀 받기 미니게임에서 한 번에 30점 이상', event: 'eggcatch', goal: 30, reward: { money: 150, xp: 120 }, absolute: true },
   { id: 'herd6',     title: '양치기 유니코',        desc: '양 몰이에서 6마리를 모두 우리에 넣기',     event: 'herd',     goal: 6, reward: { money: 200, xp: 150 }, absolute: true },
   { id: 'honey3',    title: '꿀벌 친구',            desc: '서쪽 들꽃 옆 벌통에서 꿀을 3번 거두기',    event: 'honey',    goal: 3, reward: { money: 120, xp: 90 } },
+  { id: 'swim1',     title: '첨벙첨벙',            desc: '남서쪽 낚시터 호수에 들어가 헤엄쳐 보세요', event: 'swim',     goal: 1, reward: { money: 50, xp: 40 } },
+  { id: 'lake1',     title: '낚시터 첫 손맛',      desc: '낚시터(부두 끝이나 물가)에서 물고기를 낚으세요', event: 'lakefish', goal: 1, reward: { money: 80, xp: 60 } },
+  { id: 'weed2',     title: '호미질 김매기',        desc: '밭에 난 잡초를 호미로 2번 매 주세요',       event: 'weed',     goal: 2, reward: { money: 60, xp: 50 } },
+  { id: 'dive3',     title: '물속 보물찾기',        desc: '호수의 반짝이는 곳에서 잠수해 보물 3번 찾기', event: 'dive',     goal: 3, reward: { money: 120, xp: 90 } },
+  { id: 'fight3',    title: '손맛 장인',            desc: '낚시터에서 힘겨루기 끝에 큰 물고기 3마리 낚기', event: 'fightwin', goal: 3, reward: { money: 200, xp: 150 } },
+  { id: 'lakereq',   title: '낚시꾼의 의뢰',        desc: '기록판의 오늘의 의뢰를 달성하고 낚시꾼에게 보고하기', event: 'lakereq', goal: 1, reward: { money: 150, xp: 120 } },
   { id: 'rich',      title: '천 원의 농부',         desc: '보유 금액 1,000 코인 달성',               event: 'money',    goal: 1000, reward: { money: 200, xp: 150 }, absolute: true },
   { id: 'plow30',    title: '밭갈이 달인',          desc: '트랙터 미니게임에서 한 번에 30칸 이상 갈기', event: 'plowbest', goal: 30, reward: { money: 250, xp: 200 }, absolute: true },
 ];

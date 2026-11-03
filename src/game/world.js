@@ -33,12 +33,19 @@ export const LAYOUT = {
     { x: -7, z: 12, fruit: 'fruit_apple' }, { x: -3.5, z: 14.5, fruit: 'fruit_peach' },
   ],
   dock: { x: -8.9, z: 14.8, rot: 2.38 },
+  // 유니코 낚시터 (남서쪽 호수): 물 위로 뻗은 부두(물에 뜬 나무 데크), 동쪽 물가에 낚시 가게·기록판
+  lake: {
+    x: -12.5, z: 31, r: 6,
+    pier: [{ x0: -13.35, z0: 23.2, x1: -11.65, z1: 30.2 }, { x0: -14.4, z0: 29.4, x1: -10.6, z1: 32.6 }],
+    shop: { x: -2.9, z: 28.6, rot: -Math.PI / 2 }, board: { x: -2.8, z: 24.2 }, entry: { x: -12.5, z: 23.2 },
+  },
   npcs: {
     merchant: { x: 3.2, z: -8.4, pose: 'present', name: '장터 유니코' },
     researcher: { x: -14.5, z: -3.5, pose: 'lab', name: '연구원 유니코' },
     guide: { x: 4.5, z: 6.5, pose: 'megaphone', name: '안내 유니코' },
     granny: { x: -9.6, z: -19.4, pose: 'think', name: '할머니 유니코' },
     kid: { x: -6, z: 5, pose: 'cheer', name: '꼬마 유니코', wander: { x0: -12, z0: 3.5, x1: -3, z1: 8 } },
+    fisher: { x: -5.2, z: 27.4, pose: 'wave', name: '낚시꾼 유니코' },
   },
   // 흙길 (부드러운 곡선으로 지면에 칠함): [[x,z]...], 폭
   paths: [
@@ -52,12 +59,16 @@ export const LAYOUT = {
     { pts: [[1, -14.5], [5, -16], [9, -19]], w: 2.2 },
     { pts: [[12, 9.6], [19, 11], [25.5, 13.6], [28.5, 15.2]], w: 2.4 },
     { pts: [[9.5, -19.5], [14, -18.6], [20, -18.2], [25, -18.6]], w: 2.6 },
+    // 연못 동쪽을 지나 낚시터 부두로, 갈림길은 낚시 가게로
+    { pts: [[-5.5, 9.4], [-5.4, 13], [-5.0, 17.5], [-6.8, 21.2], [-10, 23.1], [-12.5, 23.6]], w: 2.2 },
+    { pts: [[-6.8, 21.2], [-5.4, 23.8], [-4.8, 26.2]], w: 1.9 },
   ],
   // 소품 배치
   props: [
     ['lamp', 3.4, 7.6, 0], ['lamp', -1.9, -3, Math.PI], ['lamp', 1.9, -12.5, 0], ['lamp', -6, 10.8, Math.PI / 2], ['lamp', 6.5, 7.6, 0],
     ['lamp', -11, 3.4, Math.PI], ['lamp', 11.5, 5.4, 0], ['lamp', -1.9, -16, Math.PI],
-    ['bench', -3.2, 11.6, Math.PI], ['bench', 3.6, -12.4, 0], ['bench', -5.0, 17.1, -2.4],
+    ['bench', -3.2, 11.6, Math.PI], ['bench', 3.6, -12.4, 0], ['bench', -2.7, 18.4, -2.0], ['bench', -17.6, 27.2, Math.PI / 2 + 0.3], ['bench', -17.4, 34.6, Math.PI / 2 + 1.1],
+    ['lamp', -10.4, 23.4, 0], ['lamp', -6.9, 25.6, 0], ['lamp', -14.15, 32.35, 0], ['lamp', -10.85, 32.35, 0], ['barrel', -1.7, 26.6, 0], ['crate', -1.5, 30.6, 0.3], ['crate', -1.9, 31.4, -0.2],
     // 장터 가판대 양옆은 길이 지나는 자리라 소품을 바깥으로 (통로 폭 1.4m 이상)
     ['crate', -3.1, -10.4, 0.3], ['crate', -3.3, -9.4, -0.2], ['barrel', -3.4, -11.5, 0], ['barrel', 16.2, -10.2, 0], ['barrel', 16.9, -9.6, 0],
     ['crate', 8.7, -18.6, 0.4], ['barrel', 11.8, -19, 0], ['mailbox', 1.9, 11.2, 0],
@@ -87,6 +98,7 @@ export const LAYOUT = {
     ...HILLS.map((H) => [H.lookout.x - 3.5, H.lookout.z - 3.5, H.lookout.x + 3.5, H.lookout.z + 3.5]),
     ...CHESTS.map((c) => [c.x - 1.4, c.z - 1.4, c.x + 1.4, c.z + 1.4]),
     [12, 27.5, 30.5, 36],
+    [-19.5, 23.2, -1, 38.5], // 낚시터
     [-21, 3.4, -15.8, 8.2],
     [13, -39, 37, -18.4], [29.5, -14.5, 32.5, -11.5], [32, 14, 38, 20], [-18, -27, -12, -21], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5]],
 };
@@ -188,7 +200,11 @@ export class World {
     pondBed.rotation.x = -Math.PI / 2;
     pondBed.position.set(LAYOUT.pond.x, -0.05, LAYOUT.pond.z);
     this.scene.add(pondBed);
-    this.obstacles.push({ x: LAYOUT.pond.x, z: LAYOUT.pond.z, r: LAYOUT.pond.r - 0.3 });
+    // 물 (연못·호수): 들어갈 수 없지만 부두 데크 위는 걸을 수 있음
+    this.waters = [
+      { x: LAYOUT.pond.x, z: LAYOUT.pond.z, r: LAYOUT.pond.r - 0.3, decks: [] },
+      { x: LAYOUT.lake.x, z: LAYOUT.lake.z, r: LAYOUT.lake.r - 0.3, decks: LAYOUT.lake.pier, swim: true }, // 호수는 헤엄쳐 들어갈 수 있음 (플레이어만)
+    ];
     // 연못 가장자리 돌
     const rnd = mulberry32(17);
     const stoneMat = new THREE.MeshStandardMaterial({ color: 0x9a9c9f, roughness: 0.95 });
@@ -264,6 +280,7 @@ export class World {
       // 연못 모래 테두리
       ctx.fillStyle = '#d8c18c';
       ctx.beginPath(); ctx.arc(P(L.pond.x), P(L.pond.z), M(L.pond.r + 0.9), 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(P(L.lake.x), P(L.lake.z), M(L.lake.r + 1.1), 0, 7); ctx.fill();
     });
     // 광장 줄눈 + 중앙 엠블럼 원
     {
@@ -456,8 +473,70 @@ export class World {
     this.signText(this.herdSign, '🐑 양 몰이', '양을 우리에 넣어요 →');
     this.place('scarecrow', L.scarecrow.x, L.scarecrow.z, 0.4, 1, { r: 0.35 });
     this.place('dock', L.dock.x, L.dock.z, L.dock.rot, 1, { collide: false });
+    this._lake(Q, rnd);
     this._mountains();
     this.sun.position.set(30, 50, 20);
+  }
+
+  /** 유니코 낚시터: 물에 뜬 나무 부두, 나룻배, 물가 돌·갈대·연잎 (모두 정적 → 병합) */
+  _lake(Q, rnd) {
+    const K = LAYOUT.lake;
+    const wood = new THREE.MeshStandardMaterial({ color: 0xb08457, roughness: 0.85 });
+    const woodD = new THREE.MeshStandardMaterial({ color: 0x6e4a2c, roughness: 0.9 });
+    const planks = [], beams = [];
+    const TOP = 0.08; // 데크 윗면 (수면 0.03 위로 살짝: 물에 뜬 부두)
+    for (const [i, b] of K.pier.entries()) {
+      const w = b.x1 - b.x0;
+      for (let z = b.z0 + 0.15; z < b.z1 - 0.1; z += 0.3) {
+        const pl = new THREE.BoxGeometry(w - 0.04, 0.07, 0.26);
+        pl.translate((b.x0 + b.x1) / 2 + (rnd() - 0.5) * 0.03, TOP - 0.035, z);
+        planks.push(pl);
+      }
+      // 옆 테두리 보 + 기둥 (2m 간격)
+      for (const x of [b.x0 + 0.05, b.x1 - 0.05]) {
+        beams.push(new THREE.BoxGeometry(0.1, 0.12, b.z1 - b.z0).translate(x, TOP - 0.1, (b.z0 + b.z1) / 2));
+        for (let z = b.z0 + (i ? 0.1 : 1.6); z <= b.z1; z += 2) beams.push(new THREE.CylinderGeometry(0.07, 0.08, 0.75, 8).translate(x, 0.1, z));
+      }
+    }
+    const deck = new THREE.Mesh(mergeGeometries(planks.map((g) => g.toNonIndexed())), wood);
+    const frame = new THREE.Mesh(mergeGeometries(beams.map((g) => g.index ? g.toNonIndexed() : g)), woodD);
+    const pier = new THREE.Group();
+    pier.add(deck, frame);
+    this.scene.add(pier);
+    this.staticObjs.push(pier);
+    // 나룻배 (부두 끝 서쪽에 매어 둠)
+    const boat = new THREE.Group();
+    const hull = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x8a5a36, roughness: 0.8, side: THREE.DoubleSide }));
+    hull.scale.set(0.62, 0.32, 1.45);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.05, 6, 28), woodD);
+    rim.rotation.x = Math.PI / 2; rim.scale.set(0.62, 1.45, 1);
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.28), wood);
+    seat.position.y = -0.06;
+    const inner = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshStandardMaterial({ color: 0x5e3c22, roughness: 0.9 }));
+    inner.rotation.x = -Math.PI / 2; inner.scale.set(0.56, 1.36, 1); inner.position.y = -0.2;
+    boat.add(hull, rim, seat, inner);
+    boat.position.set(K.pier[1].x0 - 1.0, 0.16, (K.pier[1].z0 + K.pier[1].z1) / 2 - 0.4);
+    boat.rotation.y = 0.15;
+    this.scene.add(boat);
+    this.staticObjs.push(boat);
+    // 물가: 돌, 갈대, 연잎 (부두 자리는 비움)
+    const nearPier = (x, z) => K.pier.some((b) => x > b.x0 - 1.2 && x < b.x1 + 1.2 && z > b.z0 - 1.2 && z < b.z1 + 1.2);
+    for (let i = 0; i < 30; i++) {
+      const a = (i / 30) * Math.PI * 2 + rnd() * 0.12, rr = K.r + 0.15 + rnd() * 0.3;
+      const x = K.x + Math.cos(a) * rr, z = K.z + Math.sin(a) * rr;
+      if (nearPier(x, z)) continue;
+      if (Q && i % 3 === 0) this.place(pick3(rnd, ['plant_1', 'plant_2', 'grass_q', 'grass_q2']), x + Math.cos(a) * 0.4, z + Math.sin(a) * 0.4, rnd() * 6.28, 1.1, { collide: false });
+      else this.place(Q ? pick3(rnd, ['rock_1', 'rock_2', 'mossrock_1', 'mossrock_2']) : 'rock', x, z, rnd() * 6.28, 0.45 + rnd() * 0.3, { collide: false });
+    }
+    if (Q) {
+      for (const [dx, dz, sc] of [[3.4, 2.6, 0.9], [4.1, 1.2, 0.7], [2.6, 3.8, 0.75], [-3.8, 3.2, 0.8], [-4.4, 1.6, 0.6], [3.2, -3.4, 0.7], [-2.2, 4.6, 0.65]]) {
+        const lp = this.place('lilypad', K.x + dx, K.z + dz, rnd() * 6.28, sc, { collide: false });
+        lp.position.y = 0.05;
+      }
+      this.place('willow_1', K.x - K.r - 2.6, K.z + 3.8, 1, 1.4, { r: 0.6 });
+      this.place('log_moss', K.x + K.r + 2.2, K.z + 4.6, 0.6, 1, { r: 0.6 });
+      this.place('stump', K.x - K.r - 1.8, K.z - 2.6, 0, 1, { r: 0.4 });
+    }
   }
 
   /**
@@ -610,17 +689,52 @@ export class World {
   }
 
   // ------------------------------------------------------------ 충돌
+  /** 부두 데크 위인가 (가장자리 여유 pad) */
+  onDeck(x, z, pad = 0) {
+    for (const w of this.waters) for (const b of w.decks) if (x > b.x0 + pad && x < b.x1 - pad && z > b.z0 + pad && z < b.z1 - pad) return true;
+    return false;
+  }
+
+  /** 물 위인가 (부두 위는 제외) */
+  inWater(x, z, r = 0) {
+    for (const w of this.waters) if (Math.hypot(x - w.x, z - w.z) < w.r + r && !w.decks.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1)) return true;
+    return false;
+  }
+
+  /** 헤엄칠 수 있는 물(호수) 안인가 — 가장자리에서 pad 만큼 들어가야 수영 자세 */
+  inSwimWater(x, z, pad = 0) {
+    for (const w of this.waters) if (w.swim && Math.hypot(x - w.x, z - w.z) < w.r + 0.3 - pad && !w.decks.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1)) return true;
+    return false;
+  }
+
   isBlocked(x, z, r) {
+    if (this.inWater(x, z, r)) return true;
     for (const o of this.obstacles) if (Math.hypot(o.x - x, o.z - z) < o.r + r) return true;
     for (const b of this.boxes) if (x > b.x0 - r && x < b.x1 + r && z > b.z0 - r && z < b.z1 + r) return true;
     return false;
   }
 
   /** next 위치를 장애물 밖으로 밀어냄 (원형 캐릭터) */
-  resolveCollision(next, r) {
+  resolveCollision(next, r, { swim = false } = {}) {
     const B = LAYOUT.bounds - 1;
     next.x = THREE.MathUtils.clamp(next.x, -B, B);
     next.z = THREE.MathUtils.clamp(next.z, -B, B);
+    // 물: 부두 위면 통과, 부두에서 막 벗어나려 하면 데크 안으로 되돌리고, 그 외에는 물가로 밀어냄
+    for (const w of this.waters) {
+      if (swim && w.swim) continue;
+      const dx = next.x - w.x, dz = next.z - w.z, d = Math.hypot(dx, dz), min = w.r + r;
+      if (d >= min) continue;
+      const m = r * 0.5;
+      if (w.decks.some((b) => next.x > b.x0 + m && next.x < b.x1 - m && next.z > b.z0 + m && next.z < b.z1 - m)) continue;
+      let best = null, bd = 0.45;
+      for (const b of w.decks) {
+        const cx = THREE.MathUtils.clamp(next.x, b.x0 + m, b.x1 - m), cz = THREE.MathUtils.clamp(next.z, b.z0 + m, b.z1 - m);
+        const dd = Math.hypot(cx - next.x, cz - next.z);
+        if (dd < bd) { bd = dd; best = [cx, cz]; }
+      }
+      if (best) { next.x = best[0]; next.z = best[1]; continue; }
+      if (d > 1e-4) { next.x = w.x + (dx / d) * min; next.z = w.z + (dz / d) * min; }
+    }
     for (const o of this.obstacles) {
       const dx = next.x - o.x, dz = next.z - o.z;
       const d = Math.hypot(dx, dz), min = o.r + r;
@@ -765,3 +879,5 @@ function mulberry32(a) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+function pick3(rnd, arr) { return arr[Math.floor(rnd() * arr.length)]; }

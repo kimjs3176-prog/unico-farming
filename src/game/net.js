@@ -89,6 +89,7 @@ export class Net {
         p.x += (dx / d) * step; p.z += (dz / d) * step;
       } else r.spd = 0;
       r.unico.moving = d > 0.08 && (r.spd || 0) > 0.4;
+      r.unico.swimming = g.world.inSwimWater(r.unico.group.position.x, r.unico.group.position.z, 0.4);
       r.unico.update(dt, g.followCam.camera, g.world.daylight);
     }
     if (!this.connected) return;

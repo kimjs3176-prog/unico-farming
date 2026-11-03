@@ -8,7 +8,8 @@ export const PLACES = [
   { id: 'ranch', name: '🐄 목장', x: 14, z: 3 },
   { id: 'paddy', name: '🌾 논', x: 0, z: -15.5 },
   { id: 'smartfarm', name: '📱 스마트팜', x: -15.5, z: -6 },
-  { id: 'pond', name: '🎣 연못', x: -7.3, z: 13.4 },
+  { id: 'pond', name: '🪷 연못', x: -7.3, z: 13.4 },
+  { id: 'lake', name: '🎣 낚시터', x: -12.5, z: 22.4 },
   { id: 'field', name: '🚜 밭갈이', x: 26, z: 15 },
   { id: 'koat', name: '🏢 KOAT 체험관', x: 25, z: -24 },
 ];
@@ -70,11 +71,14 @@ export class Minimap {
     const fd = L.field; rect(fd.x0, fd.z0, fd.x0 + fd.cols * fd.cell, fd.z0 + fd.rows * fd.cell, '#b08a5a');
     rect(L.market.x - 1.5, L.market.z - 0.6, L.market.x + 1.5, L.market.z + 0.6, '#e35d5d');
     c.fillStyle = '#6fc3e8'; c.beginPath(); c.arc(X(L.pond.x), Z(L.pond.z), L.pond.r * k, 0, 7); c.fill();
+    c.beginPath(); c.arc(X(L.lake.x), Z(L.lake.z), L.lake.r * k, 0, 7); c.fill();
+    for (const b of L.lake.pier) rect(b.x0, b.z0, b.x1, b.z1, '#b08457');
+    rect(L.lake.shop.x - 1.2, L.lake.shop.z - 1.2, L.lake.shop.x + 1.2, L.lake.shop.z + 1.2, '#3a8fd8');
     const pd = L.paddy; rect(pd.x0, pd.z0, pd.x0 + pd.cols * (pd.size + pd.bund) + pd.bund, pd.z0 + pd.rows * (pd.size + pd.bund) + pd.bund, '#5fa3b0');
     const kr = L.koat.rect; rect(kr[0], kr[1], kr[2], kr[3], 'rgba(48,182,170,0.55)');
     c.fillStyle = '#e0413a'; for (const o of L.orchard) { c.beginPath(); c.arc(X(o.x), Z(o.z), 2.2 * ui, 0, 7); c.fill(); }
     // 주민 (역할 색)
-    const npcCol = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a3a9b0', kid: '#f28bb0' };
+    const npcCol = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a3a9b0', kid: '#f28bb0', fisher: '#3a7bd5' };
     for (const e of this.game.npcs.list) { const p = e.u.group.position; c.fillStyle = npcCol[e.id] || '#fff'; c.beginPath(); c.arc(X(p.x), Z(p.z), 2.6 * ui, 0, 7); c.fill(); }
     // 해로운 동물 (빨간 점)
     c.fillStyle = '#e8495a';
@@ -97,6 +101,7 @@ export class Minimap {
     c.fillText('KOAT', X((kr[0] + kr[2]) / 2), Z((kr[1] + kr[3]) / 2) + 3 * ui);
     c.fillText('과수원', X(9), Z(-11.5));
     if (ui > 1) c.fillText('연못', X(L.pond.x), Z(L.pond.z + L.pond.r + 2.5));
+    c.fillText('낚시터', X(L.lake.x), Z(L.lake.z + L.lake.r + 2.6));
     // 큰 지도: 가려는 곳 표시
     if (ui > 1 && this.pick) {
       c.strokeStyle = '#e8495a'; c.lineWidth = 3;
@@ -142,7 +147,7 @@ export class Minimap {
   /** 지정한 곳으로 이동 (막힌 곳이면 가장 가까운 빈자리로) */
   travel(x, z, name) {
     const g = this.game;
-    if (g.tractor.driving || g.smartfarm.active || g.nature.fishing || g.rice.threshing) return g.ui.toast('지금은 이동할 수 없어요');
+    if (g.tractor.driving || g.smartfarm.active || g.nature.fishing || g.rice.threshing || g.lake?.diving || g.farm.job) return g.ui.toast('지금은 이동할 수 없어요');
     const pos = g.findOpenSpot(x, z);
     this.pick = pos;
     g.teleport(pos.x, pos.z);

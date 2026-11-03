@@ -4,10 +4,10 @@ import { LAYOUT } from '../world.js';
 import { VILLAGERS } from '../sim/villagers.js';
 import { CROPS } from '../sim/crops.js';
 
-const ROLE_ICON = { merchant: '🛒', researcher: '🔬', guide: '📣', granny: '🌾', kid: '🦋' };
+const ROLE_ICON = { merchant: '🛒', researcher: '🔬', guide: '📣', granny: '🌾', kid: '🦋', fisher: '🎣' };
 /** 대화창 이름표 색 (역할별) */
-const NPC_COLOR = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a07e5c', kid: '#f28bb0' };
-const BYE = { merchant: '좋은 거래였어! 또 와~', researcher: '데이터가 쌓이면 또 알려 줄게!', guide: '궁금한 거 있으면 언제든 불러 줘!', granny: '조심히 가거라, 아가.', kid: '다음에 또 같이 놀자!' };
+const NPC_COLOR = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a07e5c', kid: '#f28bb0', fisher: '#3a7bd5' };
+const BYE = { merchant: '좋은 거래였어! 또 와~', researcher: '데이터가 쌓이면 또 알려 줄게!', guide: '궁금한 거 있으면 언제든 불러 줘!', granny: '조심히 가거라, 아가.', kid: '다음에 또 같이 놀자!', fisher: '물 조심하고, 손맛 좋은 하루 되렴 🎣' };
 
 const OUTFITS = {
   merchant: { hat: 'straw', scarf: 'red' },
@@ -15,6 +15,7 @@ const OUTFITS = {
   guide: { scarf: 'green', sprout: true },
   granny: { hat: 'straw', scarf: 'blue' },
   kid: { scarf: 'red', sprout: true },
+  fisher: { hat: 'straw', scarf: 'blue' },
 };
 
 /** 성격별 대사 (동물의 숲처럼 매일 조금씩 다른 말) */
@@ -23,6 +24,7 @@ const LINES = {
   researcher: ['스마트팜은 센서로 온도·습도를 관리해요.', '벼는 단계마다 알맞은 물 높이가 달라요. 익으면 물을 빼 주세요!', '얕은 물에선 잡초가 잘 자라요. 깊게 대면 잡초가 줄어요.'],
   guide: ['유니코 팜에 온 걸 환영해요! 퀘스트(Q)를 확인해 보세요.', '연못에서 낚시를 해 봤어요? 비 오는 날엔 희귀한 물고기가!', '과일 나무는 하루에 한 번 흔들 수 있어요.'],
   granny: ['쌀 한 톨에도 정성이 담겨야 한단다.', '모내기 철엔 물을 얕게, 이삭이 패면 깊게 대거라.', '탈곡은 힘껏! 빠르게 밟아야 낟알이 잘 떨어져.'],
+  fisher: ['큰 녀석은 서두르면 안 돼. 줄이 빨개지면 놓아 주고, 지치면 감는 거야.', '밤에는 뱀장어가 나온단다. 비 오는 날엔 산천어가 잘 물지.', '호수 한가운데 반짝이는 곳 봤니? 헤엄쳐 가서 잠수하면 조개가 있어.', '전설의 철갑상어… 황금 낚싯대라면 혹시 모르지.'],
   kid: ['나비 잡으러 가자! 밤엔 반딧불이도 있어!', '황금 잉어 본 적 있어? 엄청 희귀하대!', '나무를 흔들면 가끔 장수풍뎅이가 떨어져!'],
 };
 
@@ -112,9 +114,15 @@ export class NPCs {
       choices.push({ label: '🎁 선물하기', note: v.lastGift === g.world.day ? '오늘은 이미 선물했어요' : '', value: 'gift', disabled: v.lastGift === g.world.day });
       if (id === 'merchant') choices.push({ label: '🛒 장터 열기', value: 'market' });
       if (id === 'guide') choices.push({ label: '📜 할 일(퀘스트) 보기', value: 'quests' });
+      if (id === 'fisher') {
+        const lr = g.angling.today(g.world.day);
+        if (lr.done && !lr.claimed) choices.unshift({ label: '📋 의뢰 보고하기', note: `보상 ${lr.reward}🪙 + 떡밥 ${lr.bait}`, value: 'lakereq' });
+        choices.push({ label: '🎣 낚시 가게', value: 'lakeshop' }, { label: '🏆 기록판 보기', value: 'lakeboard' });
+      }
       choices.push({ label: '💬 이야기 더 하기', value: 'more' }, { label: '👋 안녕!', value: 'bye' });
       const c = await g.dialogue.say({ ...who(), text: line, choices: choices.slice(0, 4).concat(choices.length > 4 ? choices.slice(4) : []) });
       if (c === 'more') { line = LINES[id][e.lineIdx++ % LINES[id].length]; continue; }
+      if (c === 'lakereq') { g.lake.claimRequest(); e.u.playAction('cheer', 1.2); g.villagers.addFriend(id, 5); line = '역시! 네 솜씨는 알아줘야 해. 내일 의뢰도 기대하렴 🎣'; continue; }
       if (c === 'req') {
         if (g.economy.take(req.item, req.n)) {
           const rr = g.villagers.fulfill(id);
@@ -134,6 +142,8 @@ export class NPCs {
     if (after === 'gift') g.ui.openGiftPicker(e);
     else if (after === 'market') g.ui.openMarket();
     else if (after === 'quests') g.ui.openQuests();
+    else if (after === 'lakeshop') g.lake.openShop();
+    else if (after === 'lakeboard') g.lake.openBoard();
   }
 
   /** 하트 단계 보상 지급 */

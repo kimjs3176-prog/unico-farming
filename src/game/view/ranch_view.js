@@ -235,7 +235,9 @@ export class RanchView {
     this.sim.feed(e.a);
     g.onEvent('feed');
     g.audio.play('plant');
-    g.player.unico.playAction('heart', 1.2);
+    g.player.unico.facing = Math.atan2(e.m.position.x - g.player.position.x, e.m.position.z - g.player.position.z);
+    g.player.unico.playAction('scatter', 1.3);
+    g.fx.burst(e.m.position.x, 0.4, e.m.position.z, 0xe8c66a, 10);
     g.fx.pop(e.m.position.x, e.m.position.z, '❤️');
   }
 

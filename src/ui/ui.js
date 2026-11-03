@@ -304,7 +304,7 @@ export class UI {
     }
     p.append(grid);
     const pr = c.progress(cat);
-    p.append(h('h3', '', pr.got === pr.total ? `🏅 ${CATEGORY_NAMES[cat]} 도감 완성! (보상 ${COMPLETE_REWARD[cat]}🪙 지급됨)` : `모두 모으면 보상 ${COMPLETE_REWARD[cat]}🪙 · 힌트: ${cat === 'fish' ? '비 오는 날·밤에 희귀한 물고기' : cat === 'bug' ? '밤에는 반딧불이, 나무를 흔들면 풍뎅이' : '과수원 나무는 하루 한 번'}`));
+    p.append(h('h3', '', pr.got === pr.total ? `🏅 ${CATEGORY_NAMES[cat]} 도감 완성! (보상 ${COMPLETE_REWARD[cat]}🪙 지급됨)` : `모두 모으면 보상 ${COMPLETE_REWARD[cat]}🪙 · 힌트: ${cat === 'fish' ? '비 오는 날·밤에 희귀한 물고기 · 남서쪽 낚시터에만 사는 물고기도 있어요' : cat === 'bug' ? '밤에는 반딧불이, 나무를 흔들면 풍뎅이' : '과수원 나무는 하루 한 번'}`));
   }
 
   // ---------------------------------------------------------------- 논 상태 / 탈곡
