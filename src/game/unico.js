@@ -624,8 +624,13 @@ export class Unico {
     }
 
     // 진행 방향으로 부드럽게 회전
-    this.yaw += wrap(this.facing - this.yaw) * (1 - Math.exp(-dt * 12));
+    const turnErr = wrap(this.facing - this.yaw);
+    const prevYaw = this.yaw;
+    // 크게 돌아설 때는 조금 느리게(약 0.3초), 살짝 꺾을 때는 빠르게 → 휙 돌지 않고 몸을 돌려 방향을 틂
+    this.yaw += turnErr * (1 - Math.exp(-dt * (Math.abs(turnErr) > 1.6 ? 8 : 12)));
     this.root.rotation.y = this.yaw;
+    const turnRate = dt > 0 ? wrap(this.yaw - prevYaw) / dt : 0;
+    this._turn = (this._turn ?? 0) + (turnRate - (this._turn ?? 0)) * (1 - Math.exp(-dt * 10));
 
     // ---- 걷기: 발이 미끄러지지 않도록 실제 이동 거리로 보행 위상을 진행 ----
     const pos = this.group.position;
@@ -645,6 +650,7 @@ export class Unico {
     const stride = 2 * LEG_LEN * Math.sin(AMP); // 반주기 동안 디딘 발이 미는 거리
     const cadence = THREE.MathUtils.clamp(Math.max(speed, 1.2) / (2 * stride), 1.5, bp ? 3.0 : 3.2); // 초당 걸음 주기
     if (walking) this.walkPhase += TWO_PI * cadence * dt;
+    else if (this.walkBlend > 0.02) { const tgt = Math.ceil(this.walkPhase / Math.PI - 0.15) * Math.PI; this.walkPhase += (tgt - this.walkPhase) * (1 - Math.exp(-dt * 9)); }
     const w = this.walkBlend, ph = this.walkPhase;
     const sw = Math.sin(ph) * AMP * w;
     const legs = this.legs, arms = this.arms;
@@ -656,7 +662,7 @@ export class Unico {
       L.rotation.x = sw; Rl.rotation.x = -sw;
       L.scale.y = 1 - lift; Rl.scale.y = 1 - lift2;
       const [AL, AR] = arms;
-      AL.rotation.set(-sw * 0.85, 0, -0.14 * w); AR.rotation.set(sw * 0.85, 0, 0.14 * w);
+      const armK = 0.55 + 0.4 * sp01; AL.rotation.set(-sw * armK, 0, -(0.14 + 0.05 * sp01) * w); AR.rotation.set(sw * armK, 0, (0.14 + 0.05 * sp01) * w);
       // 대기: 팔이 숨쉬듯 살짝
       if (w < 0.5) { const br = Math.sin(this.t * 2.1) * 0.04; AL.rotation.z -= br; AR.rotation.z += br; }
     } else {
@@ -678,11 +684,23 @@ export class Unico {
     let headPitch = -Math.sin(ph * 2) * 0.02 * w - (bp ? 0.04 * sp01 * w : 0), headRoll = -bodyRoll * 0.5;
     const breath = Math.sin(this.t * 2.1) * 0.012 * (1 - w); // 숨쉬기: 가슴이 살짝 오르내림
     bodyY += breath;
+    // 돌 때 안쪽으로 살짝 기울기 (빠를수록 크게) — 자전거 타듯 몸이 회전을 따라감
+    if (!this.swimming && !this.riding) bodyRoll += THREE.MathUtils.clamp(-this._turn * 0.028 * (0.3 + sp01), -0.11, 0.11) * w;
+    // 가속하면 앞으로, 감속하면 뒤로 살짝 (속도 변화를 부드럽게 걸러서)
+    const accel = dt > 0 ? (speed - (this._lspd ?? speed)) / dt : 0; this._lspd = speed;
+    this._acc = (this._acc ?? 0) + (THREE.MathUtils.clamp(accel, -25, 25) - (this._acc ?? 0)) * (1 - Math.exp(-dt * 8));
+    if (bp && !this.swimming && !this.riding) bodyPitch += THREE.MathUtils.clamp(this._acc * 0.006, -0.07, 0.08);
+    // 멈추는 순간: 무게가 실리며 살짝 주저앉았다 돌아옴
+    if (this._wasWalking && !walking) this._settle = 0.38;
+    this._wasWalking = walking;
+    if (this._settle > 0) { this._settle = Math.max(0, this._settle - dt); const k = 1 - this._settle / 0.38; bodyY -= Math.sin(k * Math.PI) * 0.035 * (bp ? 1 : 0.6); bodyPitch -= Math.sin(k * Math.PI) * 0.03; }
     // 대기 중 두리번
     if (!this.moving && !this.action) {
       this.lookYaw += (Math.sin(this.t * 0.45) * 0.35 - this.lookYaw) * (1 - Math.exp(-dt * 2));
     } else this.lookYaw *= Math.exp(-dt * 6);
     let headYaw = this.lookYaw;
+    // 돌아서기 전에 고개가 먼저 가려는 쪽을 봄
+    if (!this.action) headYaw += THREE.MathUtils.clamp(turnErr * 0.45, -0.5, 0.5);
     // 꼬리
     let tailBase = 0; // 꼬리 뿌리 기본 각도 (탑승 시 들어 올림)
 
