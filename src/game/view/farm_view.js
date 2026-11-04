@@ -180,6 +180,18 @@ export class FarmView {
     return null;
   }
 
+  /** 씨앗 심기 (씨앗 고르기 창·오토플레이 공용). fert 면 퇴비도 같이 */
+  plantCrop(i, crop, fert = false) {
+    const g = this.game, t = this.tiles[i];
+    if (!g.economy.useSeed(crop)) return false;
+    if (!this.sim.plant(i, crop)) { g.economy.inventory.seeds[crop]++; return false; }
+    let extra = '';
+    if (fert && !this.sim.plots[i].fert && g.economy.useItem('compost', 1)) { this.sim.fertilize(i); extra = ' + 🟫 퇴비'; g.onEvent('fert'); }
+    g.onEvent('plant'); g.audio.play('plant'); g.ui.toast(`${CROPS[crop].emoji} ${CROPS[crop].name} 씨앗을 심었어요${extra}${CROPS[crop].regrow ? ` (수확 후 ${CROPS[crop].regrow}번 더 열려요)` : ''}`);
+    this.face(i); g.player.unico.playAction('plant', 1.0); g.fx.burst(t.x, 0.25, t.z, 0x8a6a45, 6);
+    return true;
+  }
+
   interact(i, type) {
     const g = this.game;
     const t = this.tiles[i];
@@ -190,14 +202,7 @@ export class FarmView {
       g.economy.addItem('weed', wn);
       g.fx.pop(t.x, t.z, '🌿'); g.ui.toast(`🌿 김매기 완료! 흙이 부드러워져 한동안 더 잘 자라요 (잡초 ${wn}개 → 퇴비통 재료)`);
     });
-    else if (type === 'plant') g.ui.openSeedPicker((crop, fert) => {
-      if (g.economy.useSeed(crop) && this.sim.plant(i, crop)) {
-        let extra = '';
-        if (fert && !this.sim.plots[i].fert && g.economy.useItem('compost', 1)) { this.sim.fertilize(i); extra = ' + 🟫 퇴비'; g.onEvent('fert'); }
-        g.onEvent('plant'); g.audio.play('plant'); g.ui.toast(`${CROPS[crop].emoji} ${CROPS[crop].name} 씨앗을 심었어요${extra}${CROPS[crop].regrow ? ` (수확 후 ${CROPS[crop].regrow}번 더 열려요)` : ''}`);
-        this.face(i); g.player.unico.playAction('plant', 1.0); g.fx.burst(t.x, 0.25, t.z, 0x8a6a45, 6);
-      }
-    }, { fert: g.economy.count('compost') });
+    else if (type === 'plant') g.ui.openSeedPicker((crop, fert) => this.plantCrop(i, crop, fert), { fert: g.economy.count('compost') });
     else if (type === 'fert') {
       if (g.economy.useItem('compost', 1) && this.sim.fertilize(i)) {
         this.face(i); g.player.unico.playAction('scatter', 1.1); g.audio.play('plant');

@@ -1,3 +1,4 @@
+import { AutoPlay } from './game/autoplay.js';
 import * as THREE from 'three';
 import { Assets } from './game/assets.js';
 import { World, LAYOUT } from './game/world.js';
@@ -97,6 +98,7 @@ class Game {
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
     this.pointer = new PointerNav(this);
+    this.autoplay = new AutoPlay(this);
     this.guide = new Guide(this);
     this.fx.onPop = (t, p) => { if (!/[❤️🌿]/u.test(t)) this.ui.flyToBag(t, p); };
     this.world.onNewDay = (day) => {
@@ -337,6 +339,7 @@ class Game {
     if (input.justPressed('KeyQ')) this.ui.panel ? this.ui.closePanel() : this.ui.openQuests();
     if (input.justPressed('Escape') && this.ui.panel) this.ui.closePanel();
     if (input.justPressed('KeyT')) this.ui.chatInput.focus();
+    if (input.justPressed('KeyP') && !this.ui.panel) this.autoplay.toggle(); // 오토플레이
     if (input.pressed.has('KeyM') && (!this.ui.panel || this.ui.panel.dataset.kind === 'map')) this.minimap.openBig(); // 지도 열기/닫기
 
     const pp = this.player.position;
@@ -361,6 +364,7 @@ class Game {
       pick(this.lake.update(dt, pp));
       pick(this.farmcraft.update(dt, pp));
       this.pointer.update(dt, input);
+      this.autoplay.update(dt, input);
       const arrived = this.player.arrivedInteract;
       this.player.arrivedInteract = false;
       const talking = this.dialogue.active || this.cinema.locked || this.dialogue.justClosed();

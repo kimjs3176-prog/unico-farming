@@ -462,3 +462,21 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .koat-stampfx { position: absolute; right: 18px; top: 58px; width: 104px; height: 104px; border-radius: 50%; border: 5px solid #d33a3a; color: #d33a3a; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-14deg); background: rgba(255,255,255,0.6); font-family: Jua, sans-serif; animation: koatstamp 0.45s cubic-bezier(.5,0,.6,1.4) both; }
 .koat-stampfx span { font-size: 30px; } .koat-stampfx b { font-size: 14px; } .koat-stampfx small { font-size: 10px; letter-spacing: 2px; }
 @keyframes koatstamp { 0% { transform: scale(3) rotate(-30deg); opacity: 0; } 70% { transform: scale(0.9) rotate(-12deg); opacity: 1; } 100% { transform: scale(1) rotate(-14deg); opacity: 1; } }
+
+/* 오토플레이 */
+.actionbar button.on { background: rgba(250,192,62,0.28); box-shadow: inset 0 0 0 2px #fac03e; }
+.actionbar button.on span { animation: autobob 1.2s ease-in-out infinite; }
+@keyframes autobob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.auto-chip { position: absolute; left: 50%; bottom: 172px; transform: translateX(-50%); background: rgba(48,182,170,0.94); color: #fff; padding: 6px 14px; border-radius: 18px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow); white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.auto-chip b { background: #fff; color: #1f8a80; border-radius: 10px; padding: 1px 7px; font-size: 12px; }
+.auto-chip i { font-style: normal; opacity: 0.75; }
+.auto-chip.hidden { display: none; }
+@media (max-width: 600px) { .auto-chip { bottom: 236px; font-size: 12px; } }
+body.cine .auto-chip { opacity: 0; pointer-events: none; }
+/* 좁은 화면: 행동 막대 버튼 10개가 화면 안에 들어가게 (넘치면 오른쪽 버튼이 잘렸음) */
+@media (max-width: 600px) {
+  .actionbar { right: 8px; gap: 2px; padding: 4px; }
+  .actionbar button { min-width: 0; flex: 1 1 0; padding: 4px 1px; font-size: 10px; white-space: nowrap; overflow: hidden; }
+  .actionbar button span { font-size: 17px; }
+  .actionbar .sep { display: none; }
+}

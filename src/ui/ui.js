@@ -100,6 +100,8 @@ export class UI {
       this.toast({ all: '🔊 음악·효과음 켜짐', sfx: '🎵 음악 끔 (효과음만)', off: '🔇 소리 끔' }[st]);
     });
     mk('📸', '찰칵', () => this.snapshot());
+    this.autoBtn = mk('🤖', '자동', () => game.autoplay.toggle());
+    this.autoBtn.title = '오토플레이 (P)';
     root.append(this.bar);
     this.emoteMenu = null;
   }
@@ -406,6 +408,20 @@ export class UI {
     if (ev) put('ban', this.banner, 'text', '📈 ' + ev.name);
     const n = q.active().filter((x) => x.complete).length;
     put('quest', this.btnQuest, 'html', `📜 퀘스트${n ? ` <b style="color:#d9534f">(${n})</b>` : ''} <span class="hint-kbd">(Q)</span>`);
+  }
+
+  /** 오토플레이 상태 표시: text=null 이면 숨김 */
+  setAuto(text, on) {
+    this.autoBtn?.classList.toggle('on', !!on);
+    if (!this.autoChip) {
+      this.autoChip = h('div', 'auto-chip hidden');
+      this.autoChip.onclick = () => this.game.autoplay.toggle(false);
+      this.autoChip.title = '눌러서 오토플레이 끄기';
+      document.getElementById('ui').append(this.autoChip);
+    }
+    this.autoChip.classList.toggle('hidden', !text);
+    const html = text ? `<b>🤖 자동</b> ${text} <i>✕</i>` : '';
+    if (html !== this.autoHtml) { this.autoChip.innerHTML = html; this.autoHtml = html; }
   }
 
   setPrompt(p) {
