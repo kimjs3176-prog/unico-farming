@@ -17,6 +17,15 @@
 닭(`hen.glb`)·까마귀(`crow.glb`)·벌통(`beehive.glb`)은 같은 저폴리 결로 이 저장소에서 직접 만든 모델입니다(`blender/build_environment.py` 의 `hen()`).
 유니코 캐릭터(코드 생성), 논·스마트팜·장터·트랙터 등 나머지 모델은 이 저장소의 Blender 스크립트(`blender/build_environment.py`)로 만든 것입니다.
 
+## 그 밖의 무료 에셋 (CC0 아님, 허용 라이선스)
+
+| 파일 | 내용 | 원작자 | 라이선스 |
+|---|---|---|---|
+| `public/fonts/unico-coin.woff2` | 🪙 코인 아이콘 한 글자짜리 컬러 글꼴 (COLRv0, 528바이트). 시스템에 코인 이모지가 없는 기기(오래된 Windows 등)에서도 보이게 | Microsoft — [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) `Coin/Flat` | MIT (`scripts/coin/LICENSE-fluentui-emoji.txt`) |
+
+- 다시 만들기: `pip install fonttools brotli` → `python3 scripts/coin/build_coin_font.py`
+- 대화창 초상화(`public/portraits/*.webp`)는 처음 받은 유니코 캐릭터 원본 그림에서 잘라 낸 것으로, 외부 에셋이 아닙니다.
+
 ## 변환 과정 (다시 만들기)
 
 원본 FBX/glTF 는 저장소에 넣지 않습니다. 아래 순서로 다시 만들 수 있습니다.

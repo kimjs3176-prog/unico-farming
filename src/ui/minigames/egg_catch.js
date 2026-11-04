@@ -131,13 +131,13 @@ export function playEggCatch(game) {
       c.restore();
       for (const f of st.fx) {
         c.globalAlpha = Math.max(0, Math.min(1, f.life * 2));
-        if (f.txt) { c.fillStyle = f.col; c.font = '22px Jua, sans-serif'; c.textAlign = 'center'; c.fillText(f.txt, f.x, f.y); }
+        if (f.txt) { c.fillStyle = f.col; c.font = "22px 'Unico Coin', Jua, sans-serif"; c.textAlign = 'center'; c.fillText(f.txt, f.x, f.y); }
         else { c.fillStyle = f.col; c.beginPath(); c.arc(f.x, f.y, 4, 0, 7); c.fill(); }
       }
       c.globalAlpha = 1;
       // HUD
       c.fillStyle = 'rgba(255,250,240,0.92)'; c.beginPath(); c.roundRect(14, 12, 220, 46, 14); c.fill();
-      c.fillStyle = '#6b4a2e'; c.font = '22px Jua, sans-serif'; c.textAlign = 'left'; c.fillText(`🥚 ${st.score}점`, 28, 43);
+      c.fillStyle = '#6b4a2e'; c.font = "22px 'Unico Coin', Jua, sans-serif"; c.textAlign = 'left'; c.fillText(`🥚 ${st.score}점`, 28, 43);
       if (st.combo >= 3) { c.fillStyle = st.combo >= 20 ? '#e8495a' : st.combo >= 10 ? '#f28c28' : '#299d93'; c.fillText(`${st.combo} 연속!`, 132, 43); }
       const left = Math.max(0, DUR - st.t);
       c.fillStyle = 'rgba(255,250,240,0.92)'; c.beginPath(); c.roundRect(W - 234, 12, 220, 46, 14); c.fill();
@@ -149,9 +149,9 @@ export function playEggCatch(game) {
     function panel(title, lines, foot) {
       c.fillStyle = 'rgba(35,25,22,0.45)'; c.fillRect(0, 0, W, H);
       c.fillStyle = '#fffaf0'; c.beginPath(); c.roundRect(W / 2 - 230, 90, 460, 70 + lines.length * 32, 24); c.fill();
-      c.textAlign = 'center'; c.fillStyle = '#299d93'; c.font = '30px Jua, sans-serif'; c.fillText(title, W / 2, 135);
-      c.fillStyle = '#6b4a2e'; c.font = '19px Jua, sans-serif'; lines.forEach((l, i) => c.fillText(l, W / 2, 172 + i * 30));
-      c.fillStyle = '#a07e5c'; c.font = '15px Jua, sans-serif'; c.fillText(foot, W / 2, 172 + lines.length * 30 + 4);
+      c.textAlign = 'center'; c.fillStyle = '#299d93'; c.font = "30px 'Unico Coin', Jua, sans-serif"; c.fillText(title, W / 2, 135);
+      c.fillStyle = '#6b4a2e'; c.font = "19px 'Unico Coin', Jua, sans-serif"; lines.forEach((l, i) => c.fillText(l, W / 2, 172 + i * 30));
+      c.fillStyle = '#a07e5c'; c.font = "15px 'Unico Coin', Jua, sans-serif"; c.fillText(foot, W / 2, 172 + lines.length * 30 + 4);
     }
     function finish() {
       if (st.closed) return; st.closed = true;

@@ -444,7 +444,7 @@ async function boot() {
   const saved = loadSave();
   nick.value = saved?.name || randomName();
   const assets = new Assets();
-  const fontReady = Promise.race([document.fonts?.load?.('40px Jua') || Promise.resolve(), new Promise((r) => setTimeout(r, 2500))]);
+  const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua'), document.fonts?.load?.("20px 'Unico Coin'", '🪙')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
   await Promise.all([assets.loadAll((p) => (bar.style.width = Math.round(p * 100) + '%')), fontReady]);
   const lt = document.getElementById('loading-text');
   if (lt) lt.textContent = '준비 완료! 닉네임을 정하고 입장하세요';

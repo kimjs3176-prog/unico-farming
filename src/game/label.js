@@ -4,12 +4,12 @@ import * as THREE from 'three';
 export function makeLabel(text, { color = '#ffffff', bg = 'rgba(35,25,22,0.75)', size = 42, scale = 0.0055 } = {}) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  ctx.font = `${size}px Jua, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
+  ctx.font = `${size}px 'Unico Coin', Jua, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
   const w = Math.ceil(ctx.measureText(text).width) + 40;
   const h = size + 28;
   canvas.width = w;
   canvas.height = h;
-  ctx.font = `${size}px Jua, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
+  ctx.font = `${size}px 'Unico Coin', Jua, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
   ctx.fillStyle = bg;
   roundRect(ctx, 0, 0, w, h, 16);
   ctx.fill();

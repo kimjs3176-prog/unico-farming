@@ -609,7 +609,7 @@ export class World {
       const g = c.getContext('2d');
       g.fillStyle = bg; g.fillRect(0, 0, w, h);
       g.fillStyle = '#4a2f1b'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.font = `900 ${size}px Jua, "Noto Sans KR", sans-serif`;
+      g.font = `900 ${size}px 'Unico Coin', Jua, "Noto Sans KR", sans-serif`;
       g.fillText(text, w / 2, h / 2 + 2);
       const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
     };

@@ -56,9 +56,9 @@ export class Minimap {
         c.beginPath(); c.arc(X(H.x), Z(H.z), H.r * (ring / 3) * k, 0, 7); c.fill();
       }
       const seen = this.game.explore?.seen?.[H.id];
-      c.font = `${10 * ui}px sans-serif`; c.textAlign = 'center'; c.fillStyle = '#000';
+      c.font = `${10 * ui}px 'Unico Coin', sans-serif`; c.textAlign = 'center'; c.fillStyle = '#000';
       c.fillText(seen ? '🔭' : '⛰️', X(H.x), Z(H.z) + 4 * ui);
-      if (ui > 1) { c.fillStyle = '#3d5a2a'; c.font = `bold ${8 * ui}px Jua, sans-serif`; c.fillText(H.name, X(H.x), Z(H.z) + 16 * ui); }
+      if (ui > 1) { c.fillStyle = '#3d5a2a'; c.font = `bold ${8 * ui}px 'Unico Coin', Jua, sans-serif`; c.fillText(H.name, X(H.x), Z(H.z) + 16 * ui); }
     }
     // 흙길
     c.strokeStyle = 'rgba(232,210,160,0.9)'; c.lineCap = 'round'; c.lineJoin = 'round';
@@ -94,7 +94,7 @@ export class Minimap {
     c.fillStyle = '#fac03e'; c.strokeStyle = '#231916'; c.lineWidth = 1.5 * ui;
     c.beginPath(); c.arc(X(p.x), Z(p.z), 4 * ui, 0, 7); c.fill(); c.stroke();
     // 라벨
-    c.fillStyle = '#231916'; c.font = `bold ${9 * ui}px Jua, sans-serif`; c.textAlign = 'center';
+    c.fillStyle = '#231916'; c.font = `bold ${9 * ui}px 'Unico Coin', Jua, sans-serif`; c.textAlign = 'center';
     c.fillText('농장', X(f.origin.x), Z(f.origin.z) + 3 * ui);
     c.fillText('목장', X((L.ranch.x0 + L.ranch.x1) / 2), Z(L.ranch.z1 - 2));
     c.fillText('스마트팜', X(L.smartfarm.x), Z(L.smartfarm.z + 7));

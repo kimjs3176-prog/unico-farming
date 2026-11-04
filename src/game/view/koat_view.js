@@ -12,9 +12,9 @@ export function signTexture(text, sub, bg = '#ffffff', fg = '#231916', w = 1024,
   g.fillStyle = bg; g.fillRect(0, 0, w, h);
   g.fillStyle = fg;
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.font = `900 ${sub ? 78 : 96}px "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
+  g.font = `900 ${sub ? 78 : 96}px 'Unico Coin', "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
   g.fillText(text, w / 2, sub ? h * 0.38 : h / 2);
-  if (sub) { g.font = `600 44px "Noto Sans KR", "Apple SD Gothic Neo", sans-serif`; g.globalAlpha = 0.8; g.fillText(sub, w / 2, h * 0.78); }
+  if (sub) { g.font = `600 44px 'Unico Coin', "Noto Sans KR", "Apple SD Gothic Neo", sans-serif`; g.globalAlpha = 0.8; g.fillText(sub, w / 2, h * 0.78); }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;

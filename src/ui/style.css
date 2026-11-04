@@ -1,9 +1,12 @@
+/* 🪙 코인: 오래된 Windows 등 시스템에 없는 이모지라 안 보이던 문제 → 코인 한 글자만 든 컬러 글꼴(524바이트)을 앞에 둠
+   (Fluent Emoji Flat 'coin', MIT · Microsoft — docs/ASSETS_CC0.md). unicode-range 덕분에 다른 글자는 그대로 */
+@font-face { font-family: 'Unico Coin'; src: url('/fonts/unico-coin.woff2') format('woff2'); unicode-range: U+1FA99; font-display: block; }
 :root {
   --ink: #231916; --teal: #30b6aa; --teal-d: #299d93; --gold: #fac03e; --leaf: #6dbb4f; --pink: #f1deec;
   --panel: #fffaf0; --panel-edge: #ead9b8; --brown: #6b4a2e; --cream: #fff4dc;
   --shadow: 0 6px 0 rgba(107,74,46,0.18), 0 12px 28px rgba(35,25,22,0.16);
-  --display: "Jua", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
-  font-family: "Gowun Dodum", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --display: 'Unico Coin', "Jua", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+  font-family: 'Unico Coin', "Gowun Dodum", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
 h1, h2, h3, button, .chip, .prompt, .toast, .mini-hud, .koat-score, .event-banner, .objective, kbd { font-family: var(--display); font-weight: 400 !important; letter-spacing: 0.01em; }
 * { box-sizing: border-box; }
@@ -233,7 +236,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .objective { position: absolute; left: 12px; top: calc(var(--hud-b, 52px) + 10px); background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 18px; padding: 8px 12px; box-shadow: 0 4px 0 rgba(107,74,46,0.15); color: var(--brown); display: flex; align-items: center; gap: 10px; max-width: min(70vw, 340px); cursor: pointer; animation: popin 0.4s cubic-bezier(.3,1.5,.5,1); }
 .objective .ic { font-size: 22px; }
 .objective .tt { font-size: 15px; line-height: 1.2; }
-.objective .tt small { display: block; font-family: "Gowun Dodum", sans-serif; font-size: 12px; color: #8a7a66; }
+.objective .tt small { display: block; font-family: 'Unico Coin', "Gowun Dodum", sans-serif; font-size: 12px; color: #8a7a66; }
 .objective .dir { width: 34px; height: 34px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; color: var(--brown); font-size: 16px; flex: none; transition: transform 0.2s; }
 .objective.done { border-color: #6dbb4f; background: #f1fbe8; }
 .objective.done .dir { background: #6dbb4f; color: #fff; }
@@ -280,7 +283,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .dlg-portrait canvas { width: 100%; height: 100%; display: block; }
 .dlg-main { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; }
 .dlg-name { display: flex; align-items: baseline; gap: 8px; margin: -30px 0 6px; }
-.dlg-name b { background: var(--dlg-accent, #30b6aa); color: #fff; font-family: Jua, sans-serif; font-weight: normal; font-size: 19px; padding: 4px 14px; border-radius: 14px; box-shadow: 0 3px 0 rgba(0,0,0,0.12); }
+.dlg-name b { background: var(--dlg-accent, #30b6aa); color: #fff; font-family: 'Unico Coin', Jua, sans-serif; font-weight: normal; font-size: 19px; padding: 4px 14px; border-radius: 14px; box-shadow: 0 3px 0 rgba(0,0,0,0.12); }
 .dlg-name small { font-size: 14px; opacity: 0.85; }
 .dlg-text { font-size: 19px; line-height: 1.55; min-height: 60px; white-space: pre-wrap; word-break: keep-all; }
 .dlg-next { position: absolute; right: 2px; bottom: -2px; font-style: normal; color: var(--dlg-accent, #30b6aa); opacity: 0; }
@@ -313,12 +316,12 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .mg-close { position: absolute; right: 10px; top: 70px; }
 
 /* 양 몰이 진행 표시 */
-.herd-hud { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 18px; padding: 8px 18px; font-family: Jua, sans-serif; font-size: 19px; color: var(--brown); box-shadow: var(--shadow); }
+.herd-hud { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 18px; padding: 8px 18px; font-family: 'Unico Coin', Jua, sans-serif; font-size: 19px; color: var(--brown); box-shadow: var(--shadow); }
 .herd-hud.hidden { display: none; }
 .herd-hud b { color: var(--teal-d); } .herd-hud b.warn { color: #e8495a; }
 
 /* 낚시터 힘겨루기 */
-.reel-hud { position: absolute; right: 18px; bottom: 110px; width: min(92vw, 380px); background: var(--panel); border: 4px solid var(--panel-edge); border-radius: 22px; padding: 10px 16px 12px; box-shadow: var(--shadow); color: var(--brown); font-family: Jua, sans-serif; text-align: center; transition: transform 0.08s; }
+.reel-hud { position: absolute; right: 18px; bottom: 110px; width: min(92vw, 380px); background: var(--panel); border: 4px solid var(--panel-edge); border-radius: 22px; padding: 10px 16px 12px; box-shadow: var(--shadow); color: var(--brown); font-family: 'Unico Coin', Jua, sans-serif; text-align: center; transition: transform 0.08s; }
 .reel-hud.hidden { display: none; }
 .reel-hud.surge { animation: reelshake 0.12s infinite; border-color: #e8495a; }
 @keyframes reelshake { 0% { transform: translateX(-3px); } 50% { transform: translateX(3px); } 100% { transform: none; } }
@@ -341,7 +344,7 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .reel-hud.reeling .rh-hold { transform: scale(0.97); filter: brightness(0.92); }
 
 /* 목장 동물 이름 바꾸기 */
-.name-input { font-family: Jua, sans-serif; font-size: 16px; width: 9em; padding: 2px 8px; border: 2px solid var(--panel-edge); border-radius: 10px; background: #fffdf5; color: var(--brown); }
+.name-input { font-family: 'Unico Coin', Jua, sans-serif; font-size: 16px; width: 9em; padding: 2px 8px; border: 2px solid var(--panel-edge); border-radius: 10px; background: #fffdf5; color: var(--brown); }
 
 /* ---------------- 미니게임 공통 연출 ---------------- */
 .mg-intro .mg-rules { display: grid; gap: 8px; margin: 6px 0 10px; }
@@ -349,7 +352,7 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .mg-rule span { font-size: 26px; width: 36px; text-align: center; }
 .mg-rule p { margin: 0; font-size: 15px; line-height: 1.4; }
 .mg-keys { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 10px; }
-.mg-keys span { background: var(--ink, #231916); color: #fff; border-radius: 10px; padding: 4px 10px; font-size: 13px; font-family: Jua, sans-serif; }
+.mg-keys span { background: var(--ink, #231916); color: #fff; border-radius: 10px; padding: 4px 10px; font-size: 13px; font-family: 'Unico Coin', Jua, sans-serif; }
 .mg-goal { text-align: center; font-size: 14px; line-height: 1.8; margin-bottom: 10px; }
 .mg-go { width: 100%; font-size: 22px; padding: 14px; animation: mgpulse 1.4s ease-in-out infinite; }
 .mg-go small { font-size: 13px; opacity: 0.8; }
@@ -358,18 +361,18 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .mg-stars i { font-style: normal; color: #d8cfbd; }
 .mg-stars i.on { color: #fac03e; text-shadow: 0 0 6px rgba(250, 192, 62, 0.6); }
 .mg-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 30; }
-.mg-count span { font-family: Jua, sans-serif; font-size: 150px; color: #fff; -webkit-text-stroke: 6px #231916; paint-order: stroke; text-shadow: 0 10px 0 rgba(0,0,0,0.18); opacity: 1; animation: mgcount 0.65s cubic-bezier(.2,1.6,.4,1); }
+.mg-count span { font-family: 'Unico Coin', Jua, sans-serif; font-size: 150px; color: #fff; -webkit-text-stroke: 6px #231916; paint-order: stroke; text-shadow: 0 10px 0 rgba(0,0,0,0.18); opacity: 1; animation: mgcount 0.65s cubic-bezier(.2,1.6,.4,1); }
 .mg-count span.go { font-size: 110px; color: #fac03e; }
 @keyframes mgcount { 0% { transform: scale(1.8); opacity: 0.35; } 35% { transform: scale(0.92); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
 .mg-result { text-align: center; overflow: hidden; }
-.mg-result .mg-score b { font-family: Jua, sans-serif; font-size: 72px; color: var(--teal-d, #1f8f86); line-height: 1; }
+.mg-result .mg-score b { font-family: 'Unico Coin', Jua, sans-serif; font-size: 72px; color: var(--teal-d, #1f8f86); line-height: 1; }
 .mg-result .mg-score small { font-size: 22px; margin-left: 4px; }
 .mg-starrow { font-size: 44px; margin: 4px 0; }
 .mg-starrow i.pop { animation: mgstar 0.45s cubic-bezier(.2,1.8,.4,1); display: inline-block; }
 @keyframes mgstar { 0% { transform: scale(0.2) rotate(-60deg); } 100% { transform: scale(1) rotate(0); } }
-.mg-grade { font-family: Jua, sans-serif; font-size: 24px; min-height: 30px; opacity: 0; transform: translateY(6px); transition: all 0.3s; }
+.mg-grade { font-family: 'Unico Coin', Jua, sans-serif; font-size: 24px; min-height: 30px; opacity: 0; transform: translateY(6px); transition: all 0.3s; }
 .mg-grade.show { opacity: 1; transform: none; }
-.mg-ribbon { display: inline-block; background: #e8495a; color: #fff; font-family: Jua, sans-serif; padding: 5px 16px; border-radius: 999px; margin-bottom: 6px; animation: mgcount 0.6s both; }
+.mg-ribbon { display: inline-block; background: #e8495a; color: #fff; font-family: 'Unico Coin', Jua, sans-serif; padding: 5px 16px; border-radius: 999px; margin-bottom: 6px; animation: mgcount 0.6s both; }
 .mg-best { font-size: 13px; opacity: 0.75; margin: 8px 0; }
 .mg-btns { display: flex; gap: 8px; justify-content: center; }
 .mg-btns button { flex: 1; font-size: 18px; padding: 11px; }
@@ -397,12 +400,12 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .thresh-panel .drum { display: inline-block; }
 .thresh-panel .msg { font-size: 15px; color: #4f9a33; margin-left: 6px; }
 /* 스마트팜 돌발 상황 */
-.smart-ev { min-height: 0; max-height: 0; overflow: hidden; background: #fff1d6; color: #9a4a00; border-radius: 10px; font-family: Jua, sans-serif; font-size: 15px; text-align: center; transition: all 0.25s; }
+.smart-ev { min-height: 0; max-height: 0; overflow: hidden; background: #fff1d6; color: #9a4a00; border-radius: 10px; font-family: 'Unico Coin', Jua, sans-serif; font-size: 15px; text-align: center; transition: all 0.25s; }
 .smart-ev.show { max-height: 60px; padding: 6px 10px; margin: 6px 0; animation: mgwarn 0.4s 3 alternate; }
 .mg-records { margin-top: 6px; }
 
 /* ---------------- KOAT 체험관 미니게임 ---------------- */
-.koat-runhead { display: flex; justify-content: space-between; align-items: center; min-height: 22px; margin-bottom: 6px; font-family: Jua, sans-serif; }
+.koat-runhead { display: flex; justify-content: space-between; align-items: center; min-height: 22px; margin-bottom: 6px; font-family: 'Unico Coin', Jua, sans-serif; }
 .koat-runhead .combo { color: #e8742a; animation: mgstar 0.3s; }
 .koat-runhead .koat-progress { margin: 0; }
 .koat-progress i.miss { background: #e35d5d; }
@@ -440,26 +443,26 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .koat-belt .seed { position: absolute; left: 0; width: 48px; height: 48px; padding: 0; font-size: 30px; border-radius: 50%; background: #fbf5e8; border: 2px solid #eadfc8; box-shadow: 0 3px 0 rgba(0,0,0,0.12); }
 .koat-belt .seed.got { transform: scale(1.4) !important; opacity: 0; transition: all 0.25s; border-color: #6dbb4f; }
 .koat-belt .seed.oops { background: #fdd; border-color: #e35d5d; transition: all 0.25s; opacity: 0.4; }
-.koat-float { position: absolute; font-family: Jua, sans-serif; font-size: 18px; pointer-events: none; animation: koatfloat 0.7s ease-out forwards; white-space: nowrap; }
+.koat-float { position: absolute; font-family: 'Unico Coin', Jua, sans-serif; font-size: 18px; pointer-events: none; animation: koatfloat 0.7s ease-out forwards; white-space: nowrap; }
 .koat-float.ok { color: #2f8f1d; } .koat-float.ng { color: #d33; }
 @keyframes koatfloat { to { transform: translateY(-36px); opacity: 0; } }
 /* 농기계 검정 게이지 */
 .koat-insp1 { background: #f7f7f7; border-radius: 14px; padding: 12px 14px; }
-.koat-insp1 .nm { font-family: Jua, sans-serif; font-size: 20px; }
+.koat-insp1 .nm { font-family: 'Unico Coin', Jua, sans-serif; font-size: 20px; }
 .koat-insp1 .std { color: #666; margin: 2px 0 10px; }
 .koat-meter .scale { position: relative; height: 22px; background: #f6d0d0; border-radius: 11px; overflow: hidden; }
 .koat-meter .scale .ok { position: absolute; top: 0; bottom: 0; background: #bfe6ae; }
 .koat-meter .scale .lim { position: absolute; top: 0; bottom: 0; width: 3px; background: #231916; }
 .koat-meter .scale .needle { position: absolute; top: -2px; bottom: -2px; width: 6px; border-radius: 3px; background: var(--div); box-shadow: 0 0 0 2px #fff; left: 0; animation: koatneedle 0.9s cubic-bezier(.3,1.5,.5,1) forwards; }
 @keyframes koatneedle { to { left: var(--to); } }
-.koat-meter .read { text-align: right; margin-top: 4px; } .koat-meter .read b { font-size: 24px; font-family: Jua, sans-serif; }
+.koat-meter .read { text-align: right; margin-top: 4px; } .koat-meter .read b { font-size: 24px; font-family: 'Unico Coin', Jua, sans-serif; }
 .koat-meter.text { display: flex; align-items: center; gap: 10px; font-size: 22px; }
 /* 저탄소 카드 */
-.koat-bigcard { background: #fff; border: 3px solid var(--div); border-radius: 18px; padding: 26px 16px; text-align: center; font-family: Jua, sans-serif; font-size: 22px; box-shadow: 0 6px 0 rgba(0,0,0,0.08); }
+.koat-bigcard { background: #fff; border: 3px solid var(--div); border-radius: 18px; padding: 26px 16px; text-align: center; font-family: 'Unico Coin', Jua, sans-serif; font-size: 22px; box-shadow: 0 6px 0 rgba(0,0,0,0.08); }
 /* 결과: 스탬프 쾅 */
 .koat-result { position: relative; overflow: hidden; }
-.koat-result .koat-score b { font-family: Jua, sans-serif; }
-.koat-stampfx { position: absolute; right: 18px; top: 58px; width: 104px; height: 104px; border-radius: 50%; border: 5px solid #d33a3a; color: #d33a3a; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-14deg); background: rgba(255,255,255,0.6); font-family: Jua, sans-serif; animation: koatstamp 0.45s cubic-bezier(.5,0,.6,1.4) both; }
+.koat-result .koat-score b { font-family: 'Unico Coin', Jua, sans-serif; }
+.koat-stampfx { position: absolute; right: 18px; top: 58px; width: 104px; height: 104px; border-radius: 50%; border: 5px solid #d33a3a; color: #d33a3a; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-14deg); background: rgba(255,255,255,0.6); font-family: 'Unico Coin', Jua, sans-serif; animation: koatstamp 0.45s cubic-bezier(.5,0,.6,1.4) both; }
 .koat-stampfx span { font-size: 30px; } .koat-stampfx b { font-size: 14px; } .koat-stampfx small { font-size: 10px; letter-spacing: 2px; }
 @keyframes koatstamp { 0% { transform: scale(3) rotate(-30deg); opacity: 0; } 70% { transform: scale(0.9) rotate(-12deg); opacity: 1; } 100% { transform: scale(1) rotate(-14deg); opacity: 1; } }
 
