@@ -35,6 +35,7 @@ export const QUESTS = [
   { id: 'star3',     title: '특상품 농부',          desc: '물·김매기·퇴비로 잘 돌봐 ⭐⭐⭐ 특상품을 수확하세요', event: 'star3', goal: 1, reward: { money: 120, xp: 90 } },
   { id: 'process2',  title: '장독대 장인',          desc: '밭 서쪽 장독대에서 가공품 2개 만들기 (김치·주스·잼)', event: 'process', goal: 2, reward: { money: 150, xp: 120 } },
   { id: 'order3',    title: '로컬푸드 납품',        desc: '주문 게시판의 주문을 3건 납품하세요',          event: 'order',    goal: 3, reward: { money: 200, xp: 150 } },
+  { id: 'fest1',     title: '수확 축제',            desc: '7일마다 열리는 유니코 수확 축제 날을 맞이하세요',  event: 'festival', goal: 1, reward: { money: 120, xp: 80 } },
   { id: 'build1',    title: '첫 건물',              desc: '서쪽 새 마을 부지에 건물을 하나 지어 완공하세요',  event: 'built',    goal: 1, reward: { money: 150, xp: 120 } },
   { id: 'build5',    title: '우리 마을',            desc: '새 마을 부지에 건물 5채를 모두 지으세요',          event: 'built',    goal: 5, reward: { money: 800, xp: 500 } },
   { id: 'giant1',    title: '대왕 작물',            desc: '아주 가끔 열리는 대왕 작물을 수확하세요 (퇴비 주면 확률 ↑)', event: 'giant', goal: 1, reward: { money: 300, xp: 200 } },

@@ -138,3 +138,23 @@ test('ranch: feed -> product after time -> collect', () => {
 });
 
 function seeded(s) { return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
+
+test('수확 축제: 7일마다 작물·생산물 1.3배, 저장·불러오기', async () => {
+  const { Economy, FESTIVAL_EVERY, FESTIVAL_MULT } = await import('../src/game/sim/economy.js');
+  assert.equal(Economy.isFestival(FESTIVAL_EVERY), true);
+  assert.equal(Economy.isFestival(FESTIVAL_EVERY * 2), true);
+  assert.equal(Economy.isFestival(0), false);
+  assert.equal(Economy.isFestival(FESTIVAL_EVERY + 1), false);
+  const e = new Economy(() => 0.5); // 시세 변동 0 (0.5 → 배수 1)
+  e.newDay(FESTIVAL_EVERY - 1);
+  const base = e.sellPrice('carrot'), milk = e.sellPrice('milk');
+  e.newDay(FESTIVAL_EVERY);
+  assert.ok(e.festival);
+  assert.equal(e.sellPrice('carrot'), Math.round(base * FESTIVAL_MULT));
+  assert.equal(e.sellPrice('milk'), Math.round(milk * FESTIVAL_MULT));
+  const f = new Economy(); f.load(JSON.parse(JSON.stringify(e.toJSON())));
+  assert.equal(f.festival.mult, FESTIVAL_MULT);
+  e.newDay(FESTIVAL_EVERY + 1);
+  assert.equal(e.festival, null);
+  assert.equal(e.sellPrice('carrot'), base);
+});

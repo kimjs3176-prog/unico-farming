@@ -535,3 +535,8 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
 /* 마을 건설 */
 .build-confetti { position: absolute; left: 50%; top: 18%; width: 420px; height: 10px; transform: translateX(-50%); pointer-events: none; z-index: 30; }
 .build-row .nm small { display: block; }
+/* 수확 축제 날 배너·장터 표시 */
+.event-banner.fest { background: linear-gradient(90deg, #ffe08a, #ffb3c1, #b8e6ff); color: #5a3a1a; box-shadow: 0 0 0 3px rgba(255,255,255,0.7), var(--shadow); animation: festglow 1.6s ease-in-out infinite alternate; }
+@keyframes festglow { from { filter: brightness(1); } to { filter: brightness(1.08); } }
+.mk-ev.fest { background: #fff0c2; color: #a85b00; }
+@media (prefers-reduced-motion: reduce) { .event-banner.fest { animation: none; } }

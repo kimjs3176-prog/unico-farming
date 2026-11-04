@@ -1,6 +1,9 @@
 import { CROPS, PRODUCTS, FEED_PRICE } from './crops.js';
 import { ITEMS, RICE_GRADE_MULT } from './items.js';
 
+/** 수확 축제: 이 날짜마다, 이 배수 */
+export const FESTIVAL_EVERY = 7, FESTIVAL_MULT = 1.3;
+
 /** 간단한 농산물 경제: 시세 랜덤워크 + 수요 이벤트, 인벤토리, 구매/판매 */
 export class Economy {
   constructor(rng = Math.random) {
@@ -13,6 +16,7 @@ export class Economy {
     for (const k of Object.keys(PRODUCTS)) this.prices[k] = { mult: 1, trend: 0 };
     this.stats = { earned: 0, spent: 0, sold: 0 };
     this.sellMult = 1; // 마을 건물 (직판장) 판매가 배수
+    this.festival = null; // 7일마다 열리는 수확 축제 { name, mult }
   }
 
   basePrice(item) {
@@ -31,13 +35,18 @@ export class Economy {
     const p = this.prices[item];
     if (!p) return Math.max(1, Math.round(this.basePrice(item) * (ITEMS[item]?.cat === 'seed' ? 0.5 : this.sellMult)));
     const ev = this.event?.item === item ? this.event.mult : 1;
-    return Math.max(1, Math.round(this.basePrice(item) * p.mult * ev * this.sellMult));
+    const fest = this.festival?.mult || 1; // 축제 날: 작물·생산물 모두
+    return Math.max(1, Math.round(this.basePrice(item) * p.mult * ev * fest * this.sellMult));
   }
 
   seedPrice(crop) { return CROPS[crop].seedPrice; }
 
-  /** 새 날: 시세 변동 (±18%, 0.55~1.7 범위) + 30% 확률 수요 이벤트 */
-  newDay() {
+  /** 축제 날인가 (7일차·14일차…) */
+  static isFestival(day) { return day > 0 && day % FESTIVAL_EVERY === 0; }
+
+  /** 새 날: 시세 변동 (±18%, 0.55~1.7 범위) + 30% 확률 수요 이벤트, 7일마다 수확 축제(작물·생산물 1.3배) */
+  newDay(day = 0) {
+    this.festival = Economy.isFestival(day) ? { name: `🎉 유니코 수확 축제! 오늘은 모든 농산물·생산물 ${FESTIVAL_MULT}배`, mult: FESTIVAL_MULT } : null;
     for (const [k, p] of Object.entries(this.prices)) {
       const prev = p.mult;
       p.mult = Math.min(1.7, Math.max(0.55, p.mult * (1 + (this.rng() - 0.5) * 0.36)));
@@ -134,13 +143,14 @@ export class Economy {
 
   earn(n) { this.money += n; this.stats.earned += n; }
 
-  toJSON() { return { money: this.money, inventory: this.inventory, prices: this.prices, event: this.event, stats: this.stats }; }
+  toJSON() { return { money: this.money, inventory: this.inventory, prices: this.prices, event: this.event, festival: this.festival, stats: this.stats }; }
   load(d) {
     if (!d) return;
     this.money = d.money ?? this.money;
     this.inventory = { seeds: {}, crops: {}, products: {}, feed: 0, items: {}, ...d.inventory };
     if (d.prices) for (const k of Object.keys(this.prices)) if (d.prices[k]) this.prices[k] = d.prices[k];
     this.event = d.event || null;
+    this.festival = d.festival || null;
     this.stats = { ...this.stats, ...d.stats };
   }
 }

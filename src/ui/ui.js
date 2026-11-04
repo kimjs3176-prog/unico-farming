@@ -403,9 +403,10 @@ export class UI {
     const bl = g.smartfarm.boostLeft;
     put('boostShow', this.boostChip, 'display', bl > 0 ? '' : 'none');
     if (bl > 0) put('boost', el.boost, 'text', `×${g.farm.sim.boost} ${Math.ceil(bl)}초`);
-    const ev = g.economy.event;
-    put('banShow', this.banner, 'display', ev ? '' : 'none');
-    if (ev) put('ban', this.banner, 'text', '📈 ' + ev.name);
+    const ev = g.economy.event, fest = g.economy.festival;
+    put('banShow', this.banner, 'display', ev || fest ? '' : 'none');
+    if (ev || fest) put('ban', this.banner, 'text', [fest?.name, ev && '📈 ' + ev.name].filter(Boolean).join('  ·  '));
+    if (this._fest !== !!fest) { this._fest = !!fest; this.banner.classList.toggle('fest', !!fest); }
     const n = q.active().filter((x) => x.complete).length;
     put('quest', this.btnQuest, 'html', `📜 퀘스트${n ? ` <b style="color:#d9534f">(${n})</b>` : ''} <span class="hint-kbd">(Q)</span>`);
   }
@@ -502,7 +503,7 @@ export class UI {
       const scroll = body.scrollTop;
       const cur = this.marketTab;
       top.innerHTML = '';
-      const coin = h('div', 'mk-coin', `🪙 <b class="money">${eco.money.toLocaleString()}</b> 코인${eco.event ? ` <span class="mk-ev">🔥 ${eco.event.name}</span>` : ''}`);
+      const coin = h('div', 'mk-coin', `🪙 <b class="money">${eco.money.toLocaleString()}</b> 코인${eco.festival ? ` <span class="mk-ev fest">🎉 수확 축제 · 모두 ${eco.festival.mult}배</span>` : ''}${eco.event ? ` <span class="mk-ev">🔥 ${eco.event.name}</span>` : ''}`);
       const tabs = h('div', 'mk-tabs');
       for (const [id, label] of TABS) {
         const n = id === 'sell' ? sellables().filter(([k]) => eco.count(k) > 0).length : 0;

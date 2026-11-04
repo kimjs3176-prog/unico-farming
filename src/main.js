@@ -104,11 +104,13 @@ class Game {
     this.guide = new Guide(this);
     this.fx.onPop = (t, p) => { if (!/[❤️🌿]/u.test(t)) this.ui.flyToBag(t, p); };
     this.world.onNewDay = (day) => {
-      const ev = this.economy.newDay();
+      const ev = this.economy.newDay(day);
       this.ranch.sim.newDay(day);
       this.town.newDay();
       this.ui.toast(`🌅 ${day}일차 아침! 장터 시세가 바뀌었어요`);
       if (ev) this.ui.toast('📈 ' + ev.name);
+      if (this.economy.festival) { this.ui.toast(this.economy.festival.name + ' (장터에서 팔면 이득!)'); this.audio.play('levelup'); this.onEvent('festival'); }
+      else if (Economy.isFestival(day + 1)) this.ui.toast('🎪 내일은 유니코 수확 축제! 수확물을 모아 두면 더 비싸게 팔 수 있어요');
     };
     this.saveTimer = 0;
     this.resize();
