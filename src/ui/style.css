@@ -462,3 +462,58 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .koat-stampfx { position: absolute; right: 18px; top: 58px; width: 104px; height: 104px; border-radius: 50%; border: 5px solid #d33a3a; color: #d33a3a; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-14deg); background: rgba(255,255,255,0.6); font-family: Jua, sans-serif; animation: koatstamp 0.45s cubic-bezier(.5,0,.6,1.4) both; }
 .koat-stampfx span { font-size: 30px; } .koat-stampfx b { font-size: 14px; } .koat-stampfx small { font-size: 10px; letter-spacing: 2px; }
 @keyframes koatstamp { 0% { transform: scale(3) rotate(-30deg); opacity: 0; } 70% { transform: scale(0.9) rotate(-12deg); opacity: 1; } 100% { transform: scale(1) rotate(-14deg); opacity: 1; } }
+
+/* ---------------- 모바일 (세로 폰) 레이아웃: UI 가 화면 가운데를 가리지 않게 위·아래 가장자리로 모음 ---------------- */
+@media (max-width: 600px) {
+  /* 위쪽 막대: 칩을 작게 → 두 줄 안에 (돈·시계·날씨 / 레벨·버튼) */
+  .hud-top { top: calc(6px + env(safe-area-inset-top, 0px)); left: 6px; right: 6px; gap: 4px; }
+  .chip { border-width: 2px; border-radius: 12px; padding: 3px 7px; font-size: 12px; gap: 4px; box-shadow: 0 2px 0 rgba(107,74,46,0.15); }
+  .chip .money { font-size: 13px; }
+  .chip .xpbar { width: 40px; height: 6px; }
+  .weather-chip { padding: 3px 7px; font-size: 12px; box-shadow: 0 2px 0 rgba(107,74,46,0.15); }
+  .weather-chip small { display: none; }
+  .hud-right { gap: 4px; }
+  .hud-right button { padding: 4px 7px; font-size: 12px; border-radius: 11px; box-shadow: 0 2px 0 #ccc; }
+  /* 목표: 미니맵 왼쪽 좁은 칸에 맞춤 */
+  /* zoom(글자 크기 설정) 안에서는 vw 도 배율이 곱해지므로 나눠서 실제 화면 폭 기준으로 */
+  .objective { left: 6px; top: calc(var(--hud-b, 52px) + 6px); max-width: calc(100vw / var(--ui-zoom, 1) - 122px); padding: 5px 8px; gap: 6px; border-width: 2px; border-radius: 14px; }
+  .objective .ic { font-size: 17px; }
+  .objective .tt { font-size: 13px; }
+  .objective .tt small { font-size: 11px; }
+  .objective .dir { width: 26px; height: 26px; font-size: 13px; }
+  .minimap { right: 6px; top: calc(var(--hud-b, 52px) + 6px); width: 96px; height: 96px; border-radius: 12px; }
+  .fps-chip { right: 6px; top: calc(var(--hud-b, 52px) + 108px); }
+  /* 아래쪽: 행동 막대를 맨 아래 가로 전체로, 그 위에 채팅(왼쪽)·E 버튼(오른쪽) */
+  .actionbar { left: 6px; right: 6px; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); transform: none; gap: 0; padding: 3px; border-radius: 16px; justify-content: space-between; }
+  .actionbar button { flex: 1 1 0; min-width: 0; padding: 4px 0; font-size: 10px; border-radius: 10px; white-space: nowrap; }
+  .actionbar button span { font-size: 17px; }
+  .actionbar .sep { display: none; }
+  .emote-menu { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); max-width: 96vw; flex-wrap: wrap; justify-content: center; }
+  .chat, body.ui-big .chat { left: 6px; bottom: calc(62px + env(safe-area-inset-bottom, 0px)); width: min(calc(52vw / var(--ui-zoom, 1)), 220px); }
+  .chat .log { max-height: 54px; font-size: 12px; }
+  .chat input { padding: 5px 8px; font-size: 13px; border-radius: 10px; }
+  .online { font-size: 11px; margin-bottom: 2px; }
+  .touch-btn { right: 10px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); width: 64px; height: 64px; font-size: 24px; }
+  .prompt { bottom: calc(140px + env(safe-area-inset-bottom, 0px)); padding: 7px 14px; }
+  .dlg { bottom: 140px; }
+}
+
+/* 가로로 눕힌 폰 (높이가 낮음): 위·아래 막대를 얇게 */
+@media (max-height: 500px) and (pointer: coarse) {
+  .hud-top { top: 6px; left: 6px; right: 6px; gap: 4px; }
+  .chip, .weather-chip { padding: 3px 8px; font-size: 12px; border-width: 2px; }
+  .hud-right button { padding: 4px 8px; font-size: 12px; }
+  .minimap { width: 90px; height: 90px; top: calc(var(--hud-b, 40px) + 4px); right: 6px; }
+  .objective { top: calc(var(--hud-b, 40px) + 4px); left: 6px; padding: 4px 8px; }
+  .objective .tt { font-size: 13px; } .objective .dir { width: 26px; height: 26px; }
+  /* 행동 막대는 왼쪽 아래, 채팅은 그 위 → 서로 겹치지 않음 */
+  .actionbar { left: 6px; bottom: 4px; transform: none; padding: 3px; }
+  .actionbar button { padding: 3px 8px; font-size: 10px; min-width: 44px; white-space: nowrap; }
+  .emote-menu { left: 6px; bottom: 56px; transform: none; }
+  .actionbar button span { font-size: 16px; }
+  .chat, body.ui-big .chat { left: 6px; width: 220px; bottom: 58px; }
+  .chat .log { max-height: 50px; }
+  .chat input { padding: 4px 8px; }
+  .touch-btn { width: 60px; height: 60px; right: 12px; bottom: 12px; font-size: 22px; }
+  .prompt { bottom: 70px; }
+}
