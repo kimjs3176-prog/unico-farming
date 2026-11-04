@@ -480,3 +480,42 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
   .actionbar button span { font-size: 17px; }
   .actionbar .sep { display: none; }
 }
+/* 대화 초상화: 안쪽 하이라이트 테두리, 말하는 동안 살짝 들썩 */
+.dlg-portrait { position: relative; box-shadow: 0 4px 12px rgba(35,25,22,0.18); }
+.dlg-portrait::after { content: ''; position: absolute; inset: 0; border-radius: 17px; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.55), inset 0 -10px 18px rgba(0,0,0,0.08); pointer-events: none; }
+.dlg:not(.done) .dlg-portrait canvas { animation: dlgtalk 0.26s ease-in-out infinite alternate; transform-origin: 50% 90%; }
+@keyframes dlgtalk { from { transform: translateY(0) scale(1); } to { transform: translateY(-2px) scale(1.018); } }
+@media (prefers-reduced-motion: reduce) { .dlg:not(.done) .dlg-portrait canvas { animation: none; } }
+/* 모든 창: 끝까지 내려도 제목·✕ 닫기가 위에 붙어 있음 */
+.panel h2 { position: sticky; top: -18px; z-index: 4; background: var(--panel); margin: -18px -20px 10px; padding: 16px 20px 10px; border-radius: 24px 24px 0 0; box-shadow: 0 6px 8px -8px rgba(107,74,46,0.35); }
+.panel h2 .close { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 16px; flex: 0 0 auto; }
+
+/* 장터: 위(제목·코인·탭)와 아래(모두 판매)는 고정, 가운데 목록만 스크롤 */
+.panel.market { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 14px; width: min(94vw, 600px); height: min(86vh, 680px); }
+.mk-row button.locked { min-width: 132px; }
+.panel.market h2 { position: static; box-shadow: none; margin-bottom: 4px; }
+.mk-top { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; border-bottom: 2px dashed rgba(107,74,46,0.18); }
+.mk-coin { display: flex; align-items: center; gap: 6px; font-size: 15px; flex-wrap: wrap; }
+.mk-coin b { font-size: 20px; color: #b7791f; }
+.mk-ev { margin-left: auto; background: #ffe3d6; color: #c2410c; border-radius: 10px; padding: 2px 8px; font-size: 12px; font-weight: 700; }
+.mk-tabs { display: flex; gap: 6px; }
+.mk-tabs button { flex: 1; background: rgba(107,74,46,0.08); color: var(--brown); box-shadow: none; border-radius: 14px; padding: 9px 6px; font-size: 15px; font-weight: 700; }
+.mk-tabs button.on { background: var(--teal, #30b6aa); color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,0.15); }
+.mk-tabs button i { font-style: normal; background: #e8495a; color: #fff; border-radius: 9px; padding: 0 6px; font-size: 12px; margin-left: 4px; }
+.mk-body { flex: 1 1 auto; min-height: 120px; overflow-y: auto; margin: 0 -10px; padding: 4px 10px 8px; overscroll-behavior: contain; }
+.mk-body h3 { margin: 12px 0 6px; }
+.mk-row .ic { font-size: 22px; width: 28px; text-align: center; flex: 0 0 auto; }
+.mk-row small { color: #8a7660; font-weight: 500; font-size: 12px; }
+.mk-row.none { opacity: 0.55; }
+.mk-row .pr { min-width: 64px; }
+.mk-sellhead { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-weight: 700; }
+.mk-sellhead span { flex: 1; }
+.mk-sellhead small { color: #8a7660; font-weight: 500; font-size: 12px; display: block; }
+.mk-sellhead button { padding: 6px 10px; font-size: 13px; }
+.mk-empty { text-align: center; padding: 26px 10px; color: #8a7660; line-height: 1.6; }
+.mk-note { font-size: 13px; color: #8a7660; margin: 12px 2px 0; }
+.trend-flat { color: #aaa; }
+.mk-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 2px dashed rgba(107,74,46,0.18); }
+.mk-total { flex: 1; font-size: 14px; }
+.mk-total b { color: #b7791f; font-size: 17px; }
+@media (max-width: 600px) { .mk-row { flex-wrap: wrap; } .mk-row .nm { min-width: 55%; } .mk-tabs button { font-size: 14px; padding: 8px 4px; } .panel.market { height: min(78vh, 680px); } }
