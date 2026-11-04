@@ -12,6 +12,7 @@ export const PLACES = [
   { id: 'lake', name: '🎣 낚시터', x: -12.5, z: 22.4 },
   { id: 'field', name: '🚜 밭갈이', x: 26, z: 15 },
   { id: 'koat', name: '🏢 KOAT 체험관', x: 25, z: -24 },
+  { id: 'town', name: '🏗️ 새 마을', x: -21.5, z: 4.6 },
 ];
 
 /** 우상단 미니맵 (2D 캔버스). 누르면 큰 지도가 열리고, 큰 지도에서 원하는 곳을 누르면 그곳으로 이동 */
@@ -79,6 +80,8 @@ export class Minimap {
     rect(L.lake.shop.x - 1.2, L.lake.shop.z - 1.2, L.lake.shop.x + 1.2, L.lake.shop.z + 1.2, '#3a8fd8');
     const pd = L.paddy; rect(pd.x0, pd.z0, pd.x0 + pd.cols * (pd.size + pd.bund) + pd.bund, pd.z0 + pd.rows * (pd.size + pd.bund) + pd.bund, '#5fa3b0');
     const kr = L.koat.rect; rect(kr[0], kr[1], kr[2], kr[3], 'rgba(48,182,170,0.55)');
+    // 새 마을 부지: 빈 부지는 점선 테두리 색, 지은 건물은 주황
+    for (const [i, st] of L.town.sites.entries()) { const done = this.game.town?.sim.sites[i]?.state !== 'empty' && this.game.town; rect(st.x - 1.8, st.z - 1.8, st.x + 1.8, st.z + 1.8, done ? '#f2a33a' : 'rgba(160,120,70,0.45)'); }
     c.fillStyle = '#e0413a'; for (const o of L.orchard) { c.beginPath(); c.arc(X(o.x), Z(o.z), 2.2 * ui, 0, 7); c.fill(); }
     // 주민 (역할 색)
     const npcCol = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a3a9b0', kid: '#f28bb0', fisher: '#3a7bd5' };
@@ -105,6 +108,7 @@ export class Minimap {
     c.fillText('과수원', X(9), Z(-11.5));
     if (ui > 1) c.fillText('연못', X(L.pond.x), Z(L.pond.z + L.pond.r + 2.5));
     c.fillText('낚시터', X(L.lake.x), Z(L.lake.z + L.lake.r + 2.6));
+    c.fillText('새 마을', X(-28), Z(13.6));
     // 큰 지도: 가려는 곳 표시
     if (ui > 1 && this.pick) {
       c.strokeStyle = '#e8495a'; c.lineWidth = 3;

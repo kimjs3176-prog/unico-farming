@@ -13,6 +13,7 @@ export function saveGame(game) {
       bees: game.bees?.toJSON(),
       angling: game.angling?.toJSON(),
       farmcraft: game.farmcraft?.toJSON(),
+      town: game.town?.toJSON(),
       pet: game.pet?.ok ? game.pet.toJSON() : undefined,
     };
     localStorage.setItem(KEY, JSON.stringify(data));

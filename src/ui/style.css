@@ -532,3 +532,6 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
 @keyframes p2blink { 0%, 94%, 100% { transform: scaleY(1); } 96.5% { transform: scaleY(0.12); } }
 .dlg:not(.done) .dlg-portrait svg.p2 { animation: dlgtalk 0.26s ease-in-out infinite alternate; transform-origin: 50% 90%; }
 @media (prefers-reduced-motion: reduce) { .p2 .p2-eye, .dlg:not(.done) .p2 .p2-mo, .dlg:not(.done) .p2 .p2-mc, .dlg:not(.done) .dlg-portrait svg.p2 { animation: none; } }
+/* 마을 건설 */
+.build-confetti { position: absolute; left: 50%; top: 18%; width: 420px; height: 10px; transform: translateX(-50%); pointer-events: none; z-index: 30; }
+.build-row .nm small { display: block; }

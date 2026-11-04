@@ -12,6 +12,7 @@ export class Economy {
     for (const k of Object.keys(CROPS)) this.prices[k] = { mult: 1, trend: 0 };
     for (const k of Object.keys(PRODUCTS)) this.prices[k] = { mult: 1, trend: 0 };
     this.stats = { earned: 0, spent: 0, sold: 0 };
+    this.sellMult = 1; // 마을 건물 (직판장) 판매가 배수
   }
 
   basePrice(item) {
@@ -28,9 +29,9 @@ export class Economy {
 
   sellPrice(item) {
     const p = this.prices[item];
-    if (!p) return Math.max(1, Math.round(this.basePrice(item) * (ITEMS[item]?.cat === 'seed' ? 0.5 : 1)));
+    if (!p) return Math.max(1, Math.round(this.basePrice(item) * (ITEMS[item]?.cat === 'seed' ? 0.5 : this.sellMult)));
     const ev = this.event?.item === item ? this.event.mult : 1;
-    return Math.max(1, Math.round(this.basePrice(item) * p.mult * ev));
+    return Math.max(1, Math.round(this.basePrice(item) * p.mult * ev * this.sellMult));
   }
 
   seedPrice(crop) { return CROPS[crop].seedPrice; }

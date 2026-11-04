@@ -21,6 +21,8 @@ export class FarmSim {
     this.sprinklerRows = 0; // 스프링클러가 깔린 줄 수 (앞줄부터): 물이 마르면 자동으로 뿌림
     this.boost = 1; // 스마트팜 보너스 등
     this.weatherMult = 1; // 날씨 영향 (눈 오면 느려짐)
+    this.buildMult = 1; // 마을 건물 (유리 온실) 성장 배수
+    this.waterMult = 1; // 마을 건물 (물탱크) 물 지속 배수
     this.weedChance = 0; // 초당 잡초가 날 확률 (자라는 밭마다). 0 이면 잡초 없음 (테스트 기본값)
     this.rng = Math.random;
     this.listeners = [];
@@ -90,7 +92,7 @@ export class FarmSim {
   water(i) {
     const p = this.plots[i];
     if (p.state !== 'growing') return false;
-    p.water = WATER_DURATION;
+    p.water = WATER_DURATION * this.waterMult;
     this.emit('water', i);
     return true;
   }
@@ -99,7 +101,7 @@ export class FarmSim {
   rain() {
     let n = 0;
     this.plots.forEach((p, i) => {
-      if (p.state === 'growing' && p.water < 10) { p.water = WATER_DURATION; this.emit('rainwater', i); n++; }
+      if (p.state === 'growing' && p.water < 10) { p.water = WATER_DURATION * this.waterMult; this.emit('rainwater', i); n++; }
     });
     return n;
   }
@@ -139,8 +141,8 @@ export class FarmSim {
       if (p.state !== 'growing') return;
       if (!p.weeds && this.weedChance > 0 && p.progress > 0.08 && this.rng() < this.weedChance * dt) { p.weeds = true; this.emit('weeds', i); }
       // 스프링클러: 물이 마른 밭에 자동으로
-      if (p.water <= 0 && Math.floor(i / this.cols) < this.sprinklerRows) { p.water = WATER_DURATION; this.emit('sprinkle', i); }
-      const rate = (p.water > 0 ? 1 : 0.3) * this.boost * this.weatherMult * (p.weeds ? 0.5 : 1) * (p.loose > 0 ? 1.25 : 1) * (p.fert ? FERT_SPEED : 1);
+      if (p.water <= 0 && Math.floor(i / this.cols) < this.sprinklerRows) { p.water = WATER_DURATION * this.waterMult; this.emit('sprinkle', i); }
+      const rate = (p.water > 0 ? 1 : 0.3) * this.boost * this.weatherMult * this.buildMult * (p.weeds ? 0.5 : 1) * (p.loose > 0 ? 1.25 : 1) * (p.fert ? FERT_SPEED : 1);
       if (p.loose > 0) p.loose = Math.max(0, p.loose - dt);
       // 관리 점수: 물이 있었던 시간 (잡초가 있으면 절반만)
       p.careT = (p.careT || 0) + dt;
