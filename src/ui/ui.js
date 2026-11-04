@@ -34,8 +34,8 @@ export class UI {
     this.boostChip = h('div', 'chip', '🌱 성장 부스트 <span></span>');
     this.boostChip.style.display = 'none';
     const right = h('div', 'hud-right');
-    this.btnBag = h('button', 'ghost', '🎒 가방 <span class="hint-kbd">(I)</span>');
-    this.btnQuest = h('button', 'ghost', '📜 퀘스트 <span class="hint-kbd">(Q)</span>');
+    this.btnBag = h('button', 'ghost', '🎒<span class="lbl"> 가방</span> <span class="hint-kbd">(I)</span>');
+    this.btnQuest = h('button', 'ghost', '📜<span class="lbl"> 퀘스트</span> <span class="hint-kbd">(Q)</span>');
     this.btnHelp = h('button', 'ghost', '❔');
     this.btnSettings = h('button', 'ghost', '⚙️');
     this.btnSettings.title = '환경설정 (그래픽 품질)';
@@ -100,7 +100,15 @@ export class UI {
       this.toast({ all: '🔊 음악·효과음 켜짐', sfx: '🎵 음악 끔 (효과음만)', off: '🔇 소리 끔' }[st]);
     });
     mk('📸', '찰칵', () => this.snapshot());
+    this.autoBtn = mk('🤖', '자동', () => game.autoplay.toggle());
+    this.autoBtn.title = '오토플레이 (P)';
     root.append(this.bar);
+    // 모바일: 행동 막대는 ☰ 버튼 하나로 접어 두고, 누르면 펼침 (버튼을 고르면 다시 접힘)
+    this.barToggle = h('button', 'bar-toggle', '☰');
+    this.barToggle.title = '메뉴';
+    this.barToggle.onclick = () => this.setBarOpen(!this.root.classList.contains('bar-open'));
+    root.append(this.barToggle);
+    this.bar.addEventListener('click', (e) => { if (e.target.closest('button')) this.setBarOpen(false); });
     this.emoteMenu = null;
   }
 
@@ -405,7 +413,26 @@ export class UI {
     put('banShow', this.banner, 'display', ev ? '' : 'none');
     if (ev) put('ban', this.banner, 'text', '📈 ' + ev.name);
     const n = q.active().filter((x) => x.complete).length;
-    put('quest', this.btnQuest, 'html', `📜 퀘스트${n ? ` <b style="color:#d9534f">(${n})</b>` : ''} <span class="hint-kbd">(Q)</span>`);
+    put('quest', this.btnQuest, 'html', `📜<span class="lbl"> 퀘스트</span>${n ? ` <b style="color:#d9534f">(${n})</b>` : ''} <span class="hint-kbd">(Q)</span>`);
+  }
+
+  setBarOpen(open) {
+    this.root.classList.toggle('bar-open', open);
+    this.barToggle.textContent = open ? '✕' : '☰';
+  }
+
+  /** 오토플레이 상태 표시: text=null 이면 숨김 */
+  setAuto(text, on) {
+    this.autoBtn?.classList.toggle('on', !!on);
+    if (!this.autoChip) {
+      this.autoChip = h('div', 'auto-chip hidden');
+      this.autoChip.onclick = () => this.game.autoplay.toggle(false);
+      this.autoChip.title = '눌러서 오토플레이 끄기';
+      document.getElementById('ui').append(this.autoChip);
+    }
+    this.autoChip.classList.toggle('hidden', !text);
+    const html = text ? `<b>🤖 자동</b> ${text} <i>✕</i>` : '';
+    if (html !== this.autoHtml) { this.autoChip.innerHTML = html; this.autoHtml = html; }
   }
 
   setPrompt(p) {

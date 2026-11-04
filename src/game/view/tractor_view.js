@@ -135,7 +135,12 @@ export class TractorView {
     // 경계/장애물 (연못, 건물)
     const next = new THREE.Vector3(v.x, 0, v.z);
     this.game.world.resolveCollision(next, 1.4);
-    if (next.x !== v.x || next.z !== v.z) { v.speed *= 0.3; v.x = next.x; v.z = next.z; }
+    if (next.x !== v.x || next.z !== v.z) {
+      // 막힌 만큼만 감속 (담장을 스치면 살짝, 정면으로 박으면 크게)
+      const want = Math.hypot(v.x - prevX, v.z - prevZ), got = Math.hypot(next.x - prevX, next.z - prevZ);
+      v.speed *= want > 1e-4 ? Math.max(0.3, Math.min(1, got / want)) : 0.3;
+      v.x = next.x; v.z = next.z;
+    }
     if (input.justPressed('Space')) { this.plowDown = !this.plowDown; this.game.audio.play('click'); }
     // 쟁기 위치 = 트랙터 뒤 2.3m
     const px = v.x - Math.sin(v.heading) * 2.3, pz = v.z - Math.cos(v.heading) * 2.3;

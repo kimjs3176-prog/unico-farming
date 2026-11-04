@@ -463,57 +463,70 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .koat-stampfx span { font-size: 30px; } .koat-stampfx b { font-size: 14px; } .koat-stampfx small { font-size: 10px; letter-spacing: 2px; }
 @keyframes koatstamp { 0% { transform: scale(3) rotate(-30deg); opacity: 0; } 70% { transform: scale(0.9) rotate(-12deg); opacity: 1; } 100% { transform: scale(1) rotate(-14deg); opacity: 1; } }
 
-/* ---------------- 모바일 (세로 폰) 레이아웃: UI 가 화면 가운데를 가리지 않게 위·아래 가장자리로 모음 ---------------- */
+/* 오토플레이 */
+.actionbar button.on { background: rgba(250,192,62,0.28); box-shadow: inset 0 0 0 2px #fac03e; }
+.actionbar button.on span { animation: autobob 1.2s ease-in-out infinite; }
+@keyframes autobob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.auto-chip { position: absolute; left: 50%; bottom: 172px; transform: translateX(-50%); background: rgba(48,182,170,0.94); color: #fff; padding: 6px 14px; border-radius: 18px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow); white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.auto-chip b { background: #fff; color: #1f8a80; border-radius: 10px; padding: 1px 7px; font-size: 12px; }
+.auto-chip i { font-style: normal; opacity: 0.75; }
+.auto-chip.hidden { display: none; }
+@media (max-width: 600px) { .auto-chip { bottom: 236px; font-size: 12px; } }
+body.cine .auto-chip { opacity: 0; pointer-events: none; }
+/* 좁은 화면: 행동 막대 버튼 10개가 화면 안에 들어가게 (넘치면 오른쪽 버튼이 잘렸음) */
 @media (max-width: 600px) {
-  /* 위쪽 막대: 칩을 작게 → 두 줄 안에 (돈·시계·날씨 / 레벨·버튼) */
-  .hud-top { top: calc(6px + env(safe-area-inset-top, 0px)); left: 6px; right: 6px; gap: 4px; }
-  .chip { border-width: 2px; border-radius: 12px; padding: 3px 7px; font-size: 12px; gap: 4px; box-shadow: 0 2px 0 rgba(107,74,46,0.15); }
-  .chip .money { font-size: 13px; }
-  .chip .xpbar { width: 40px; height: 6px; }
-  .weather-chip { padding: 3px 7px; font-size: 12px; box-shadow: 0 2px 0 rgba(107,74,46,0.15); }
-  .weather-chip small { display: none; }
-  .hud-right { gap: 4px; }
-  .hud-right button { padding: 4px 7px; font-size: 12px; border-radius: 11px; box-shadow: 0 2px 0 #ccc; }
-  /* 목표: 미니맵 왼쪽 좁은 칸에 맞춤 */
-  /* zoom(글자 크기 설정) 안에서는 vw 도 배율이 곱해지므로 나눠서 실제 화면 폭 기준으로 */
-  .objective { left: 6px; top: calc(var(--hud-b, 52px) + 6px); max-width: calc(100vw / var(--ui-zoom, 1) - 122px); padding: 5px 8px; gap: 6px; border-width: 2px; border-radius: 14px; }
-  .objective .ic { font-size: 17px; }
-  .objective .tt { font-size: 13px; }
-  .objective .tt small { font-size: 11px; }
-  .objective .dir { width: 26px; height: 26px; font-size: 13px; }
-  .minimap { right: 6px; top: calc(var(--hud-b, 52px) + 6px); width: 96px; height: 96px; border-radius: 12px; }
-  .fps-chip { right: 6px; top: calc(var(--hud-b, 52px) + 108px); }
-  /* 아래쪽: 행동 막대를 맨 아래 가로 전체로, 그 위에 채팅(왼쪽)·E 버튼(오른쪽) */
-  .actionbar { left: 6px; right: 6px; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); transform: none; gap: 0; padding: 3px; border-radius: 16px; justify-content: space-between; }
-  .actionbar button { flex: 1 1 0; min-width: 0; padding: 4px 0; font-size: 10px; border-radius: 10px; white-space: nowrap; }
+  .actionbar { right: 8px; gap: 2px; padding: 4px; }
+  .actionbar button { min-width: 0; flex: 1 1 0; padding: 4px 1px; font-size: 10px; white-space: nowrap; overflow: hidden; }
   .actionbar button span { font-size: 17px; }
   .actionbar .sep { display: none; }
-  .emote-menu { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); max-width: 96vw; flex-wrap: wrap; justify-content: center; }
-  .chat, body.ui-big .chat { left: 6px; bottom: calc(62px + env(safe-area-inset-bottom, 0px)); width: min(calc(52vw / var(--ui-zoom, 1)), 220px); }
-  .chat .log { max-height: 54px; font-size: 12px; }
-  .chat input { padding: 5px 8px; font-size: 13px; border-radius: 10px; }
-  .online { font-size: 11px; margin-bottom: 2px; }
-  .touch-btn { right: 10px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); width: 64px; height: 64px; font-size: 24px; }
-  .prompt { bottom: calc(140px + env(safe-area-inset-bottom, 0px)); padding: 7px 14px; }
-  .dlg { bottom: 140px; }
 }
+/* 메뉴 접기 버튼: 넓은 화면에서는 숨김 */
+.bar-toggle { display: none; }
+.hud-right .lbl { display: inline; }
 
-/* 가로로 눕힌 폰 (높이가 낮음): 위·아래 막대를 얇게 */
-@media (max-height: 500px) and (pointer: coarse) {
-  .hud-top { top: 6px; left: 6px; right: 6px; gap: 4px; }
-  .chip, .weather-chip { padding: 3px 8px; font-size: 12px; border-width: 2px; }
-  .hud-right button { padding: 4px 8px; font-size: 12px; }
-  .minimap { width: 90px; height: 90px; top: calc(var(--hud-b, 40px) + 4px); right: 6px; }
-  .objective { top: calc(var(--hud-b, 40px) + 4px); left: 6px; padding: 4px 8px; }
-  .objective .tt { font-size: 13px; } .objective .dir { width: 26px; height: 26px; }
-  /* 행동 막대는 왼쪽 아래, 채팅은 그 위 → 서로 겹치지 않음 */
-  .actionbar { left: 6px; bottom: 4px; transform: none; padding: 3px; }
-  .actionbar button { padding: 3px 8px; font-size: 10px; min-width: 44px; white-space: nowrap; }
-  .emote-menu { left: 6px; bottom: 56px; transform: none; }
+/* ---------------- 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) ----------------
+   위: 돈·시계·레벨·날씨 아이콘 + 아이콘 버튼 한 줄 / 목표는 제목 한 줄 / 미니맵 작게
+   아래: 행동 막대는 ☰ 하나로 접고, 채팅 입력은 '말하기' 를 눌렀을 때만 */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  .hud-top { top: calc(4px + env(safe-area-inset-top, 0px)); left: 4px; right: 4px; gap: 3px; }
+  .chip, .weather-chip { border-width: 2px; border-radius: 10px; padding: 2px 6px; font-size: 11px; gap: 3px; box-shadow: 0 2px 0 rgba(107,74,46,0.15); }
+  .chip .money { font-size: 12px; }
+  .chip .xpbar { width: 28px; height: 5px; }
+  .chip .xp { display: none; }
+  .weather-chip > span, .weather-chip small { display: none; }
+  .hud-right { gap: 3px; }
+  .hud-right button { padding: 2px 6px; font-size: 13px; border-radius: 10px; box-shadow: 0 2px 0 #ccc; }
+  .hud-right .lbl { display: none; }
+  .hud-right b { font-size: 10px; }
+  /* 목표: 제목 한 줄만 (설명·진행 막대는 숨김, 누르면 퀘스트 창) */
+  .objective { left: 4px; top: calc(var(--hud-b, 40px) + 4px); max-width: calc(100vw / var(--ui-zoom, 1) - 96px); padding: 3px 8px; gap: 5px; border-width: 2px; border-radius: 12px; box-shadow: 0 2px 0 rgba(107,74,46,0.15); }
+  .objective .ic { font-size: 14px; }
+  .objective .tt { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .objective .tt small, .objective .bar { display: none; }
+  .objective .dir { width: 20px; height: 20px; font-size: 10px; }
+  .minimap { right: 4px; top: calc(var(--hud-b, 40px) + 4px); width: 76px; height: 76px; border-radius: 10px; border-width: 2px; }
+  .fps-chip { right: 4px; top: calc(var(--hud-b, 40px) + 84px); }
+  .toasts { top: calc(var(--hud-b, 40px) + 34px); }
+  .toast { font-size: 12px; padding: 5px 12px; border-width: 2px; }
+  /* 아래: ☰ (왼쪽) · E (오른쪽) 만 늘 보임 */
+  .bar-toggle { display: block; position: absolute; left: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); width: 46px; height: 46px; padding: 0; border-radius: 50%; font-size: 20px; background: rgba(35,25,22,0.78); color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,0.3); }
+  .actionbar { display: none; left: 60px; right: 8px; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); transform: none; gap: 0; padding: 3px; border-radius: 16px; justify-content: space-between; max-width: 560px; }
+  #ui.bar-open .actionbar { display: flex; }
+  .actionbar button { flex: 1 1 0; min-width: 0; padding: 4px 0; font-size: 9px; border-radius: 10px; white-space: nowrap; overflow: hidden; }
   .actionbar button span { font-size: 16px; }
-  .chat, body.ui-big .chat { left: 6px; width: 220px; bottom: 58px; }
-  .chat .log { max-height: 50px; }
-  .chat input { padding: 4px 8px; }
-  .touch-btn { width: 60px; height: 60px; right: 12px; bottom: 12px; font-size: 22px; }
-  .prompt { bottom: 70px; }
+  .actionbar .sep { display: none; }
+  .emote-menu { left: 8px; bottom: calc(62px + env(safe-area-inset-bottom, 0px)); transform: none; max-width: calc(100vw - 16px); flex-wrap: wrap; }
+  .chat, body.ui-big .chat { left: 8px; bottom: calc(60px + env(safe-area-inset-bottom, 0px)); width: min(calc(56vw / var(--ui-zoom, 1)), 220px); }
+  .online { display: none; }
+  .chat .log { max-height: 46px; font-size: 11px; margin-bottom: 2px; }
+  .chat .log div { background: rgba(255,255,255,0.7); padding: 1px 6px; }
+  /* 채팅 입력칸: 평소엔 숨김(포커스는 받을 수 있게), '말하기' 를 누르면 나타남 */
+  .chat:not(:focus-within) input { position: absolute; opacity: 0; pointer-events: none; height: 0; padding: 0; border: 0; }
+  .chat input { padding: 5px 8px; font-size: 14px; border-radius: 10px; }
+  .touch-btn { right: 10px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); width: 58px; height: 58px; font-size: 22px; }
+  #ui.bar-open .touch-btn { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+  .prompt { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); padding: 6px 12px; font-size: 13px; }
+  .auto-chip { bottom: calc(112px + env(safe-area-inset-bottom, 0px)); font-size: 11px; padding: 4px 10px; }
+  .dlg { bottom: 70px; }
+  .drive-pad { bottom: 70px; }
 }

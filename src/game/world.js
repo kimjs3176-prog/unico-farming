@@ -742,6 +742,7 @@ export class World {
       if (d > 1e-4) { next.x = w.x + (dx / d) * min; next.z = w.z + (dz / d) * min; }
     }
     for (const o of this.obstacles) {
+      if (!(o.r > 0)) continue; // 반지름 0 = 꺼진 장애물 (운전 중인 트랙터 자신 등) — 거리 0 근처에서 r 만큼 튕겨 내지 않게
       const dx = next.x - o.x, dz = next.z - o.z;
       const d = Math.hypot(dx, dz), min = o.r + r;
       if (d < min && d > 1e-4) { next.x = o.x + (dx / d) * min; next.z = o.z + (dz / d) * min; }
