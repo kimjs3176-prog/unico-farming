@@ -77,7 +77,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 @media (pointer: coarse) { .touch-btn { display: block; } .hint-kbd { display: none; } }
 
 /* 패널 */
-.panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--panel); border: 4px solid var(--panel-edge); border-radius: 28px; padding: 18px 20px; width: min(94vw, 560px); max-height: 86vh; overflow: auto; box-shadow: var(--shadow); color: var(--brown); animation: panelin 0.32s cubic-bezier(.3,1.45,.5,1); }
+.panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--panel); border: 4px solid var(--panel-edge); border-radius: 28px; padding: 18px 20px; width: min(94vw, 560px); max-height: calc(86vh / var(--ui-zoom, 1)); overflow: auto; box-shadow: var(--shadow); color: var(--brown); animation: panelin 0.32s cubic-bezier(.3,1.45,.5,1); }
 @keyframes panelin { from { opacity: 0; transform: translate(-50%, -46%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 @keyframes popin { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
 .panel h2 { margin: 0 0 10px; display: flex; align-items: center; gap: 8px; color: var(--teal-d); font-size: 24px; }
@@ -494,7 +494,8 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
 .panel h2 .close { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 16px; flex: 0 0 auto; }
 
 /* 장터: 위(제목·코인·탭)와 아래(모두 판매)는 고정, 가운데 목록만 스크롤 */
-.panel.market { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 14px; width: min(94vw, 600px); height: min(86vh, 680px); }
+.panel.market { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 14px; width: min(calc(94vw / var(--ui-zoom, 1)), 600px); height: min(calc(86vh / var(--ui-zoom, 1)), 680px); }
+/* 글자 크게(확대) 설정에서도 창이 화면 높이를 넘지 않게: vh 는 확대 배율만큼 나눠 줌 */
 .mk-row button.locked { min-width: 132px; }
 .panel.market h2 { position: static; box-shadow: none; margin-bottom: 4px; }
 .mk-top { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; border-bottom: 2px dashed rgba(107,74,46,0.18); }
@@ -521,7 +522,7 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
 .mk-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 2px dashed rgba(107,74,46,0.18); }
 .mk-total { flex: 1; font-size: 14px; }
 .mk-total b { color: #b7791f; font-size: 17px; }
-@media (max-width: 600px) { .mk-row { flex-wrap: wrap; } .mk-row .nm { min-width: 55%; } .mk-tabs button { font-size: 14px; padding: 8px 4px; } .panel.market { height: min(78vh, 680px); } }
+@media (max-width: 600px) { .mk-row { flex-wrap: wrap; } .mk-row .nm { min-width: 55%; } .mk-tabs button { font-size: 14px; padding: 8px 4px; } .panel.market { height: min(calc(78vh / var(--ui-zoom, 1)), 680px); } }
 /* 2D 초상화: 말하는 동안 입 벌렸다 닫기, 가끔 눈 깜빡임 */
 .dlg-portrait svg.p2 { width: 100%; height: 100%; display: block; }
 .p2 .p2-mo { opacity: 0; }
