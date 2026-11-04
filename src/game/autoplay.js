@@ -1,17 +1,20 @@
 import { LAYOUT } from './world.js';
 import { CROPS, PRODUCTS } from './sim/crops.js';
 import { chooseTask, shopList, bestSeed, TASK_LABEL } from './sim/autoplay.js';
+import { NavGrid } from './sim/path.js';
 
 /**
  * 오토플레이 모드: 유니코가 알아서 밭·목장 일을 하고 장터에서 사고팜
  *  - 할 일 고르기는 sim/autoplay.js (수확 > 거두기 > 물 > 김매기 > 사료 > 심기 > 퇴비 > 밭 갈기 > 빗질 > 쓰다듬기)
  *  - 직접 움직이면(키보드·조이스틱·클릭 이동) 잠깐 멈췄다가 4초 뒤 다시 이어감
  *  - 창·대화·컷신·미니게임·트랙터 중에는 쉬고, 끝나면 다시 시작
- *  - 막혀서 못 가는 대상은 30초 동안 건너뜀
+ *  - 길찾기(sim/path.js)로 건물·울타리·연못을 돌아서 감. 막히면 비켜서 길을 다시 찾고, 그래도 못 가면 30초 동안 건너뜀
  */
 const REACH = { plot: 1.1, animal: 1.6, market: 1.4 };
 const HOLD_MANUAL = 4;      // 직접 조작 후 다시 이어가기까지 (초)
-const TASK_TIMEOUT = 25;    // 한 일에 이만큼 넘게 걸리면 포기
+const TASK_TIMEOUT = 40;    // 한 일에 이만큼 넘게 걸리면 포기
+const MAX_STUCK = 4;        // 막혀서 길을 다시 찾는 최대 횟수
+const WP_STOP = 0.35;       // 경유점 도착 거리
 const SKIP_FOR = 30;        // 못 간 대상 건너뛰는 시간
 
 export class AutoPlay {
@@ -33,7 +36,7 @@ export class AutoPlay {
     this.on = v;
     this._stopMove();
     this.task = null; this.hold = 0; this.cool = 0; this.skip.clear();
-    if (v) { this.done = 0; this.earned = 0; }
+    if (v) { this.done = 0; this.earned = 0; this.nav = null; }
     g.ui.toast(v ? '🤖 오토플레이 시작! 유니코가 알아서 농사·목장 일을 하고 장터에서 사고팔아요 (P 또는 🤖 버튼으로 끄기 · 직접 움직이면 잠깐 멈춤)'
       : `🤖 오토플레이 끔${this.done ? ` · 한 일 ${this.done}가지${this.earned ? ` · 판매 +${this.earned}🪙` : ''}` : ''}`);
     g.audio.play('click');
@@ -104,27 +107,59 @@ export class AutoPlay {
     if (!goal || t.t > TASK_TIMEOUT) return this._fail(t);
     const d = Math.hypot(goal.x - p.position.x, goal.z - p.position.z);
     if (d <= REACH[t.kind] + 0.15) { this._stopMove(); this.task = null; this._act(t); return; }
-    // 목장 울타리를 넘나들 때는 출입구(서쪽)를 거쳐 감
-    if (!t.via) t.via = this._via(goal);
-    if (t.via.length && Math.hypot(t.via[0].x - p.position.x, t.via[0].z - p.position.z) < 0.6) { t.via.shift(); this._stopMove(); }
+    // 길: 처음, 막혔을 때, 움직이는 동물이 길 끝에서 멀어졌을 때 다시 찾음
+    if (!t.path || t.replan || (t.kind === 'animal' && Math.hypot(goal.x - t.end.x, goal.z - t.end.z) > 1.5)) {
+      this._stopMove();
+      t.path = this._plan(goal, t);
+      t.end = { x: goal.x, z: goal.z }; t.replan = false;
+      if (!t.path) return this._fail(t);
+    }
+    // 경유점에 닿으면 다음으로
+    while (t.path.length > 1 && Math.hypot(t.path[0].x - p.position.x, t.path[0].z - p.position.z) < WP_STOP + 0.25) { t.path.shift(); this._stopMove(); }
     if (!p.moveTarget) {
-      // 이동이 끝났는데 아직 멀고, 지난번보다 별로 가까워지지 않았으면 막힌 것
-      if (this.mt) { if (t.lastD !== undefined && t.lastD - d < 0.3) t.stuck = (t.stuck || 0) + 1; if (t.stuck > 2) return this._fail(t); }
-      t.lastD = d;
-      const wp = t.via[0];
-      if (wp) p.goTo(() => wp, 0.35, false);
-      else p.goTo(() => this._goal(t) || p.position, REACH[t.kind], false);
+      // 이동이 멈췄는데 목표(경유점) 근처가 아니면 막힌 것 → 비켜서 길을 다시 찾음
+      if (this.mt && t.leg) {
+        const w = t.leg.last ? goal : t.leg;
+        if (Math.hypot(w.x - p.position.x, w.z - p.position.z) > (t.leg.last ? REACH[t.kind] : WP_STOP) + 0.3) {
+          t.stuck = (t.stuck || 0) + 1;
+          if (t.stuck > MAX_STUCK) return this._fail(t);
+          t.replan = true; this.mt = null;
+          return;
+        }
+      }
+      const last = t.path.length === 1, wp = t.path[0];
+      t.leg = { x: wp.x, z: wp.z, last };
+      if (last) p.goTo(() => this._goal(t) || p.position, REACH[t.kind], false);
+      else p.goTo(() => wp, WP_STOP, false);
       this.mt = p.moveTarget;
     }
   }
 
-  /** 울타리 출입구 경유점 */
-  _via(goal) {
-    const R = LAYOUT.ranch, p = this.g.player.position;
-    const inR = (q) => q.x > R.x0 && q.x < R.x1 && q.z > R.z0 && q.z < R.z1;
-    const out = { x: R.gate.x - 1.8, z: R.gate.z }, inn = { x: R.gate.x + 1.8, z: R.gate.z };
-    if (inR(goal) === inR(p)) return [];
-    return inR(p) ? [inn, out] : [out, inn];
+  /** 길찾기 격자 (정적 장애물, 캐릭터 반지름 반영). 막혔을 때 오래된 격자면 다시 만듦 */
+  _grid(fresh = false) {
+    const now = performance.now();
+    if (!this.nav || (fresh && now - this.navAt > 5000)) {
+      const w = this.g.world;
+      this.nav = new NavGrid((x, z) => w.isBlocked(x, z, 0.6), LAYOUT.bounds - 1, 0.5);
+      this.navAt = now;
+    }
+    return this.nav;
+  }
+
+  /** 현재 위치 → 목표 경유점. 막혀서 다시 찾는 중이면 옆으로 비켜서는 점을 먼저 넣음 (동물·주민 같은 움직이는 장애물) */
+  _plan(goal, t) {
+    const p = this.g.player.position, nav = this._grid(!!t.stuck);
+    const path = nav.find(p, goal);
+    if (!path) return null;
+    if (t.stuck) {
+      const n = path[0], dx = n.x - p.x, dz = n.z - p.z, l = Math.hypot(dx, dz) || 1;
+      const side = t.stuck % 2 ? 1 : -1;
+      for (const k of [side, -side]) {
+        const sx = p.x + (-dz / l) * 1.3 * k - (dx / l) * 0.4, sz = p.z + (dx / l) * 1.3 * k - (dz / l) * 0.4;
+        if (nav.lineFree(p, { x: sx, z: sz })) { const rest = nav.find({ x: sx, z: sz }, goal); if (rest) return [{ x: sx, z: sz }, ...rest]; }
+      }
+    }
+    return path;
   }
 
   _fail(t) { this.skip.set(t.key, SKIP_FOR); this._stopMove(); this.task = null; }
