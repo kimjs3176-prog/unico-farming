@@ -7,7 +7,8 @@ import { NavGrid } from './sim/path.js';
  * 오토플레이 모드: 유니코가 알아서 밭·목장 일을 하고 장터에서 사고팜
  *  - 할 일 고르기는 sim/autoplay.js (수확 > 거두기 > 물 > 김매기 > 사료 > 심기 > 퇴비 > 밭 갈기 > 빗질 > 쓰다듬기)
  *  - 직접 움직이면(키보드·조이스틱·클릭 이동) 잠깐 멈췄다가 4초 뒤 다시 이어감
- *  - 창·대화·컷신·미니게임·트랙터 중에는 쉬고, 끝나면 다시 시작
+ *  - 대화·컷신 대사는 읽을 시간만큼 기다렸다 자동으로 넘기고, 결과 창(레벨 업 등)은 3초 뒤 닫음
+ *  - 그 밖의 창·미니게임·트랙터 중에는 쉬고, 끝나면 다시 시작
  *  - 길찾기(sim/path.js)로 건물·울타리·연못을 돌아서 감. 막히면 비켜서 길을 다시 찾고, 그래도 못 가면 30초 동안 건너뜀
  */
 const REACH = { plot: 1.1, animal: 1.6, market: 1.4 };
@@ -90,6 +91,7 @@ export class AutoPlay {
       return;
     }
     if (this.hold > 0) { this.hold -= dt; return; }
+    if (this._autoDismiss()) return;
     if (this._busy()) { this._stopMove(); this.task = null; g.ui.setAuto?.('⏸ 잠깐 쉬는 중 · 창·대화·미니게임이 끝나면 이어가요', true); return; }
     if (this.cool > 0) { this.cool -= dt; return; }
     if (!this.task) {
@@ -133,6 +135,23 @@ export class AutoPlay {
       else p.goTo(() => wp, WP_STOP, false);
       this.mt = p.moveTarget;
     }
+  }
+
+  /** 대화 자동 넘김 · 결과 창 자동 닫기. 처리 중이면 true (이번 프레임은 그것만) */
+  _autoDismiss() {
+    const g = this.g;
+    if (g.dialogue.active) {
+      if (g.dialogue.autoStep()) { this._stopMove(); this.task = null; g.ui.setAuto?.('💬 대화 자동으로 넘기는 중', true); return true; }
+      return false;
+    }
+    const P = g.ui.panel;
+    if (P?.dataset.kind === 'result' && !g.cinema.locked) {
+      const now = performance.now();
+      if (P !== this._resPanel) { this._resPanel = P; this._resAt = now; }
+      if (now - this._resAt > 3000) { g.ui.closePanel(); this._resPanel = null; }
+      return true;
+    }
+    return false;
   }
 
   /** 길찾기 격자 (정적 장애물, 캐릭터 반지름 반영). 막혔을 때 오래된 격자면 다시 만듦 */

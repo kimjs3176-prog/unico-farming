@@ -702,6 +702,7 @@ export class UI {
 
   result(title, lines) {
     const p = this.openPanel(title);
+    p.dataset.kind = 'result'; // 오토플레이 중에는 잠시 보여 준 뒤 자동으로 닫음
     p.append(h('div', 'rows', lines.map((t) => `<div class="row">${t}</div>`).join('')));
     const b = h('button', '', '확인');
     b.style.marginTop = '10px';
