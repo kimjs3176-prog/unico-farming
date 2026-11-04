@@ -1,15 +1,13 @@
 import { PALETTES } from '../game/unico.js';
 
 /**
- * 대화창 2D 초상화 (SVG 일러스트)
- *  - 캐릭터의 팔레트(몸·주둥이·갈기 색)와 옷차림(밀짚모자·안전모·고글·스카프·새싹)을 그대로 따라 그림
+ * 대화창 2D 초상화
+ *  - 유니코: 처음 받은 캐릭터 원본 그림(포즈별, public/portraits/*.webp)에서 얼굴·상반신을 잘라 씀
+ *    역할·감정에 맞는 포즈 (안내 = 확성기, 연구원 = 실험복, 안내데스크 = 발표 …)
+ *    주민·체험관 담당은 원본 그림 그대로 갈기 색만 그 캐릭터 색으로 바꿔 구분 (주인공은 원본 색 그대로)
  *  - 3D 장면을 찍지 않으므로 가로등·나무에 가려지지 않고, 낮·밤과 상관없이 늘 같은 밝기
- *  - 말하는 동안 입이 열렸다 닫히고(.dlg:not(.done)), 가끔 눈을 깜빡임 (CSS)
- *  - 반려견 콩이(시바견) 초상화도 있음: portraitSVG(null, { kind: 'dog' })
+ *  - 반려견 콩이(시바견): 원본 그림이 없어 SVG 로 그림 (말할 때 입이 움직이고 눈을 깜빡임)
  */
-const OFFICIAL = { body: 0xffffff, snout: 0xf7e1ec, mane: 0x30b6aa, maneD: 0x249d92, hoof: 0x2aa79b };
-const SCARF = { red: ['#e35d5d', '#c24444'], green: ['#7ac943', '#5ea72f'], blue: ['#4a90d9', '#3473b8'] };
-const hex = (n) => `#${(n >>> 0).toString(16).padStart(6, '0')}`;
 const LINE = '#5b4434';
 
 /** 말하는 사람 색으로 배경 그라데이션 */
@@ -34,60 +32,6 @@ const mouth = (x, y, w = 13) => `<path class="p2-mc" d="M${x - w} ${y - 2} Q${x}
   <g class="p2-mo"><path d="M${x - w * 0.8} ${y - 3} Q${x} ${y - 1} ${x + w * 0.8} ${y - 3} Q${x + w * 0.6} ${y + 12} ${x} ${y + 12} Q${x - w * 0.6} ${y + 12} ${x - w * 0.8} ${y - 3} Z" fill="#7a2f2f" stroke="${LINE}" stroke-width="2.6" stroke-linejoin="round"/>
   <ellipse cx="${x}" cy="${y + 8}" rx="${w * 0.42}" ry="3.2" fill="#f27c8c"/></g>`;
 
-/** 유니코 (주인공·주민·체험관 담당) */
-function unicoSVG(u, accent, id) {
-  const P = PALETTES[u?.palette] || OFFICIAL;
-  const f = u?.outfit || {};
-  const body = hex(P.body), snout = hex(P.snout), mane = hex(P.mane), maneD = hex(P.maneD);
-  const hat = f.hat, sprout = f.sprout && !hat;
-  const sc = SCARF[f.scarf];
-  let s = bg(id, accent);
-  // 어깨·몸
-  s += `<path d="M38 200 Q42 158 100 152 Q158 158 162 200 Z" fill="${body}" stroke="${LINE}" stroke-opacity="0.35" stroke-width="2.5"/>`;
-  // 뒤 갈기 (오른쪽 뒤로 넘어감)
-  s += `<path d="M128 58 Q170 62 166 104 Q164 132 146 146 Q154 116 140 98 Z" fill="${maneD}"/>
-        <path d="M122 54 Q160 52 160 92 Q158 118 142 130 Q146 104 132 90 Z" fill="${mane}"/>`;
-  // 귀
-  const ear = (x, flip) => `<path d="M${x} 74 Q${x + 4 * flip} 34 ${x + 22 * flip} 38 Q${x + 30 * flip} 58 ${x + 22 * flip} 80 Z" fill="${body}" stroke="${LINE}" stroke-opacity="0.4" stroke-width="2.5"/>
-        <path d="M${x + 5 * flip} 70 Q${x + 8 * flip} 46 ${x + 19 * flip} 47 Q${x + 23 * flip} 61 ${x + 18 * flip} 74 Z" fill="#f6b8c8"/>`;
-  s += ear(58, -1) + ear(142, 1);
-  // 머리 (둥근 큰 얼굴) + 그늘
-  s += `<ellipse cx="100" cy="104" rx="60" ry="55" fill="${body}" stroke="${LINE}" stroke-opacity="0.45" stroke-width="2.8"/>
-        <ellipse cx="100" cy="104" rx="60" ry="55" fill="url(#${id}sh)"/>`;
-  // 주둥이 (아래쪽 연한 색) + 콧구멍
-  s += `<ellipse cx="100" cy="130" rx="40" ry="24" fill="${snout}"/>
-        <ellipse cx="88" cy="124" rx="3" ry="2.2" fill="${LINE}" fill-opacity="0.75"/><ellipse cx="112" cy="124" rx="3" ry="2.2" fill="${LINE}" fill-opacity="0.75"/>`;
-  // 앞 갈기 (이마 위 몽글몽글)
-  s += `<path d="M66 70 Q70 46 94 48 Q102 36 116 44 Q136 44 136 66 Q124 58 112 62 Q100 54 88 62 Q76 60 66 70 Z" fill="${mane}"/>
-        <path d="M80 60 Q92 50 104 56" fill="none" stroke="#fff" stroke-opacity="0.45" stroke-width="3" stroke-linecap="round"/>`;
-  // 볼·눈·입
-  s += `<ellipse cx="62" cy="116" rx="11" ry="7" fill="#f7a1b5" fill-opacity="0.75"/><ellipse cx="138" cy="116" rx="11" ry="7" fill="#f7a1b5" fill-opacity="0.75"/>`;
-  s += eye(78, 100) + eye(122, 100);
-  if (f.goggles) s += `<g fill="none" stroke="#3b3f46" stroke-width="4.5"><circle cx="78" cy="100" r="17"/><circle cx="122" cy="100" r="17"/><path d="M95 99 Q100 95 105 99"/></g>
-        <circle cx="78" cy="100" r="15" fill="#bfe6ff" fill-opacity="0.22"/><circle cx="122" cy="100" r="15" fill="#bfe6ff" fill-opacity="0.22"/>
-        <path d="M66 92 L74 86" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-opacity="0.8"/><path d="M110 92 L118 86" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-opacity="0.8"/>`;
-  s += mouth(100, 138);
-  // 스카프 (턱 아래 삼각 + 매듭)
-  if (sc) s += `<path d="M58 152 Q100 172 142 152 L134 166 Q100 180 66 166 Z" fill="${sc[0]}" stroke="${sc[1]}" stroke-width="2"/>
-        <path d="M92 168 L100 198 L112 168 Z" fill="${sc[0]}" stroke="${sc[1]}" stroke-width="2" stroke-linejoin="round"/><circle cx="102" cy="168" r="6" fill="${sc[1]}"/>`;
-  // 뿔 (금색 나선)
-  const horn = `<path d="M90 52 L100 8 L110 52 Z" fill="#f2c23a" stroke="#b8860b" stroke-width="2.4" stroke-linejoin="round"/>
-        <g stroke="#c9961a" stroke-width="2.6" stroke-linecap="round"><path d="M93 42 L107 37"/><path d="M95 31 L105 27"/><path d="M97 21 L103 18"/></g>
-        <path d="M96 46 L100 14" stroke="#fff3b0" stroke-width="2" stroke-linecap="round" stroke-opacity="0.8"/>`;
-  if (hat === 'straw') s += `<ellipse cx="100" cy="58" rx="74" ry="15" fill="#f1d27a" stroke="#b98d3a" stroke-width="2.6"/>
-        <path d="M68 56 Q70 26 100 26 Q130 26 132 56 Z" fill="#f4da8a" stroke="#b98d3a" stroke-width="2.6"/>
-        <path d="M69 50 Q100 58 131 50 L131 42 Q100 50 69 42 Z" fill="#8b5a2b"/>
-        <path d="M80 36 Q100 32 120 36" fill="none" stroke="#c9a24a" stroke-width="2"/>` + horn.replace('M90 52 L100 8 L110 52', 'M93 30 L100 2 L107 30');
-  else if (hat === 'helmet') s += `<path d="M58 64 Q60 22 100 20 Q140 22 142 64 Z" fill="#fac03e" stroke="#c48a12" stroke-width="2.6"/>
-        <ellipse cx="100" cy="64" rx="50" ry="9" fill="#f0a91c" stroke="#c48a12" stroke-width="2.4"/><path d="M92 22 L92 62 M108 22 L108 62" stroke="#e8a114" stroke-width="5"/>
-        <path d="M70 40 Q78 30 90 28" stroke="#fff" stroke-opacity="0.6" stroke-width="4" fill="none" stroke-linecap="round"/>`;
-  else s += horn;
-  if (sprout) s += `<path d="M118 50 Q120 40 124 34" stroke="#5ea72f" stroke-width="3" fill="none" stroke-linecap="round"/>
-        <path d="M124 34 Q132 20 148 24 Q140 38 124 34 Z" fill="#8bd45a" stroke="#5ea72f" stroke-width="2"/>
-        <path d="M123 36 Q112 24 102 30 Q110 40 123 36 Z" fill="#a6e07a" stroke="#5ea72f" stroke-width="2"/>`;
-  return s;
-}
-
 /** 반려견 콩이 (시바견) */
 function dogSVG(accent, id) {
   const fur = '#e39a4a', furD = '#c97c2e', cream = '#fff4e2';
@@ -111,15 +55,99 @@ function dogSVG(accent, id) {
 }
 
 let seq = 0;
+
+/** 원본 그림 포즈: 감정표현 → 포즈, 역할(팔레트) → 기본 포즈 */
+const POSES = ['front', 'wave', 'cheer', 'heart', 'think', 'megaphone', 'lab', 'idle', 'safety', 'tablet', 'phone', 'water', 'present', 'side'];
+const BY_EMOTE = { wave: 'wave', cheer: 'cheer', heart: 'heart', think: 'think', megaphone: 'megaphone', present: 'present', safety: 'safety', water: 'water', lab: 'lab', phone: 'phone', tablet: 'tablet' };
+const BY_ROLE = {
+  official: 'front', guide: 'megaphone', merchant: 'idle', researcher: 'lab', granny: 'heart', kid: 'cheer', fisher: 'side',
+  koat_desk: 'present', koat_tech: 'present', koat_venture: 'phone', koat_seed: 'idle', koat_smart: 'tablet', koat_machine: 'safety', koat_env: 'lab',
+};
+export function poseFor(palette, emote) { return BY_EMOTE[emote] || BY_ROLE[palette] || 'front'; }
+
+const BASE = (import.meta.env?.BASE_URL || '/') + 'portraits/';
+const imgs = new Map();
+function load(pose) {
+  if (!imgs.has(pose)) {
+    const im = new Image();
+    im.decoding = 'async';
+    im.src = `${BASE}${pose}.webp`;
+    imgs.set(pose, im);
+  }
+  return imgs.get(pose);
+}
+/** 처음 대화가 뜨기 전에 미리 받아 둠 */
+export function preloadPortraits() { for (const p of POSES) load(p); }
+
+/** 갈기(청록) 색만 바꾸기: 색상·채도는 목표 색으로, 밝기는 원본 비율 유지 */
+function toHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+  if (mx === mn) return [0, 0, l];
+  const d = mx - mn, s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+  const h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h / 6, s, l];
+}
+function fromHsl(h, s, l) {
+  if (!s) return [l, l, l].map((v) => Math.round(v * 255));
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  const f = (t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+  return [f(h + 1 / 3), f(h), f(h - 1 / 3)].map((v) => Math.round(v * 255));
+}
+const TEAL_L = 0.45; // 원본 갈기 밝기 (#30b6aa 부근)
+function recolor(ctx, size, mane) {
+  const [th, ts, tl] = toHsl((mane >> 16) & 255, (mane >> 8) & 255, mane & 255);
+  const img = ctx.getImageData(0, 0, size, size), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 8) continue;
+    const [h, s, l] = toHsl(d[i], d[i + 1], d[i + 2]);
+    if (s < 0.3 || h < 0.42 || h > 0.56) continue; // 청록 계열만
+    const [r, g, b] = fromHsl(th, Math.min(1, ts * (s / 0.6)), Math.min(0.95, l * (tl / TEAL_L)));
+    d[i] = r; d[i + 1] = g; d[i + 2] = b;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+/** 말하는 사람 색 배경 + 원본 그림 (그림이 아직 안 왔으면 받는 대로 그림) */
+function unicoCanvas(u, accent, emote) {
+  const size = 256;
+  if (!/^#[0-9a-f]{6}$/i.test(accent)) accent = '#30b6aa';
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  cv.className = 'p2';
+  const ctx = cv.getContext('2d');
+  const grad = ctx.createRadialGradient(size * 0.45, size * 0.36, size * 0.04, size * 0.5, size * 0.5, size * 0.78);
+  grad.addColorStop(0, '#fffdf6'); grad.addColorStop(0.6, `${accent}4d`); grad.addColorStop(1, `${accent}9e`);
+  const pal = u?.palette || 'official';
+  const im = load(poseFor(pal, emote));
+  const draw = () => {
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.beginPath(); ctx.ellipse(size / 2, size * 1.07, size * 0.56, size * 0.27, 0, 0, Math.PI * 2); ctx.fill();
+    if (!im.complete || !im.naturalWidth) return;
+    const mane = PALETTES[pal]?.mane;
+    if (mane === undefined) { ctx.drawImage(im, 0, 0, size, size); return; }
+    // 그림만 따로 색을 바꾼 뒤 배경 위에 얹음
+    const tmp = document.createElement('canvas'); tmp.width = tmp.height = size;
+    const tc = tmp.getContext('2d'); tc.drawImage(im, 0, 0, size, size);
+    try { recolor(tc, size, mane); } catch { /* 색 바꾸기 실패 시 원본 */ }
+    ctx.drawImage(tmp, 0, 0);
+  };
+  draw();
+  if (!im.complete) im.addEventListener('load', draw, { once: true });
+  return cv;
+}
+
 /**
- * @param unico Unico (palette·outfit 사용) 또는 null
- * @param o { accent, kind: 'unico'|'dog' }
- * @returns SVG 요소
+ * @param unico Unico (palette 사용) 또는 null
+ * @param o { accent, kind: 'unico'|'dog', emote }
+ * @returns 초상화 요소 (canvas 또는 SVG)
  */
-export function portraitSVG(unico, { accent = '#30b6aa', kind = 'unico' } = {}) {
+export function portraitSVG(unico, { accent = '#30b6aa', kind = 'unico', emote } = {}) {
+  if (kind !== 'dog') return unicoCanvas(unico, accent, emote);
   const id = `p2_${seq++}_`;
-  const inner = kind === 'dog' ? dogSVG(accent, id) : unicoSVG(unico, accent, id);
   const wrap = document.createElement('div');
-  wrap.innerHTML = `<svg class="p2" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">${inner}</svg>`;
+  wrap.innerHTML = `<svg class="p2" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">${dogSVG(accent, id)}</svg>`;
   return wrap.firstChild;
 }

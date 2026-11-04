@@ -1,4 +1,4 @@
-import { portraitSVG } from './portrait2d.js';
+import { portraitSVG, preloadPortraits } from './portrait2d.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -27,6 +27,7 @@ export class Dialogue {
       if (n >= 1 && n <= 4) this.el.querySelectorAll('.dlg-choices button')[n - 1]?.click();
     }, true);
     this.portraits = new Map();
+    preloadPortraits();
   }
 
   /** 방금 닫혔는지 (닫는 키 입력이 다른 상호작용으로 새지 않게) */
@@ -35,13 +36,13 @@ export class Dialogue {
   skipAll() { this._skip = true; this._advance(true); }
 
   /** 초상화: 말하는 유니코의 색·옷차림으로 2D 일러스트. portrait: 'dog' 이면 반려견 */
-  _portrait(speaker, color, kind) {
+  _portrait(speaker, color, kind, emote) {
     const box = this.$('.dlg-portrait');
     box.innerHTML = '';
     const show = !!speaker || kind === 'dog';
     box.style.display = show ? '' : 'none';
     if (!show) return;
-    try { box.append(portraitSVG(speaker, { accent: color || '#30b6aa', kind: kind || 'unico' })); } catch { box.style.display = 'none'; }
+    try { box.append(portraitSVG(speaker, { accent: color || '#30b6aa', kind: kind || 'unico', emote })); } catch { box.style.display = 'none'; }
   }
 
   _advance(force) {
@@ -59,8 +60,8 @@ export class Dialogue {
     let result = null, lastSpeaker;
     for (const ln of lines) {
       if (this._skip && !ln.choices) continue;
-      const who = ln.speaker || ln.portrait || null;
-      if (who !== lastSpeaker) { this._portrait(ln.speaker, ln.color, ln.portrait); lastSpeaker = who; }
+      const who = `${ln.speaker?.palette || ln.portrait || ''}:${ln.emote || ''}:${ln.speaker ? 1 : 0}`;
+      if (who !== lastSpeaker) { this._portrait(ln.speaker, ln.color, ln.portrait, ln.emote); lastSpeaker = who; }
       this.el.style.setProperty('--dlg-accent', ln.color || '#30b6aa');
       this.$('.dlg-name b').textContent = ln.name || '';
       this.$('.dlg-name small').innerHTML = ln.sub ? esc(ln.sub) : '';
