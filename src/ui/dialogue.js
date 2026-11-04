@@ -1,9 +1,9 @@
-import { renderPortrait } from '../game/cutscene.js';
+import { portraitSVG } from './portrait2d.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /**
- * 대화창 (화면 아래): 3D 초상화 + 이름표 + 한 글자씩 나오는 대사 + 말소리 + 선택지
+ * 대화창 (화면 아래): 2D 초상화(SVG, 말할 때 입이 움직임) + 이름표 + 한 글자씩 나오는 대사 + 말소리 + 선택지
  *  - 클릭 / E / Space / Enter: 글자 다 보이기 → 다음 줄
  *  - 선택지는 클릭 또는 숫자 키 1~4
  * say([{ speaker?: Unico, name, color?, sub?, text, choices?: [{ label, value, disabled? }] }]) → 마지막 선택 값
@@ -34,12 +34,14 @@ export class Dialogue {
 
   skipAll() { this._skip = true; this._advance(true); }
 
-  _portrait(speaker) {
+  /** 초상화: 말하는 유니코의 색·옷차림으로 2D 일러스트. portrait: 'dog' 이면 반려견 */
+  _portrait(speaker, color, kind) {
     const box = this.$('.dlg-portrait');
     box.innerHTML = '';
-    box.style.display = speaker ? '' : 'none';
-    if (!speaker) return;
-    try { box.append(renderPortrait(this.game, speaker)); } catch { box.style.display = 'none'; }
+    const show = !!speaker || kind === 'dog';
+    box.style.display = show ? '' : 'none';
+    if (!show) return;
+    try { box.append(portraitSVG(speaker, { accent: color || '#30b6aa', kind: kind || 'unico' })); } catch { box.style.display = 'none'; }
   }
 
   _advance(force) {
@@ -57,7 +59,8 @@ export class Dialogue {
     let result = null, lastSpeaker;
     for (const ln of lines) {
       if (this._skip && !ln.choices) continue;
-      if (ln.speaker !== lastSpeaker) { this._portrait(ln.speaker); lastSpeaker = ln.speaker; }
+      const who = ln.speaker || ln.portrait || null;
+      if (who !== lastSpeaker) { this._portrait(ln.speaker, ln.color, ln.portrait); lastSpeaker = who; }
       this.el.style.setProperty('--dlg-accent', ln.color || '#30b6aa');
       this.$('.dlg-name b').textContent = ln.name || '';
       this.$('.dlg-name small').innerHTML = ln.sub ? esc(ln.sub) : '';

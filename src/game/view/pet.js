@@ -179,7 +179,7 @@ export class Pet {
     if (crop) choices.push({ label: `${CROPS[crop].emoji} ${CROPS[crop].name} 나눠 주기`, value: 'crop', disabled: sim.hunger >= 98 });
     for (const t of TRICKS) choices.push({ label: `${t.emoji} 재주: ${t.name}`, value: 'trick:' + t.id, disabled: !sim.unlocked(t.id), note: sim.unlocked(t.id) ? '' : `하트 ${t.hearts}개가 되면 배워요` });
     choices.push({ label: '✏️ 이름 짓기', value: 'name' }, { label: '👋 그만', value: 'bye' });
-    const c = await g.dialogue.say({ speaker: null, name: `🐕 ${sim.name}`, color: '#e39a4a', sub: `애정 ${'❤️'.repeat(sim.hearts)}${'🤍'.repeat(5 - sim.hearts)} · 배부름 ${Math.round(sim.hunger)}%`, text: `${sim.name}는 ${moodText}`, choices });
+    const c = await g.dialogue.say({ speaker: null, portrait: 'dog', name: `🐕 ${sim.name}`, color: '#e39a4a', sub: `애정 ${'❤️'.repeat(sim.hearts)}${'🤍'.repeat(5 - sim.hearts)} · 배부름 ${Math.round(sim.hunger)}%`, text: `${sim.name}는 ${moodText}`, choices });
     g.cinema.release();
     if (c === 'pet') this.pet();
     else if (c === 'treat' && eco.take('pet_treat', 1)) this._fed(sim.feed('treat'), '🦴');
