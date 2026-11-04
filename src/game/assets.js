@@ -25,7 +25,7 @@ export const ENV_MODELS = [
  * q_farm: barn, silo, windmill, well, coop, water_tower, open_barn, tower_windmill ...
  * q_nature: tree_1~5, pine_1~3, birch_1~3, willow_1~2, autumn_1~3, bush_1~2, rock_1~4, mossrock_1~4, stump, log ...
  */
-export const PACK_MODELS = ['q_farm', 'q_nature'];
+export const PACK_MODELS = ['q_farm', 'q_nature', 'k_props']; // k_props: KayKit 소품 (CC0, 건설 비계·자재·통·상자)
 /** 뼈대 애니메이션이 있는 CC0 동물 (walk/idle/eat/look/run/jump) */
 export const ANIMATED_MODELS = ['q_cow', 'q_sheep', 'q_wolf', 'q_fox', 'q_horse', 'q_donkey', 'q_alpaca', 'q_shiba'];
 

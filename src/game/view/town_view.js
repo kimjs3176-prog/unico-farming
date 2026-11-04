@@ -6,8 +6,8 @@ import { confetti } from '../../ui/minigame_frame.js';
 
 /**
  * 새 마을 부지 (서쪽): 코인을 내고 건물 짓기
- *  - 빈 부지: 말뚝·줄·흙 + 표지판 → 가까이에서 E: 건물 고르기 창
- *  - 공사 중: 비계(나무 기둥·발판)가 둘러싸고 건물이 아래부터 차오름, 흙먼지·망치 소리, 진행률 표시. 코인을 더 내면 바로 완성
+ *  - 빈 부지: 말뚝·줄·흙(KayKit) + 자재 + 표지판 → 가까이에서 E: 건물 고르기 창
+ *  - 공사 중: 비계(KayKit Medieval Hexagon, CC0)와 목재·돌·외바퀴 수레가 둘러싸고 건물이 아래부터 차오름, 흙먼지·망치 소리, 진행률 표시. 코인을 더 내면 바로 완성
  *  - 완공: 비계가 걷히며 건물이 통 튀어나옴, 꽃가루·축하 소리. 농장 전체에 효과 (sim/town.js)
  * 건물 모양은 모두 코드로 만든 저폴리 (게임 팔레트)
  */
@@ -114,11 +114,17 @@ export class TownView {
     this.game = game;
     const L = LAYOUT.town;
     this.sim = new TownSim(L.sites.length);
+    const A = game.assets, kk = A.has('k_building_scaffolding');
+    this.kk = kk;
+    /** KayKit 소품 복제 (CC0, 배율 4.5 = 게임 크기) */
+    this.k = (n, x, z, r = 0, sc = 4.5) => { const m = A.clone(`k_${n}`); m.position.set(x, 0, z); m.rotation.y = r; m.scale.setScalar(sc); return m; };
     this.sites = L.sites.map((p, i) => {
       const root = new THREE.Group();
       root.position.set(p.x, 0, p.z);
       root.rotation.y = Math.atan2(L.entry.x - p.x, L.entry.z - p.z); // 길(입구) 쪽을 바라봄
-      const marker = siteMarker(); root.add(marker);
+      const marker = siteMarker();
+      if (kk) { marker.children[0].visible = false; marker.add(this.k('building_dirt', 0, 0, i * 1.3, 2.2)); marker.add(this.k('resource_lumber', 1.2, 1.9, 0.3, 3.2), this.k('sack', -1.6, 1.9, 0.6, 3.6)); }
+      root.add(marker);
       game.world.scene.add(root);
       const obstacle = { x: p.x, z: p.z, r: 0 };
       game.world.obstacles.push(obstacle);
@@ -141,7 +147,17 @@ export class TownView {
       s.type = st.type;
     }
     const building = st.state === 'building';
-    if (building && !s.scaf) { s.scaf = scaffold(); s.root.add(s.scaf); }
+    if (building && !s.scaf) {
+      if (this.kk) {
+        // KayKit 비계 + 자재 더미(목재·돌·외바퀴 수레·상자)
+        const g = new THREE.Group(), sc = this.k('building_scaffolding', 0, 0, 0, 2.25);
+        g.add(sc, this.k('resource_lumber', 2.6, 1.0, 1.2, 4), this.k('resource_stone', 2.5, -1.2, 0.4, 4), this.k('wheelbarrow', -2.6, 1.4, 2.3, 4.2), this.k('crate_A_big', -2.5, -1.3, 0.2, 4), this.k('crate_B_small', -2.9, -0.6, 0.9, 4));
+        g.userData.levels = [sc];
+        g.userData.kk = sc;
+        s.scaf = g;
+      } else s.scaf = scaffold();
+      s.root.add(s.scaf);
+    }
     if (!building && s.scaf) { s.root.remove(s.scaf); s.scaf = null; }
     s.marker.visible = st.state !== 'done';
     s.obstacle.r = st.state === 'empty' ? 0 : 2.1;
@@ -173,7 +189,8 @@ export class TownView {
       }
       if (s.scaf) {
         const pr = this.sim.progress(s.i);
-        s.scaf.userData.levels.forEach((lv, k) => { lv.visible = pr >= k * 0.22; });
+        if (s.scaf.userData.kk) { const v = Math.min(1, 0.55 + pr); s.scaf.userData.kk.scale.set(2.25, 2.25 * v * 1.25, 2.25); } // 비계가 공사에 맞춰 높아짐
+        else s.scaf.userData.levels.forEach((lv, k) => { lv.visible = pr >= k * 0.22; });
         s.dust -= dt;
         const near = Math.hypot(s.p.x - pp.x, s.p.z - pp.z) < 14;
         if (s.dust <= 0) { s.dust = 1.1 + Math.random() * 0.6; g.fx.burst(s.p.x + (Math.random() - 0.5) * 3, 0.3, s.p.z + (Math.random() - 0.5) * 3, 0xb89a74, 6); if (near) g.audio.play('dig', 0.35); }

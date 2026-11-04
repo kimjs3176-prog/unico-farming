@@ -370,6 +370,15 @@ export class World {
     this.signText(this.place('sign', -1.9, 5.8, 0.2, 1, { collide: false, dynamic: true }), '🦄 유니코 팜', '← 스마트팜 · 목장 →');
     this.signText(this.place('sign', 11, 11, -0.6, 1, { collide: false, dynamic: true }), '🚜 밭갈이', '트랙터 체험 →');
     this.place('wheelbarrow', -4, 5.5, 1.2, 1, { collide: false });
+    // KayKit 소품 (CC0): 장터 옆 채소 상자·자루, 우물가 물동이, 새 마을 부지 입구 자재 더미
+    if (this.assets.has('k_barrel')) {
+      const K = 4.5, kp = (n, x, z, r = 0, k = K) => this.place(`k_${n}`, x, z, r, k, { collide: false });
+      kp('crate_A_big', -2.4, -11.6, 0.3); kp('crate_open', -2.2, -12.7, 1.2); kp('sack', -3.2, -11.0, 0.5); kp('sack', -3.0, -12.2, 2.0); kp('barrel', 2.6, -11.9, 0);
+      kp('bucket_water', L.well.x + 1.1, L.well.z + 0.8, 0.4); kp('barrel', L.well.x - 1.2, L.well.z - 0.9, 0.8);
+      const T = L.town.sign;
+      kp('pallet', T.x + 1.6, T.z - 1.4, 0.2); kp('sack', T.x + 1.4, T.z - 1.3, 0.4); kp('sack', T.x + 1.9, T.z - 1.6, 1.4); kp('sack', T.x + 1.6, T.z - 1.45, 0.9, K * 0.9);
+      kp('barrel', T.x - 1.5, T.z - 1.2, 0); kp('barrel', T.x - 2.0, T.z - 0.8, 0.6); kp('resource_lumber', T.x + 0.4, T.z - 2.3, 0.5);
+    }
     // 목장 (CC0 Quaternius 농장 건물)
     this.place('barn', L.barn.x, L.barn.z, 0, 0.9);
     this.place('silo', L.silo.x, L.silo.z, 0, 0.85, { r: 1.3 });

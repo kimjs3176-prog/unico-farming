@@ -10,8 +10,10 @@
 | `q_cow.glb`, `q_horse.glb`, `q_donkey.glb`, `q_alpaca.glb`, `q_shiba.glb` | 뼈대 애니메이션 동물 (걷기·대기·풀 뜯기·두리번·달리기) | Quaternius — Ultimate Animated Animal Pack | CC0 1.0 |
 | `q_wolf.glb`, `q_fox.glb` | 늑대·여우 (걷기·달리기·두리번·으르렁) | Quaternius — Ultimate Animated Animal Pack | CC0 1.0 |
 | `q_sheep.glb` | 양 (대기 + 같은 뼈대의 농장 팩 소에서 옮겨 온 걷기) | Quaternius — Farm Animal Pack | CC0 1.0 |
+| `k_props.glb` | 건설 비계·흙 부지·목재·돌 더미·자루·통·상자·물동이·팔레트·외바퀴 수레 (새 마을 공사장, 장터·우물가·마을 입구 장식) | Kay Lousberg — KayKit Medieval Hexagon Pack 1.0 | CC0 1.0 |
 
-- 원본: <https://quaternius.com> (Farm Buildings / Ultimate Nature / Ultimate Animated Animal Pack)
+- 원본: <https://quaternius.com> (Farm Buildings / Ultimate Nature / Ultimate Animated Animal Pack), <https://github.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0> (KayKit, `scripts/kaykit/LICENSE-KayKit-Medieval-Hexagon.txt`)
+- KayKit 다시 만들기: 팩의 `Assets/gltf/**` 에서 필요한 `.gltf`·`.bin`·`hexagons_medieval.png` 를 한 폴더에 모은 뒤 `node scripts/pack-kaykit.mjs <폴더>`
 - 라이선스 전문: <https://creativecommons.org/publicdomain/zero/1.0/>
 
 닭(`hen.glb`)·까마귀(`crow.glb`)·벌통(`beehive.glb`)은 같은 저폴리 결로 이 저장소에서 직접 만든 모델입니다(`blender/build_environment.py` 의 `hen()`).
