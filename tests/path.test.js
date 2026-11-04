@@ -61,3 +61,13 @@ test('길찾기: 완전히 갇힌 목표는 길 없음(null)이 아니라 바깥
   // 벽 너머로는 못 감
   assert.equal(nav.find({ x: 0, z: 0 }, { x: 0, z: 6 }), null);
 });
+
+test('길찾기: 목표 옆 빈칸이 막힌 틈이어도, 닿을 거리 안의 다른 빈칸으로 감', () => {
+  // 목표(사람) 둘레를 벽이 감싸고 남쪽에만 틈 → 목표 바로 옆 칸 중 일부는 갇힌 틈
+  const blocked = (x, z) => Math.hypot(x, z) < 0.9 || (Math.hypot(x, z) > 1.4 && Math.hypot(x, z) < 1.9 && z > -0.5);
+  const nav = new NavGrid(blocked, 10);
+  const path = nav.find({ x: 0, z: 6 }, { x: 0, z: 0 }, 2.2);
+  assert.ok(path, '닿을 거리 안의 빈칸까지 길이 있어야 함');
+  const end = path.at(-1);
+  assert.ok(Math.hypot(end.x, end.z) <= 2.2 + 0.01);
+});

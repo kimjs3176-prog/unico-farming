@@ -57,31 +57,39 @@ export class NavGrid {
 
   /**
    * from → to 경유점 목록 (마지막은 도착점). 길이 없으면 null
+   * @param near 목표에서 이 거리 안의 빈칸에 닿으면 도착 (사람·건물 옆처럼 목표 자리가 막혀 있을 때).
+   *   0 이면 목표 칸 — 목표 칸이 막혀 있으면 가장 가까운 빈칸 거리만큼으로 넓힘
    * @param maxNodes 탐색 상한 (너무 오래 걸리지 않게)
    */
-  find(from, to, maxNodes = 40000) {
-    const n = this.n;
+  find(from, to, near = 0, maxNodes = 40000) {
+    const n = this.n, C = this.cell;
     const s0 = this.idx(from.x, from.z), g0 = this.idx(to.x, to.z);
-    const s = this.nearestFree(s0.i, s0.j, 4), g = this.nearestFree(g0.i, g0.j);
-    if (!s || !g) return null;
+    const s = this.nearestFree(s0.i, s0.j, 4);
+    if (!s) return null;
     const goalFree = this.free(g0.i, g0.j);
-    const end = goalFree ? { x: to.x, z: to.z } : this.center(g.i, g.j);
-    if (s.i === g.i && s.j === g.j) return [end];
+    if (!goalFree) {
+      const g = this.nearestFree(g0.i, g0.j);
+      if (!g) return null;
+      const c = this.center(g.i, g.j);
+      near = Math.max(near, Math.hypot(c.x - to.x, c.z - to.z) + C * 0.5);
+    }
     const start = from;
     // 이미 일직선으로 갈 수 있으면 바로
-    if (this.free(s0.i, s0.j) && this.lineFree(start, end)) return [end];
+    if (goalFree && this.free(s0.i, s0.j) && this.lineFree(start, to)) return [{ x: to.x, z: to.z }];
 
-    const N = n * n, si = s.j * n + s.i, gi = g.j * n + g.i;
+    const N = n * n, si = s.j * n + s.i, gi = g0.j * n + g0.i, nearC = near / C;
+    const x0 = this.min + C * 0.5 - to.x, z0 = this.min + C * 0.5 - to.z;
+    const isGoal = (k) => (goalFree && k === gi) || (near > 0 && Math.hypot(x0 + (k % n) * C, z0 + ((k / n) | 0) * C) <= near);
     const gScore = new Float32Array(N).fill(Infinity), came = new Int32Array(N).fill(-1), closed = new Uint8Array(N);
-    const h = (k) => { const dx = Math.abs((k % n) - g.i), dz = Math.abs(((k / n) | 0) - g.j); return Math.max(dx, dz) + 0.4142 * Math.min(dx, dz); };
+    const h = (k) => { const dx = Math.abs((k % n) - g0.i), dz = Math.abs(((k / n) | 0) - g0.j); return Math.max(0, Math.max(dx, dz) + 0.4142 * Math.min(dx, dz) - nearC); };
     const heap = new MinHeap();
     gScore[si] = 0; heap.push(si, h(si));
     const DIRS = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]];
-    let found = false, visited = 0;
+    let found = -1, visited = 0;
     while (heap.size) {
       const k = heap.pop();
       if (closed[k]) continue;
-      if (k === gi) { found = true; break; }
+      if (isGoal(k)) { found = k; break; }
       closed[k] = 1;
       if (++visited > maxNodes) break;
       const ci = k % n, cj = (k / n) | 0;
@@ -93,9 +101,12 @@ export class NavGrid {
         if (ng < gScore[nk]) { gScore[nk] = ng; came[nk] = k; heap.push(nk, ng + h(nk)); }
       }
     }
-    if (!found) return null;
+    if (found < 0) return null;
+    const end = found === gi && goalFree ? { x: to.x, z: to.z } : this.center(found % n, (found / n) | 0);
+    if (found === si) return [end];
+    const gi2 = found;
     const cells = [];
-    for (let k = gi; k !== -1; k = came[k]) cells.push(this.center(k % n, (k / n) | 0));
+    for (let k = gi2; k !== -1; k = came[k]) cells.push(this.center(k % n, (k / n) | 0));
     cells.reverse();
     cells[cells.length - 1] = end;
     // 일직선으로 이을 수 있는 경유점은 건너뜀
