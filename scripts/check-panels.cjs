@@ -48,11 +48,14 @@ srv.listen(0, async () => {
       for (const r of rg.getClientRects()) if (r.width > 1 && r.height > 1) boxes.push({ el, r, t: n.textContent.trim().slice(0, 20) });
     }
     // 스크롤 상자 안에서 안 보이는 부분은 제외
-    const visibleIn = (el, r) => { for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) { const cs = getComputedStyle(a); if (/(auto|scroll)/.test(cs.overflowY)) { const ar = a.getBoundingClientRect(); if (r.bottom < ar.top + 2 || r.top > ar.bottom - 2) return false; } if (a === panel) break; } return true; };
+    const visibleIn = (el, r) => { for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) { const cs = getComputedStyle(a); if (/(auto|scroll)/.test(cs.overflowY)) { const ar = a.getBoundingClientRect(); if (r.bottom > ar.bottom - 2 || r.top < ar.top + 2) return false; /* 스크롤 경계에 걸쳐 반만 보이는 줄도 제외 */ } if (a === panel) break; } return true; };
     // 위에 고정된 제목줄(불투명) 아래로 스크롤돼 들어간 글자는 가려져 안 보이므로 제외
     const hd = panel.querySelector(':scope > h2'), hr = hd && getComputedStyle(hd).position === 'sticky' ? hd.getBoundingClientRect() : null;
     const underHeader = (x) => hr && !hd.contains(x.el) && x.r.top < hr.bottom - 2;
-    const vis = boxes.filter((x) => visibleIn(x.el, x.r) && !underHeader(x));
+    // 등장 애니메이션 중이거나 장식(기울어진 스탬프·꽃가루)인 글자는 제외
+    const animating = new Set(document.getAnimations().filter((a) => a.playState === 'running').map((a) => a.effect?.target).filter(Boolean));
+    const deco = (el) => { for (let a = el; a && a !== panel; a = a.parentElement) if (animating.has(a) || a.matches('.koat-stampfx, .mg-confetti, [data-deco]')) return true; return false; };
+    const vis = boxes.filter((x) => visibleIn(x.el, x.r) && !underHeader(x) && !deco(x.el));
     // 2) 서로 다른 요소의 글자끼리 겹침
     for (let i = 0; i < vis.length; i++) for (let j = i + 1; j < vis.length; j++) {
       const A = vis[i], B = vis[j];
