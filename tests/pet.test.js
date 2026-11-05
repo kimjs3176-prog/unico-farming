@@ -38,3 +38,19 @@ test('저장·불러오기', () => {
   const q = new PetSim(); q.load(JSON.parse(JSON.stringify(p.toJSON())));
   assert.equal(q.name, '두부'); assert.equal(q.affection, 55);
 });
+
+test('재주는 하트 순서대로 열리고, 하트 4·5에 손!·춤추기', async () => {
+  const { TRICKS, TRICK_TIME } = await import('../src/game/sim/pet.js');
+  const hs = TRICKS.map((t) => t.hearts);
+  assert.deepEqual(hs, [...hs].sort((a, b) => a - b));
+  const p = new PetSim();
+  p.affection = 79; // 하트 3
+  assert.equal(p.unlocked('jump'), true);
+  assert.equal(p.unlocked('paw'), false);
+  p.affection = 80; // 하트 4
+  assert.equal(p.unlocked('paw'), true);
+  assert.equal(p.unlocked('dance'), false);
+  p.affection = 100; // 하트 5
+  assert.equal(p.unlocked('dance'), true);
+  for (const t of TRICKS) assert.ok(TRICK_TIME[t.id] > 0, `${t.id} 길이`);
+});

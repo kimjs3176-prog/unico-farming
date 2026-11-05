@@ -2,13 +2,17 @@
  * 반려견 키우기 규칙 (렌더링과 분리, tests/pet.test.js)
  *  배부름(0~100): 시간이 지나면 줄어듦 (게임 하루 ≈ 6분에 약 100)
  *  애정(0~100, 하트 0~5): 쓰다듬기(쿨타임)·간식으로 오르고, 많이 배고프면 조금씩 줄어듦
- *  재주: 하트 1 앉아, 2 빙글, 3 점프 / 하트 3 이상이고 배부르면 가끔 땅을 파서 보물을 찾아 옴
+ *  재주: 하트 1 앉아, 2 빙글, 3 점프, 4 손!, 5 춤추기 / 하트 3 이상이고 배부르면 가끔 땅을 파서 보물을 찾아 옴
  */
 export const TRICKS = [
   { id: 'sit', name: '앉아', emoji: '🐕', hearts: 1 },
   { id: 'spin', name: '빙글빙글', emoji: '🌀', hearts: 2 },
   { id: 'jump', name: '점프', emoji: '⤴️', hearts: 3 },
+  { id: 'paw', name: '손!', emoji: '🐾', hearts: 4 },
+  { id: 'dance', name: '춤추기', emoji: '🎵', hearts: 5 },
 ];
+/** 재주 길이(초) */
+export const TRICK_TIME = { sit: 2.2, spin: 1.1, jump: 1.2, paw: 2.0, dance: 2.6 };
 const HUNGER_PER_SEC = 100 / 360;
 const PET_COOLDOWN = 20;
 

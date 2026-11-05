@@ -5,7 +5,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 /**
  * 대화창 (화면 아래): 2D 초상화(SVG, 말할 때 입이 움직임) + 이름표 + 한 글자씩 나오는 대사 + 말소리 + 선택지
  *  - 클릭 / E / Space / Enter: 글자 다 보이기 → 다음 줄
- *  - 선택지는 클릭 또는 숫자 키 1~4
+ *  - 선택지는 클릭 또는 숫자 키 1~9
  * say([{ speaker?: Unico, name, color?, sub?, text, choices?: [{ label, value, disabled? }] }]) → 마지막 선택 값
  */
 export class Dialogue {
@@ -24,7 +24,7 @@ export class Dialogue {
       if (!this.active || e.target?.tagName === 'INPUT') return;
       if (['KeyE', 'Space', 'Enter'].includes(e.code)) { e.preventDefault(); e.stopPropagation(); this._advance(); }
       const n = +e.key;
-      if (n >= 1 && n <= 4) this.el.querySelectorAll('.dlg-choices button')[n - 1]?.click();
+      if (n >= 1 && n <= 9) this.el.querySelectorAll('.dlg-choices button')[n - 1]?.click(); // 선택지 번호 1~9
     }, true);
     this.portraits = new Map();
     preloadPortraits();

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { heightAt } from '../terrain.js';
 import { playClip } from './ranch_view.js';
 import { makeLabel } from '../label.js';
-import { PetSim, TRICKS } from '../sim/pet.js';
+import { PetSim, TRICKS, TRICK_TIME } from '../sim/pet.js';
 import { CROPS } from '../sim/crops.js';
 import { ITEMS } from '../sim/items.js';
 
@@ -101,15 +101,31 @@ export class Pet {
 
   _mix(dt, rate = 1) { this.e.mixer.update(dt * rate); this.e.m.position.y = heightAt(this.e.m.position.x, this.e.m.position.z) + (this._hop || 0); }
 
-  /** 재주: 앉아(앉는 동작) · 빙글빙글(제자리 한 바퀴 달리기) · 점프 */
+  /** 재주: 앉아(앉는 동작) · 빙글빙글(제자리 한 바퀴 달리기) · 점프 · 손!(앉아서 앞발 톡) · 춤추기(통통 뛰며 좌우로 흔들고 한 바퀴) */
   _doTrick(dt, d) {
-    const tr = this.trick, e = this.e;
+    const tr = this.trick, e = this.e, g = this.game, p = e.m.position;
+    const prev = tr.t;
     tr.t += dt;
+    const at = (s) => prev < s && tr.t >= s; // 이번 프레임에 s 초를 지났나
     if (tr.id === 'sit') { playClip(e, 'idle2', 0.2); }
     else if (tr.id === 'spin') { playClip(e, 'run', 0.15); e.m.rotation.y += dt * Math.PI * 2 / 1.1; }
     else if (tr.id === 'jump') { playClip(e, 'jump', 0.1); this._hop = Math.max(0, Math.sin(Math.min(1, tr.t / 0.7) * Math.PI)) * 0.55; }
+    else if (tr.id === 'paw') {
+      // 주인 쪽을 보고 앉았다가 앞발을 톡 (몸이 살짝 들림), 주인은 손바닥을 내밀며 하트
+      const pp = g.player.position; e.m.rotation.y = Math.atan2(pp.x - p.x, pp.z - p.z);
+      playClip(e, 'idle2', 0.2);
+      this._hop = tr.t > 0.7 && tr.t < 1.3 ? Math.sin((tr.t - 0.7) / 0.6 * Math.PI) * 0.12 : 0;
+      if (at(0.75)) { g.fx.pop(p.x, p.z, '🐾'); g.audio.play('pop', 0.6); g.player.unico.playAction('heart', 1.1); }
+    } else if (tr.id === 'dance') {
+      // 통통 뛰며 좌우로 흔들다가 마지막에 한 바퀴, 박자마다 음표
+      playClip(e, tr.t < 1.8 ? 'jump' : 'run', 0.12);
+      this._hop = Math.abs(Math.sin(tr.t * Math.PI * 2.5)) * 0.22;
+      if (tr.t < 1.8) e.m.rotation.y += Math.cos(tr.t * Math.PI * 2.5) * dt * 3.2;
+      else e.m.rotation.y += dt * Math.PI * 2 / 0.8;
+      for (let k = 0; k < 5; k++) if (at(0.2 + k * 0.4)) { g.fx.pop(p.x, p.z, k % 2 ? '🎶' : '🎵'); g.audio.pluck([784, 988, 1175, 988, 1319][k], 0.35, 0, undefined, 0.12); }
+    }
     this._mix(dt);
-    if (tr.t > (tr.id === 'sit' ? 2.2 : tr.id === 'spin' ? 1.1 : 1.2)) {
+    if (tr.t > (TRICK_TIME[tr.id] || 1.2)) {
       this.trick = null; this._hop = 0;
       this.game.fx.pop(e.m.position.x, e.m.position.z, '✨');
     }

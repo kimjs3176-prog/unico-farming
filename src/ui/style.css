@@ -552,3 +552,6 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
 .help-row b { flex: 0 0 auto; min-width: 4.6em; white-space: nowrap; color: var(--teal-d, #1f8f86); }
 .help-row .ds { flex: 1 1 auto; min-width: 0; }
 @media (max-width: 600px) { .help-row { flex-wrap: wrap; } .help-row .ds { flex-basis: 100%; padding-left: 30px; } }
+/* 대화창 이름표는 한 줄 (좁은 화면에서 '🐕 / 콩이'로 쪼개지지 않게) */
+.dlg-name b { white-space: nowrap; }
+.dlg-name { flex-wrap: wrap; row-gap: 2px; }
