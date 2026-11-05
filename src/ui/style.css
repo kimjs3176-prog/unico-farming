@@ -463,7 +463,7 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 .koat-result { position: relative; overflow: hidden; }
 .koat-result .koat-score b { font-family: 'Unico Coin', Jua, sans-serif; }
 .koat-stampfx { position: absolute; right: 18px; top: 78px; z-index: 3; width: 104px; height: 104px; border-radius: 50%; border: 5px solid #d33a3a; color: #d33a3a; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-14deg); background: rgba(255,255,255,0.6); font-family: 'Unico Coin', Jua, sans-serif; animation: koatstamp 0.45s cubic-bezier(.5,0,.6,1.4) both; }
-.koat-stampfx span { font-size: 30px; } .koat-stampfx b { font-size: 14px; } .koat-stampfx small { font-size: 10px; letter-spacing: 2px; }
+.koat-stampfx span { font-size: 28px; line-height: 1.1; } .koat-stampfx b { font-size: 13px; line-height: 1.15; white-space: nowrap; } .koat-stampfx small { font-size: 9px; letter-spacing: 2px; line-height: 1.2; margin-top: 2px; }
 @keyframes koatstamp { 0% { transform: scale(3) rotate(-30deg); opacity: 0; } 70% { transform: scale(0.9) rotate(-12deg); opacity: 1; } 100% { transform: scale(1) rotate(-14deg); opacity: 1; } }
 
 /* 오토플레이 */
