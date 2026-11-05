@@ -462,7 +462,7 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 /* 결과: 스탬프 쾅 */
 .koat-result { position: relative; overflow: hidden; }
 .koat-result .koat-score b { font-family: 'Unico Coin', Jua, sans-serif; }
-.koat-stampfx { position: absolute; right: 18px; top: 58px; width: 104px; height: 104px; border-radius: 50%; border: 5px solid #d33a3a; color: #d33a3a; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-14deg); background: rgba(255,255,255,0.6); font-family: 'Unico Coin', Jua, sans-serif; animation: koatstamp 0.45s cubic-bezier(.5,0,.6,1.4) both; }
+.koat-stampfx { position: absolute; right: 18px; top: 78px; z-index: 3; width: 104px; height: 104px; border-radius: 50%; border: 5px solid #d33a3a; color: #d33a3a; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-14deg); background: rgba(255,255,255,0.6); font-family: 'Unico Coin', Jua, sans-serif; animation: koatstamp 0.45s cubic-bezier(.5,0,.6,1.4) both; }
 .koat-stampfx span { font-size: 30px; } .koat-stampfx b { font-size: 14px; } .koat-stampfx small { font-size: 10px; letter-spacing: 2px; }
 @keyframes koatstamp { 0% { transform: scale(3) rotate(-30deg); opacity: 0; } 70% { transform: scale(0.9) rotate(-12deg); opacity: 1; } 100% { transform: scale(1) rotate(-14deg); opacity: 1; } }
 
@@ -541,3 +541,14 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
 @keyframes festglow { from { filter: brightness(1); } to { filter: brightness(1.08); } }
 .mk-ev.fest { background: #fff0c2; color: #a85b00; }
 @media (prefers-reduced-motion: reduce) { .event-banner.fest { animation: none; } }
+
+/* 상세창 글자 배치: 한국어 낱말이 줄 끝에서 글자 단위로 쪼개지지 않게 (긴 영문·숫자 덩어리만 필요할 때 끊음) */
+.panel, .dlg, .toast, .prompt, .objective, .auto-chip { word-break: keep-all; overflow-wrap: anywhere; }
+.panel .row .nm, .panel .row .pr, .panel button { min-width: 0; }
+.panel .row .pr { flex: 0 0 auto; white-space: nowrap; }
+/* 도움말: 아이콘 | 제목(한 줄) | 설명 */
+.help-row { align-items: flex-start; }
+.help-row .ic { flex: 0 0 22px; text-align: center; }
+.help-row b { flex: 0 0 auto; min-width: 4.6em; white-space: nowrap; color: var(--teal-d, #1f8f86); }
+.help-row .ds { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 600px) { .help-row { flex-wrap: wrap; } .help-row .ds { flex-basis: 100%; padding-left: 30px; } }

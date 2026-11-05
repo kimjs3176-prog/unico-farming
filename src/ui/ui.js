@@ -724,7 +724,10 @@ export class UI {
       '🏢 <b>KOAT 체험관</b> 하단 🏢 버튼 또는 북동쪽 광장. 6개 본부(기술사업·벤처창업·종자사업·스마트농업·농기계검정·농업환경분석) 부스에서 미니게임으로 하는 일을 체험하고 스탬프를 모아요',
       '🌐 <b>메타버스</b> 같은 서버의 다른 유니코가 보이고 채팅할 수 있어요 (좌하단)',
       '💾 자동 저장(10초) · 로컬 브라우저 저장',
-    ].map((t) => `<div class="row">${t}</div>`).join('')));
+    ].map((t) => {
+      const m = t.match(/^(\S+)\s+<b>(.*?)<\/b>\s*(.*)$/);
+      return m ? `<div class="row help-row"><span class="ic">${m[1]}</span><b>${m[2]}</b><span class="ds">${m[3]}</span></div>` : `<div class="row">${t}</div>`;
+    }).join('')));
     const reset = h('button', 'ghost', '🗑 저장 데이터 초기화');
     reset.style.marginTop = '10px';
     reset.onclick = () => { if (confirm('저장된 농장을 지우고 처음부터 시작할까요?')) this.game.resetSave(); };

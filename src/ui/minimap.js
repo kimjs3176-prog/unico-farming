@@ -59,7 +59,7 @@ export class Minimap {
       const seen = this.game.explore?.seen?.[H.id];
       c.font = `${10 * ui}px 'Unico Coin', sans-serif`; c.textAlign = 'center'; c.fillStyle = '#000';
       c.fillText(seen ? '🔭' : '⛰️', X(H.x), Z(H.z) + 4 * ui);
-      if (ui > 1) { c.fillStyle = '#3d5a2a'; c.font = `bold ${8 * ui}px 'Unico Coin', Jua, sans-serif`; c.fillText(H.name, X(H.x), Z(H.z) + 16 * ui); }
+      if (ui > 1) { c.fillStyle = '#3d5a2a'; c.font = `bold ${8 * ui}px 'Unico Coin', Jua, sans-serif`; const hw = c.measureText(H.name).width / 2 + 4 * ui; c.fillText(H.name, Math.min(S - hw, Math.max(hw, X(H.x))), Z(H.z) + 16 * ui); } // 가장자리에서 잘리지 않게
     }
     // 흙길
     c.strokeStyle = 'rgba(232,210,160,0.9)'; c.lineCap = 'round'; c.lineJoin = 'round';
