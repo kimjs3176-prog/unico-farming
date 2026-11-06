@@ -417,6 +417,7 @@ export function bubble(kind) {
   else if (kind === 'heart') { s.ell(6, 6, 2, 2, 'tomato', { level: 2 }); s.ell(10, 6, 2, 2, 'tomato', { level: 2 }); s.poly([4, 7, 12, 7, 8, 12], 'tomato', { level: 2 }); }
   else if (kind === 'note') { s.vline(9, 3, 9, 'eye', 1); s.ell(7, 10, 2, 1.6, 'eye', { level: 1 }); s.hline(9, 11, 3, 'eye', 1); s.set(11, 4, 'eye', 1); }
   else if (kind === 'zz') { s.grid(4, 3, `kkkk.\n..k..\n.k...\nkkkk.\n.....\n..kkk\n...k.\n..kkk`, { k: ['roofb', 2] }); }
+  else if (kind === 'honey') { s.ell(8, 8.5, 4, 3.6, 'gold', { lo: 1 }); s.rect(5, 3, 6, 2, 'wood', 3); s.set(6, 7, 'gold', 4); }
   else if (kind === 'dots') { for (const x of [4, 8, 12]) s.set(x, 8, 'eye', 1); }
   s.outline({ ink: ['ink', 1] });
   return s;
@@ -830,6 +831,18 @@ export function chest(open = false) {
   else { s.ell(15, 11, 12, 6, 'wood', { lo: 3, clip: (x, y) => y < 12 }); s.rect(3, 11, 24, 2, 'gold', 2); }
   for (const x of [8, 21]) s.vline(x, open ? 11 : 6, 23, 'gold', 2);
   s.rect(13, 13, 4, 4, 'gold', 4); s.set(15, 15, 'ink', 0);
+  s.outline();
+  return s;
+}
+
+/** 벌통 (나무 상자 3단 + 지붕, 앞 입구) */
+export function beehive() {
+  const s = new Spr(30, 40);
+  for (let k = 0; k < 3; k++) { const y = 12 + k * 8; s.rect(3, y, 24, 8, 'wood', 4 - (k % 2)); s.hline(3, 26, y, 'wood', 5); s.hline(3, 26, y + 7, 'wood', 1); s.vline(26, y, y + 7, 'wood', 2); }
+  s.poly([0, 13, 4, 6, 26, 6, 30, 13], 'roofg', { level: 3 }); s.hline(0, 29, 13, 'roofg', 1);
+  s.rect(10, 33, 10, 2, 'ink', 1); // 입구
+  for (const x of [5, 23]) s.rect(x, 36, 3, 4, 'wood', 1);
+  s.set(8, 18, 'gold', 3); s.set(20, 26, 'gold', 3); // 흘러나온 꿀 자국
   s.outline();
   return s;
 }

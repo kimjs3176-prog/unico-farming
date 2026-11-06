@@ -22,7 +22,7 @@ const dirOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 
 const nameOf = (k) => (CROPS[k] || PRODUCTS[k] || ITEMS[k])?.name || k;
 const iconOf = (k) => (k === 'rice_seed' || k === 'paddy' || k.startsWith('rice_') ? 'rice' : CROPS[k] ? k : PRODUCTS[k] ? k : k === 'feed' ? 'feed' : k === 'pet_treat' ? 'treat' : k.startsWith('fish_') ? 'fish' : k === 'compost' ? 'compost' : k.startsWith('fruit_') ? 'tomato' : k.endsWith('_gold') ? 'star' : 'gift');
 // 도트 버전에서 할 수 있는 퀘스트만 보여 줌
-const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built']);
+const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built', 'swim', 'dive', 'honey']);
 const THRESH_TIME = 6, THRESH_BAND = [0.55, 0.9]; // 3D 판과 같은 탈곡 규칙
 const M = 16; // 트랙터 시뮬레이션 1m = 16px (밭 한 칸 2m = 32px)
 
@@ -220,7 +220,7 @@ export class Game {
   /** 주인공 몸 상자 (발 주변 14×9px) 가 막힌 칸이나 주민·가축과 겹치는지 */
   boxBlocked(px, py) {
     const x0 = Math.floor((px - 7) / T), x1 = Math.floor((px + 6) / T), y0 = Math.floor((py - 8) / T), y1 = Math.floor((py + 1) / T);
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (this.blocked(x, y)) return true;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (this.blocked(x, y) && !this.swimOK(x, y)) return true;
     return false;
   }
   /** 칸 (x,y) 위에 주인공 몸이 걸쳐 있나 (주민·가축이 그 칸으로 못 들어오게) */
@@ -262,6 +262,7 @@ export class Game {
     let top = this.run ? MOVE.RUN : MOVE.WALK;
     const pi = paddyAt(p.x, p.y);
     const wading = pi >= 0 && this.rice.paddies[pi].water > 0.5;
+    if (this.swimming) { top = MOVE.WALK * 0.55; if (p.speed > 20) { this.splashT = (this.splashT || 0) - dt; if (this.splashT <= 0) { this.splashT = 0.35; this.audio.play('splash', 0.12); } } }
     if (wading) { top *= 0.62; if (p.speed > 20) { this.splashT = (this.splashT || 0) - dt; if (this.splashT <= 0) { this.splashT = 0.2; for (let k = 0; k < 3; k++) this.parts.push({ kind: 'drop', x: p.wx + (Math.random() - 0.5) * 12, y: p.wy - 4, vx: (Math.random() - 0.5) * 30, vy: -40 - Math.random() * 20, grav: 260, life: 0.4, decay: 2.4 }); } } }
     const k = len > 0.05 ? MOVE.ACCEL : MOVE.DECEL;
     const a = 1 - Math.exp(-k * dt);
@@ -316,6 +317,11 @@ export class Game {
       if (acc >= 30) { target = this.trail[i - 1]; break; }
     }
     if (!target) target = this.trail[0] || { x: p.px - 24, y: p.py };
+    // 콩이는 호수에 들어가지 않고 물가에서 기다림
+    if (this.isWater(Math.floor(target.x / T), Math.floor((target.y - 6) / T))) {
+      const land = [...this.trail].reverse().find((q) => !this.isWater(Math.floor(q.x / T), Math.floor((q.y - 6) / T)));
+      target = land && Math.hypot(land.x - d.px, land.y - d.py) < 160 ? land : { x: d.px, y: d.py };
+    }
     const dx = target.x - d.px, dy = target.y - d.py, dist = Math.hypot(dx, dy);
     if (dist > 160) { d.px = target.x; d.py = target.y; d.vx = d.vy = 0; return; }
     const slow = this.pet.hunger < 25 ? 0.8 : 1;
@@ -410,7 +416,7 @@ export class Game {
     return null;
   }
   /** 앞 칸에 할 게 없으면 서 있는 논 (논 안에 들어가 일하기) */
-  target() { const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) return t; const pd = paddyAt(this.player.x, this.player.y); return pd >= 0 ? this.paddyInfo(pd) : null; }
+  target() { if (this.swimming) return this.diving ? null : this.swimTarget(); const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) return t; const pd = paddyAt(this.player.x, this.player.y); return pd >= 0 ? this.paddyInfo(pd) : null; }
   hintText() { if (this.player.speed > 70) return null; return this.target()?.label || null; }
   interact() { const t = this.target(); if (t) t.run(); }
 
@@ -909,6 +915,14 @@ export class Game {
       out.push({ img: S.char('player', { scarf: 'scarf' }, p.dir, 0), x: hx - 20, y: hy - 26 + shake, sh: 34, sy: vy + 15, player: true });
       return out.concat(this.drawOthers());
     }
+    if (this.swimming) {
+      // 헤엄: 상반신만 물 위로, 개헤엄 하듯 좌우로 까딱 · 잠수 중에는 안 보임
+      if (!this.diving) {
+        const bob = Math.round(Math.sin(this.swimT * 5) * 1), sway = p.speed > 10 ? (Math.floor(this.swimT * 6) % 2 ? 1 : 3) : 0;
+        out.push({ img: S.char('player', { scarf: 'scarf' }, p.dir, sway), x: p.wx - 20, y: p.wy - 50 + 16 + bob, sh: 34, sy: p.wy, player: true });
+      }
+      return out.concat(this.drawOthers());
+    }
     const pImg = S.char('player', { scarf: 'scarf' }, p.dir, this.fish ? 0 : p.frame);
     out.push({ img: pImg, x: p.wx - 20, y: p.wy - 50 + (this.fish ? 0 : 0), sy: p.wy, shadow: 'm', sx: p.wx, shy: p.wy - 1, player: true, bubble: this.fish?.state === 'bite' ? '!' : null });
     return out.concat(this.drawOthers());
@@ -944,6 +958,7 @@ export class Game {
   }
   /** 낚싯줄·찌 */
   drawOverlay(g, camX, camY, t) {
+    this.drawWater(g, camX, camY, t);
     const f = this.fish || (this.fight && this.fishFight), p = this.player;
     if (!f) return;
     // 힘겨루기 중에는 찌가 물속으로 끌려 들어갔다 나왔다 함

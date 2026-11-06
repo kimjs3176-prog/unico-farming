@@ -306,6 +306,7 @@ export class Renderer {
         case 'boat': decals.push({ img: S.boat, x: Math.round(o.px) - 30, y: Math.round(o.py) - 14, bob: 3 }); break;
         case 'site': list.push({ site: o.site, x: o.x * T, y: by(o) - 132, sy: by(o) - 2, tall: true, lot: { x: o.x * T, y: by(o) - 98 } }); break;
         case 'lookout': list.push({ img: S.lookout, x: o.x * T, y: by(o) - 58, sy: by(o) - 2, tall: true }); break;
+        case 'hive': list.push({ hive: o.hive, img: S.hive, x: cx(o) - 15, y: by(o) - 40, sy: by(o) - 4, shadow: 's', sx: cx(o), shy: by(o) - 4 }); break;
         case 'chest': list.push({ chest: o.chest, x: cx(o) - 15, y: by(o) - 28, sy: by(o) - 6 }); break;
         case 'thresher': list.push({ thresher: true, x: o.x * T - 3, y: by(o) - 58, sy: by(o) - 4, tall: true }); break;
         case 'sign': list.push({ img: S.sign, x: cx(o) - 18, y: by(o) - 36, sy: by(o) - 4 }); break;
@@ -424,6 +425,7 @@ export class Renderer {
       if (d.trough) img = S.trough[game.ranch.trough > 0 ? 1 : 0];
       if (d.sensor) img = S.sensor[Math.floor(this.t * 3) % 3];
       if (d.fountain) img = S.fountain[Math.floor(this.t * 4) % 2];
+      if (d.hive !== undefined && game.hives[d.hive].honey >= 1) d.bubble = 'honey'; else if (d.hive !== undefined) d.bubble = null;
       if (d.chest !== undefined) img = S.chest[game.chestDay[d.chest] === game.day ? 1 : 0];
       if (d.site !== undefined) {
         // 건설 부지: 빈 땅 → 공사(건물이 아래부터 차오르고 비계) → 완성 (풍차는 날개가 돎)
@@ -463,6 +465,7 @@ export class Renderer {
       if (p.kind === 'leaf') { g.fillStyle = p.col; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 2, 1); g.fillRect(Math.round(p.x - camX) + (Math.sin(p.a) > 0 ? 1 : 0), Math.round(p.y - camY) - 1, 1, 1); }
       else if (p.kind === 'dust') { g.globalAlpha = 0.5 * p.life; g.fillStyle = '#fff6d8'; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 1, 1); g.globalAlpha = 1; }
       else if (p.kind === 'puff') { g.globalAlpha = 0.6 * p.life; g.fillStyle = `rgb(${rampRGB('path', 4)})`; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 2, 2); g.globalAlpha = 1; }
+      else if (p.kind === 'bubble') { g.globalAlpha = Math.min(1, p.life * 1.5); g.fillStyle = 'rgba(220,245,255,0.9)'; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 2, 2); g.globalAlpha = 1; }
       else if (p.kind === 'grain') { g.fillStyle = `rgb(${rampRGB('corn', 3)})`; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 1, 1); }
       else if (p.kind === 'drop') { g.fillStyle = `rgb(${rampRGB('water', 4)})`; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 1, 2); }
       else if (p.kind === 'icon') { g.globalAlpha = Math.min(1, p.life * 2); g.drawImage(p.img, Math.round(p.x - camX - 8), Math.round(p.y - camY - 8)); g.globalAlpha = 1; }
