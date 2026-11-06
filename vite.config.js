@@ -13,6 +13,9 @@ export default defineConfig({
     sourcemap: false,
     chunkSizeWarningLimit: 1200,
     // three.js 는 따로 묶어 둠: 게임 코드만 바뀐 업데이트에서는 브라우저 캐시의 three 청크를 그대로 재사용
-    rollupOptions: { output: { manualChunks: (id) => (id.includes('node_modules/three') ? 'three' : undefined) } },
+    rollupOptions: {
+      // 3D 판(index.html)과 도트 판(pixel.html) 두 페이지
+      input: { main: 'index.html', pixel: 'pixel.html' },
+      output: { manualChunks: (id) => (id.includes('node_modules/three') ? 'three' : undefined) } },
   },
 });

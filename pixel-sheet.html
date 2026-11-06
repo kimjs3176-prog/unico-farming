@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>도트 시트</title>
+<style>body{background:#6f8a6a;margin:0;padding:8px;font:12px sans-serif;color:#fff}canvas{image-rendering:pixelated;margin:2px;vertical-align:bottom}h3{margin:8px 0 2px}</style></head>
+<body><div id="out"></div>
+<script type="module">
+import { sheetGroups } from '/src/pixel/sheet.js';
+const S = +(new URLSearchParams(location.search).get('s') || 4);
+const only = new URLSearchParams(location.search).get('only');
+for (const [name, list] of sheetGroups()) {
+  if (only && !name.includes(only)) continue;
+  const h = document.createElement('h3'); h.textContent = name; out.appendChild(h);
+  for (const spr of list) { const c = spr.toCanvas(); c.style.width = c.width * S + 'px'; c.style.height = c.height * S + 'px'; out.appendChild(c); }
+}
+document.body.dataset.ready = 1;
+</script></body></html>
