@@ -52,7 +52,8 @@ export class Renderer {
     const W = Math.floor(innerWidth * dpr), H = Math.floor(innerHeight * dpr);
     this.canvas.width = W; this.canvas.height = H;
     this.scale = Math.max(2, Math.floor(Math.min(W, H) / 420));
-    this.VW = Math.ceil(W / this.scale); this.VH = Math.ceil(H / this.scale);
+    // 한 점 더 크게 그려 두고 화면에 옮길 때 소수점만큼 밀어 냄 → 도트는 그대로, 스크롤은 부드럽게
+    this.VW = Math.ceil(W / this.scale) + 1; this.VH = Math.ceil(H / this.scale) + 1;
     for (const c of [this.low, this.light, this.glowC]) { c.width = this.VW; c.height = this.VH; }
     // 후처리는 낮은 해상도에서 (흐림은 어차피 부드러우니 1/2, 블룸은 1/4)
     this.blurC.width = Math.ceil(this.VW / 2); this.blurC.height = Math.ceil(this.VH / 2);
@@ -234,11 +235,13 @@ export class Renderer {
     }
     const S = this.S, g = this.lg, VW = this.VW, VH = this.VH;
     const WW = MW * T, WH = MH * T;
-    const focus = game.cameraFocus();
-    let camX = Math.round(focus.x - VW / 2), camY = Math.round(focus.y - VH / 2);
-    camX = VW >= WW ? Math.round((WW - VW) / 2) : Math.max(0, Math.min(WW - VW, camX));
-    camY = VH >= WH ? Math.round((WH - VH) / 2) : Math.max(0, Math.min(WH - VH, camY));
-    this.camX = camX; this.camY = camY;
+    const focus = game.cameraFocus(dt);
+    let cfx = focus.x - VW / 2, cfy = focus.y - VH / 2;
+    cfx = VW >= WW ? (WW - VW) / 2 : Math.max(0, Math.min(WW - VW, cfx));
+    cfy = VH >= WH ? (WH - VH) / 2 : Math.max(0, Math.min(WH - VH, cfy));
+    const camX = Math.floor(cfx), camY = Math.floor(cfy);
+    const fracX = cfx - camX, fracY = cfy - camY;
+    this.camX = camX; this.camY = camY; this.camFX = cfx; this.camFY = cfy;
     const night = nightness(game.time);
     const rain = game.raining ? 1 : 0;
 
@@ -377,7 +380,8 @@ export class Renderer {
     const ctx = this.ctx, sc = this.scale;
     ctx.imageSmoothingEnabled = false;
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-    ctx.drawImage(this.low, 0, 0, VW * sc, VH * sc);
+    const ox = -Math.round(fracX * sc), oy = -Math.round(fracY * sc);
+    ctx.drawImage(this.low, ox, oy, VW * sc, VH * sc);
     if (this.filterOK && this.fx.dof) {
       const bg = this.bg;
       bg.globalCompositeOperation = 'source-over';
@@ -385,7 +389,7 @@ export class Renderer {
       bg.clearRect(0, 0, bw, bh);
       bg.filter = 'blur(0.6px)'; bg.drawImage(this.low, 0, 0, bw, bh); bg.filter = 'none';
       bg.globalCompositeOperation = 'destination-in'; bg.fillStyle = this.dofGrad; bg.fillRect(0, 0, bw, bh);
-      ctx.imageSmoothingEnabled = true; ctx.drawImage(this.blurC, 0, 0, VW * sc, VH * sc); ctx.imageSmoothingEnabled = false;
+      ctx.imageSmoothingEnabled = true; ctx.drawImage(this.blurC, ox, oy, VW * sc, VH * sc); ctx.imageSmoothingEnabled = false;
     }
     if (this.filterOK && this.fx.bloom) {
       const bl = this.bl, bw = this.bloomC.width, bh = this.bloomC.height;
@@ -396,7 +400,7 @@ export class Renderer {
       bl.filter = 'none';
       ctx.imageSmoothingEnabled = true;
       ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 0.2 + night * 0.35;
-      ctx.drawImage(this.bloomC, 0, 0, VW * sc, VH * sc);
+      ctx.drawImage(this.bloomC, ox, oy, VW * sc, VH * sc);
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.imageSmoothingEnabled = false;
     }
     if (this.fx.vignette) { ctx.fillStyle = this.vignette; ctx.fillRect(0, 0, this.canvas.width, this.canvas.height); }
@@ -434,7 +438,7 @@ export class Renderer {
   /** 화면 좌표(CSS px) → 월드 타일 */
   screenToTile(cx, cy) {
     const dpr = this.canvas.width / innerWidth;
-    const lx = (cx * dpr) / this.scale + this.camX, ly = (cy * dpr) / this.scale + this.camY;
+    const lx = (cx * dpr) / this.scale + (this.camFX ?? this.camX), ly = (cy * dpr) / this.scale + (this.camFY ?? this.camY);
     return { x: Math.floor(lx / T), y: Math.floor(ly / T), px: lx, py: ly };
   }
 }

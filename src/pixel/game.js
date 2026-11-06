@@ -32,6 +32,23 @@ class Actor {
   get frame() { return !this.moving ? 0 : this.t < 0.5 ? (this.step ? 1 : 3) : 0; }
 }
 
+/**
+ * 자유 이동 캐릭터 (주인공·반려견): 픽셀 좌표(발 위치) + 속도. 칸 좌표(x, y)는 상호작용·충돌 판정용으로 계산
+ */
+export const MOVE = { WALK: 112, RUN: 184, ACCEL: 15, DECEL: 22, STRIDE: 15 };
+class Walker {
+  constructor(tx, ty, dir = 'down') { this.place(tx, ty); this.dir = dir; this.dist = 0; }
+  place(tx, ty) { this.px = tx * T + T / 2; this.py = ty * T + T - 4; this.vx = 0; this.vy = 0; }
+  get x() { return Math.floor(this.px / T); }
+  get y() { return Math.floor((this.py - 6) / T); }
+  get wx() { return this.px; }
+  get wy() { return this.py; }
+  get speed() { return Math.hypot(this.vx, this.vy); }
+  get moving() { return this.speed > 12; }
+  /** 걸음 수 = 실제로 간 거리 (빨리 걸으면 다리도 빨리) */
+  get frame() { return this.moving ? [1, 0, 3, 0][Math.floor(this.dist / MOVE.STRIDE) % 4] : 0; }
+}
+
 export class Game {
   constructor(S, ui, audio, music) {
     this.S = S; this.ui = ui; this.audio = audio; this.music = music;
@@ -47,12 +64,14 @@ export class Game {
     this.book = new Collection();
     this.day = 1; this.time = 0.27; this.raining = false;
     this.seed = 'carrot';
-    this.player = new Actor(SPAWN.x, SPAWN.y, 'down');
-    this.dog = new Actor(SPAWN.x - 1, SPAWN.y, 'right'); this.dog.dur = 0.24;
+    this.player = new Walker(SPAWN.x, SPAWN.y, 'down');
+    this.dog = new Walker(SPAWN.x - 1, SPAWN.y, 'right');
+    this.trail = []; // 주인공이 지나온 길 (반려견이 그대로 따라옴)
+    this.cam = null;
     this.npcs = NPCS.map((n) => ({ ...n, a: new Actor(n.x, n.y, n.dir), home: [n.x, n.y], next: 2 + Math.random() * 4, bubble: null }));
     this.animals = this.ranch.animals.map((a, i) => ({ sim: a, a: new Actor(ANIMAL_START[i].x, ANIMAL_START[i].y, 'right'), face: Math.random() < 0.5 ? 0 : 1, next: Math.random() * 4, eat: 0 }));
     this.fruitTrees = this.map.objs.filter((o) => o.type === 'tree' && o.item);
-    this.held = []; this.holdT = 0; this.run = false;
+    this.held = []; this.run = false; this.stuckT = 0; this.puffT = 0;
     this.path = null; this.pathAct = null;
     this.fish = null; // 낚시 상태
     this.parts = [];
@@ -81,7 +100,7 @@ export class Game {
     this.day = d.day || 1; this.time = d.time ?? 0.27; this.seed = d.seed || 'carrot'; this.raining = !!d.raining;
     this.farm.load(d.farm); this.econ.load(d.econ); this.ranch.load(d.ranch); this.villagers.load(d.villagers); this.quests.load(d.quests); this.pet.load(d.pet);
     if (d.book) { this.book.entries = d.book.entries || {}; this.book.rewarded = d.book.rewarded || {}; }
-    if (d.player && !this.blocked(d.player.x, d.player.y)) { this.player = new Actor(d.player.x, d.player.y, d.player.dir); this.dog = new Actor(d.player.x, d.player.y + 1 < MH && !this.blocked(d.player.x, d.player.y + 1) ? d.player.y + 1 : d.player.y, 'down'); }
+    if (d.player && !this.blocked(d.player.x, d.player.y)) { this.player.place(d.player.x, d.player.y); this.player.dir = d.player.dir || 'down'; this.dog.place(d.player.x, d.player.y); }
     (d.trees || []).forEach((v, i) => { if (this.fruitTrees[i]) { this.fruitTrees[i].lastShake = v; this.fruitTrees[i].shaken = v === this.day; } });
     // 새로 들인 동물이 저장에 있으면 배치
     while (this.animals.length < this.ranch.animals.length) { const a = this.ranch.animals[this.animals.length]; this.animals.push({ sim: a, a: new Actor(40, 30, 'right'), face: 0, next: 1, eat: 0 }); }
@@ -109,7 +128,7 @@ export class Game {
     if (this.ui.key(k)) return;
     if (k === 'ok') return this.fish ? this.reel() : this.interact();
     if (k === 'back' && this.fish) return this.cancelFish();
-    if (DIRS[k]) { if (!this.held.includes(k)) this.held.push(k); this.holdT = 0; this.path = null; }
+    if (DIRS[k]) { if (!this.held.includes(k)) this.held.push(k); this.path = null; this.pathAct = null; }
   }
   release(k) { this.held = this.held.filter((h) => h !== k); }
   tapTile(tx, ty) {
@@ -154,8 +173,7 @@ export class Game {
       this.simTick(dt);
     }
     this.movePlayer(dt, busy);
-    this.player.update(dt);
-    this.dog.update(dt);
+    this.moveDog(dt);
     this.updateNpcs(dt, busy);
     this.updateAnimals(dt);
     for (const t of this.fruitTrees) if (t.shakeT > 0) t.shakeT -= dt;
@@ -174,49 +192,113 @@ export class Game {
     if (this.pet.tick(dt) === 'dig') { this.pet.dig(); this.dogBubble = '!'; this.audio.play('bark'); this.ui.toast(`${this.pet.name}가 땅을 파서 뭔가 찾았어요!`); }
   }
 
-  movePlayer(dt, busy) {
+  /** 주인공 몸 상자 (발 주변 14×9px) 가 막힌 칸이나 주민·가축과 겹치는지 */
+  boxBlocked(px, py) {
+    const x0 = Math.floor((px - 7) / T), x1 = Math.floor((px + 6) / T), y0 = Math.floor((py - 8) / T), y1 = Math.floor((py + 1) / T);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (this.blocked(x, y)) return true;
+    return false;
+  }
+  /** 칸 (x,y) 위에 주인공 몸이 걸쳐 있나 (주민·가축이 그 칸으로 못 들어오게) */
+  playerOn(x, y) {
     const p = this.player;
-    if (p.moving || busy || this.fish) return;
-    let dir = this.held[this.held.length - 1];
-    if (dir) {
-      this.holdT += dt;
-      this.path = null;
-    } else if (this.path?.length) {
-      const [nx, ny] = this.path[0];
-      if (this.blocked(nx, ny)) { this.path = null; return; }
-      this.path.shift();
-      this.step(nx - p.x, ny - p.y);
-      return;
-    } else if (this.path && this.pathAct) {
-      const [ax, ay] = this.pathAct; this.path = null; this.pathAct = null;
-      p.dir = dirOf(ax - p.x, ay - p.y);
-      this.interact();
-      return;
-    } else return;
-    const [dx, dy] = DIRS[dir];
-    // 톡 누르면 제자리에서 돌기만 (포켓몬식)
-    if (p.dir !== dir && this.holdT < 0.09) { p.dir = dir; return; }
-    if (this.blocked(p.x + dx, p.y + dy)) { if (p.dir !== dir) p.dir = dir; if (!this.bumpT || this.bumpT < performance.now()) { this.audio.play('bump', 0.25); this.bumpT = performance.now() + 380; } return; }
-    this.step(dx, dy);
+    return p.px + 6 >= x * T && p.px - 7 < (x + 1) * T && p.py + 1 >= y * T && p.py - 8 < (y + 1) * T;
   }
 
-  step(dx, dy) {
+  movePlayer(dt, busy) {
     const p = this.player;
-    const run = this.run;
-    const ox = p.x, oy = p.y;
-    p.go(dx, dy, run ? 0.14 : 0.24);
-    if (run) this.puff(p.wx, p.wy, 2);
-    // 반려견은 내가 있던 칸으로 따라옴
-    const d = this.dog;
-    if (!(d.x === ox && d.y === oy)) {
-      const ddx = ox - d.x, ddy = oy - d.y;
-      if (Math.abs(ddx) + Math.abs(ddy) === 1) d.go(ddx, ddy, p.dur);
-      else { d.fx = d.x = ox; d.fy = d.y = oy; d.t = 1; }
-      if (d.x === p.x && d.y === p.y) { d.fx = d.x = ox; d.fy = d.y = oy; }
+    // 입력 방향: 누른 키를 모두 합침 (대각선 가능)
+    let ax = 0, ay = 0;
+    if (!busy && !this.fish) {
+      for (const k of this.held) { ax += DIRS[k][0]; ay += DIRS[k][1]; }
+      if (!ax && !ay && this.path) {
+        // 누른 곳으로 걸어가기: 칸 중심을 차례로 따라감
+        if (this.path.length) {
+          const [nx, ny] = this.path[0];
+          const tx = nx * T + T / 2, ty = ny * T + T - 6;
+          const dx = tx - p.px, dy = ty - p.py, d = Math.hypot(dx, dy);
+          if (d < 5 && this.path.length > 1) this.path.shift();
+          else if (d < 2) this.path.shift();
+          else { ax = dx / d; ay = dy / d; if (d < 14 && this.path.length === 1) { ax *= d / 14; ay *= d / 14; } }
+        } else {
+          const act = this.pathAct; this.path = null; this.pathAct = null;
+          if (act) { p.dir = dirOf(act[0] - p.x, act[1] - p.y); this.interact(); }
+        }
+      }
     }
-    d.dur = p.dur;
-    const slow = this.pet.hunger < 25;
-    if (slow) d.dur *= 1.15;
+    const len = Math.hypot(ax, ay);
+    if (len > 1) { ax /= len; ay /= len; }
+    // 바라보는 쪽: 크게 누른 축. 대각선이면 지금 보는 쪽을 유지 (방향이 파르르 떨지 않게)
+    if (len > 0.05) {
+      const cur = DIRS[p.dir];
+      const keep = (cur[0] && Math.sign(cur[0]) === Math.sign(ax) && Math.abs(ax) > 0.3) || (cur[1] && Math.sign(cur[1]) === Math.sign(ay) && Math.abs(ay) > 0.3);
+      if (!keep || Math.abs(Math.abs(ax) - Math.abs(ay)) > 0.35) p.dir = Math.abs(ax) >= Math.abs(ay) ? (ax > 0 ? 'right' : 'left') : (ay > 0 ? 'down' : 'up');
+    }
+    // 가속·감속: 목표 속도로 지수적으로 다가감 (급출발·급정지 없이, 그래도 손에 바로 붙게)
+    const top = this.run ? MOVE.RUN : MOVE.WALK;
+    const k = len > 0.05 ? MOVE.ACCEL : MOVE.DECEL;
+    const a = 1 - Math.exp(-k * dt);
+    p.vx += (ax * top - p.vx) * a; p.vy += (ay * top - p.vy) * a;
+    if (Math.abs(p.vx) < 0.5 && !ax) p.vx = 0;
+    if (Math.abs(p.vy) < 0.5 && !ay) p.vy = 0;
+    // 이동: 축마다 나눠서 막히면 그 축만 멈춤 (벽을 따라 미끄러짐). 한 번에 3px 이하로 쪼개 터널링 방지
+    const ox = p.px, oy = p.py;
+    let mx = p.vx * dt, my = p.vy * dt;
+    const n = Math.max(1, Math.ceil(Math.max(Math.abs(mx), Math.abs(my)) / 3));
+    mx /= n; my /= n;
+    for (let i = 0; i < n; i++) {
+      if (mx) { if (!this.boxBlocked(p.px + mx, p.py)) p.px += mx; else if (!this.nudge(p, 'y', mx, dt / n) ) { p.vx *= 0.2; mx = 0; } }
+      if (my) { if (!this.boxBlocked(p.px, p.py + my)) p.py += my; else if (!this.nudge(p, 'x', my, dt / n)) { p.vy *= 0.2; my = 0; } }
+    }
+    const moved = Math.hypot(p.px - ox, p.py - oy);
+    p.dist += moved;
+    // 벽에 대고 밀면 톡 소리 (가끔)
+    if (len > 0.5 && moved < 0.2 * top * dt) { this.stuckT += dt; if (this.stuckT > 0.18 && (!this.bumpT || this.bumpT < performance.now())) { this.audio.play('bump', 0.2); this.bumpT = performance.now() + 600; } }
+    else this.stuckT = 0;
+    if (this.stuckT > 0.6 && this.path) { this.path = null; this.pathAct = null; }
+    // 달릴 때 흙먼지
+    if (this.run && p.speed > MOVE.WALK) { this.puffT -= dt; if (this.puffT <= 0) { this.puffT = 0.12; this.puff(p.wx, p.wy, 1); } }
+    // 지나온 길 기록 (2px 마다)
+    const last = this.trail[this.trail.length - 1];
+    if (!last || Math.hypot(last.x - p.px, last.y - p.py) >= 2) { this.trail.push({ x: p.px, y: p.py }); if (this.trail.length > 120) this.trail.shift(); }
+  }
+
+  /**
+   * 모서리 비켜 가기: 앞이 막혔는데 옆으로 몇 px 만 비키면 지나갈 수 있으면 그쪽으로 살짝 밀어 줌
+   * (칸 사이 좁은 틈·문 앞에서 걸리지 않게)
+   */
+  nudge(p, axis, push, dt) {
+    const step = Math.min(10, MOVE.WALK * 0.9 * dt);
+    for (let off = 2; off <= 12; off += 2) for (const sgn of [1, -1]) {
+      const ox = axis === 'x' ? sgn * off : 0, oy = axis === 'y' ? sgn * off : 0;
+      const fx = axis === 'y' ? push : 0, fy = axis === 'x' ? push : 0;
+      if (!this.boxBlocked(p.px + ox, p.py + oy) && !this.boxBlocked(p.px + ox + fx, p.py + oy + fy)) {
+        if (axis === 'x') p.px += sgn * Math.min(step, off); else p.py += sgn * Math.min(step, off);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 반려견: 주인공이 지나온 길을 약 30px 뒤에서 그대로 따라감 */
+  moveDog(dt) {
+    const d = this.dog, p = this.player;
+    let target = null, acc = 0;
+    for (let i = this.trail.length - 1; i > 0; i--) {
+      acc += Math.hypot(this.trail[i].x - this.trail[i - 1].x, this.trail[i].y - this.trail[i - 1].y);
+      if (acc >= 30) { target = this.trail[i - 1]; break; }
+    }
+    if (!target) target = this.trail[0] || { x: p.px - 24, y: p.py };
+    const dx = target.x - d.px, dy = target.y - d.py, dist = Math.hypot(dx, dy);
+    if (dist > 160) { d.px = target.x; d.py = target.y; d.vx = d.vy = 0; return; }
+    const slow = this.pet.hunger < 25 ? 0.8 : 1;
+    const want = dist < 1 ? 0 : Math.min(MOVE.RUN * 1.15 * slow, dist * 7);
+    const tvx = dist ? (dx / dist) * want : 0, tvy = dist ? (dy / dist) * want : 0;
+    const a = 1 - Math.exp(-14 * dt);
+    d.vx += (tvx - d.vx) * a; d.vy += (tvy - d.vy) * a;
+    d.px += d.vx * dt; d.py += d.vy * dt;
+    d.dist += d.speed * dt;
+    if (d.speed > 14) d.dir = Math.abs(d.vx) > Math.abs(d.vy) ? (d.vx > 0 ? 'right' : 'left') : (d.vy > 0 ? 'down' : 'up');
+    else if (Math.hypot(p.px - d.px, p.py - d.py) < 60 && !this.dogTrick) d.dir = Math.abs(p.px - d.px) > Math.abs(p.py - d.py) ? (p.px > d.px ? 'right' : 'left') : (p.py > d.py ? 'down' : 'up');
   }
 
   updateNpcs(dt, busy) {
@@ -228,7 +310,7 @@ export class Game {
       n.next = 2.5 + Math.random() * 4;
       const [dx, dy] = Object.values(DIRS)[Math.floor(Math.random() * 4)];
       const nx = n.a.x + dx, ny = n.a.y + dy;
-      if (Math.abs(nx - n.home[0]) > n.wander || Math.abs(ny - n.home[1]) > n.wander || this.blocked(nx, ny) || (nx === this.player.x && ny === this.player.y) || this.plotAt(nx, ny) >= 0) { n.a.dir = dirOf(dx, dy); continue; }
+      if (Math.abs(nx - n.home[0]) > n.wander || Math.abs(ny - n.home[1]) > n.wander || this.blocked(nx, ny) || this.playerOn(nx, ny) || this.plotAt(nx, ny) >= 0) { n.a.dir = dirOf(dx, dy); continue; }
       n.a.go(dx, dy, 0.36);
     }
   }
@@ -244,7 +326,7 @@ export class Game {
       if (Math.random() < 0.3) { v.eat = 1.6; continue; } // 풀 뜯기
       const [dx, dy] = Object.values(DIRS)[Math.floor(Math.random() * 4)];
       const nx = v.a.x + dx, ny = v.a.y + dy;
-      if (nx <= RANCH.x0 || nx >= RANCH.x1 || ny <= RANCH.y0 || ny >= RANCH.y1 || this.blocked(nx, ny) || (nx === this.player.x && ny === this.player.y) || (nx === this.dog.x && ny === this.dog.y)) continue;
+      if (nx <= RANCH.x0 || nx >= RANCH.x1 || ny <= RANCH.y0 || ny >= RANCH.y1 || this.blocked(nx, ny) || this.playerOn(nx, ny) || (nx === this.dog.x && ny === this.dog.y)) continue;
       v.a.go(dx, dy, v.sim.type === 'chicken' ? 0.3 : 0.6);
       if (dx) v.face = dx > 0 ? 0 : 1;
     }
@@ -264,7 +346,7 @@ export class Game {
   refreshDayWeather(roll) { if (roll) this.raining = Math.random() < 0.22; }
 
   /* ─────────── 상호작용 ─────────── */
-  facing() { const p = this.player; const [dx, dy] = DIRS[p.dir]; return [p.x + dx, p.y + dy]; }
+  facing() { const p = this.player; const [dx, dy] = DIRS[p.dir]; return [Math.floor((p.px + dx * 20) / T), Math.floor((p.py - 10 + dy * 20) / T)]; }
 
   /** 칸에 무엇이 있는지 → { label, run } */
   targetInfo(x, y) {
@@ -291,8 +373,8 @@ export class Game {
     void p;
     return null;
   }
-  hintText() { if (this.player.moving) return null; const [x, y] = this.facing(); return this.targetInfo(x, y)?.label || null; }
-  interact() { if (this.player.moving) return; const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) t.run(); }
+  hintText() { if (this.player.speed > 70) return null; const [x, y] = this.facing(); return this.targetInfo(x, y)?.label || null; }
+  interact() { const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) t.run(); }
 
   report(ev, n = 1) {
     for (const q of this.quests.report(ev, n)) { this.ui.toast(`퀘스트 완료: ${q.title} (J 에서 보상)`, 'quest'); this.audio.play('win'); }
@@ -382,8 +464,8 @@ export class Game {
     for (let s = 0; s < Math.min(skip, 200); s += 1) this.simTick(1);
     this.time = 0.26;
     this.newDay();
-    const p = this.player; p.fx = p.x = 25; p.fy = p.y = 14; p.t = 1; p.dir = 'down';
-    this.dog.fx = this.dog.x = 26; this.dog.fy = this.dog.y = 14; this.dog.t = 1;
+    this.player.place(25, 14); this.player.dir = 'down';
+    this.dog.place(26, 14); this.trail = [];
     this.ui.fade(false);
   }
   mailbox() {
@@ -527,6 +609,7 @@ export class Game {
     let bx = x, by = y;
     if (this.isWater(x + dx, y + dy)) { bx += dx; by += dy; }
     this.fishing.cast({ night: this.night > 0.6, raining: this.raining });
+    p.vx = p.vy = 0; this.path = null;
     this.fish = { state: 'waiting', bx: bx * T + 16, by: by * T + 18, dip: 0, t: 0 };
     this.audio.play('splash', 0.6);
   }
@@ -595,7 +678,14 @@ export class Game {
   }
 
   /* ─────────── 렌더러에 넘기는 것 ─────────── */
-  cameraFocus() { return { x: this.player.wx, y: this.player.wy - 16 }; }
+  cameraFocus(dt = 1 / 60) {
+    const p = this.player;
+    const tx = p.wx + p.vx * 0.28, ty = p.wy - 16 + p.vy * 0.22;
+    if (!this.cam || Math.hypot(tx - this.cam.x, ty - this.cam.y) > 400) this.cam = { x: tx, y: ty };
+    const a = 1 - Math.exp(-6 * dt);
+    this.cam.x += (tx - this.cam.x) * a; this.cam.y += (ty - this.cam.y) * a;
+    return this.cam;
+  }
   takeParticles() { const p = this.parts; this.parts = []; return p; }
   extraLights() {
     const L = [{ x: this.player.wx, y: this.player.wy - 16, r: 56, c: [150, 160, 210], k: 0.55 }];
@@ -608,7 +698,7 @@ export class Game {
     out.push({ img: pImg, x: p.wx - 20, y: p.wy - 50 + (this.fish ? 0 : 0), sy: p.wy, shadow: 'm', sx: p.wx, shy: p.wy - 1, player: true, bubble: this.fish?.state === 'bite' ? '!' : null });
     // 반려견
     const d = this.dog;
-    let dimg = S.shiba[d.dir][d.moving && d.t < 0.5 ? 1 : 0];
+    let dimg = S.shiba[d.dir][d.moving ? Math.floor(d.dist / 11) % 2 : 0];
     let jump = 0;
     if (this.dogTrick) { this.dogTrick.t -= 1 / 60; const tt = this.dogTrick.t; if (this.dogTrick.id === 'spin') dimg = S.shiba[['down', 'right', 'up', 'left'][Math.floor(tt * 12) % 4]][0]; if (this.dogTrick.id === 'jump' || this.dogTrick.id === 'dance') jump = Math.abs(Math.sin(tt * 9)) * 8; if (tt <= 0) this.dogTrick = null; }
     out.push({ img: dimg, x: d.wx - 16, y: d.wy - 25 - Math.round(jump), sy: d.wy - 1, shadow: 's', sx: d.wx, shy: d.wy, bubble: this.dogBubble });
