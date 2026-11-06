@@ -1,3 +1,4 @@
+import { COSTUMES } from '../game/sim/costume.js';
 import { CROPS, PRODUCTS, FEED_PRICE } from '../game/sim/crops.js';
 import { ITEMS, CATEGORY_NAMES, itemsOf } from '../game/sim/items.js';
 import { BOOK_CATS, COMPLETE_REWARD } from '../game/sim/collection.js';
@@ -278,7 +279,7 @@ export class UI {
       const b = h('button', '', `${it.emoji} ${it.name}${liked ? ' 💕' : ''}<span class="q">${n}개</span>`);
       b.onclick = () => {
         if (!eco.take(k, 1)) return;
-        const r = g.villagers.gift(e.id, k, g.world.day);
+        const r = g.villagers.gift(e.id, k, g.world.day, g.costume?.mult('friend') ?? 1);
         e.u.playAction(r.liked ? 'cheer' : 'heart', 1.8);
         e.u.say(r.liked ? '와아! 이거 정말 좋아해! 💕' : '고마워, 잘 쓸게!', 3);
         g.audio.play(r.liked ? 'win' : 'coin');
@@ -492,7 +493,7 @@ export class UI {
     p.append(body);
     const foot = h('div', 'mk-foot');
     p.append(foot);
-    const TABS = [['buy', '🌱 사기'], ['sell', '💰 팔기'], ['fac', '🛠️ 시설']];
+    const TABS = [['buy', '🌱 사기'], ['sell', '💰 팔기'], ['cos', '👗 의상'], ['fac', '🛠️ 시설']];
     const sellables = () => {
       const list = [];
       for (const [k, c] of Object.entries({ ...CROPS, ...PRODUCTS })) list.push([k, c]);
@@ -578,6 +579,42 @@ export class UI {
           ab.onclick = () => { const n = sellables().reduce((a, [k]) => a + eco.count(k), 0); const got = eco.sellAll(); g.onEvent('sell', n); g.audio.play('coin'); this.toast(`+${got} 코인`); render(); };
           foot.append(ab);
         }
+      } else if (cur === 'cos') {
+        // 👗 의상: 코스튬 사기 · 바로 입기 (갈아입기·세트는 집 옷장)
+        const cs = g.costume;
+        body.append(h('h3', '', '👗 코스튬 (입고 있는 옷의 혜택만 적용)'));
+        const rows = h('div', 'rows');
+        for (const c of COSTUMES) {
+          const owned = cs.has(c.id), wearing = cs.wearing === c.id;
+          const why = cs.whyNotBuy(c.id, { money: eco.money, level: g.quests.level, festival: !!eco.festival });
+          const price = c.unlock === 'stamps' ? '보상' : `${c.price}🪙`;
+          const r = h('div', `row mk-row${owned ? '' : ' none-soft'}`, `<span class="ic">${c.icon}</span><span class="nm">${c.name}${wearing ? ' <span class="qty">입는 중</span>' : owned ? ' <span class="qty">보유</span>' : ''}<br><small>✨ ${c.perkText} · ${c.desc}</small></span><span class="pr">${owned ? '' : price}</span>`);
+          if (owned) {
+            const b = h('button', wearing ? 'ghost' : 'gold', wearing ? '벗기' : '입기');
+            b.onclick = () => { cs.wear(wearing ? null : c.id); g.applyLook(); g.audio.play('pop', 0.7); if (!wearing) { g.player.unico.playAction('cheer', 0.9); this.toast(`${c.icon} ${c.name} · ${c.perkText}`); } render(); };
+            r.append(b);
+          } else if (why && !/모자라요/.test(why)) {
+            const b = h('button', 'locked', `🔒 ${why.replace('부터 살 수 있어요', ' 해금').replace('체험관 스탬프 6개를 모으면 받아요', '스탬프 6개').replace('수확 축제 날에만 팔아요', '축제 날에만')}`);
+            b.disabled = true; r.append(b);
+          } else {
+            const b = h('button', '', '사기');
+            b.disabled = !!why;
+            b.onclick = () => {
+              const cost = cs.buy(c.id, { money: eco.money, level: g.quests.level, festival: !!eco.festival });
+              if (!cost) return;
+              eco.money -= cost; eco.stats.spent += cost;
+              cs.wear(c.id); g.applyLook();
+              g.audio.play('levelup'); g.player.unico.playAction('cheer', 1.2);
+              this.toast(`${c.icon} ${c.name}을(를) 샀어요! 바로 입었어요 · ${c.perkText}`);
+              g.onEvent('costume', cs.owned.size);
+              render();
+            };
+            r.append(b);
+          }
+          rows.append(r);
+        }
+        body.append(rows);
+        body.append(h('p', 'mk-note', '🏠 집 옷장에서 코스튬·소품을 갈아입고, 자주 입는 옷차림을 세트로 저장할 수 있어요'));
       } else {
         const fc = g.farmcraft, sim = g.farm.sim;
         body.append(h('h3', '', '🛠️ 농장 시설'));

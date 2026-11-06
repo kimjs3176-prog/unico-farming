@@ -45,6 +45,8 @@ import { LakeView } from './game/view/lake_view.js';
 import { Angling } from './game/sim/angling.js';
 import { WaterFX } from './game/waterfx.js';
 import { FarmCraftView } from './game/view/farmcraft_view.js';
+import { CostumeSim, COSTUME, encodeLook } from './game/sim/costume.js';
+import { DIVISIONS } from './game/sim/koat.js';
 
 class Game {
   constructor(canvas, assets, name) {
@@ -71,6 +73,8 @@ class Game {
     this.postfx.enabled = this.quality.post;
     this.followCam = new FollowCamera(this.camera);
     this.economy = new Economy();
+    this.costume = new CostumeSim(); // 코스튬 (옷장·장터 의상 탭)
+    this.economy.bonus = (k) => this.costume.mult(k);
     this.quests = new Quests();
     this.player = new Player(assets, this.world, name);
     this.ui = new UI(this, document.getElementById('ui'));
@@ -217,6 +221,8 @@ class Game {
     this.farmcraft.load(s.farmcraft);
     this.town.load(s.town);
     this.home.load(s.home);
+    this.costume.load(s.costume);
+    this.applyLook(false);
     if (this.pet.ok) this.pet.load(s.pet);
     if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원');
     if (s.world) { this.world.time = s.world.time; this.world.day = s.world.day; }
@@ -292,6 +298,20 @@ class Game {
 
 
   /** 순간이동 (지도·체험관 버튼). 카메라는 현재 각도 유지가 기본 */
+  /** 지금 옷차림 (옷장 소품 + 코스튬) */
+  outfitNow() {
+    const o = this.home.sim.outfit || {};
+    return { hat: o.hat ?? null, scarf: o.scarf ?? null, goggles: !!o.goggles, sprout: o.sprout === undefined ? true : !!o.sprout, costume: this.costume.wearing };
+  }
+  /** 다른 접속자에게 보내는 모습 문자열 */
+  look() { return encodeLook(this.outfitNow()); }
+  /** 옷차림을 내 유니코에 입히고 (send 면) 접속자에게 알림 */
+  applyLook(send = true) {
+    const o = this.outfitNow();
+    this.player.unico.setOutfit(o);
+    if (send) this.net?.sendLook();
+  }
+
   teleport(x, z, { yaw, pitch, distance, facing } = {}) {
     this.home?.leave(true); // 집 안에서 지도로 이동하면 먼저 밖으로
     this.ui.closePanel();
@@ -453,6 +473,15 @@ class Game {
     SURF.snow.value += (snowTarget - SURF.snow.value) * Math.min(1, dt * 0.35);
     if (this.home.inside) SURF.snow.value = 0; // 실내 가구에는 눈이 쌓이지 않음 (나가면 다시 서서히)
     this.minimap.update(dt);
+    // 코스튬 자동 지급 (체험관 스탬프 투어 완주 → 체험관 조끼)
+    if ((this._cosT = (this._cosT || 0) + dt) > 2) {
+      this._cosT = 0;
+      for (const id of this.costume.autoUnlock({ stamps: this.koat.book.count, stampsTotal: DIVISIONS.length })) {
+        this.ui.toast(`🎁 새 코스튬 '${COSTUME[id].icon} ${COSTUME[id].name}'을(를) 받았어요! 집 옷장에서 입어 보세요`);
+        this.audio.play('levelup');
+        this.onEvent('costume', this.costume.owned.size);
+      }
+    }
     this.guide.update(dt);
     this.ui.updateHud();
     // 비 오는 날 자동 물주기 (3초마다 점검)

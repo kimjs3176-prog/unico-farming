@@ -77,7 +77,7 @@ export class FarmRoom {
     return this.state.getWebSockets().map((ws) => ws.deserializeAttachment()).filter((p) => p?.name);
   }
 
-  pub(p) { return { id: p.id, name: p.name, x: p.x, z: p.z, f: p.f, a: p.a }; }
+  pub(p) { return { id: p.id, name: p.name, x: p.x, z: p.z, f: p.f, a: p.a, l: p.l || '' }; }
 
   async fetch(req) {
     const url = new URL(req.url);
@@ -114,6 +114,7 @@ export class FarmRoom {
     if (m.t === 'join') {
       if (p.name) return; // 한 번만
       p.name = String(m.name || '').replace(/[<>&"'`]/g, '').trim().slice(0, 12) || '유니코';
+      p.l = String(m.l || '').replace(/[^a-z0-9.-]/g, '').slice(0, 48); // 옷차림
       ws.serializeAttachment(p);
       const n = this.players().length;
       ws.send(JSON.stringify({ t: 'welcome', id: p.id, room: p.room, count: n, players: this.players().filter((x) => x.id !== p.id).map((x) => this.pub(x)) }));
@@ -125,6 +126,11 @@ export class FarmRoom {
       const now = Date.now(); if (now - (p.lp || 0) < 100) return; p.lp = now; // 위치는 초당 10번까지 (방 전체로 퍼지므로)
       const num = (v, lim) => (Number.isFinite(+v) ? Math.max(-lim, Math.min(lim, +v)) : 0);
       Object.assign(p, { x: num(m.x, BOUND), z: num(m.z, BOUND), f: num(m.f, 20), a: String(m.a || '').replace(/[^a-z_]/gi, '').slice(0, 12) });
+      ws.serializeAttachment(p);
+      this.broadcast({ t: 'state', players: [this.pub(p)] }, p.id);
+    } else if (m.t === 'look') {
+      const now = Date.now(); if (now - (p.ll || 0) < 1000) return; p.ll = now; // 옷 갈아입기는 1초에 한 번까지
+      p.l = String(m.l || '').replace(/[^a-z0-9.-]/g, '').slice(0, 48);
       ws.serializeAttachment(p);
       this.broadcast({ t: 'state', players: [this.pub(p)] }, p.id);
     } else if (m.t === 'chat') {

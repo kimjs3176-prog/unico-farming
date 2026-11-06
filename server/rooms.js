@@ -11,6 +11,11 @@ export function sanitizeName(name) {
   return s || randomName();
 }
 
+/** 옷차림(모습) 문자열: 영문 소문자·숫자·점·하이픈만, 48자까지 (클라이언트가 다시 정해진 이름만 골라 씀) */
+export function sanitizeLook(s) {
+  return String(s ?? '').replace(/[^a-z0-9.-]/g, '').slice(0, 48);
+}
+
 export function sanitizeChat(text) {
   return String(text ?? '').replace(/[<>]/g, '').trim().slice(0, 80);
 }
@@ -23,11 +28,11 @@ export class Player {
     this.ws = ws;
     this.name = name;
     this.room = room;
-    this.x = 0; this.z = 9; this.f = 0; this.a = '';
+    this.x = 0; this.z = 9; this.f = 0; this.a = ''; this.l = ''; this.lookAt = -1e9;
     this.dirty = true;
     this.chatTimes = [];
   }
-  public() { return { id: this.id, name: this.name, x: this.x, z: this.z, f: this.f, a: this.a }; }
+  public() { return { id: this.id, name: this.name, x: this.x, z: this.z, f: this.f, a: this.a, l: this.l }; }
   send(obj) { try { if (this.ws.readyState === 1) this.ws.send(JSON.stringify(obj)); } catch {} }
 }
 
@@ -69,10 +74,11 @@ export class Rooms {
     return null;
   }
 
-  join(ws, name, wantRoom) {
+  join(ws, name, wantRoom, look = '') {
     const room = this.pick(wantRoom);
     if (!room) return null;
     const p = new Player(ws, sanitizeName(name), room);
+    p.l = sanitizeLook(look);
     room.players.set(p.id, p);
     return p;
   }
@@ -99,6 +105,14 @@ export class Rooms {
         p.chatTimes.push(t);
         const text = sanitizeChat(m.text);
         if (text) p.room.broadcast({ t: 'chat', id: p.id, name: p.name, text });
+        return;
+      }
+      case 'look': { // 옷 갈아입기: 1초에 한 번까지
+        const t = this.now();
+        if (t - p.lookAt < 1000) return;
+        p.lookAt = t;
+        p.l = sanitizeLook(m.l);
+        p.dirty = true;
         return;
       }
       case 'ping': return p.send({ t: 'pong' });

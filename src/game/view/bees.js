@@ -39,7 +39,7 @@ export class Bees {
     const working = W.daylight > 0.35 && !['rain', 'storm', 'snow'].includes(W.weatherKind);
     let k = 0, best = null;
     for (const h of this.hives) {
-      if (working && h.honey < 1) h.honey = Math.min(1, h.honey + dt / FILL_TIME);
+      if (working && h.honey < 1) h.honey = Math.min(1, h.honey + (dt / FILL_TIME) * (g.costume?.mult('honey') ?? 1)); // 양봉 모자: 20% 빨리
       h.label.visible = h.honey >= 1;
       h.label.position.y = heightAt(h.x, h.z) + 1.8 + Math.sin(this.t * 2) * 0.06;
       const y0 = heightAt(h.x, h.z);

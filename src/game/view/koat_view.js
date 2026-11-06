@@ -132,7 +132,7 @@ export class KoatView {
   record(id, score) {
     const g = this.game;
     const r = this.book.record(id, score);
-    if (r.passed) { g.economy.earn(50 + Math.round(score / 2)); g.audio.play('win'); g.player.unico.playAction('cheer', 1.6); }
+    if (r.passed) { g.economy.earn(Math.round((50 + Math.round(score / 2)) * (g.costume?.mult('koat_coins') ?? 1))); g.audio.play('win'); g.player.unico.playAction('cheer', 1.6); }
     else { g.audio.play('bump'); g.player.unico.playAction('think', 1.2); }
     if (r.newStamp) { g.onEvent('koatstamp', 1); g.onEvent('koatall', this.book.count); }
     return r;

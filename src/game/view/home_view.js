@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
 import { HomeSim, HOME_LEVELS, OUTFIT } from '../sim/home.js';
+import { COSTUMES, COSTUME } from '../sim/costume.js';
 import { buildRoom, IO } from './home_interior.js';
 import { SURF } from '../surface.js';
 import { ITEMS } from '../sim/items.js';
@@ -159,12 +160,15 @@ export class HomeView {
       const c = this.house.userData.chimney.clone().applyMatrix4(this.root.matrixWorld);
       g.fx.burst(c.x, c.y, c.z, 0xdedede, 3);
     }
-    g.player.speedMult = this.sim.speedMult(w.day);
+    g.player.speedMult = this.sim.speedMult(w.day) * this._wetMult();
     const D = LAYOUT.home.door, d = Math.hypot(D.x - pp.x, D.z - pp.z);
     if (d > 2.0) return null;
     const can = this.sim.canSleep(w.time);
     return { d, label: `🏠 ${this.sim.info.name} 들어가기${can ? ' · 🛏️ 잘 시간' : ''}`, key: 'home', onInteract: () => this.enter() };
   }
+
+  /** 비·눈 오는 날 코스튬 혜택 (노란 비옷: 걷기 +10%) */
+  _wetMult() { return ['rain', 'storm', 'snow'].includes(this.game.world.weatherKind) ? (this.game.costume?.mult('speed_wet') ?? 1) : 1; }
 
   /** 화면을 잠깐 어둡게 했다가 fn 실행 후 밝게 */
   _fade(text, fn, ms = 450) {
@@ -248,11 +252,14 @@ export class HomeView {
     this.roomGlass.emissive.setHex(night > 0.5 ? 0x1b2a55 : 0x9fd3ea);
     this.roomGlass.emissiveIntensity = night > 0.5 ? 0.6 : 0.5;
     if (this.room.fire) { const f = this.room.fire; f.scale.y = 1 + Math.sin(performance.now() / 90) * 0.12; f.material.emissiveIntensity = 1.4 + Math.sin(performance.now() / 70) * 0.3; }
+    // 옷장 미리보기: 창이 닫히면 카메라를 원래대로
+    if (this._wdCam && g.ui.panel !== this._wdPanel) { Object.assign(cam, this._wdCam); this._wdCam = null; this._wdPanel = null; }
+    if (this._wdCam) { cam.yaw = THREE.MathUtils.clamp(cam.yaw, -0.9, 0.9); return { d: 99, label: '👗 옷장', key: 'inside' }; }
     // 카메라는 앞쪽에서만 (옆으로 너무 돌리면 벽 뒤가 보임)
     cam.yaw = THREE.MathUtils.clamp(((cam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI, -0.55, 0.55);
     cam.pitch = THREE.MathUtils.clamp(cam.pitch, 0.62, 1.2);
     cam.distance = THREE.MathUtils.clamp(cam.distance, 6, 15);
-    g.player.speedMult = this.sim.speedMult(w.day);
+    g.player.speedMult = this.sim.speedMult(w.day) * this._wetMult();
     // 가장 가까운 가구
     let best = null, bd = 1.35;
     for (const sp of this.room.spots) { const d = Math.hypot(IO.x + sp.x - pp.x, IO.z + sp.z - pp.z); if (d < bd) { bd = d; best = sp; } }
@@ -270,46 +277,103 @@ export class HomeView {
     if (key === 'wardrobe') return this.openWardrobe();
   }
 
-  /** 옷장: 모자·스카프·고글·새싹 */
-  openWardrobe() {
-    const g = this.game, ui = g.ui, u = g.player.unico;
+  /** 옷장: 🧥 코스튬 · 🎩 소품 · 💾 세트. 창은 옆에 붙고 카메라가 유니코 앞으로 다가가 입은 모습을 보여 줌 */
+  openWardrobe(tab = this._wdTab || 'cos') {
+    const g = this.game, ui = g.ui, cs = g.costume, cam = g.followCam;
+    const el = (tag, cls, html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; e.innerHTML = html; return e; };
     const p = ui.openPanel('👗 옷장');
-    const cur = () => ({ hat: null, scarf: null, goggles: false, sprout: true, ...(u.outfit || {}) });
+    p.classList.add('wardrobe');
+    // 미리보기 카메라 (창을 닫으면 _updateInside 가 되돌림)
+    if (!this._wdCam) this._wdCam = { yaw: cam.yaw, pitch: cam.pitch, distance: cam.distance };
+    this._wdPanel = p;
+    cam.yaw = -0.35; cam.pitch = 0.28; cam.distance = 4.6;
+    g.player.unico.facing = cam.yaw + 0.35;
+    const body = el('div', 'wd');
+    p.append(body);
     const render = () => {
-      p.querySelectorAll('.wd').forEach((e) => e.remove());
-      const o = cur();
-      const box = document.createElement('div'); box.className = 'wd';
-      const group = (title, opts, keyName) => {
-        const h3 = document.createElement('h3'); h3.textContent = title; box.append(h3);
-        const row = document.createElement('div'); row.className = 'wd-row';
-        for (const [val, label] of opts) {
-          const b = document.createElement('button');
-          b.className = o[keyName] === val ? 'gold' : 'ghost';
-          b.textContent = label;
-          b.onclick = () => { this.wear({ [keyName]: val }); g.audio.play('pop', 0.6); render(); };
-          row.append(b);
+      this._wdTab = tab;
+      body.innerHTML = '';
+      const tabs = el('div', 'mk-tabs wd-tabs');
+      for (const [id, label] of [['cos', '🧥 코스튬'], ['acc', '🎩 소품'], ['set', '💾 세트']]) {
+        const t = el('button', tab === id ? 'on' : '', label);
+        t.onclick = () => { tab = id; g.audio.play('click', 0.5); render(); };
+        tabs.append(t);
+      }
+      body.append(tabs);
+      const o = g.outfitNow();
+      if (tab === 'cos') {
+        const grid = el('div', 'cos-grid');
+        const slot = (id, icon, name, sub, state, onclick) => {
+          const b = el('button', `cos-slot ${state}`, `<span class="ic">${icon}</span><b>${name}</b><small>${sub}</small>${state === 'on' ? '<i>입는 중</i>' : ''}`);
+          b.disabled = state === 'locked';
+          b.onclick = onclick;
+          grid.append(b);
+        };
+        slot(null, '🦄', '기본 유니코', '아무것도 입지 않은 모습', cs.wearing ? 'own' : 'on', () => { cs.wear(null); this._applyCos(); render(); });
+        for (const c of COSTUMES) {
+          const owned = cs.has(c.id);
+          const how = c.unlock === 'stamps' ? '🏢 체험관 스탬프 6개' : c.festival ? `🎉 축제 날 장터 ${c.price}🪙` : `🛒 장터 ${c.price}🪙 · Lv.${c.lv}`;
+          slot(c.id, c.icon, c.name, owned ? `✨ ${c.perkText}` : `🔒 ${how}`, !owned ? 'locked' : cs.wearing === c.id ? 'on' : 'own', () => { cs.wear(c.id); this._applyCos(c); render(); });
         }
-        box.append(row);
-      };
-      group('🎩 모자', [[null, '없음'], ['straw', '👒 밀짚모자'], ['helmet', '⛑️ 안전모']], 'hat');
-      group('🧣 스카프', [[null, '없음'], ['red', '🔴 빨강'], ['green', '🟢 초록'], ['blue', '🔵 파랑']], 'scarf');
-      group('🥽 고글', [[false, '안 씀'], [true, '씀']], 'goggles');
-      group('🌱 머리 새싹 (모자를 쓰면 가려져요)', [[true, '있음'], [false, '없음']], 'sprout');
-      p.append(box);
+        body.append(grid);
+        body.append(el('p', 'mk-note', '코스튬은 장터의 👗 의상 탭에서 사요. 입고 있는 옷의 혜택만 적용돼요'));
+      } else if (tab === 'acc') {
+        const cover = cs.wearing ? COSTUME[cs.wearing] : null;
+        const group = (title, opts, keyName) => {
+          body.append(el('h3', '', title));
+          const row = el('div', 'wd-row');
+          for (const [val, label] of opts) {
+            const b = el('button', o[keyName] === val ? 'gold' : 'ghost', label);
+            b.onclick = () => { this.wear({ [keyName]: val }); g.audio.play('pop', 0.6); render(); };
+            row.append(b);
+          }
+          body.append(row);
+        };
+        group('🎩 모자', [[null, '없음'], ['straw', '👒 밀짚모자'], ['helmet', '⛑️ 안전모']], 'hat');
+        group('🧣 스카프', [[null, '없음'], ['red', '🔴 빨강'], ['green', '🟢 초록'], ['blue', '🔵 파랑']], 'scarf');
+        group('🥽 고글', [[false, '안 씀'], [true, '씀']], 'goggles');
+        group('🌱 머리 새싹 (모자를 쓰면 가려져요)', [[true, '있음'], [false, '없음']], 'sprout');
+        if (cover) body.append(el('p', 'mk-note', `${cover.icon} ${cover.name}을(를) 입는 동안에는 옷에 따라 모자·스카프가 가려질 수 있어요`));
+      } else {
+        const rows = el('div', 'rows');
+        const desc = (st) => st ? [st.costume ? `${COSTUME[st.costume].icon} ${COSTUME[st.costume].name}` : '🦄 기본', st.hat ? { straw: '👒', helmet: '⛑️' }[st.hat] : '', st.scarf ? { red: '🔴', green: '🟢', blue: '🔵' }[st.scarf] : '', st.goggles ? '🥽' : ''].filter(Boolean).join(' ') : '비어 있음';
+        cs.sets.forEach((st, i) => {
+          const r = el('div', 'row', `<span class="ic">${i + 1}</span><span class="nm">세트 ${i + 1}<br><small>${desc(st)}</small></span>`);
+          const save = el('button', 'ghost', '💾 지금 옷 저장');
+          save.onclick = () => { cs.saveSet(i, o); g.audio.play('pop', 0.6); ui.toast(`💾 세트 ${i + 1}에 저장했어요`); render(); };
+          const load = el('button', '', '입기');
+          load.disabled = !st;
+          load.onclick = () => { const v = cs.loadSet(i); if (!v) return ui.toast('🔒 그 옷을 아직 가지고 있지 않아요'); this.wear({ hat: v.hat, scarf: v.scarf, goggles: v.goggles, sprout: v.sprout }); this._applyCos(v.costume && COSTUME[v.costume]); render(); };
+          r.append(save, load);
+          rows.append(r);
+        });
+        body.append(rows);
+        body.append(el('p', 'mk-note', '자주 입는 옷차림을 저장해 두고 한 번에 갈아입어요'));
+      }
     };
     render();
   }
 
+  /** 코스튬을 바꾼 뒤: 입히기·접속자 알림·저장, 반짝 효과 */
+  _applyCos(c) {
+    const g = this.game;
+    g.applyLook();
+    g.audio.play(c ? 'levelup' : 'pop', c ? 0.5 : 0.6);
+    g.player.unico.playAction('cheer', 0.9);
+    if (c) g.ui.toast(`${c.icon} ${c.name} · ${c.perkText}`);
+    g.onEvent('outfit');
+    saveGame(g);
+  }
+
   /** 옷 입기 (저장도) */
   wear(o) {
-    const u = this.game.player.unico;
     const clean = {};
     if ('hat' in o) clean.hat = OUTFIT.hat.includes(o.hat) ? o.hat : null;
     if ('scarf' in o) clean.scarf = OUTFIT.scarf.includes(o.scarf) ? o.scarf : null;
     if ('goggles' in o) clean.goggles = !!o.goggles;
     if ('sprout' in o) clean.sprout = !!o.sprout;
-    u.setOutfit(clean);
     this.sim.outfit = { ...this.sim.outfit, ...clean, set: true };
+    this.game.applyLook();
     this.game.onEvent('outfit');
   }
 
@@ -397,7 +461,6 @@ export class HomeView {
   load(d) {
     this.sim.load(d);
     this.build();
-    if (d?.outfit?.set) { const { hat, scarf, goggles, sprout } = this.sim.outfit; this.game.player.unico.setOutfit({ hat, scarf, goggles, ...(sprout === undefined ? {} : { sprout }) }); this.sim.outfit.set = true; }
   }
 }
 

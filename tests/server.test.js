@@ -43,3 +43,21 @@ test('sanitize', () => {
   assert.equal(sanitizeChat('  a<b>  '), 'ab');
   assert.match(randomName(() => 0), /^부지런한 당근$/);
 });
+
+test('rooms: 옷차림(look) 은 걸러서 퍼지고 1초에 한 번까지', async () => {
+  const { sanitizeLook } = await import('../server/rooms.js');
+  let now = 0;
+  const rooms = new Rooms({ maxPlayers: 10, now: () => now });
+  const a = rooms.join(fakeWs(), 'a', null, 'raincoat.straw.red.1.1'), b = rooms.join(fakeWs(), 'b');
+  assert.equal(a.public().l, 'raincoat.straw.red.1.1');
+  rooms.tick(); b.ws.sent.length = 0;
+  rooms.handle(a, { t: 'look', l: 'hanbok.<img src=x>.-.0.1' });
+  rooms.tick();
+  assert.equal(b.ws.sent[0].players[0].l, 'hanbok.imgsrcx.-.0.1');
+  now = 500; rooms.handle(a, { t: 'look', l: 'chef.-.-.0.1' });
+  assert.equal(a.l, 'hanbok.imgsrcx.-.0.1', '1초 안에 다시 바꾸면 무시');
+  now = 1600; rooms.handle(a, { t: 'look', l: 'chef.-.-.0.1' });
+  assert.equal(a.l, 'chef.-.-.0.1');
+  assert.equal(sanitizeLook('x'.repeat(100)).length, 48);
+  assert.equal(sanitizeLook({ toString() { return 'A.B'; } }), '.');
+});

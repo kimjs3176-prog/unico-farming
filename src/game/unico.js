@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeLabel } from './label.js';
 import { enhanceMaterial } from './surface.js';
 import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, RIGS, bonePos } from './unico_mesh.js';
+import { costumeShape } from './unico_costume.js';
 
 /**
  * 유니코 3D 캐릭터 (플레이어 / 다른 접속자 / NPC 공용)
@@ -12,7 +13,7 @@ import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, RIGS, b
  *   흰 몸 · 청록 곱슬 갈기/꼬리/발굽 · 주황 띠 금색 뿔 · 분홍 주둥이와 볼 · 큰 검은 눈 · 새싹 머리핀
  * - 부품은 피벗(몸통/머리/다리4/꼬리/눈)별로 지오메트리를 병합하고 모든 인스턴스가 공유 → 접속자가 많아도 가벼움
  * - 걷기(대각선 다리 교차), 숨쉬기, 눈 깜빡임, 꼬리 흔들기, 고개 돌리기, 감정표현 애니메이션
- * - 옷/소품(outfit): strawHat, helmet, goggles, scarf, sprout
+ * - 옷/소품(outfit): strawHat, helmet, goggles, scarf, sprout + 두 발 유니코 코스튬(costume, unico_costume.js)
  * 전방은 +Z, 발바닥 y=0, 뿔 끝 약 2.2m
  */
 
@@ -381,6 +382,8 @@ export class Unico {
     this.maneBones = [boneMap.maneH, boneMap.maneN].filter(Boolean);
     this.legs = this.biped ? [boneMap.legL, boneMap.legR] : [boneMap.legFL, boneMap.legFR, boneMap.legBL, boneMap.legBR];
     this.arms = this.biped ? [boneMap.armL, boneMap.armR] : [];
+    this.boneMap = boneMap;
+    this.costumeMeshes = {}; // 코스튬 id → 부위별 메시 (처음 입을 때 만듦)
     this.root.updateMatrixWorld(true);
     this.skeleton = new THREE.Skeleton(R.bones.map((b) => boneMap[b[0]]));
     this.skin = new THREE.SkinnedMesh(skinGeometry(rig, palette), SKIN_MAT);
@@ -462,13 +465,28 @@ export class Unico {
   setOutfit(o) {
     this.outfit = { ...(this.outfit || {}), ...o };
     const f = this.outfit;
-    this.acc.sprout.visible = !!f.sprout && !f.hat;
-    this.acc.strawHat.visible = f.hat === 'straw';
-    this.acc.helmet.visible = f.hat === 'helmet';
+    // 코스튬 (두 발 유니코만): 입은 것만 보이게, 모자·새싹·스카프를 가리는 옷이면 그것들은 숨김
+    const shape = this.biped && f.costume ? costumeShape(f.costume) : null;
+    if (shape && !this.costumeMeshes[f.costume]) {
+      const list = [];
+      for (const [part, pieces] of Object.entries(shape.parts)) {
+        const parent = part === 'head' ? this.headAcc : part === 'body' ? this.bodyG : this.boneMap[part];
+        if (!parent || !pieces.length) continue;
+        const m = meshOf(bundle(pieces.map(([g, mt]) => [g.clone(), mt])));
+        parent.add(m); list.push(m);
+      }
+      this.costumeMeshes[f.costume] = list;
+    }
+    for (const [id, list] of Object.entries(this.costumeMeshes)) for (const m of list) m.visible = !!shape && id === f.costume;
+    const hat = shape?.hideHat ? null : f.hat;
+    this.acc.sprout.visible = !!f.sprout && !hat && !shape?.hideSprout;
+    this.acc.strawHat.visible = hat === 'straw';
+    this.acc.helmet.visible = hat === 'helmet';
     this.acc.goggles.visible = !!f.goggles;
-    this.acc.scarfRed.visible = f.scarf === 'red';
-    this.acc.scarfGreen.visible = f.scarf === 'green';
-    this.acc.scarfBlue.visible = f.scarf === 'blue';
+    const scarf = shape?.hideScarf ? null : f.scarf;
+    this.acc.scarfRed.visible = scarf === 'red';
+    this.acc.scarfGreen.visible = scarf === 'green';
+    this.acc.scarfBlue.visible = scarf === 'blue';
   }
 
   setName(name, color = '#fff', bg) {

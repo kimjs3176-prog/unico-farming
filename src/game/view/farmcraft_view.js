@@ -124,7 +124,7 @@ export class FarmCraftView {
     this.heap.material.color.setHex(this.compost.ready ? 0x2f2117 : 0x4a3322);
     this._mark('binLabel', this.heap.parent, this.compost.ready ? `🟫 퇴비 ${this.compost.ready}` : '', 1.15);
     // 장독 (숙성 끝나면 반짝)
-    for (const i of this.proc.tick(dt)) { const id = this.proc.slots[i]?.id; if (id) g.ui.toast(`🏺 ${ITEMS[id].name}이(가) 다 익었어요! 장독대에서 꺼내세요`); }
+    for (const i of this.proc.tick(dt * (g.costume?.mult('jar') ?? 1))) { const id = this.proc.slots[i]?.id; if (id) g.ui.toast(`🏺 ${ITEMS[id].name}이(가) 다 익었어요! 장독대에서 꺼내세요`); }
     this.jars.forEach((j, i) => {
       j.m.visible = i < this.proc.jars;
       const s = this.proc.slots[i], done = this.proc.isDone(i);

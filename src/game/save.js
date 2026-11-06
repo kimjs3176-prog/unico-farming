@@ -15,6 +15,7 @@ export function saveGame(game) {
       farmcraft: game.farmcraft?.toJSON(),
       town: game.town?.toJSON(),
       home: game.home?.toJSON(),
+      costume: game.costume?.toJSON(),
       pet: game.pet?.ok ? game.pet.toJSON() : undefined,
     };
     localStorage.setItem(KEY, JSON.stringify(data));

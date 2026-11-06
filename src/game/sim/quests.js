@@ -37,6 +37,8 @@ export const QUESTS = [
   { id: 'order3',    title: '로컬푸드 납품',        desc: '주문 게시판의 주문을 3건 납품하세요',          event: 'order',    goal: 3, reward: { money: 200, xp: 150 } },
   { id: 'fest1',     title: '수확 축제',            desc: '7일마다 열리는 유니코 수확 축제 날을 맞이하세요',  event: 'festival', goal: 1, reward: { money: 120, xp: 80 } },
   { id: 'sleep1',    title: '첫 단잠',              desc: '저녁 6시 이후 유니코 집 침대에서 잠을 자 보세요',  event: 'sleep',    goal: 1, reward: { money: 80, xp: 60 } },
+  { id: 'cos1',      title: '첫 코스튬',            desc: '장터 👗 의상 탭에서 코스튬을 하나 사 입어 보세요', event: 'costume',  goal: 1, absolute: true, reward: { money: 100, xp: 80 } },
+  { id: 'cos4',      title: '옷장 수집가',          desc: '코스튬을 4벌 모으세요 (체험관 조끼·축제 한복 포함)', event: 'costume', goal: 4, absolute: true, reward: { money: 600, xp: 400 } },
   { id: 'home2',     title: '더 넓은 집',           desc: '유니코 집을 아늑한 집으로 넓히세요',              event: 'homeup',   goal: 1, reward: { money: 200, xp: 150 } },
   { id: 'build1',    title: '첫 건물',              desc: '서쪽 새 마을 부지에 건물을 하나 지어 완공하세요',  event: 'built',    goal: 1, reward: { money: 150, xp: 120 } },
   { id: 'build5',    title: '우리 마을',            desc: '새 마을 부지에 건물 5채를 모두 지으세요',          event: 'built',    goal: 5, reward: { money: 800, xp: 500 } },

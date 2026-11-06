@@ -188,6 +188,16 @@ export function makeSDF(rig = 'quad') {
   return { P, sdf };
 }
 
+/** 몸통만의 SDF (갈기·머리·팔다리 제외, 어깨 공 관절 포함) — 코스튬 옷 껍데기를 몸에 맞출 때 */
+export function makeBodySDF(rig = 'biped') {
+  const P = (rig === 'biped' ? primitivesBiped() : primitives()).filter((q) => q.bone === 'body' && q.slot === 'body');
+  return (x, y, z) => {
+    let d = P[0].f(x, y, z);
+    for (let i = 1; i < P.length; i++) { const k = P[i].k; d = smin(d, P[i].f(x, y, z), typeof k === 'function' ? k(x, y, z) : k); }
+    return d;
+  };
+}
+
 /** 표면 위 점: 시작점에서 dir 방향으로 진행해 표면(0)을 찾음 */
 export function surfacePoint(sdf, from, dir) {
   const d = dir.clone().normalize();

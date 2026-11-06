@@ -109,7 +109,7 @@ wss.on('connection', (ws, req) => {
     if (m.t === 'pos') { const t = Date.now(); if (t - lastPos < 100) return; lastPos = t; } // 위치는 초당 10번까지
     if (!player) {
       if (m.t !== 'join') return;
-      player = rooms.join(ws, m.name, wantRoom);
+      player = rooms.join(ws, m.name, wantRoom, m.l);
       if (!player) { ws.send(JSON.stringify({ t: 'full' })); return ws.close(); }
       ws.send(JSON.stringify({ t: 'welcome', id: player.id, room: player.room.name, count: player.room.size, players: player.room.snapshot() }));
       player.room.broadcast({ t: 'joined', p: player.public(), count: player.room.size }, player.id);

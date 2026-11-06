@@ -17,6 +17,7 @@ export class Economy {
     this.stats = { earned: 0, spent: 0, sold: 0 };
     this.sellMult = 1; // 마을 건물 (직판장) 판매가 배수
     this.festival = null; // 7일마다 열리는 수확 축제 { name, mult }
+    this.bonus = () => 1; // 코스튬 혜택 배율 (main 에서 연결)
   }
 
   basePrice(item) {
@@ -36,7 +37,8 @@ export class Economy {
     if (!p) return Math.max(1, Math.round(this.basePrice(item) * (ITEMS[item]?.cat === 'seed' ? 0.5 : this.sellMult)));
     const ev = this.event?.item === item ? this.event.mult : 1;
     const fest = this.festival?.mult || 1; // 축제 날: 작물·생산물 모두
-    return Math.max(1, Math.round(this.basePrice(item) * p.mult * ev * fest * this.sellMult));
+    const perk = CROPS[item] ? this.bonus('sell_crop') : 1; // 코스튬 혜택 (농부 멜빵바지)
+    return Math.max(1, Math.round(this.basePrice(item) * p.mult * ev * fest * this.sellMult * perk));
   }
 
   seedPrice(crop) { return CROPS[crop].seedPrice; }

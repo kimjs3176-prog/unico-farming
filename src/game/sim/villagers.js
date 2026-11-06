@@ -41,12 +41,13 @@ export class Villagers {
   }
 
   /** 선물: 좋아하는 것 +12, 그 외 +5. 하루 1회 */
-  gift(id, item, day) {
+  /** mult: 우정 배율 (코스튬 혜택: 고운 한복) */
+  gift(id, item, day, mult = 1) {
     const s = this.state[id];
     if (s.lastGift === day) return { ok: false, reason: 'today' };
     s.lastGift = day;
     const liked = VILLAGERS[id].likes.includes(item);
-    return { ok: true, liked, ...this.addFriend(id, liked ? 12 : 5) };
+    return { ok: true, liked, ...this.addFriend(id, Math.round((liked ? 12 : 5) * mult)) };
   }
 
   addFriend(id, n) {

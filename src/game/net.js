@@ -1,3 +1,4 @@
+import { decodeLook } from './sim/costume.js';
 import { Unico } from './unico.js';
 
 const SEND_HZ = 5;
@@ -22,7 +23,7 @@ export class Net {
     const url = room ? `${base}?room=${encodeURIComponent(room)}` : base;
     this.wantRoom = room;
     try { this.ws = new WebSocket(url); } catch { return; }
-    this.ws.onopen = () => { this.connected = true; this.send({ t: 'join', name: this.game.playerName }); };
+    this.ws.onopen = () => { this.connected = true; this.send({ t: 'join', name: this.game.playerName, l: this.game.look?.() || '' }); };
     this.ws.onmessage = (e) => { try { this.handle(JSON.parse(e.data)); } catch {} };
     this.ws.onclose = () => { this.connected = false; this.clearRemote(); this.game.ui.setOnline(0, ''); if (!this.switching) this.reconnect = setTimeout(() => this.connect(this.wantRoom), 5000); this.switching = false; };
     this.ws.onerror = () => {};
@@ -39,6 +40,9 @@ export class Net {
   }
 
   send(o) { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(o)); }
+  /** 옷을 갈아입으면 다른 접속자에게 알림 */
+  sendLook() { if (this.connected) this.send({ t: 'look', l: this.game.look() }); }
+
   sendChat(text) {
     if (!this.connected) { this.game.ui.chatLine(this.game.playerName, text, true); this.game.player.unico.say(text); return; }
     this.send({ t: 'chat', text });
@@ -66,6 +70,7 @@ export class Net {
       u.group.position.set(r.target.x, 0, r.target.z);
       this.remote.set(p.id, r);
     }
+    if (p.l && p.l !== r.l) { r.l = p.l; r.unico.setOutfit(decodeLook(p.l)); } // 정해진 옷 이름만 (decodeLook)
     if (p.x !== undefined) { r.target.x = p.x; r.target.z = p.z; }
     if (p.f !== undefined) r.unico.facing = p.f;
     if (p.a !== undefined) { if (p.a) r.unico.playAction(p.a, 0); else r.unico.clearAction(); }
