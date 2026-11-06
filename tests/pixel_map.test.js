@@ -57,3 +57,18 @@ test('도트 조명: 한낮은 밝고 한밤은 어두움', () => {
   assert.equal(nightness(0.95), 1);
   assert.ok(ambientAt(0.5)[0] > 240 && ambientAt(0.0)[0] < 100);
 });
+
+test('도트 지도: 논 8마지기·트랙터 밭·차고가 걸어서 닿는 곳에 있음', async () => {
+  const { PADDIES, FIELD, TRACTOR_HOME, THRESHER, paddyAt } = await import('../src/pixel/map.js');
+  assert.equal(PADDIES.length, 8);
+  for (const [i, P] of PADDIES.entries()) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+    assert.equal(map.ground[(P.y + dy) * MW + P.x + dx], G.paddy);
+    assert.equal(paddyAt(P.x + dx, P.y + dy), i);
+  }
+  for (let r = 0; r < FIELD.rows; r++) for (let c = 0; c < FIELD.cols; c++) assert.equal(map.ground[(FIELD.y + r) * MW + FIELD.x + c], G.field);
+  const R = reachable(new Set(NPCS.map((n) => `${n.x},${n.y}`)));
+  assert.ok(R.has(`${PADDIES[0].x},${PADDIES[0].y + 2}`), '논둑');
+  assert.ok(R.has(`${THRESHER.x},${THRESHER.y}`), '탈곡기 앞');
+  assert.ok(R.has(`${TRACTOR_HOME.x - 1},${TRACTOR_HOME.y}`), '트랙터 옆');
+  assert.ok(R.has(`${FIELD.x},${FIELD.y}`), '밭');
+});

@@ -22,5 +22,7 @@ export function sheetGroups() {
   g.push(['crops', [W.plotSoil(), W.plotSoil(true), W.weeds(), ...['carrot', 'cabbage', 'tomato', 'strawberry', 'corn'].flatMap((k) => [0, 1, 2].map((st) => W.crop(k, st))), W.crop('corn', 2, { giant: true })]]);
   g.push(['icons', ['coin', 'carrot', 'cabbage', 'tomato', 'strawberry', 'corn', 'egg', 'milk', 'wool', 'honey', 'seed', 'feed', 'treat', 'fish', 'compost', 'heart', 'star', 'sun', 'moon', 'rain', 'bag', 'quest', 'gift'].map(W.icon)]);
   g.push(['fx', [...['!', '?', 'heart', 'note', 'zz', 'dots'].map(W.bubble), ...[0, 1, 2, 3].map(W.sparkle), W.bobber()]]);
+  g.push(['rice', [W.paddyBase('dry'), W.paddyBase('tilled'), W.paddyWater(0), ...[0, 1, 2, 3].map(W.ricePlants), W.thresher(0), W.fieldCell(false), W.fieldCell(true)]]);
+  g.push(['tractor', [0, 4, 8, 12, 16, 20, 24, 28].map((k) => W.tractorStack((k / 32) * Math.PI * 2, k % 8 === 0)).concat([W.tractorStack(0.3, false)])]);
   return g;
 }

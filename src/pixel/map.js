@@ -5,12 +5,19 @@ import { rng } from './pxl.js';
  * 가운데 광장·집, 동쪽 밭, 서쪽 장터, 남동쪽 목장, 남서쪽 연못, 가장자리 숲
  */
 export const MW = 56, MH = 40;
-export const G = { grass: 0, path: 1, soil: 2, water: 3 };
+export const G = { grass: 0, path: 1, soil: 2, water: 3, paddy: 4, field: 5 };
 
 export const PLOTS = { x: 38, y: 13, cols: 6, rows: 4 }; // 밭 24칸
 export const RANCH = { x0: 35, y0: 24, x1: 50, y1: 35, gate: [41, 42] }; // 울타리 (안쪽 x0+1..x1-1)
 export const POND = { cx: 13.2, cy: 30.2, rx: 6.6, ry: 4.3 };
 export const SPAWN = { x: 27, y: 22 };
+/** 논 8마지기: 2×2칸씩, 사이는 걸어 다니는 둑 (북서쪽) */
+export const PADDIES = [6, 9, 12, 15].flatMap((x) => [4, 7].map((y) => ({ x, y }))).sort((a, b) => a.y - b.y || a.x - b.x);
+export const THRESHER = { x: 18, y: 6 };
+/** 트랙터 밭갈이 밭 (남쪽): 9×6칸, 한 칸 = 2m (3D 판과 같은 칸 크기) */
+export const FIELD = { x: 21, y: 28, cols: 9, rows: 6, rocks: [[2, 1], [6, 3], [4, 4], [7, 0]] };
+export const TRACTOR_HOME = { x: 31, y: 34 };
+export const paddyAt = (x, y) => PADDIES.findIndex((p) => x >= p.x && x < p.x + 2 && y >= p.y && y < p.y + 2);
 
 export function buildMap() {
   const r = rng(2026);
@@ -30,7 +37,12 @@ export function buildMap() {
   rect(5, 20, 21, 21, G.path);            // 서쪽 길 (장터)
   rect(8, 18, 14, 19, G.path);            // 장터 앞
   rect(14, 22, 15, 25, G.path);           // 연못 가는 길
-  rect(30, 24, 31, 31, G.path);           // 남쪽 산책길
+  rect(30, 24, 31, 35, G.path);           // 남쪽 산책길 (트랙터 차고까지)
+  rect(5, 3, 17, 9, G.path);              // 논둑
+  rect(16, 6, 22, 7, G.path);             // 논 → 탈곡기
+  rect(21, 8, 22, 17, G.path);            // 탈곡기 → 마을
+  for (const P of PADDIES) rect(P.x, P.y, P.x + 1, P.y + 1, G.paddy);
+  rect(FIELD.x, FIELD.y, FIELD.x + FIELD.cols - 1, FIELD.y + FIELD.rows - 1, G.field);
   // ── 밭 ──
   rect(37, 12, 44, 19, G.soil);
   // ── 연못 ──
@@ -53,6 +65,11 @@ export function buildMap() {
   objs.push({ type: 'sign', x: 36, y: 19, text: '유니코 밭' }); block(36, 19, 36, 19);
   objs.push({ type: 'sign', x: 40, y: 23, text: '유니코 목장' }); block(40, 23, 40, 23);
   objs.push({ type: 'stump', x: 19, y: 24 }); block(19, 24, 19, 24);
+  objs.push({ type: 'thresher', x: THRESHER.x, y: THRESHER.y - 1, w: 2, h: 1 }); block(THRESHER.x, THRESHER.y - 1, THRESHER.x + 1, THRESHER.y - 1);
+  objs.push({ type: 'sign', x: 17, y: 9, text: '유니코 논' }); block(17, 9, 17, 9);
+  objs.push({ type: 'sign', x: 20, y: 27, text: '트랙터 밭' }); block(20, 27, 20, 27);
+  objs.push({ type: 'hay', x: 21, y: 5 }); block(21, 5, 21, 5);
+  for (const [c, r] of FIELD.rocks) { objs.push({ type: 'rock', x: FIELD.x + c, y: FIELD.y + r, seed: c + r }); block(FIELD.x + c, FIELD.y + r, FIELD.x + c, FIELD.y + r); }
   for (const [x, y] of [[22, 17], [33, 17], [21, 23], [34, 23], [16, 19], [44, 22], [17, 26]]) { objs.push({ type: 'lamp', x, y }); block(x, y, x, y); }
 
   // ── 목장 울타리 ──
@@ -87,10 +104,10 @@ export function buildMap() {
 
   // ── 안쪽 장식: 나무·덤불·바위·꽃 ──
   const deco = [
-    ['tree', 6, 8], ['tree', 9, 6], ['pine', 5, 12], ['tree', 31, 7], ['tree', 34, 8], ['pine', 48, 7], ['tree', 51, 10], ['tree', 49, 15],
-    ['tree', 6, 25], ['pine', 4, 34], ['tree', 22, 32], ['pine', 25, 35], ['tree', 52, 30], ['tree', 33, 33],
-    ['bush', 21, 11], ['bush', 29, 11], ['bush', 30, 14], ['bush', 20, 26], ['bush', 34, 26], ['bush', 7, 15], ['bush', 46, 11], ['bush', 26, 27],
-    ['rock', 18, 33], ['bigrock', 8, 23], ['rock', 47, 18], ['rock', 33, 12], ['rock', 23, 28],
+    ['pine', 5, 12], ['tree', 3, 10], ['tree', 31, 7], ['tree', 34, 8], ['pine', 48, 7], ['tree', 51, 10], ['tree', 49, 15],
+    ['tree', 6, 25], ['pine', 4, 34], ['tree', 19, 34], ['pine', 25, 35], ['tree', 52, 30], ['tree', 33, 33],
+    ['bush', 21, 11], ['bush', 29, 11], ['bush', 30, 14], ['bush', 34, 26], ['bush', 7, 15], ['bush', 46, 11], ['bush', 33, 30],
+    ['rock', 18, 33], ['bigrock', 8, 23], ['rock', 47, 18], ['rock', 33, 12],
   ];
   for (const [t, x, y] of deco) if (isFree(x, y)) { objs.push({ type: t, x, y, seed: x * 13 + y * 7, kind: 'fol' }); block(x, y, x, y); }
   // 꽃밭 (지나갈 수 있음)

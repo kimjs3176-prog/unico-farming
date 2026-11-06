@@ -41,6 +41,7 @@ addEventListener('keydown', (e) => {
   if (!started) { if (e.code === 'Enter' || e.code === 'Space') start(); return; }
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { game.run = true; return; }
+  if (e.code === 'Space' && game.tr.driving && !ui.busy) { e.preventDefault(); if (!e.repeat) game.togglePlow(); return; }
   const k = KEYMAP[e.code] || (/^Digit[1-9]$/.test(e.code) ? e.code.slice(5) : null);
   if (k) { e.preventDefault(); if (!e.repeat || !['up', 'down', 'left', 'right'].includes(k) || ui.busy) game.press(k); return; }
   if (ui.busy) return;
@@ -67,7 +68,7 @@ canvas.addEventListener('pointerdown', (e) => {
 const pad = document.querySelector('.pad'), ab = document.querySelector('.abtns');
 pad.addEventListener('pointerdown', (e) => { const d = e.target.closest('[data-d]')?.dataset.d; if (d) { e.preventDefault(); game.press(d); e.target.setPointerCapture?.(e.pointerId); } });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) pad.addEventListener(ev, (e) => { const d = e.target.closest('[data-d]')?.dataset.d; if (d) game.release(d); });
-ab.addEventListener('pointerdown', (e) => { const k = e.target.closest('[data-k]')?.dataset.k; if (!k) return; e.preventDefault(); if (k === 'a') game.press('ok'); else if (ui.busy || game.fish) game.press('back'); else { game.run = !game.run; e.target.classList.toggle('on', game.run); } });
+ab.addEventListener('pointerdown', (e) => { const k = e.target.closest('[data-k]')?.dataset.k; if (!k) return; e.preventDefault(); if (k === 'a') game.press('ok'); else if (game.tr.driving) game.togglePlow(); else if (ui.busy || game.fish) game.press('back'); else { game.run = !game.run; e.target.classList.toggle('on', game.run); } });
 if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
 
 addEventListener('resize', () => R.resize());

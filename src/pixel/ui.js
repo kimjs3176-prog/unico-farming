@@ -24,6 +24,7 @@ export class UI {
       </div>
       <div class="seedbar panel" data-act="seed"><img class="ico"><div><b class="sn"></b><span class="sc"></span></div><kbd>Q</kbd></div>
       <div class="hint hidden"></div>
+      <div class="meter panel hidden"></div>
       <div class="toasts"></div>
       <div class="dialog hidden"><div class="nametag"></div><div class="text"></div><div class="choices"></div><i class="more">▼</i></div>
       <div class="menu hidden"><div class="menu-card panel"><div class="menu-head"><b class="mt"></b><div class="tabs"></div><button class="x">✕</button></div><div class="menu-sub"></div><div class="list"></div><div class="menu-foot"></div></div></div>
@@ -60,6 +61,15 @@ export class UI {
     sb.querySelector('.sn').textContent = `${s.seed.name} 씨앗`;
     sb.querySelector('.sc').textContent = `× ${s.seed.n}`;
     this.q('.snd').textContent = s.sound;
+  }
+
+  /** 미니게임 계기판 (탈곡 게이지·트랙터 시간/점수). null 이면 숨김 */
+  meter(m) {
+    const el = this.q('.meter');
+    if (!m) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    const bar = m.gauge !== undefined ? `<div class="gauge"><i class="band" style="left:${m.band[0] * 100}%;width:${(m.band[1] - m.band[0]) * 100}%"></i><b style="width:${m.gauge * 100}%" class="${m.ok ? 'ok' : m.hot ? 'hot' : ''}"></b></div>` : '';
+    el.innerHTML = `<div class="mh"><span class="mt">${m.title}</span><span class="mtime${m.time <= 5 ? ' warn' : ''}">${Math.ceil(m.time)}초</span></div>${bar}<div class="ms">${m.text}</div>`;
   }
 
   hint(text) {

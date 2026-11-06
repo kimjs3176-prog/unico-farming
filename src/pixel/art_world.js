@@ -393,6 +393,7 @@ export function icon(id) {
     case 'sun': s.ell(8, 8, 4.5, 4.5, 'gold', { lo: 2 }); for (const [x, y] of [[8, 1], [8, 14], [1, 8], [14, 8], [3, 3], [13, 3], [3, 13], [13, 13]]) s.set(x, y, 'gold', 3); break;
     case 'moon': s.ell(8, 8, 5.5, 5.5, 'corn', { lo: 3 }); s.ell(11, 6, 4.5, 4.5, 'corn', { clip: () => false }); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if ((x - 11) ** 2 + (y - 6) ** 2 < 18) s.set(x, y, null); break;
     case 'rain': s.ell(8, 6, 6, 3.5, 'stone', { lo: 3 }); for (const x of [4, 8, 12]) s.line(x, 11, x - 1, 14, 'water', 4); break;
+    case 'rice': for (let i = 0; i < 5; i++) s.line(4 + i * 2, 15, 3 + i * 2.4, 3, 'hay', 2 + (i % 2)); for (const [x, y] of [[3, 3], [6, 2], [9, 2], [12, 3], [5, 5], [11, 5]]) s.ell(x, y, 1.3, 1.6, 'corn', { lo: 2 }); s.hline(3, 12, 10, 'scarf', 2); break;
     case 'bag': s.ell(8, 10, 6, 5, 'wood', { lo: 2 }); s.rect(6, 3, 4, 3, 'wood', 3); s.hline(5, 10, 5, 'scarf', 2); break;
     case 'quest': s.rect(3, 2, 10, 13, 'cream', 3); s.rect(3, 2, 10, 2, 'wood', 3); for (let y = 6; y < 14; y += 3) s.hline(5, 11, y, 'wood', 2); break;
     case 'gift': s.rect(3, 6, 10, 9, 'rose', 2); s.rect(2, 5, 12, 3, 'rose', 3); s.vline(8, 5, 14, 'gold', 3); s.ell(6, 3.5, 2, 1.5, 'gold', { lo: 2 }); s.ell(10, 3.5, 2, 1.5, 'gold', { lo: 2 }); break;
@@ -430,3 +431,154 @@ export function sparkle(f) {
 }
 
 export function bobber() { const s = new Spr(8, 10); s.ell(4, 6, 3, 3, 'cloth', { lo: 2 }); s.ell(4, 4, 3, 2, 'tomato', { lo: 2, clip: (x, y) => y < 5 }); s.vline(4, 0, 2, 'iron', 2); s.outline({ soft: false }); return s; }
+
+/* ───────────── 논 ───────────── */
+
+/** 논 바닥 (64×64 = 2×2칸). state: dry 갈라진 마른 논 / tilled 써레질한 진흙 */
+export function paddyBase(state) {
+  const s = new Spr(64, 64);
+  const r = rng(state === 'dry' ? 11 : 23);
+  if (state === 'dry') {
+    s.rect(0, 0, 64, 64, 'soil', 3);
+    // 마른 논의 갈라짐 (모서리에서 뻗는 금)
+    for (let k = 0; k < 7; k++) {
+      let x = r() * 64, y = r() * 64, a = r() * 6.28;
+      for (let i = 0; i < 14; i++) { const nx = x + Math.cos(a) * 3, ny = y + Math.sin(a) * 3; s.line(x | 0, y | 0, nx | 0, ny | 0, 'soil', 1); x = nx; y = ny; a += (r() - 0.5) * 1.4; }
+    }
+    // 지난해 벼 그루터기 (줄 맞춰)
+    for (let y = 6; y < 64; y += 10) for (let x = 5; x < 64; x += 10) { s.set(x, y, 'hay', 1); s.set(x + 1, y, 'hay', 2); }
+  } else {
+    s.rect(0, 0, 64, 64, 'soil', 1);
+    for (let y = 3; y < 64; y += 6) { s.hline(0, 63, y, 'soil', 2); s.hline(0, 63, y + 1, 'soil', 0); }
+  }
+  // 둑 쪽 가장자리 그림자
+  s.hline(0, 63, 0, 'soil', 0); s.hline(0, 63, 1, 'soil', state === 'dry' ? 2 : 0); s.vline(0, 0, 63, 'soil', 0);
+  return s;
+}
+
+/** 논물 한 장 (투명도는 물 높이로) */
+export function paddyWater(f = 0) {
+  const s = new Spr(64, 64);
+  s.rect(0, 0, 64, 64, 'water', 3);
+  for (let y = 0; y < 64; y += 8) for (let x = ((y / 8) % 2) * 8 + f * 4; x < 64; x += 16) s.hline(x, x + 3, y + 3, 'water', 5);
+  return s;
+}
+
+/** 벼 포기들 (64×80, 바닥 기준). stage 0 모 · 1 분얼기 · 2 이삭 · 3 황금(익음) */
+export function ricePlants(stage) {
+  const s = new Spr(64, 84);
+  const H = [7, 13, 19, 18][stage];
+  const R = stage === 3 ? 'hay' : 'leaf';
+  for (let row = 0; row < 4; row++) for (let col = 0; col < 4; col++) {
+    const bx = 8 + col * 16, by = 26 + row * 16; // 포기 밑동 (줄 맞춰 심은 모)
+    const n = stage === 0 ? 3 : 5;
+    for (let i = 0; i < n; i++) {
+      const spread = (i - (n - 1) / 2) * (stage === 0 ? 1 : 1.6);
+      const tx = bx + spread * (stage >= 2 ? 1.8 : 1.2), ty = by - H + Math.abs(spread) * 1.5;
+      // 잎줄기: 아래는 그늘, 위는 빛
+      const mx = Math.round((bx + tx) / 2), my = Math.round((by + ty) / 2);
+      s.line(bx, by, mx, my, R, 1); s.line(mx, my, Math.round(tx), Math.round(ty), R, i % 2 ? 3 : 4);
+      if (stage >= 2 && i % 2 === 0) {
+        // 이삭: 끝에서 고개를 숙임 (익으면 더)
+        const droop = stage === 3 ? 4 : 2;
+        s.line(Math.round(tx), Math.round(ty), Math.round(tx + Math.sign(spread || 1) * 2), Math.round(ty + droop), stage === 3 ? 'corn' : 'cabbage', 3);
+        s.set(Math.round(tx), Math.round(ty) - 1, stage === 3 ? 'corn' : 'cabbage', 4);
+      }
+    }
+    s.hline(bx - 1, bx + 1, by + 1, 'soil', 0); // 밑동 그림자
+  }
+  return s;
+}
+
+/** 탈곡기 (2칸): 나무 몸통 + 원통 드럼 + 깔때기. f 는 드럼 회전 프레임 */
+export function thresher(f = 0) {
+  const s = new Spr(70, 60);
+  s.rect(6, 22, 58, 30, 'wood', 3); for (let y = 22; y < 52; y += 6) s.hline(6, 63, y, 'wood', 1); s.hline(6, 63, 22, 'wood', 5);
+  for (const x of [8, 58]) s.rect(x, 50, 5, 8, 'wood', 1);
+  // 드럼 (가로 원통, 이빨 줄이 돌아감)
+  s.rect(14, 10, 38, 16, 'iron', 2); s.hline(14, 51, 10, 'iron', 3); s.hline(14, 51, 25, 'iron', 0);
+  for (let x = 16 + (f % 3) * 2; x < 51; x += 6) { s.vline(x, 12, 23, 'stone', 4); s.set(x, 17, 'stone', 5); }
+  // 깔때기·바퀴 손잡이
+  s.poly([50, 6, 66, 0, 66, 10, 52, 14], 'wood', { level: 2 });
+  s.ell(10, 18, 6, 6, 'iron', { lo: 1 }); s.line(10, 18, 10 + Math.round(Math.cos(f) * 5), 18 + Math.round(Math.sin(f) * 5), 'gold', 3);
+  // 쌀 받는 자루
+  s.ell(56, 48, 7, 6, 'cream', { lo: 1 }); s.hline(51, 61, 43, 'scarf', 2);
+  s.outline();
+  return s;
+}
+
+/** 트랙터 밭 한 칸: 갈기 전(풀 섞인 묵은 땅) / 쟁기로 간 이랑 */
+export function fieldCell(plowed) {
+  const s = new Spr(32, 32);
+  if (!plowed) {
+    s.rect(0, 0, 32, 32, 'path', 3);
+    for (const [x, y] of [[5, 6], [20, 4], [12, 18], [26, 22], [6, 26], [17, 11]]) { s.set(x, y, 'grass', 4); s.set(x - 1, y + 1, 'grass', 3); s.set(x + 1, y + 1, 'grass', 3); }
+    s.hline(0, 31, 0, 'path', 2); s.vline(0, 0, 31, 'path', 2);
+  } else {
+    s.rect(0, 0, 32, 32, 'soil', 2);
+    for (let y = 2; y < 32; y += 5) { s.hline(0, 31, y, 'soil', 4); s.hline(0, 31, y + 1, 'soil', 3); s.hline(0, 31, y + 3, 'soil', 1); }
+  }
+  return s;
+}
+
+/* ───────────── 트랙터 (스프라이트 스태킹) ─────────────
+ * 복셀 모델을 높이별 단면으로 잘라 1px 씩 올려 쌓으면, 어느 방향으로 돌려도 도트가 유지되는 2.5D 물체가 됨.
+ * 모델 좌표: x 앞(+)·뒤, y 왼쪽·오른쪽, z 높이. 미리 32방향으로 구워 둠
+ */
+const TR = { L: 34, W: 20, H: 22 };
+function tractorVoxel(x, y, z, plowDown) {
+  const yc = y - TR.W / 2 + 0.5;
+  const ay = Math.abs(yc);
+  // 뒷바퀴 (큰 바퀴, 축은 y)
+  { const dx = x - 9, dz = z - 7.5, rr = dx * dx + dz * dz; if (ay >= 6.5 && ay <= 10 && rr <= 56) return rr > 30 ? ['iron', ay > 9.2 || z > 12 ? 2 : 1] : ['gold', rr < 6 ? 4 : 2]; }
+  // 앞바퀴
+  { const dx = x - 27, dz = z - 4, rr = dx * dx + dz * dz; if (ay >= 5 && ay <= 7.5 && rr <= 17) return rr > 7 ? ['iron', 1] : ['gold', 3]; }
+  // 차체 (보닛·몸통)
+  if (x >= 13 && x <= 31 && ay <= 4.5 && z >= 5 && z <= 11) {
+    if (x >= 30) return ['iron', 2]; // 앞 그릴
+    if (z === 11) return ['barn', 4];
+    return ['barn', ay > 3.5 ? 2 : 3];
+  }
+  // 엔진룸 옆 노랑 줄
+  if (x >= 14 && x <= 29 && ay > 4.5 && ay <= 5 && z === 8) return ['gold', 3];
+  // 운전석 바닥·좌석
+  if (x >= 5 && x <= 13 && ay <= 6 && z >= 7 && z <= 8) return ['iron', 2];
+  if (x >= 6 && x <= 9 && ay <= 2.5 && z >= 9 && z <= 12) return z === 12 || x === 6 ? ['scarf', 2] : ['scarf', 1];
+  // 핸들
+  if (x === 13 && ay <= 1 && z >= 9 && z <= 13) return ['iron', 1];
+  if (x >= 12 && x <= 14 && ay <= 2.5 && z === 14) return ['iron', 3];
+  // 굴뚝
+  if (x >= 23 && x <= 24 && yc >= 2 && yc <= 3 && z >= 11 && z <= 17) return ['iron', z === 17 ? 0 : 2];
+  // 안전 프레임 (ROPS): 뒤쪽 두 기둥 + 위 가로대
+  if (x >= 3 && x <= 4 && ay >= 5.5 && ay <= 6.5 && z >= 8 && z <= 20) return ['iron', 3];
+  if (x >= 3 && x <= 4 && ay <= 6.5 && z >= 20 && z <= 21) return ['gold', 3];
+  // 쟁기 (뒤): 내리면 땅에 닿고, 올리면 위로
+  const pz = plowDown ? 0 : 4;
+  if (x >= -2 && x <= 2 && ay <= 8 && z >= pz && z <= pz + 2) return ['stone', z === pz + 2 ? 4 : 2];
+  if (x >= 2 && x <= 4 && ay <= 1 && z >= pz + 2 && z <= 7) return ['iron', 2];
+  return null;
+}
+export function tractorStack(angle, plowDown) {
+  const K = 1.6; // 복셀 1칸 = 1.6px (캐릭터와 크기를 맞춤)
+  const S = 96, HZ = Math.ceil(TR.H * K);
+  const s = new Spr(S, S + HZ);
+  const fx = Math.sin(angle), fy = Math.cos(angle); // 앞 방향 (화면 좌표: 아래가 +y)
+  const cx = S / 2, cy = S / 2 + HZ - 6;
+  for (let zz = 0; zz < HZ; zz++) {
+    const z = Math.floor(zz / K);
+    for (let v = -S / 2; v < S / 2; v++) for (let u = -S / 2; u < S / 2; u++) {
+      // 화면 점 (u,v) → 모델 좌표 (앞=x, 옆=y), 모델 중심 x=15
+      const mx = (u * fx + v * fy) / K + 15, my = (-u * fy + v * fx) / K + TR.W / 2;
+      const vx = Math.round(mx), vy = Math.round(my - 0.5);
+      if (vx < -3 || vx > TR.L || vy < 0 || vy >= TR.W) continue;
+      const c = tractorVoxel(vx, vy, z, plowDown);
+      if (!c) continue;
+      // 위가 비어 있으면 윗면 (한 단계 밝게)
+      const top = zz === HZ - 1 || Math.floor((zz + 1) / K) !== z ? !tractorVoxel(vx, vy, z + 1, plowDown) : false;
+      s.set(cx + u, cy + v - zz, c[0], c[1] + (top ? 1 : 0));
+    }
+  }
+  s.outline();
+  return s;
+}
+export const TRACTOR_ANCHOR = { x: 48, y: 48 + Math.ceil(TR.H * 1.6) - 6 };

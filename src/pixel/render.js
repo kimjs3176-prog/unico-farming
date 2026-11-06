@@ -1,4 +1,4 @@
-import { MW, MH, G, POND, PLOTS } from './map.js';
+import { MW, MH, G, POND, PLOTS, PADDIES, FIELD } from './map.js';
 import { rampRGB, bayer } from './pxl.js';
 
 const T = 32;
@@ -81,6 +81,9 @@ export class Renderer {
       if (pondEdge < 1) { mat[y * W + x] = G.water; continue; }
       const wx = (vnoise(x / 20, y / 20) - 0.5) * 12, wy = (vnoise(x / 20 + 50, y / 20 + 50) - 0.5) * 12;
       let m = tileAt(x + wx, y + wy);
+      const exact = tileAt(x, y);
+      if (exact === G.paddy || exact === G.field) m = exact;
+      else if (m === G.paddy || m === G.field) m = G.path;
       if (m === G.water) m = G.grass;
       mat[y * W + x] = m;
     }
@@ -125,6 +128,8 @@ export class Renderer {
         if (M(x, y - 1) === G.grass || M(x, y - 2) === G.grass) l = 1;
         else if (M(x, y - 3) === G.grass) l = 2;
         put(i, rampRGB('path', l));
+      } else if (m === G.paddy || m === G.field) {
+        put(i, rampRGB(m === G.paddy ? 'soil' : 'path', m === G.paddy ? 1 : 3));
       } else if (m === G.soil) {
         let l = 2;
         if (M(x, y - 1) === G.grass || M(x, y - 2) === G.grass) l = 0;
@@ -212,6 +217,7 @@ export class Renderer {
         case 'stall': list.push({ img: S.stall, x: o.x * T, y: by(o) - 110, sy: by(o) - 4, tall: true }); break;
         case 'well': list.push({ img: S.well, x: o.x * T + 4, y: by(o) - 72, sy: by(o) - 4, tall: true }); break;
         case 'lamp': list.push({ img: S.lamp.day, glow: S.lamp.night, x: cx(o) - 10, y: by(o) - 66, sy: by(o) - 4, tall: true, shadow: 's', sx: cx(o), shy: by(o) - 4 }); this.lights.push({ x: cx(o), y: by(o) - 56, r: 92, c: [255, 200, 120], lamp: true }); break;
+        case 'thresher': list.push({ thresher: true, x: o.x * T - 3, y: by(o) - 58, sy: by(o) - 4, tall: true }); break;
         case 'sign': list.push({ img: S.sign, x: cx(o) - 18, y: by(o) - 36, sy: by(o) - 4 }); break;
         case 'mailbox': list.push({ img: S.mailbox, x: cx(o) - 10, y: by(o) - 36, sy: by(o) - 4 }); break;
         case 'trough': list.push({ trough: true, x: o.x * T + 2, y: by(o) - 26, sy: by(o) - 4 }); break;
@@ -259,9 +265,31 @@ export class Renderer {
     }
     for (const d of this.decals) g.drawImage(d.img, d.x - camX, d.y - camY + (d.bob ? Math.round(Math.sin(this.t * 1.2 + d.bob) * 0.6) : 0));
 
+    const drawables = [];
+    // 트랙터 밭 (간 칸은 이랑)
+    const F = game.field;
+    for (let r = 0; r < F.rows; r++) for (let c = 0; c < F.cols; c++) {
+      const x = (FIELD.x + c) * T - camX, y = (FIELD.y + r) * T - camY;
+      if (x < -T || y < -T || x > VW || y > VH) continue;
+      g.drawImage(S.fieldCell[F.plowed[c + r * F.cols] ? 1 : 0], x, y);
+    }
+    // 논: 바닥 → 물 → 벼
+    const R = game.rice;
+    PADDIES.forEach((P, i) => {
+      const x = P.x * T - camX, y = P.y * T - camY;
+      if (x < -64 || y < -90 || x > VW || y > VH + 10) return;
+      const p = R.paddies[i];
+      g.drawImage(p.state === 'dry' ? S.paddy.dry : S.paddy.tilled, x, y);
+      if (p.water > 0.05) { g.globalAlpha = Math.min(0.78, 0.3 + (p.water / 10) * 0.55); g.drawImage(S.paddy.water[Math.floor(this.t * 1.4 + i) % 2], x, y); g.globalAlpha = 1; }
+      if (p.state === 'growing' || p.state === 'ripe') {
+        const st = p.state === 'ripe' ? 3 : Math.min(2, p.stage);
+        drawables.push({ img: S.paddy.rice[st], x: x + camX, y: y + camY - 20, sy: y + camY + 40 });
+        for (let k = 0; k < p.weeds; k++) g.drawImage(S.weeds, x + ((k * 23) % 40), y + ((k * 37) % 40));
+        if (p.state === 'ripe' && Math.floor(this.t * 2 + i) % 4 === 0) drawables.push({ img: S.sparkle[Math.floor(this.t * 8) % 4], x: x + camX + 26, y: y + camY - 10, sy: y + camY + 70 });
+      }
+    });
     // 밭 (바닥에 붙은 층)
     const farm = game.farm;
-    const drawables = [];
     for (let i = 0; i < farm.plots.length; i++) {
       const p = farm.plots[i];
       const px = (PLOTS.x + (i % PLOTS.cols)) * T - camX, py = (PLOTS.y + Math.floor(i / PLOTS.cols)) * T - camY;
@@ -299,10 +327,11 @@ export class Renderer {
         x += Math.round(sway);
       }
       if (d.trough) img = S.trough[game.ranch.trough > 0 ? 1 : 0];
+      if (d.thresher) img = S.thresher[Math.floor(this.t * (game.threshing ? 6 + game.threshing.gauge * 30 : 1.5)) % 3];
       if (!img) return;
       if (d.alpha !== undefined) g.globalAlpha = d.alpha;
       if (d.flash) g.filter = 'brightness(1.6)';
-      g.drawImage(img, x, y);
+      if (d.sh) g.drawImage(img, 0, 0, img.width, d.sh, x, y, img.width, d.sh); else g.drawImage(img, x, y);
       if (d.flash) g.filter = 'none';
       g.globalAlpha = 1;
       if (d.glow && night > 0.01) glowList.push([d.glow, x, y]);
@@ -310,7 +339,7 @@ export class Renderer {
       if (d.bubble) { const b = S.bubble[d.bubble]; if (b) g.drawImage(b, x + (img.width >> 1) - 8, y - 12 + Math.round(Math.sin(this.t * 5) * 1)); }
     });
     // 큰 것에 가려진 주인공: 반투명 실루엣으로 한 번 더
-    if (playerD) {
+    if (playerD && !playerD.d.sh) {
       const { x, y, img } = playerD;
       const covered = drawables.slice(playerIdx + 1).some((d) => d.tall && (d.img || d.set) && x + 30 > d.x - camX && x + 10 < d.x - camX + (d.img || d.set.crown).width && y + 40 > d.y - camY && y < d.y - camY + (d.img || d.set.crown).height - 8);
       if (covered) { g.globalAlpha = 0.42; g.drawImage(img, x, y); g.globalAlpha = 1; }
@@ -323,6 +352,7 @@ export class Renderer {
       if (p.kind === 'leaf') { g.fillStyle = p.col; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 2, 1); g.fillRect(Math.round(p.x - camX) + (Math.sin(p.a) > 0 ? 1 : 0), Math.round(p.y - camY) - 1, 1, 1); }
       else if (p.kind === 'dust') { g.globalAlpha = 0.5 * p.life; g.fillStyle = '#fff6d8'; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 1, 1); g.globalAlpha = 1; }
       else if (p.kind === 'puff') { g.globalAlpha = 0.6 * p.life; g.fillStyle = `rgb(${rampRGB('path', 4)})`; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 2, 2); g.globalAlpha = 1; }
+      else if (p.kind === 'grain') { g.fillStyle = `rgb(${rampRGB('corn', 3)})`; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 1, 1); }
       else if (p.kind === 'drop') { g.fillStyle = `rgb(${rampRGB('water', 4)})`; g.fillRect(Math.round(p.x - camX), Math.round(p.y - camY), 1, 2); }
       else if (p.kind === 'icon') { g.globalAlpha = Math.min(1, p.life * 2); g.drawImage(p.img, Math.round(p.x - camX - 8), Math.round(p.y - camY - 8)); g.globalAlpha = 1; }
     }

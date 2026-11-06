@@ -138,3 +138,15 @@ body.touch .hint { bottom: calc(var(--u) * 4 + 52px); }
 @keyframes blink2 { 50% { filter: brightness(1.15); } }
 .title-card .keys { font-size: 0.8em; opacity: 0.85; line-height: 2; margin: calc(var(--u) * 6) 0 calc(var(--u) * 3); }
 .to3d { color: var(--teal); font-size: 0.85em; }
+
+/* 미니게임 계기판 */
+.meter { position: fixed; left: 50%; top: calc(var(--u) * 4); transform: translateX(-50%); min-width: min(80vw, calc(var(--fs) * 20)); text-align: center; pointer-events: none !important; }
+.meter .mh { display: flex; justify-content: space-between; gap: calc(var(--u) * 6); }
+.meter .mt { color: var(--gold); }
+.meter .mtime.warn { color: #ff8670; animation: blink 0.5s steps(2) infinite; }
+.meter .ms { font-size: 0.9em; }
+.gauge { position: relative; height: calc(var(--fs) * 1.1); margin: calc(var(--u) * 2) 0; background: #0e0b1c; border: var(--u) solid var(--ink); box-shadow: 0 0 0 var(--u) var(--gold2); }
+.gauge .band { position: absolute; top: calc(var(--u) * -1); bottom: calc(var(--u) * -1); z-index: 1; border: var(--u) solid #c8ea80; background: rgba(63, 143, 58, 0.25); }
+.gauge b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--gold); }
+.gauge b.ok { background: #7cc04a; }
+.gauge b.hot { background: #d8443e; }

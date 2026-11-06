@@ -60,6 +60,18 @@ export function buildSprites() {
   S.crop = {};
   for (const k of ['carrot', 'cabbage', 'tomato', 'strawberry', 'corn']) S.crop[k] = [0, 1, 2].map((st) => cv(W.crop(k, st))).concat([cv(W.crop(k, 2, { giant: true }))]);
 
+  S.paddy = { dry: cv(W.paddyBase('dry')), tilled: cv(W.paddyBase('tilled')), water: [cv(W.paddyWater(0)), cv(W.paddyWater(1))], rice: [0, 1, 2, 3].map((k) => cv(W.ricePlants(k))) };
+  S.thresher = [0, 1, 2].map((f) => cv(W.thresher(f * 2.1)));
+  S.fieldCell = [cv(W.fieldCell(false)), cv(W.fieldCell(true))];
+  // 트랙터 32방향 × 쟁기 2: 쓰는 방향부터 그때그때 굽고, 나머지는 쉬는 시간에 미리 구움 (첫 로딩을 가볍게)
+  const tcache = [[], []];
+  S.tractor = (down, k) => (tcache[down ? 1 : 0][k] ||= cv(W.tractorStack((k / 32) * Math.PI * 2, down)));
+  S.tractor(true, 16);
+  let warm = 0;
+  const idle = window.requestIdleCallback || ((f) => setTimeout(f, 30));
+  const step = () => { if (warm >= 64) return; S.tractor(warm >= 32, warm % 32); warm++; idle(step); };
+  setTimeout(() => idle(step), 1500);
+  S.tractorAnchor = W.TRACTOR_ANCHOR;
   S.bubble = Object.fromEntries(['!', '?', 'heart', 'note', 'zz', 'dots'].map((k) => [k, cv(W.bubble(k))]));
   S.sparkle = [0, 1, 2, 3].map((f) => cv(W.sparkle(f)));
   S.bobber = cv(W.bobber());

@@ -6,9 +6,11 @@ import { Quests, QUESTS } from '../game/sim/quests.js';
 import { PetSim, TRICKS } from '../game/sim/pet.js';
 import { FishingSim } from '../game/sim/fishing.js';
 import { Collection } from '../game/sim/collection.js';
+import { RiceSim, RICE_STAGES, thresh } from '../game/sim/rice.js';
+import { FieldSim, Vehicle, TRACTOR_TIME } from '../game/sim/tractor.js';
 import { CROPS, PRODUCTS, FEED_PRICE, ANIMALS } from '../game/sim/crops.js';
 import { ITEMS } from '../game/sim/items.js';
-import { MW, MH, G, PLOTS, RANCH, SPAWN, NPCS, ANIMAL_START, buildMap } from './map.js';
+import { MW, MH, G, PLOTS, RANCH, SPAWN, NPCS, ANIMAL_START, PADDIES, FIELD, TRACTOR_HOME, paddyAt, buildMap } from './map.js';
 import { nightness } from './render.js';
 
 const T = 32;
@@ -17,11 +19,13 @@ const SAVE_KEY = 'unico-pixel-save-v1';
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const dirOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down');
 const nameOf = (k) => (CROPS[k] || PRODUCTS[k] || ITEMS[k])?.name || k;
-const iconOf = (k) => (CROPS[k] ? k : PRODUCTS[k] ? k : k === 'feed' ? 'feed' : k === 'pet_treat' ? 'treat' : k.startsWith('fish_') ? 'fish' : k === 'compost' ? 'compost' : k.startsWith('fruit_') ? 'tomato' : k.endsWith('_gold') ? 'star' : 'gift');
+const iconOf = (k) => (k === 'rice_seed' || k === 'paddy' || k.startsWith('rice_') ? 'rice' : CROPS[k] ? k : PRODUCTS[k] ? k : k === 'feed' ? 'feed' : k === 'pet_treat' ? 'treat' : k.startsWith('fish_') ? 'fish' : k === 'compost' ? 'compost' : k.startsWith('fruit_') ? 'tomato' : k.endsWith('_gold') ? 'star' : 'gift');
 // 도트 버전에서 할 수 있는 퀘스트만 보여 줌
-const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed']);
+const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest']);
+const THRESH_TIME = 6, THRESH_BAND = [0.55, 0.9]; // 3D 판과 같은 탈곡 규칙
+const M = 16; // 트랙터 시뮬레이션 1m = 16px (밭 한 칸 2m = 32px)
 
-/** 칸 단위로 움직이는 캐릭터 (포켓몬식 한 칸 걷기) */
+/** 칸 단위로 움직이는 캐릭터 (주민·가축) */
 class Actor {
   constructor(x, y, dir = 'down') { this.x = x; this.y = y; this.fx = x; this.fy = y; this.t = 1; this.dir = dir; this.dur = 0.24; this.step = 0; }
   get moving() { return this.t < 1; }
@@ -62,6 +66,12 @@ export class Game {
     this.pet = new PetSim();
     this.fishing = new FishingSim();
     this.book = new Collection();
+    this.rice = new RiceSim(PADDIES.length);
+    this.riceBatches = []; // 수확한 벼 묶음 { n, q } → 탈곡할 때 등급 결정
+    this.threshing = null;
+    this.field = new FieldSim(FIELD.cols, FIELD.rows, 2, FIELD.x * 2, FIELD.y * 2, FIELD.rocks);
+    this.vehicle = new Vehicle((TRACTOR_HOME.x + 0.5) * 2, (TRACTOR_HOME.y + 0.6) * 2, Math.PI);
+    this.tr = { driving: false, plowDown: true, counting: 0, streak: 0, maxStreak: 0, lastPlow: -9, engineT: 0, best: 0 };
     this.day = 1; this.time = 0.27; this.raining = false;
     this.seed = 'carrot';
     this.player = new Walker(SPAWN.x, SPAWN.y, 'down');
@@ -88,7 +98,7 @@ export class Game {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         v: 1, day: this.day, time: this.time, seed: this.seed, raining: this.raining,
-        farm: this.farm.toJSON(), econ: this.econ.toJSON(), ranch: this.ranch.toJSON(), villagers: this.villagers.toJSON(), quests: this.quests.toJSON(), pet: this.pet.toJSON(), book: { entries: this.book.entries, rewarded: this.book.rewarded },
+        farm: this.farm.toJSON(), econ: this.econ.toJSON(), ranch: this.ranch.toJSON(), villagers: this.villagers.toJSON(), quests: this.quests.toJSON(), rice: { ...this.rice.toJSON(), batches: this.riceBatches }, plowBest: this.tr.best, pet: this.pet.toJSON(), book: { entries: this.book.entries, rewarded: this.book.rewarded },
         player: { x: this.player.x, y: this.player.y, dir: this.player.dir }, trees: this.fruitTrees.map((t) => t.lastShake || 0),
       }));
     } catch { /* 저장 불가 (사생활 보호 모드 등) */ }
@@ -98,7 +108,7 @@ export class Game {
     try { d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch { d = null; }
     if (!d) return;
     this.day = d.day || 1; this.time = d.time ?? 0.27; this.seed = d.seed || 'carrot'; this.raining = !!d.raining;
-    this.farm.load(d.farm); this.econ.load(d.econ); this.ranch.load(d.ranch); this.villagers.load(d.villagers); this.quests.load(d.quests); this.pet.load(d.pet);
+    this.farm.load(d.farm); this.econ.load(d.econ); this.ranch.load(d.ranch); this.villagers.load(d.villagers); this.quests.load(d.quests); this.pet.load(d.pet); this.rice.load(d.rice); this.riceBatches = d.rice?.batches || []; this.tr.best = d.plowBest || 0;
     if (d.book) { this.book.entries = d.book.entries || {}; this.book.rewarded = d.book.rewarded || {}; }
     if (d.player && !this.blocked(d.player.x, d.player.y)) { this.player.place(d.player.x, d.player.y); this.player.dir = d.player.dir || 'down'; this.dog.place(d.player.x, d.player.y); }
     (d.trees || []).forEach((v, i) => { if (this.fruitTrees[i]) { this.fruitTrees[i].lastShake = v; this.fruitTrees[i].shaken = v === this.day; } });
@@ -113,7 +123,8 @@ export class Game {
     for (const a of this.animals) if (a.a.x === x && a.a.y === y) return { kind: 'animal', a };
     return null;
   }
-  blocked(x, y) { return this.solid(x, y) || !!this.entityAt(x, y); }
+  blocked(x, y) { return this.solid(x, y) || !!this.entityAt(x, y) || (!this.tr?.driving && this.tractorTile(x, y)); }
+  tractorTile(x, y) { const v = this.vehicle; return x === Math.floor(v.x * M / T) && y === Math.floor(v.z * M / T); }
   plotAt(x, y) { const c = x - PLOTS.x, r = y - PLOTS.y; return c >= 0 && r >= 0 && c < PLOTS.cols && r < PLOTS.rows ? r * PLOTS.cols + c : -1; }
   objAt(x, y) { return this.map.objs.find((o) => !o.walk && o.px === undefined && (o.w ? x >= o.x && x < o.x + o.w && y <= o.y && y > o.y - (o.h ?? 3) : o.x === x && o.y === y)); }
   isWater(x, y) { return x >= 0 && y >= 0 && x < MW && y < MH && this.map.ground[y * MW + x] === G.water; }
@@ -126,13 +137,16 @@ export class Game {
   press(k) {
     this.audio._ctx();
     if (this.ui.key(k)) return;
+    if (this.threshing) { if (k === 'ok') this.mash(); return; }
+    if (this.tr.driving) { if (k === 'ok' || k === 'back') this.dismount(false); else if (DIRS[k] && !this.held.includes(k)) this.held.push(k); return; }
     if (k === 'ok') return this.fish ? this.reel() : this.interact();
     if (k === 'back' && this.fish) return this.cancelFish();
     if (DIRS[k]) { if (!this.held.includes(k)) this.held.push(k); this.path = null; this.pathAct = null; }
   }
   release(k) { this.held = this.held.filter((h) => h !== k); }
   tapTile(tx, ty) {
-    if (this.ui.busy || this.fish) return;
+    if (this.threshing) return this.mash();
+    if (this.ui.busy || this.fish || this.tr.driving) return;
     const p = this.player;
     // 바로 옆 칸이면 돌아서 상호작용
     if (Math.abs(tx - p.x) + Math.abs(ty - p.y) === 1 && this.targetInfo(tx, ty)) { p.dir = dirOf(tx - p.x, ty - p.y); this.interact(); return; }
@@ -172,20 +186,22 @@ export class Game {
       if (this.time >= 1) { this.time -= 1; this.newDay(); }
       this.simTick(dt);
     }
-    this.movePlayer(dt, busy);
+    if (this.tr.driving) this.drive(dt, busy); else this.movePlayer(dt, busy);
+    if (this.threshing && !busy) this.threshTick(dt);
     this.moveDog(dt);
     this.updateNpcs(dt, busy);
     this.updateAnimals(dt);
     for (const t of this.fruitTrees) if (t.shakeT > 0) t.shakeT -= dt;
     if (this.fish) this.fishTick(dt);
     this.saveT -= dt; if (this.saveT <= 0) { this.saveT = 10; this.save(); }
-    this.ui.hint(this.fish ? (this.fish.state === 'bite' ? '지금 당기기!' : '찌가 쑥 들어가면 당기기 (Esc: 그만)') : this.hintText());
+    this.ui.hint(this.threshing ? '연타! (Space 도 되고, 화면을 눌러도 돼요)' : this.tr.driving ? `내리기 · W/S 앞뒤 · A/D 핸들 · Space 쟁기 ${this.tr.plowDown ? '내림' : '올림'}` : this.fish ? (this.fish.state === 'bite' ? '지금 당기기!' : '찌가 쑥 들어가면 당기기 (Esc: 그만)') : this.hintText());
     this.ui.hud(this.hudState());
     this.music?.setScene({ daylight: 1 - this.night, kind: this.raining ? 'rain' : 'clear', precip: this.raining ? 0.7 : 0, wind: 0.2 });
   }
 
   simTick(dt) {
     this.farm.tick(dt);
+    this.rice.tick(dt, { raining: this.raining });
     if (this.raining) { this.rainT = (this.rainT || 0) - dt; if (this.rainT <= 0) { this.rainT = 8; this.farm.rain(); } }
     const ready = this.ranch.tick(dt, this.day);
     for (const a of ready) { const v = this.animals.find((x) => x.sim === a); if (v) v.eat = 0; }
@@ -234,7 +250,10 @@ export class Game {
       if (!keep || Math.abs(Math.abs(ax) - Math.abs(ay)) > 0.35) p.dir = Math.abs(ax) >= Math.abs(ay) ? (ax > 0 ? 'right' : 'left') : (ay > 0 ? 'down' : 'up');
     }
     // 가속·감속: 목표 속도로 지수적으로 다가감 (급출발·급정지 없이, 그래도 손에 바로 붙게)
-    const top = this.run ? MOVE.RUN : MOVE.WALK;
+    let top = this.run ? MOVE.RUN : MOVE.WALK;
+    const pi = paddyAt(p.x, p.y);
+    const wading = pi >= 0 && this.rice.paddies[pi].water > 0.5;
+    if (wading) { top *= 0.62; if (p.speed > 20) { this.splashT = (this.splashT || 0) - dt; if (this.splashT <= 0) { this.splashT = 0.2; for (let k = 0; k < 3; k++) this.parts.push({ kind: 'drop', x: p.wx + (Math.random() - 0.5) * 12, y: p.wy - 4, vx: (Math.random() - 0.5) * 30, vy: -40 - Math.random() * 20, grav: 260, life: 0.4, decay: 2.4 }); } } }
     const k = len > 0.05 ? MOVE.ACCEL : MOVE.DECEL;
     const a = 1 - Math.exp(-k * dt);
     p.vx += (ax * top - p.vx) * a; p.vy += (ay * top - p.vy) * a;
@@ -355,6 +374,9 @@ export class Game {
     if (ent?.kind === 'npc') { const n = ent.n; return { label: `${VILLAGERS[n.id].name}와 이야기`, run: () => this.talk(n) }; }
     if (ent?.kind === 'animal') { const v = ent.a, a = v.sim; const act = this.ranch.actionFor(a, this.day); return { label: `${a.name}(${ANIMALS[a.type].name}) ${'♥'.repeat(this.ranch.hearts(a))} · ${act.type === 'feed' ? `사료 주기 (사료 ${this.econ.inventory.feed})` : act.label}`, run: () => this.animalAct(v) }; }
     if (this.dog.x === x && this.dog.y === y) return { label: `${this.pet.name} 돌보기 ${'♥'.repeat(this.pet.hearts)}`, run: () => this.dogMenu() };
+    if (this.tractorTile(x, y)) return { label: '트랙터 타기 (밭갈이 미니게임)', run: () => this.beginTractor() };
+    const pd = paddyAt(x, y);
+    if (pd >= 0) return this.paddyInfo(pd);
     const i = this.plotAt(x, y);
     if (i >= 0) { const a = this.farm.actionFor(i, (this.econ.inventory.seeds[this.seed] || 0) > 0, (this.econ.inventory.items.compost || 0) > 0); if (a?.type === 'plant') a.label = `${CROPS[this.seed].name} 씨앗 심기`; return a && { label: a.label, run: () => this.plotAct(i, a) }; }
     const o = this.objAt(x, y);
@@ -367,14 +389,17 @@ export class Game {
       if (o.type === 'well') return { label: '우물', run: () => this.ui.say('', '시원한 우물물이 찰랑거려요. 물뿌리개는 언제나 가득!') };
       if (o.type === 'stall') { const m = this.npcs.find((n) => n.id === 'merchant'); return { label: '장터 열기', run: () => this.shop(m) }; }
       if (o.type === 'tree' && o.item) return { label: o.shaken ? '오늘은 열매를 다 땄어요' : `${nameOf(o.item)} 나무 흔들기`, run: () => this.shake(o) };
+      if (o.type === 'thresher') { const n = this.econ.count('paddy'); return { label: n ? `탈곡하기 (벼 ${n}단)` : '탈곡기 (벼를 베어 오세요)', run: () => (n ? this.beginThresh() : this.ui.say('', '논에서 벼를 베어 오면 여기서 쌀로 만들 수 있어요. 탈곡할 때 드럼 속도를 초록 구간에 맞추세요!')) }; }
       if (o.type === 'crate') return { label: '나무 상자', run: () => this.ui.say('', '장터에서 쓰는 빈 상자예요.') };
     }
     if (this.isWater(x, y)) return { label: '낚싯대 던지기', run: () => this.cast(x, y) };
     void p;
     return null;
   }
-  hintText() { if (this.player.speed > 70) return null; const [x, y] = this.facing(); return this.targetInfo(x, y)?.label || null; }
-  interact() { const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) t.run(); }
+  /** 앞 칸에 할 게 없으면 서 있는 논 (논 안에 들어가 일하기) */
+  target() { const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) return t; const pd = paddyAt(this.player.x, this.player.y); return pd >= 0 ? this.paddyInfo(pd) : null; }
+  hintText() { if (this.player.speed > 70) return null; return this.target()?.label || null; }
+  interact() { const t = this.target(); if (t) t.run(); }
 
   report(ev, n = 1) {
     for (const q of this.quests.report(ev, n)) { this.ui.toast(`퀘스트 완료: ${q.title} (J 에서 보상)`, 'quest'); this.audio.play('win'); }
@@ -542,6 +567,148 @@ export class Game {
     this.report('hearts', Math.max(...Object.keys(VILLAGERS).map((k) => this.villagers.hearts(k))));
   }
 
+  /* ── 논농사 ── */
+  paddyInfo(i) {
+    const acts = this.rice.actionsFor(i, this.econ.count('rice_seed') > 0);
+    const a = acts[0];
+    if (!a) return null;
+    const p = this.rice.paddies[i];
+    const lab = a.type === 'plant' ? `모내기 (볍씨 ${this.econ.count('rice_seed')})` : a.label;
+    const st = p.state === 'growing' ? ` · ${RICE_STAGES[p.stage].name} ${Math.floor(p.progress * 100)}%` : '';
+    return { label: lab + (a.type === 'check' ? '' : st), run: () => this.riceAct(i, a) };
+  }
+  riceAct(i, a) {
+    const P = PADDIES[i], cx = P.x * T + 32, cy = P.y * T + 32;
+    const R = this.rice;
+    switch (a.type) {
+      case 'till': R.till(i); this.audio.play('dig'); this.puff(cx, cy, 8); break;
+      case 'flood': R.flood(i); this.audio.play('splash'); this.ui.toast('논에 물을 댔어요. 이제 모를 심어요', 'rice'); break;
+      case 'need_seed': this.ui.toast('볍씨가 없어요. 장터에서 사 오세요', 'rice'); this.audio.play('bump', 0.3); break;
+      case 'plant': if (!this.econ.useItem('rice_seed')) return; R.plant(i); this.audio.play('plant'); this.report('riceplant'); this.ui.toast('모내기 완료! 단계마다 알맞은 물 높이를 맞춰 주세요', 'rice'); break;
+      case 'water': R.water(i); this.audio.play('water'); this.splash(cx, cy); break;
+      case 'drain': R.drain(i); this.audio.play('splash', 0.5); this.ui.toast(`물을 뺐어요 (${R.paddies[i].water.toFixed(1)}cm)`, 'rain'); break;
+      case 'weed': R.weed(i); this.econ.addItem('weed'); this.audio.play('dig'); this.report('weed'); break;
+      case 'harvest': {
+        const r = R.harvest(i); if (!r) return;
+        this.riceBatches.push({ n: r.amount, q: r.quality });
+        this.econ.addItem('paddy', r.amount);
+        this.popIcon('rice', cx, cy - 10, Math.min(4, r.amount)); this.audio.play('harvest');
+        this.ui.toast(`벼 ${r.amount}단! 예상 등급 ${'★'.repeat(RiceSim.grade(r.quality))} · 탈곡기에서 쌀로`, 'rice');
+        break;
+      }
+      default: this.ui.toast(a.label, 'rice');
+    }
+  }
+  splash(x, y) { for (let k = 0; k < 10; k++) this.parts.push({ kind: 'drop', x: x + (Math.random() - 0.5) * 50, y: y - 8, vx: 0, vy: 50 + Math.random() * 30, life: 0.45, decay: 1.8 }); }
+
+  /* ── 탈곡: 연타로 드럼 속도를 초록 구간에 유지 (너무 빠르면 과열로 잠깐 멈춤) ── */
+  async beginThresh() {
+    const c = await this.ui.say('탈곡', `${THRESH_TIME}초 동안 E·Space 를 연타해서 드럼을 돌려요. 게이지를 초록 구간에 오래 둘수록 낟알이 잘 떨어져요. 끝까지 차면 과열!`, ['시작!', '다음에']);
+    if (c !== 0) return;
+    this.player.vx = this.player.vy = 0;
+    this.threshing = { t: -1.2, gauge: 0, inBand: 0, jam: 0, grain: 0 }; // 앞 1.2초는 준비
+    this.audio.play('click');
+  }
+  mash() {
+    const th = this.threshing; if (!th || th.t < 0 || th.jam > 0) return;
+    th.gauge = Math.min(1, th.gauge + 0.1); this.audio.play('click', 0.3);
+    if (th.gauge >= 0.98) { th.jam = 0.8; th.gauge = 0.3; this.audio.play('bump', 0.7); }
+  }
+  threshTick(dt) {
+    const th = this.threshing;
+    th.t += dt;
+    const ok = th.gauge >= THRESH_BAND[0] && th.gauge <= THRESH_BAND[1] && th.jam <= 0;
+    if (th.t > 0) {
+      if (th.jam > 0) th.jam -= dt;
+      th.gauge = Math.max(0, th.gauge - dt * 0.45);
+      if (ok) { th.inBand += dt; th.grain -= dt; if (th.grain <= 0) { th.grain = 0.1; for (let k = 0; k < 3; k++) this.parts.push({ kind: 'grain', x: 18 * T + 30 + Math.random() * 30, y: 5 * T + 10, vx: (Math.random() - 0.5) * 60, vy: -60 - Math.random() * 40, grav: 300, life: 0.6, decay: 1.6 }); } }
+    }
+    this.ui.meter({ title: '탈곡', time: th.t < 0 ? THRESH_TIME : THRESH_TIME - th.t, gauge: th.gauge, band: THRESH_BAND, ok, hot: th.jam > 0, text: th.t < 0 ? '준비…' : th.jam > 0 ? '과열! 잠깐 멈췄어요' : ok ? '좋아요! 그 속도 유지!' : th.gauge > THRESH_BAND[1] ? '너무 빨라요! 살살' : '더 빨리 연타!' });
+    if (th.t >= THRESH_TIME) this.finishThresh();
+  }
+  finishThresh() {
+    const th = this.threshing; this.threshing = null; this.ui.meter(null);
+    const eff = th.inBand / THRESH_TIME / 0.75;
+    const made = {};
+    const batches = this.riceBatches.length ? this.riceBatches : [{ n: this.econ.count('paddy'), q: 50 }];
+    for (const b of batches) { const gr = RiceSim.grade(b.q), n = thresh(b.n, eff); made[gr] = (made[gr] || 0) + n; this.econ.addItem(`rice_${gr}`, n); }
+    this.econ.take('paddy', this.econ.count('paddy'));
+    this.riceBatches = [];
+    this.report('thresh'); this.audio.play('win');
+    const score = Math.round(Math.min(1, eff) * 100), stars = score >= 90 ? 3 : score >= 70 ? 2 : score >= 40 ? 1 : 0;
+    this.ui.say('탈곡 완료', `${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} 효율 ${score}% · ${Object.entries(made).map(([g, n]) => `${ITEMS['rice_' + g].name} × ${n}`).join(', ')} · 논농사 숙련도 Lv.${this.rice.skillLevel}`);
+  }
+
+  /* ── 트랙터 밭갈이: 3D 판과 같은 차량 모델(Vehicle)과 밭 규칙(FieldSim) ── */
+  async beginTractor() {
+    const c = await this.ui.say('트랙터 밭갈이', `${TRACTOR_TIME}초 안에 쟁기로 밭 칸을 최대한 많이 갈아요. W/S 앞뒤, A/D 핸들, Space 쟁기. 쉬지 않고 이어 갈면 연속 보너스, 바위에 부딪히면 -3초! (최고 ${this.tr.best}칸)`, ['출발!', '다음에']);
+    if (c !== 0) return;
+    const tr = this.tr;
+    Object.assign(tr, { driving: true, plowDown: true, counting: 3, streak: 0, maxStreak: 0, lastPlow: -9 });
+    this.held = []; this.path = null;
+    this.field.start(); this.field.running = false;
+    this.audio.play('engine');
+  }
+  togglePlow() { if (!this.tr.driving) return; this.tr.plowDown = !this.tr.plowDown; this.audio.play('click'); }
+  drive(dt, busy) {
+    const v = this.vehicle, tr = this.tr, F = this.field;
+    let ax = 0, ay = 0;
+    if (!busy && tr.counting <= 0) for (const k of this.held) { ax += DIRS[k][0]; ay += DIRS[k][1]; }
+    if (tr.counting > 0) { const before = Math.ceil(tr.counting); tr.counting -= dt; if (Math.ceil(tr.counting) !== before) this.audio.play(tr.counting <= 0 ? 'win' : 'pop'); if (tr.counting <= 0) F.running = true; }
+    const px = v.x, pz = v.z, ph = v.heading;
+    v.step(dt, -ay, ax);
+    // 충돌: 차체 중심과 앞 끝이 막힌 칸이면 되돌리고 감속
+    const hit = (x, z) => { const tx = Math.floor(x * M / T), ty = Math.floor(z * M / T); return this.solid(tx, ty) || !!this.entityAt(tx, ty) || this.isWater(tx, ty); };
+    const fx = v.x + Math.sin(v.heading) * 1.4, fz = v.z + Math.cos(v.heading) * 1.4, bx = v.x - Math.sin(v.heading) * 1.4, bz = v.z - Math.cos(v.heading) * 1.4;
+    if (hit(v.x, v.z) || hit(v.speed >= 0 ? fx : bx, v.speed >= 0 ? fz : bz)) {
+      const rock = F.isRock(fx, fz) && Math.abs(v.speed) > 1;
+      v.x = px; v.z = pz; v.heading = ph; v.speed *= rock ? -0.2 : -0.1; v.pedal = 0;
+      if (rock) { F.hits++; F.time = Math.max(0, F.time - 3); this.ui.toast('바위에 부딪혔어요! -3초', 'star'); this.audio.play('bump'); }
+      else if (!this.bumpT || this.bumpT < performance.now()) { this.audio.play('bump', 0.4); this.bumpT = performance.now() + 500; }
+    }
+    // 쟁기 = 트랙터 뒤 2.3m
+    const plx = v.x - Math.sin(v.heading) * 2.3, plz = v.z - Math.cos(v.heading) * 2.3;
+    if (tr.plowDown && Math.abs(v.speed) > 0.5 && F.running) {
+      const i = F.plowAt(plx, plz);
+      if (i >= 0) {
+        this.audio.play('dig', 0.3); this.puff(plx * M, plz * M, 4);
+        const now = TRACTOR_TIME - F.time;
+        tr.streak = now - tr.lastPlow < 1.2 ? tr.streak + 1 : 1; tr.lastPlow = now;
+        tr.maxStreak = Math.max(tr.maxStreak, tr.streak);
+        if (tr.streak % 10 === 0) { this.audio.play('pop'); this.ui.toast(`연속 ${tr.streak}칸!`, 'star'); }
+      }
+    }
+    if (tr.plowDown && Math.abs(v.speed) > 0.5 && Math.random() < dt * 20) this.puff(plx * M, plz * M, 1);
+    tr.engineT -= dt; if (tr.engineT <= 0) { tr.engineT = 0.9 - Math.min(0.5, Math.abs(v.speed) * 0.08); this.audio.play('engine', 0.35 + Math.abs(v.speed) * 0.06); }
+    // 주인공은 운전석에 (카메라도 따라감)
+    const p = this.player;
+    p.px = v.x * M - Math.sin(v.heading) * 7; p.py = v.z * M - Math.cos(v.heading) * 7 + 6; p.vx = Math.sin(v.heading) * v.speed * M; p.vy = Math.cos(v.heading) * v.speed * M;
+    p.dir = Math.abs(Math.sin(v.heading)) > Math.abs(Math.cos(v.heading)) ? (Math.sin(v.heading) > 0 ? 'right' : 'left') : (Math.cos(v.heading) > 0 ? 'down' : 'up');
+    const last = this.trail[this.trail.length - 1];
+    if (!last || Math.hypot(last.x - p.px, last.y - p.py) >= 2) { this.trail.push({ x: p.px, y: p.py + 10 }); if (this.trail.length > 120) this.trail.shift(); }
+    if (F.running && TRACTOR_TIME - F.time - tr.lastPlow > 1.2) tr.streak = 0;
+    this.ui.meter({ title: '트랙터 밭갈이', time: tr.counting > 0 ? TRACTOR_TIME : F.time, text: tr.counting > 0 ? `${Math.ceil(tr.counting)}…` : `간 칸 ${F.score} / ${F.cols * F.rows - F.rocks.size}${tr.streak > 1 ? ` · 연속 ${tr.streak}` : ''} · 쟁기 ${tr.plowDown ? '내림' : '올림'}` });
+    if (F.tick(dt)) this.dismount(true);
+  }
+  dismount(finished) {
+    const tr = this.tr, F = this.field, v = this.vehicle;
+    tr.driving = false; F.running = false; this.ui.meter(null); this.held = [];
+    v.speed = 0; v.pedal = 0;
+    // 옆 빈 칸에 내림
+    const tx = Math.floor(v.x * M / T), ty = Math.floor(v.z * M / T);
+    const spot = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1], [2, 0], [-2, 0]].map(([dx, dy]) => [tx + dx, ty + dy]).find(([x, y]) => !this.blocked(x, y) && !this.isWater(x, y));
+    if (spot) this.player.place(spot[0], spot[1]);
+    this.player.vx = this.player.vy = 0; this.trail = []; this.dog.place(this.player.x, this.player.y);
+    if (!finished) return;
+    const stars = F.score >= 45 ? 3 : F.score >= 30 ? 2 : F.score >= 15 ? 1 : 0;
+    const streakBonus = tr.maxStreak * 3, starBonus = [0, 0, 30, 80][stars];
+    const reward = F.reward() + streakBonus + starBonus;
+    this.econ.earn(reward); this.report('tractor'); this.report('plowbest', F.score);
+    const rec = F.score > tr.best; if (rec) tr.best = F.score;
+    this.audio.play('win');
+    this.ui.say('밭갈이 결과', `${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} ${F.score}칸${rec ? ' (신기록!)' : ''} · 최대 연속 ${tr.maxStreak}칸 · 바위 ${F.hits}회 · 보상 ${reward}코인`);
+  }
+
   /* ── 장터 ── */
   shop(n) {
     if (n) { n.talking = true; n.a.dir = dirOf(this.player.x - n.a.x, this.player.y - n.a.y); }
@@ -556,6 +723,7 @@ export class Game {
             const C = CROPS[k], lock = C.unlockLevel > this.level;
             return { icon: k, label: `${C.name} 씨앗${lock ? ` (Lv.${C.unlockLevel})` : ''}`, right: `${C.seedPrice} · 보유 ${e.inventory.seeds[k] || 0}`, disabled: lock || e.money < C.seedPrice, onPick: () => { if (e.buySeed(k)) { this.audio.play('coin'); } } };
           });
+          items.push({ icon: 'rice', label: '볍씨 (논에 모내기)', right: `${ITEMS.rice_seed.price} · 보유 ${e.inventory.items.rice_seed || 0}`, disabled: e.money < ITEMS.rice_seed.price, onPick: () => e.buyItem('rice_seed') && this.audio.play('coin') });
           items.push({ icon: 'feed', label: '가축 사료', right: `${FEED_PRICE} · 보유 ${e.inventory.feed}`, disabled: e.money < FEED_PRICE, onPick: () => e.buyFeed() && this.audio.play('coin') });
           items.push({ icon: 'treat', label: '강아지 간식', right: `${ITEMS.pet_treat.price} · 보유 ${e.inventory.items.pet_treat || 0}`, disabled: e.money < ITEMS.pet_treat.price, onPick: () => e.buyItem('pet_treat') && this.audio.play('coin') });
           items.push({ icon: 'compost', label: '퇴비 (심을 때 자동)', right: `${ITEMS.compost.price} · 보유 ${e.inventory.items.compost || 0}`, disabled: e.money < ITEMS.compost.price, onPick: () => e.buyItem('compost') && this.audio.play('coin') });
@@ -643,7 +811,7 @@ export class Game {
         if (tab === 'seed') {
           const items = Object.keys(CROPS).filter((k) => CROPS[k].unlockLevel <= this.level).map((k) => ({ icon: k, label: `${CROPS[k].name} 씨앗${k === this.seed ? ' (선택됨)' : ''}`, right: `× ${inv.seeds[k] || 0}`, onPick: () => { this.seed = k; } }));
           items.push({ icon: 'feed', label: '가축 사료', right: `× ${inv.feed}`, onPick: () => {} });
-          for (const k of ['pet_treat', 'compost', 'weed']) if (inv.items[k]) items.push({ icon: iconOf(k), label: nameOf(k), right: `× ${inv.items[k]}`, onPick: () => {} });
+          for (const k of ['rice_seed', 'pet_treat', 'compost', 'weed']) if (inv.items[k]) items.push({ icon: iconOf(k), label: nameOf(k), right: `× ${inv.items[k]}`, onPick: () => {} });
           return { sub: '씨앗을 고르면 밭에 심을 씨앗이 바뀌어요', items };
         }
         const list = [...Object.entries(inv.crops), ...Object.entries(inv.products), ...Object.entries(inv.items).filter(([k]) => ITEMS[k]?.cat !== 'seed')].filter(([, v]) => v > 0);
@@ -694,8 +862,22 @@ export class Game {
   drawEntities() {
     const S = this.S, out = [];
     const p = this.player;
+    const v = this.vehicle, vx = v.x * M, vy = v.z * M;
+    const ai = ((Math.round((v.heading / (Math.PI * 2)) * 32) % 32) + 32) % 32;
+    const timg = S.tractor(this.tr.plowDown || !this.tr.driving, ai);
+    const shake = this.tr.driving && Math.abs(v.speed) > 0.3 ? Math.round(Math.sin(performance.now() / 45)) * 0.5 : 0;
+    out.push({ img: timg, x: vx - S.tractorAnchor.x, y: vy - S.tractorAnchor.y + shake, sy: vy + 14, shadow: 'xl', sx: vx, shy: vy + 8, tall: true });
+    if (this.tr.driving) {
+      const hx = vx - Math.sin(v.heading) * 12, hy = vy - Math.cos(v.heading) * 12 - 17;
+      out.push({ img: S.char('player', { scarf: 'scarf' }, p.dir, 0), x: hx - 20, y: hy - 26 + shake, sh: 34, sy: vy + 15, player: true });
+      return out.concat(this.drawOthers());
+    }
     const pImg = S.char('player', { scarf: 'scarf' }, p.dir, this.fish ? 0 : p.frame);
     out.push({ img: pImg, x: p.wx - 20, y: p.wy - 50 + (this.fish ? 0 : 0), sy: p.wy, shadow: 'm', sx: p.wx, shy: p.wy - 1, player: true, bubble: this.fish?.state === 'bite' ? '!' : null });
+    return out.concat(this.drawOthers());
+  }
+  drawOthers() {
+    const S = this.S, out = [];
     // 반려견
     const d = this.dog;
     let dimg = S.shiba[d.dir][d.moving ? Math.floor(d.dist / 11) % 2 : 0];
