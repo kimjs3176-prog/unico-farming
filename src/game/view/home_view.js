@@ -1,3 +1,4 @@
+import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
 import { HomeSim, HOME_LEVELS, OUTFIT } from '../sim/home.js';
@@ -342,7 +343,7 @@ export class HomeView {
         group('🧣 스카프', [[null, '없음'], ['red', '🔴 빨강'], ['green', '🟢 초록'], ['blue', '🔵 파랑']], 'scarf');
         group('🥽 고글', [[false, '안 씀'], [true, '씀']], 'goggles');
         group('🌱 머리 새싹 (모자를 쓰면 가려져요)', [[true, '있음'], [false, '없음']], 'sprout');
-        if (cover) body.append(el('p', 'mk-note', `${cover.icon} ${cover.name}을(를) 입는 동안에는 옷에 따라 모자·스카프가 가려질 수 있어요`));
+        if (cover) body.append(el('p', 'mk-note', `${cover.icon} ${cover.name}${josa(cover.name, '을/를')} 입는 동안에는 옷에 따라 모자·스카프가 가려질 수 있어요`));
       } else {
         const rows = el('div', 'rows');
         const desc = (st) => st ? [st.costume ? `${COSTUME[st.costume].icon} ${COSTUME[st.costume].name}` : '🦄 기본', st.hat ? { straw: '👒', helmet: '⛑️' }[st.hat] : '', st.scarf ? { red: '🔴', green: '🟢', blue: '🔵' }[st.scarf] : '', st.goggles ? '🥽' : ''].filter(Boolean).join(' ') : '비어 있음';

@@ -1,3 +1,4 @@
+import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { Unico } from '../unico.js';
 import { LAYOUT } from '../world.js';
@@ -118,7 +119,7 @@ export class NPCs {
     g.cinema.focusTalk(pp, np);
     g.cinema.hideLabelsOf(g.player.unico, e.u);
     const r = g.villagers.talk(e.id, g.world.day);
-    if (r.gained) g.ui.toast(`💕 ${e.n.name}와(과) 오늘 첫 인사! 우정 +${r.gained}`);
+    if (r.gained) g.ui.toast(`💕 ${e.n.name}${josa(e.n.name, '와/과')} 오늘 첫 인사! 우정 +${r.gained}`);
     this.applyRewards(e, r);
     const id = e.id, color = NPC_COLOR[id] || '#30b6aa';
     const who = () => ({ speaker: e.u, name: `${ROLE_ICON[id] || ''} ${e.n.name}`, color, sub: `우정 ${'❤️'.repeat(g.villagers.hearts(id))}${'🤍'.repeat(5 - g.villagers.hearts(id))}` });

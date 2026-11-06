@@ -1,3 +1,4 @@
+import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
 import { ITEMS, itemsOf } from '../sim/items.js';
@@ -151,7 +152,7 @@ export class LakeView {
     else if (r < 0.82) { const n = 30 + Math.floor(Math.random() * 6) * 10; g.economy.earn(n); text = `🪙 물에 빠진 동전 ${n}`; g.audio.play('coin'); }
     else { g.economy.addItem('fish_snail', 1); const rec = g.collection.add('fish_snail', { size: 4 + Math.round(Math.random() * 3), day: g.world.day }); text = `🐌 우렁이${rec.isNew ? ' (도감 등록!)' : ''}`; g.afterCollect?.(); g.audio.play('harvest'); }
     g.fx.pop(p.x, p.z, text.split(' ')[0]);
-    g.ui.toast(`🤿 잠수해서 ${text}을(를) 찾았어요!`);
+    g.ui.toast(`🤿 잠수해서 ${text}${josa(text, '을/를')} 찾았어요!`);
     g.onEvent('dive');
   }
 
@@ -310,7 +311,7 @@ export class LakeView {
             A.upgrade();
             g.audio.play('levelup');
             g.player.unico.playAction('cheer', 1.4);
-            ui.toast(`${r.emoji} ${r.name}을(를) 손에 넣었어요! 줄이 더 튼튼해졌어요`);
+            ui.toast(`${r.emoji} ${r.name}${josa(r.name, '을/를')} 손에 넣었어요! 줄이 더 튼튼해졌어요`);
             render();
           };
           row.append(b);

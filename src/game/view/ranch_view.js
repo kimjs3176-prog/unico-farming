@@ -1,3 +1,4 @@
+import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { RanchSim, ANIMAL_PRICES, BARN, TROUGH_MAX, RANCH_LEVELS } from '../sim/ranch.js';
 import { Processor, RANCH_RECIPES, WORKSHOP_PRICES } from '../sim/farmcraft.js';
@@ -270,11 +271,11 @@ export class RanchView {
     // 여우·늑대가 울타리에 붙어 있으면 동물들이 겁먹어 생산이 멈추고 그쪽을 바라봄
     const threat = g.pests?.ranchThreat;
     if (threat) for (const e of this._all || []) { e.rest = 'look'; e.wait = Math.max(e.wait, 1); }
-    for (const r of S.tick(threat ? 0 : dt, day)) g.ui.toast(`${ANIMALS[r.type].emoji} ${r.name}의 ${PRODUCTS[r.product].name}이(가) 준비됐어요!`);
-    for (const a of S.lastGrown) { g.ui.toast(`🎉 ${BABY[a.type]} ${a.name}이(가) 다 자랐어요!`); g.audio.play('levelup'); }
+    for (const r of S.tick(threat ? 0 : dt, day)) g.ui.toast(`${ANIMALS[r.type].emoji} ${r.name}의 ${PRODUCTS[r.product].name}${josa(PRODUCTS[r.product].name, '이/가')} 준비됐어요!`);
+    for (const a of S.lastGrown) { g.ui.toast(`🎉 ${BABY[a.type]} ${a.name}${josa(a.name, '이/가')} 다 자랐어요!`); g.audio.play('levelup'); }
     if (S.lastAutoFed.length && !this._autoTip) { this._autoTip = true; g.ui.toast('🌾 여물통 자동 급이: 배고픈 동물이 알아서 사료를 먹었어요'); }
     // 목장 가공소 숙성
-    for (const i of this.work.tick(dt)) { const id = this.work.slots[i]?.id; if (id) g.ui.toast(`🧀 ${ITEMS[id].name}이(가) 다 됐어요! 목장 가공소에서 꺼내세요`); }
+    for (const i of this.work.tick(dt)) { const id = this.work.slots[i]?.id; if (id) g.ui.toast(`🧀 ${ITEMS[id].name}${josa(ITEMS[id].name, '이/가')} 다 됐어요! 목장 가공소에서 꺼내세요`); }
     this.wheels.forEach((m, k) => { m.visible = k < 1 + this.work.slots.filter(Boolean).length; });
     this.hay.scale.y = 0.2 + (S.trough / TROUGH_MAX) * 1.8;
     this.hay.position.y = 0.26 + (S.trough / TROUGH_MAX) * 0.12;
@@ -324,7 +325,7 @@ export class RanchView {
     if (best.v) return { d: bd, label: `${best.v.emoji} ${best.v.name} 쓰다듬기`, key: 'pet', onInteract: () => this.pet(best) };
     const a = best.a, act = S.actionFor(a, day);
     const nm = `${S.isBaby(a) ? BABY[a.type] : ANIMALS[a.type].name} ${a.name}`;
-    if (this.sleeping && act.type !== 'collect') return { d: bd, label: `💤 ${nm}이(가) 자고 있어요`, key: 'sleep' };
+    if (this.sleeping && act.type !== 'collect') return { d: bd, label: `💤 ${nm}${josa(nm, '이/가')} 자고 있어요`, key: 'sleep' };
     if (act.type === 'wait') return { d: bd, label: `${nm}: ${act.label}`, key: 'wait' };
     if (act.type === 'feed') return { d: bd, label: `${nm}에게 ${act.label} (사료 ${g.economy.inventory.feed}개)`, key: 'feed', onInteract: () => this.feed(best) };
     if (act.type === 'brush') return { d: bd, label: `🪮 ${nm} ${act.label} (하루 한 번 · 생산이 빨라져요)`, key: 'brush', onInteract: () => this.brush(best) };
@@ -340,7 +341,7 @@ export class RanchView {
     g.fx.pop(e.m.position.x, e.m.position.z, r.heartUp ? '💖' : '💕');
     if (r.heartUp) {
       g.audio.play('levelup', 0.7);
-      g.ui.toast(`💖 ${e.a.name}와(과) 더 친해졌어요! 하트 ${r.hearts}개${r.hearts === 3 ? ' · 이제 생산물이 2개씩!' : r.hearts === 4 ? ' · 가끔 특별한 생산물을 줘요!' : ''}`);
+      g.ui.toast(`💖 ${e.a.name}${josa(e.a.name, '와/과')} 더 친해졌어요! 하트 ${r.hearts}개${r.hearts === 3 ? ' · 이제 생산물이 2개씩!' : r.hearts === 4 ? ' · 가끔 특별한 생산물을 줘요!' : ''}`);
       g.onEvent('animalheart', Math.max(...this.sim.animals.map((a) => this.sim.hearts(a))));
     } else g.ui.toast(`${what} ${e.a.name} 기분이 좋아 보여요 ${'♥'.repeat(r.hearts)}`);
     g.onEvent('animalcare');
@@ -366,7 +367,7 @@ export class RanchView {
       const g = this.game;
       g.audio.play('levelup');
       const unlock = Object.entries(RANCH_RECIPES).filter(([, r]) => r.level === lv).map(([k]) => ITEMS[k].name);
-      g.ui.toast(`🐄 목장 숙련도 Lv.${lv}!${unlock.length ? ` 목장 가공소에서 ${unlock.join(', ')}을(를) 만들 수 있어요` : ''}`);
+      g.ui.toast(`🐄 목장 숙련도 Lv.${lv}!${unlock.length ? ` 목장 가공소에서 ${unlock.join(', ')}${josa(unlock.join(', '), '을/를')} 만들 수 있어요` : ''}`);
     }
     this._lv = lv;
   }
@@ -432,7 +433,7 @@ export class RanchView {
           const e = this.ents.find((x) => x.a === a);
           g.fx.burst(e.m.position.x, 0.6, e.m.position.z, 0xfff3a0, 16);
           g.audio.play('levelup');
-          g.ui.toast(`🎉 ${BABY[type]} ${a.name}이(가) 목장에 왔어요! 쓰다듬어 주면 더 빨리 자라요`);
+          g.ui.toast(`🎉 ${BABY[type]} ${a.name}${josa(a.name, '이/가')} 목장에 왔어요! 쓰다듬어 주면 더 빨리 자라요`);
           g.onEvent('buyanimal');
           render();
         };

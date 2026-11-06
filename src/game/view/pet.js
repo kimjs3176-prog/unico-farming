@@ -1,3 +1,4 @@
+import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { heightAt } from '../terrain.js';
 import { playClip } from './ranch_view.js';
@@ -94,7 +95,7 @@ export class Pet {
     e.mixer.update(dt * THREE.MathUtils.clamp(rate, 0.5, 1.8));
     // 이름표는 가까울 때만 (화면 정리), 쓰다듬기는 다른 할 일보다 우선순위 낮게
     this.label.visible = d < 4.5;
-    if (this.sim.found && d < 2 && !hidden) return { d: d - 0.5, label: `🐕 ${this.sim.name}가 찾아 온 것 받기`, key: 'petfind', onInteract: () => this.takeFound() };
+    if (this.sim.found && d < 2 && !hidden) return { d: d - 0.5, label: `🐕 ${this.sim.name}${josa(this.sim.name, '이/가')} 찾아 온 것 받기`, key: 'petfind', onInteract: () => this.takeFound() };
     if (d < 1.4 && !hidden) return { d: d + 1.2, label: `🐕 ${this.sim.name} 돌보기`, key: 'pet', onInteract: () => this.care() };
     return null;
   }
@@ -154,7 +155,7 @@ export class Pet {
       const f = this.sim.dig();
       g.audio.play('bark');
       g.fx.pop(p.x, p.z, f.type === 'coin' ? '🪙' : f.type === 'seed' ? '🌱' : '🎁');
-      g.ui.toast(`🐕 ${this.sim.name}가 땅을 파서 무언가를 찾았어요! 가까이 가서 받아 주세요`);
+      g.ui.toast(`🐕 ${this.sim.name}${josa(this.sim.name, '이/가')} 땅을 파서 무언가를 찾았어요! 가까이 가서 받아 주세요`);
     }
     void playerPos;
     return null;
@@ -171,7 +172,7 @@ export class Pet {
     } else { eco.addItem('fruit_apple', 1); eco.addItem('pet_treat', 1); text = `${ITEMS.fruit_apple.emoji} 사과와 🦴 간식`; }
     g.audio.play('coin');
     g.player.unico.playAction('heart', 1);
-    g.ui.toast(`🐕 ${this.sim.name}가 ${text}을(를) 물어 왔어요! 착하다~`);
+    g.ui.toast(`🐕 ${this.sim.name}${josa(this.sim.name, '이/가')} ${text}${josa(text, '을/를')} 물어 왔어요! 착하다~`);
     this.sim.affection = Math.min(100, this.sim.affection + 2);
   }
 
@@ -213,7 +214,7 @@ export class Pet {
     this.petT = 2; playClip(this.e, 'eat', 0.2);
     g.audio.play('plant');
     g.fx.pop(p.x, p.z, emoji);
-    g.ui.toast(`🐕 ${this.sim.name}가 맛있게 먹었어요! 배부름 +${r.hunger}, 애정 +${r.affection}`);
+    g.ui.toast(`🐕 ${this.sim.name}${josa(this.sim.name, '이/가')} 맛있게 먹었어요! 배부름 +${r.hunger}, 애정 +${r.affection}`);
     g.onEvent?.('petfeed');
   }
 

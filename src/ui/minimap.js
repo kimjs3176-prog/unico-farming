@@ -1,3 +1,4 @@
+import { josa } from '../game/sim/josa.js';
 import { LAYOUT } from '../game/world.js';
 import { HILLS } from '../game/terrain.js';
 
@@ -161,6 +162,6 @@ export class Minimap {
     const pos = g.findOpenSpot(x, z);
     this.pick = pos;
     g.teleport(pos.x, pos.z);
-    g.ui.toast(name ? `${name}(으)로 이동했어요` : '✨ 이동했어요');
+    g.ui.toast(name ? `${name}${josa(name, '으로/로')} 이동했어요` : '✨ 이동했어요');
   }
 }

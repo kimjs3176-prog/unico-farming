@@ -1,3 +1,4 @@
+import { josa } from '../game/sim/josa.js';
 import { joinQrBox } from './join_qr.js';
 import { COSTUMES } from '../game/sim/costume.js';
 import { CROPS, PRODUCTS, FEED_PRICE } from '../game/sim/crops.js';
@@ -614,7 +615,7 @@ export class UI {
               eco.money -= cost; eco.stats.spent += cost;
               cs.wear(c.id); g.applyLook();
               g.audio.play('levelup'); g.player.unico.playAction('cheer', 1.2);
-              this.toast(`${c.icon} ${c.name}을(를) 샀어요! 바로 입었어요 · ${c.perkText}`);
+              this.toast(`${c.icon} ${c.name}${josa(c.name, '을/를')} 샀어요! 바로 입었어요 · ${c.perkText}`);
               g.onEvent('costume', cs.owned.size);
               render();
             };

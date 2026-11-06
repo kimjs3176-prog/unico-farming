@@ -1,3 +1,4 @@
+import { josa } from './game/sim/josa.js';
 import { HomeView } from './game/view/home_view.js';
 import { TownView } from './game/view/town_view.js';
 import { AutoPlay } from './game/autoplay.js';
@@ -392,7 +393,7 @@ class Game {
         const i = LEVELS.indexOf(this.gfx.autoLevel);
         if (i > 0) {
           this.setGraphics(applyPreset({ ...this.gfx, autoLevel: LEVELS[i - 1] }, 'auto'));
-          this.ui.toast(`⚙️ 화면이 끊겨서 그래픽 품질을 '${PRESET_INFO[LEVELS[i - 1]].name}'(으)로 낮췄어요 (환경설정에서 바꿀 수 있어요)`);
+          this.ui.toast(`⚙️ 화면이 끊겨서 그래픽 품질을 '${PRESET_INFO[LEVELS[i - 1]].name}'${josa(PRESET_INFO[LEVELS[i - 1]].name, '으로/로')} 낮췄어요 (환경설정에서 바꿀 수 있어요)`);
         }
       }
     } else if (this.governor.frames === 0) this.ui.updateFps?.(this.governor.fps);
@@ -493,7 +494,7 @@ class Game {
     if ((this._cosT = (this._cosT || 0) + dt) > 2) {
       this._cosT = 0;
       for (const id of this.costume.autoUnlock({ stamps: this.koat.book.count, stampsTotal: DIVISIONS.length })) {
-        this.ui.toast(`🎁 새 코스튬 '${COSTUME[id].icon} ${COSTUME[id].name}'을(를) 받았어요! 집 옷장에서 입어 보세요`);
+        this.ui.toast(`🎁 새 코스튬 '${COSTUME[id].icon} ${COSTUME[id].name}'${josa(COSTUME[id].name, '을/를')} 받았어요! 집 옷장에서 입어 보세요`);
         this.audio.play('levelup');
         this.onEvent('costume', this.costume.owned.size);
       }

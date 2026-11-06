@@ -1,3 +1,4 @@
+import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { heightAt } from '../terrain.js';
 import { LAYOUT } from '../world.js';
@@ -189,7 +190,7 @@ export class NatureView {
     g.player.unico.facing = Math.atan2(b.g.position.x - g.player.position.x, b.g.position.z - g.player.position.z);
     g.player.unico.playAction('net', 0.7);
     g.fx.pop(b.g.position.x, b.g.position.z, ITEMS[b.kind].emoji);
-    g.ui.toast(`${ITEMS[b.kind].emoji} ${ITEMS[b.kind].name}을(를) 잡았다!${rec.isNew ? ' 📖 도감 등록!' : ''}`);
+    g.ui.toast(`${ITEMS[b.kind].emoji} ${ITEMS[b.kind].name}${josa(ITEMS[b.kind].name, '을/를')} 잡았다!${rec.isNew ? ' 📖 도감 등록!' : ''}`);
     g.afterCollect?.();
   }
 
@@ -430,7 +431,7 @@ export class NatureView {
       if (out.request) extra += ' 📋 오늘의 의뢰 달성! 낚시꾼에게 보고하세요';
       else if (out.biggest) extra += ' 🏅 낚시터 최고 기록!';
     }
-    g.ui.toast(`🎣 ${it.name}을(를) 낚았다! (${r.size}cm)${rec.isNew ? ' 📖 새 도감!' : rec.isRecord ? ' 🏆 신기록!' : ''}${extra}`);
+    g.ui.toast(`🎣 ${it.name}${josa(it.name, '을/를')} 낚았다! (${r.size}cm)${rec.isNew ? ' 📖 새 도감!' : rec.isRecord ? ' 🏆 신기록!' : ''}${extra}`);
     g.afterCollect?.();
     return null;
   }

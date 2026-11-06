@@ -1,3 +1,4 @@
+import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { HILLS, CHESTS, heightAt } from '../terrain.js';
 import { CROPS } from '../sim/crops.js';
@@ -108,7 +109,7 @@ export class ExploreView {
     g.player.unico.playAction('cheer', 1.2);
     g.fx.burst(c.x, c.m.position.y + 0.6, c.z, 0xffd75a, 20);
     g.fx.pop(c.x, c.z, '🎁');
-    g.ui.toast(`🎁 보물 상자에서 ${text}을(를) 찾았어요! (내일 다시 채워져요)`);
+    g.ui.toast(`🎁 보물 상자에서 ${text}${josa(text, '을/를')} 찾았어요! (내일 다시 채워져요)`);
     g.onEvent('chest');
   }
 }

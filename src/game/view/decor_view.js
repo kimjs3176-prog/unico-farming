@@ -1,3 +1,4 @@
+import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { heightAt } from '../terrain.js';
 import { LAYOUT } from '../world.js';
@@ -171,7 +172,7 @@ export class DecorView {
     g.audio.play('pop', 0.6);
     saveGame(g);
     if (kind === 'move') { this.start(p.id); this.mode.rot = p.rot; this.mode.moving = true; g.ui.toast(`${DECOR_BY_ID[p.id].icon} 새 자리로 가서 E (무료)`); }
-    else g.ui.toast(`🧺 ${DECOR_BY_ID[p.id].name}을(를) 보관함에 넣었어요 · 다시 놓을 때는 무료`);
+    else g.ui.toast(`🧺 ${DECOR_BY_ID[p.id].name}${josa(DECOR_BY_ID[p.id].name, '을/를')} 보관함에 넣었어요 · 다시 놓을 때는 무료`);
   }
 
   update(dt, pp) {
