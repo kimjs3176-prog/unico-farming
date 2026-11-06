@@ -46,6 +46,7 @@ import { Angling } from './game/sim/angling.js';
 import { WaterFX } from './game/waterfx.js';
 import { FarmCraftView } from './game/view/farmcraft_view.js';
 import { CostumeSim, COSTUME, encodeLook } from './game/sim/costume.js';
+import { joinQrBox } from './ui/join_qr.js';
 import { SocialSim } from './game/sim/social.js';
 import { SocialView } from './game/view/social_view.js';
 import { DIVISIONS } from './game/sim/koat.js';
@@ -524,6 +525,8 @@ async function boot() {
   await Promise.all([assets.loadAll((p) => (bar.style.width = Math.round(p * 100) + '%')), fontReady]);
   const lt = document.getElementById('loading-text');
   if (lt) lt.textContent = '준비 완료! 닉네임을 정하고 입장하세요';
+  // 로그인 화면 접속 QR (휴대폰으로 같은 게임에 바로 들어오기, 좁은 화면·터치 기기에서는 숨김)
+  try { const q = joinQrBox(); q.classList.add('login-qr'); document.getElementById('loading')?.append(q); } catch { /* QR 없이도 입장 가능 */ }
   btn.disabled = false;
   btn.textContent = '입장하기';
   let started = false;

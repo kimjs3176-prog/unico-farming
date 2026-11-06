@@ -151,7 +151,7 @@ export class Scenery {
       if (Math.hypot(x - LAYOUT.pond.x, z - LAYOUT.pond.z) < LAYOUT.pond.r + 1.5) continue;
       if (Math.hypot(x - LAYOUT.lake.x, z - LAYOUT.lake.z) < LAYOUT.lake.r + 1.6) continue;
       if (no.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1)) continue;
-      if (this.world.isBare(x, z) || this.world.isReserved(x, z, -0.5)) continue;
+      if (this.world.isBare(x, z) || this.world.isReserved(x, z, -0.5, true)) continue;
       if (this.world.isBlocked(x, z, 0.3)) continue;
       p.set(x, heightAt(x, z), z);
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * Math.PI * 2);
@@ -198,7 +198,7 @@ export class Scenery {
       const [cx, cz, pc] = clusters[Math.floor(rnd() * clusters.length)];
       const x = cx + (rnd() - 0.5) * 6, z = cz + (rnd() - 0.5) * 6;
       if (Math.abs(x) > B || Math.abs(z) > B) continue;
-      if (this.world.isBare(x, z) || this.world.isBlocked(x, z, 0.4) || this.world.isReserved(x, z, 0)) continue;
+      if (this.world.isBare(x, z) || this.world.isBlocked(x, z, 0.4) || this.world.isReserved(x, z, 0, true)) continue;
       if (Math.hypot(x - LAYOUT.pond.x, z - LAYOUT.pond.z) < LAYOUT.pond.r + 1) continue;
       if (Math.hypot(x - LAYOUT.lake.x, z - LAYOUT.lake.z) < LAYOUT.lake.r + 1.2) continue;
       p.set(x, heightAt(x, z), z);

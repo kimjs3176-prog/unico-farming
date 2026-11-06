@@ -1,3 +1,4 @@
+import { joinQrBox } from './join_qr.js';
 import { COSTUMES } from '../game/sim/costume.js';
 import { CROPS, PRODUCTS, FEED_PRICE } from '../game/sim/crops.js';
 import { ITEMS, CATEGORY_NAMES, itemsOf } from '../game/sim/items.js';
@@ -205,13 +206,18 @@ export class UI {
   async openRooms() {
     const g = this.game;
     const p = this.openPanel('🏡 어느 농장으로 갈까요?');
-    p.append(h('p', '', '농장을 옮겨도 내 밭·가방·퀘스트는 그대로예요. 방마다 최대 50명이 함께 지내요.'));
+    const note = h('p', '', '농장을 옮겨도 내 밭·가방·퀘스트는 그대로예요.');
+    p.append(note);
     const list = h('div', 'room-list');
     p.append(list);
+    // 친구 초대: 이 QR 을 휴대폰으로 찍으면 같은 게임 주소로 바로 들어와요
+    p.append(h('h3', '', '👥 친구 초대'));
+    p.append(joinQrBox('📱 이 QR 을 찍으면 같은 농장 게임으로 들어와요', 120));
     try {
       const base = (import.meta.env?.VITE_WS_URL || '').replace(/^ws/, 'http').replace(/\/ws$/, '');
       const r = await fetch(`${base}/rooms`);
       const d = await r.json();
+      note.textContent = `농장을 옮겨도 내 밭·가방·퀘스트는 그대로예요. 방마다 최대 ${+d.maxPlayers || 0}명이 함께 지내요.`;
       const rooms = d.rooms.length ? d.rooms : [{ name: '1번 농장', count: 0, max: d.maxPlayers }];
       const nextIdx = rooms.length + 1;
       if (rooms.every((x) => x.count >= x.max)) rooms.push({ name: `${nextIdx}번 농장`, count: 0, max: d.maxPlayers });
