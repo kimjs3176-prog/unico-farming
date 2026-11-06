@@ -15,7 +15,8 @@ globalThis.WebSocketPair = class { constructor() { this[0] = new FakeWs(); this[
 const RealResponse = globalThis.Response;
 globalThis.Response = class { constructor(body, init = {}) { this.status = init.status ?? 200; this.webSocket = init.webSocket; } static json(o) { return RealResponse.json(o); } };
 
-const { FarmRoom, default: worker, MAX_PLAYERS, MAX_ROOMS } = await import('../deploy/cloudflare/worker.js');
+const { FarmRoom, default: worker } = await import('../deploy/cloudflare/worker.js');
+const { MAX_PLAYERS, MAX_ROOMS } = await import('../deploy/cloudflare/limits.js');
 const CAP = MAX_PLAYERS * 2; // 방 하나 소켓 총량 (입장 전 포함)
 
 function fakeState() {
@@ -80,4 +81,9 @@ test('릴레이: 오늘 무료 한도 안전선을 넘었으면 방을 찾지 �
   const res = await worker.fetch(new Request('https://relay/ws', { headers: { Upgrade: 'websocket' } }), env);
   assert.equal(res.status, 101);
   assert.deepEqual(asked.map((a) => a[0]), ['__ledger__'], '방 개수 세기·입장 요청 없이 장부만 확인');
+});
+
+test('릴레이 진입 파일은 핸들러(default)·Durable Object 클래스만 내보냄 (상수를 내보내면 workerd 가 시작 거부)', async () => {
+  const mod = await import('../deploy/cloudflare/worker.js');
+  for (const [k, v] of Object.entries(mod)) assert.ok(k === 'default' ? typeof v === 'object' : typeof v === 'function', `내보낸 ${k}: ${typeof v}`);
 });

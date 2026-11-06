@@ -9,10 +9,9 @@
  *   사용량 보기: GET /usage
  */
 import { Meter, addToLedger, limits, nextReset } from './budget.js';
+import { MAX_PLAYERS, MAX_ROOMS } from './limits.js';
 import { sanitizeAct, ACT_LIMIT } from '../../server/rooms.js';
 
-export const MAX_PLAYERS = 30;         // 방 하나 인원 (무료 플랜에 맞춰 4개 방 × 30명 = 최대 120명)
-export const MAX_ROOMS = 4;
 const LEDGER = '__ledger__';
 const MAX_MSG = 4096;           // 메시지 최대 길이(바이트)
 const CHAT_LIMIT = 5;           // 10초에 채팅 5번까지
