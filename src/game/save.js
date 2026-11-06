@@ -7,7 +7,7 @@ export function saveGame(game) {
       farm: game.farm.sim.toJSON(), economy: game.economy.toJSON(), quests: game.quests.toJSON(), ranch: game.ranch.toJSON(),
       rice: game.rice.toJSON(), nature: game.nature.toJSON(), villagers: game.villagers.toJSON(), collection: game.collection.toJSON(), koat: game.koat.toJSON(),
       world: { time: game.world.time, day: game.world.day },
-      player: { x: game.player.position.x, z: game.player.position.z },
+      player: game.home?.inside ? { ...game.home.outPos } : { x: game.player.position.x, z: game.player.position.z }, // 집 안이면 문 앞으로 저장
       flags: game.flags || {},
       explore: game.explore?.toJSON(),
       bees: game.bees?.toJSON(),

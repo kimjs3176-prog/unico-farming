@@ -751,7 +751,8 @@ export class World {
   }
 
   /** next 위치를 장애물 밖으로 밀어냄 (원형 캐릭터) */
-  resolveCollision(next, r, { swim = false } = {}) {
+  resolveCollision(next, r, { swim = false, player = false } = {}) {
+    if (player && this.playerCollision) return this.playerCollision(next, r); // 실내 등 플레이어만 다른 규칙
     const B = LAYOUT.bounds - 1;
     next.x = THREE.MathUtils.clamp(next.x, -B, B);
     next.z = THREE.MathUtils.clamp(next.z, -B, B);

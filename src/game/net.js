@@ -96,7 +96,7 @@ export class Net {
     this.acc += dt;
     if (this.acc < 1 / SEND_HZ) return;
     this.acc = 0;
-    const pos = g.tractor.driving ? g.tractor.riderGroup.position : g.player.position;
+    const pos = g.tractor.driving ? g.tractor.riderGroup.position : g.home?.inside ? g.home.outPos : g.player.position; // 집 안이면 다른 사람에게는 문 앞으로
     const u = g.player.unico;
     const msg = { t: 'pos', x: +pos.x.toFixed(2), z: +pos.z.toFixed(2), f: +u.facing.toFixed(2), a: u.action || '' };
     const key = JSON.stringify(msg);

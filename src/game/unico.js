@@ -591,7 +591,8 @@ export class Unico {
     // 수영: 몸이 물에 잠김 (잠수 중에는 더 깊이)
     const sinkT = this.swimming ? (this.action === 'dive' ? -0.68 - Math.sin(Math.min(1, this.actionT / 1.3) * Math.PI) * 1.3 : -0.68) : 0;
     this.sink += (sinkT - this.sink) * (1 - Math.exp(-dt * (this.swimming ? 5 : 8)));
-    if (this.group.parent?.isScene) this.group.position.y = heightAt(this.group.position.x, this.group.position.z) + this.sink;
+    // floorY: 실내 등 지형 대신 정해진 바닥 높이
+    if (this.group.parent?.isScene) this.group.position.y = (this.floorY ?? heightAt(this.group.position.x, this.group.position.z)) + this.sink;
     // 직전 프레임 자세 저장 (전환 보간용)
     const bones = this._poseBones();
     const prev = (this._prevPose ||= bones.map(() => [0, 0, 0, 1]));

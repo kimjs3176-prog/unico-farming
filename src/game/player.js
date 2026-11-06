@@ -83,7 +83,7 @@ export class Player {
     if (vel.lengthSq() > 0) {
       const from = (this._from ||= new THREE.Vector3()).copy(this.group.position);
       const next = (this._next ||= new THREE.Vector3()).copy(from).addScaledVector(vel, dt);
-      this.world.resolveCollision(next, 0.45, { swim: true }); // 호수는 헤엄쳐 들어감
+      this.world.resolveCollision(next, 0.45, { swim: true, player: true }); // 호수는 헤엄쳐 들어감
       this.group.position.copy(next);
       // 벽에 막힌 만큼 속도도 줄여 다시 출발할 때 튀지 않게
       if (dt > 0) { const real = next.distanceTo(from) / dt, sp = vel.length(); if (real < sp) vel.multiplyScalar(Math.max(0, real / sp)); }

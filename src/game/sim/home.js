@@ -15,6 +15,8 @@ export const HOME_LEVELS = [
   { name: '아늑한 집', price: 1500, lv: 2, desc: '창문이 커지고 꽃밭·우편함이 생겨요. 매일 아침 우편함에 40코인' },
   { name: '2층 집', price: 4000, lv: 4, desc: '2층과 굴뚝, 정원 등불. 매일 아침 우편함에 100코인과 퇴비' },
 ];
+/** 옷장에서 고를 수 있는 것 */
+export const OUTFIT = { hat: [null, 'straw', 'helmet'], scarf: [null, 'red', 'green', 'blue'] };
 /** 단계별 아침 우편함 선물 */
 export const MAIL = [null, { coins: 40, items: [] }, { coins: 100, items: [['compost', 1]] }];
 
@@ -23,6 +25,7 @@ export class HomeSim {
     this.level = 0;      // HOME_LEVELS 번호
     this.restedDay = 0;  // 개운한 날 (이 날짜까지 속도 보너스)
     this.sleeps = 0;     // 잠잔 횟수
+    this.outfit = {};    // 옷장에서 고른 옷차림 { hat, scarf, goggles, sprout }
   }
 
   get info() { return HOME_LEVELS[this.level]; }
@@ -62,11 +65,13 @@ export class HomeSim {
   /** 새 날 아침 우편함 */
   mail() { return MAIL[this.level] || null; }
 
-  toJSON() { return { level: this.level, restedDay: this.restedDay, sleeps: this.sleeps }; }
+  toJSON() { return { level: this.level, restedDay: this.restedDay, sleeps: this.sleeps, outfit: this.outfit }; }
   load(d) {
     if (!d) return;
     this.level = Math.max(0, Math.min(HOME_LEVELS.length - 1, d.level | 0));
     this.restedDay = d.restedDay | 0;
     this.sleeps = d.sleeps | 0;
+    const o = d.outfit || {};
+    this.outfit = { hat: OUTFIT.hat.includes(o.hat) ? o.hat : null, scarf: OUTFIT.scarf.includes(o.scarf) ? o.scarf : null, goggles: !!o.goggles, sprout: o.sprout === undefined ? undefined : !!o.sprout, ...(o.set ? { set: true } : {}) };
   }
 }

@@ -48,3 +48,13 @@ test('저장·불러오기 (이상한 값은 범위 안으로)', () => {
   assert.equal(g.level, 1); assert.equal(g.restedDay, 5);
   g.load({ level: 99 }); assert.equal(g.level, HOME_LEVELS.length - 1);
 });
+
+test('옷차림 저장: 정해진 것만 받아들임', async () => {
+  const { OUTFIT } = await import('../src/game/sim/home.js');
+  const h = new HomeSim();
+  h.load({ outfit: { hat: 'straw', scarf: 'blue', goggles: 1 } });
+  assert.deepEqual([h.outfit.hat, h.outfit.scarf, h.outfit.goggles], ['straw', 'blue', true]);
+  h.load({ outfit: { hat: 'crown', scarf: '<x>' } });
+  assert.equal(h.outfit.hat, null); assert.equal(h.outfit.scarf, null);
+  assert.ok(OUTFIT.hat.includes('helmet'));
+});

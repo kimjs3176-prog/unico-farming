@@ -293,6 +293,7 @@ class Game {
 
   /** 순간이동 (지도·체험관 버튼). 카메라는 현재 각도 유지가 기본 */
   teleport(x, z, { yaw, pitch, distance, facing } = {}) {
+    this.home?.leave(true); // 집 안에서 지도로 이동하면 먼저 밖으로
     this.ui.closePanel();
     this.player.position.set(x, 0, z);
     this.player.moveTarget = null;
@@ -375,24 +376,26 @@ class Game {
     // 상호작용 후보: 진행 중인 미니게임(d<0)이 최우선, 그다음 가장 가까운 대상
     let prompt = null;
     const pick = (p) => { if (p && (!prompt || (p.d ?? 99) < (prompt.d ?? 99))) prompt = p; };
-    pick(this.tractor.update(dt, input, pp));
+    const pw = this.home.inside ? this.home.outVec : pp; // 집 안이면 바깥 것들은 문 앞 기준
+    pick(this.tractor.update(dt, input, pw));
     if (!this.tractor.driving) {
-      pick(this.smartfarm.update(dt, input, pp));
-      pick(this.npcs.update(dt, pp));
-      pick(this.farm.update(dt, pp));
-      pick(this.ranch.update(dt, pp));
-      pick(this.rice.update(dt, pp));
-      pick(this.nature.update(dt, pp));
-      pick(this.koat.update(dt, pp));
-      pick(this.pet.update(dt, pp));
-      pick(this.explore.update(dt, pp));
-      pick(this.pests.update(dt, pp));
-      pick(this.herding.update(dt, pp));
-      pick(this.bees.update(dt, pp));
-      pick(this.lake.update(dt, pp));
-      pick(this.farmcraft.update(dt, pp));
-      pick(this.town.update(dt, pp));
-      pick(this.home.update(dt, pp));
+      pick(this.smartfarm.update(dt, input, pw));
+      pick(this.npcs.update(dt, pw));
+      pick(this.farm.update(dt, pw));
+      pick(this.ranch.update(dt, pw));
+      pick(this.rice.update(dt, pw));
+      pick(this.nature.update(dt, pw));
+      pick(this.koat.update(dt, pw));
+      pick(this.pet.update(dt, pw));
+      pick(this.explore.update(dt, pw));
+      pick(this.pests.update(dt, pw));
+      pick(this.herding.update(dt, pw));
+      pick(this.bees.update(dt, pw));
+      pick(this.lake.update(dt, pw));
+      pick(this.farmcraft.update(dt, pw));
+      pick(this.town.update(dt, pw));
+      const homePrompt = this.home.update(dt, pp);
+      if (this.home.inside) prompt = homePrompt; else pick(homePrompt); // 집 안에서는 가구 안내만
       this.pointer.update(dt, input);
       this.autoplay.update(dt, input);
       const arrived = this.player.arrivedInteract;

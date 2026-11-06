@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
-import { HomeSim, HOME_LEVELS } from '../sim/home.js';
+import { HomeSim, HOME_LEVELS, OUTFIT } from '../sim/home.js';
+import { buildRoom, IO } from './home_interior.js';
 import { ITEMS } from '../sim/items.js';
 import { saveGame } from '../save.js';
 
@@ -9,6 +10,8 @@ import { saveGame } from '../save.js';
  *  - 🛏️ 잠자기: 저녁 6시~새벽 6시. 화면이 어두워졌다 밝아지며 다음 날 아침 6시 30분, 그날 하루 걷기 +15%
  *  - 🏡 집 넓히기: 오두막 → 아늑한 집(큰 창·꽃밭·우편함) → 2층 집(2층·정원 등불·굴뚝 연기)
  *  - 밤에는 창문에 불이 켜짐, 아늑한 집부터 매일 아침 우편함 선물
+ *  - 🏠 실내: 문으로 들어가면 단면 인형집처럼 위·앞에서 내려다보는 방 (view/home_interior.js)
+ *    침대(잠자기)·옷장(옷 갈아입기)·책장(도감)·달력(퀘스트)·책상(집 넓히기)·문(나가기)
  * 모양은 모두 코드로 만든 저폴리 (게임 팔레트)
  */
 const M = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...o });
@@ -112,7 +115,25 @@ export class HomeView {
     this.obstacle = { x: H.x, z: H.z, r: 2.3 };
     game.world.obstacles.push(this.obstacle);
     this.smokeT = 0;
+    // 실내 (맵 밖 IO 에 지어 둠). 불빛은 처음부터 장면에 넣어 두고(셰이더 다시 만들기 방지) 밖에서는 꺼 둠
+    this.inside = false;
+    this.outPos = { x: LAYOUT.home.door.x, z: LAYOUT.home.door.z - 0.8 };
+    this.outVec = new THREE.Vector3(this.outPos.x, 0, this.outPos.z);
+    this.roomGlass = new THREE.MeshStandardMaterial({ color: 0x9fd3ea, roughness: 0.2, emissive: 0x9fd3ea, emissiveIntensity: 0.3 });
+    this.roomLampMat = new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffc46b, emissiveIntensity: 0.2 });
+    this.roomLight = new THREE.PointLight(0xffd6a0, 0, 16, 1.4);
+    this.roomLight.position.set(IO.x, IO.y + 2.7, IO.z);
+    game.world.scene.add(this.roomLight);
     this.build();
+  }
+
+  /** 실내 방 다시 짓기 (집 단계가 바뀌면) */
+  buildRoom() {
+    if (this.room) this.game.world.scene.remove(this.room.group);
+    this.room = buildRoom(this.sim.level, { glass: this.roomGlass, lampMat: this.roomLampMat });
+    this.room.group.position.set(IO.x, IO.y, IO.z);
+    this.game.world.scene.add(this.room.group);
+    this.room.group.visible = this.inside;
   }
 
   build() {
@@ -121,10 +142,12 @@ export class HomeView {
     this.yard = buildYard(this.sim.level, this.lamp);
     for (const o of [this.house, this.yard]) { o.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); this.root.add(o); }
     this.obstacle.r = [2.1, 2.5, 2.7][this.sim.level];
+    this.buildRoom();
   }
 
   update(dt, pp) {
     const g = this.game, w = g.world;
+    if (this.inside) return this._updateInside(dt, pp);
     // 밤엔 창문·등불에 불, 굴뚝 연기 (저녁·아침과 2층 집은 늘)
     const night = 1 - THREE.MathUtils.clamp(w.daylight * 2.2, 0, 1);
     this.glass.emissiveIntensity = night * 1.1;
@@ -139,7 +162,152 @@ export class HomeView {
     const D = LAYOUT.home.door, d = Math.hypot(D.x - pp.x, D.z - pp.z);
     if (d > 2.0) return null;
     const can = this.sim.canSleep(w.time);
-    return { d, label: `🏠 ${this.sim.info.name} · ${can ? '🛏️ 잠자기 가능' : '들어가기'}`, key: 'home', onInteract: () => this.open() };
+    return { d, label: `🏠 ${this.sim.info.name} 들어가기${can ? ' · 🛏️ 잘 시간' : ''}`, key: 'home', onInteract: () => this.enter() };
+  }
+
+  /** 화면을 잠깐 어둡게 했다가 fn 실행 후 밝게 */
+  _fade(text, fn, ms = 450) {
+    const fade = document.createElement('div');
+    fade.className = 'sleep-fade quick';
+    fade.innerHTML = `<span>${text}</span>`;
+    document.getElementById('ui').append(fade);
+    requestAnimationFrame(() => fade.classList.add('on'));
+    setTimeout(() => { fn(); fade.classList.remove('on'); setTimeout(() => fade.remove(), 700); }, ms);
+  }
+
+  /** 들어가기: 방으로 옮기고, 카메라를 위·앞에서 내려다보게, 바깥(하늘·비·안개)은 가림 */
+  enter() {
+    const g = this.game, cam = g.followCam;
+    if (this.inside || g.tractor.driving) return;
+    g.ui.closePanel();
+    g.audio.play('click');
+    this._fade('🏠', () => {
+      this.inside = true;
+      this.room.group.visible = true;
+      this._cam = { yaw: cam.yaw, pitch: cam.pitch, distance: cam.distance };
+      const e = this.room.entry;
+      g.player.position.set(IO.x + e.x, IO.y, IO.z + e.z);
+      g.player.unico.floorY = IO.y; // 바닥 높이는 방바닥 (지형 높이 대신)
+      g.player.moveTarget = null; g.player.vel?.set(0, 0, 0);
+      g.player.unico.facing = -Math.PI / 2;
+      cam.yaw = 0; cam.pitch = 0.92; cam.distance = [9.5, 10.5, 12][this.sim.level]; cam.first = true;
+      g.world.playerCollision = (next, r) => this._collide(next, r);
+      g.ui.toast(`🏠 ${this.sim.info.name}에 들어왔어요 · 가구 앞에서 E`);
+    });
+  }
+
+  /** 나가기: 문 앞으로, 카메라·바깥 원래대로 */
+  leave(quick = false) {
+    const g = this.game, cam = g.followCam;
+    if (!this.inside) return;
+    const go = () => {
+      this.inside = false;
+      this.room.group.visible = false;
+      g.world.playerCollision = null;
+      this.roomLight.intensity = 0;
+      g.player.unico.floorY = null;
+      g.player.position.set(this.outPos.x, 0, this.outPos.z);
+      g.player.moveTarget = null; g.player.vel?.set(0, 0, 0);
+      g.player.unico.facing = Math.PI; // 북쪽(길)을 보고 나옴
+      if (this._cam) Object.assign(cam, this._cam);
+      cam.first = true;
+      if (g.world.scenery?.sky) g.world.scenery.sky.visible = true;
+    };
+    if (quick) go(); else { g.audio.play('click'); this._fade('🚪', go); }
+  }
+
+  /** 실내 충돌: 방 안쪽 + 가구 상자 */
+  _collide(next, r) {
+    const { W, D, solids } = this.room;
+    const lx = next.x - IO.x, lz = next.z - IO.z;
+    let x = THREE.MathUtils.clamp(lx, -W / 2 + r, W / 2 - r), z = THREE.MathUtils.clamp(lz, -D / 2 + r, D / 2 - 0.25);
+    for (const b of solids) {
+      if (x > b.x0 - r && x < b.x1 + r && z > b.z0 - r && z < b.z1 + r) {
+        const push = [[x - (b.x0 - r), 'x', b.x0 - r], [(b.x1 + r) - x, 'x', b.x1 + r], [z - (b.z0 - r), 'z', b.z0 - r], [(b.z1 + r) - z, 'z', b.z1 + r]].sort((a, c) => a[0] - c[0])[0];
+        if (push[1] === 'x') x = push[2]; else z = push[2];
+      }
+    }
+    next.x = IO.x + x; next.z = IO.z + z;
+    return next;
+  }
+
+  _updateInside(dt, pp) {
+    const g = this.game, w = g.world, cam = g.followCam;
+    // 바깥 가리기: 하늘·비·눈 끄고 배경·안개를 어둡게 (매 프레임 world.update 가 되돌리므로 그 뒤에 덮어씀)
+    if (w.scenery?.sky) w.scenery.sky.visible = false;
+    if (w.precip) { w.precip.rain.visible = false; w.precip.snow.visible = false; }
+    w.scene.background?.setHex(0x1c1720);
+    if (w.scene.fog) { w.scene.fog.color.setHex(0x1c1720); w.scene.fog.near = 18; w.scene.fog.far = 34; }
+    // 실내 불빛: 밤일수록 따뜻하게, 창밖은 낮엔 하늘빛·밤엔 짙은 남색
+    const night = 1 - THREE.MathUtils.clamp(w.daylight * 2.2, 0, 1);
+    this.roomLight.intensity = 0.9 + night * 2.4;
+    this.roomLampMat.emissiveIntensity = 0.3 + night * 1.8;
+    this.roomGlass.emissive.setHex(night > 0.5 ? 0x1b2a55 : 0x9fd3ea);
+    this.roomGlass.emissiveIntensity = night > 0.5 ? 0.6 : 0.5;
+    if (this.room.fire) { const f = this.room.fire; f.scale.y = 1 + Math.sin(performance.now() / 90) * 0.12; f.material.emissiveIntensity = 1.4 + Math.sin(performance.now() / 70) * 0.3; }
+    // 카메라는 앞쪽에서만 (옆으로 너무 돌리면 벽 뒤가 보임)
+    cam.yaw = THREE.MathUtils.clamp(((cam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI, -0.55, 0.55);
+    cam.pitch = THREE.MathUtils.clamp(cam.pitch, 0.62, 1.2);
+    cam.distance = THREE.MathUtils.clamp(cam.distance, 6, 15);
+    g.player.speedMult = this.sim.speedMult(w.day);
+    // 가장 가까운 가구
+    let best = null, bd = 1.35;
+    for (const sp of this.room.spots) { const d = Math.hypot(IO.x + sp.x - pp.x, IO.z + sp.z - pp.z); if (d < bd) { bd = d; best = sp; } }
+    if (!best) return { d: 99, label: `🏠 ${this.sim.info.name} · 가구 앞에서 E`, key: 'inside' };
+    return { d: bd, label: best.key === 'bed' && !this.sim.canSleep(w.time) ? '🛏️ 침대 · 저녁 6시부터 잘 수 있어요' : best.label, key: 'home_' + best.key, onInteract: () => this._use(best.key) };
+  }
+
+  _use(key) {
+    const g = this.game, ui = g.ui;
+    if (key === 'door') return this.leave();
+    if (key === 'bed') { if (this.sim.canSleep(g.world.time)) return this.sleep(); return ui.toast(`🛏️ 아직 일러요 · 저녁 6시부터 잘 수 있어요 (지금 ${g.world.clockText().split(' ')[1]})`); }
+    if (key === 'books') return ui.openBook();
+    if (key === 'calendar') return ui.openQuests();
+    if (key === 'desk') return this.open();
+    if (key === 'wardrobe') return this.openWardrobe();
+  }
+
+  /** 옷장: 모자·스카프·고글·새싹 */
+  openWardrobe() {
+    const g = this.game, ui = g.ui, u = g.player.unico;
+    const p = ui.openPanel('👗 옷장');
+    const cur = () => ({ hat: null, scarf: null, goggles: false, sprout: true, ...(u.outfit || {}) });
+    const render = () => {
+      p.querySelectorAll('.wd').forEach((e) => e.remove());
+      const o = cur();
+      const box = document.createElement('div'); box.className = 'wd';
+      const group = (title, opts, keyName) => {
+        const h3 = document.createElement('h3'); h3.textContent = title; box.append(h3);
+        const row = document.createElement('div'); row.className = 'wd-row';
+        for (const [val, label] of opts) {
+          const b = document.createElement('button');
+          b.className = o[keyName] === val ? 'gold' : 'ghost';
+          b.textContent = label;
+          b.onclick = () => { this.wear({ [keyName]: val }); g.audio.play('pop', 0.6); render(); };
+          row.append(b);
+        }
+        box.append(row);
+      };
+      group('🎩 모자', [[null, '없음'], ['straw', '👒 밀짚모자'], ['helmet', '⛑️ 안전모']], 'hat');
+      group('🧣 스카프', [[null, '없음'], ['red', '🔴 빨강'], ['green', '🟢 초록'], ['blue', '🔵 파랑']], 'scarf');
+      group('🥽 고글', [[false, '안 씀'], [true, '씀']], 'goggles');
+      group('🌱 머리 새싹 (모자를 쓰면 가려져요)', [[true, '있음'], [false, '없음']], 'sprout');
+      p.append(box);
+    };
+    render();
+  }
+
+  /** 옷 입기 (저장도) */
+  wear(o) {
+    const u = this.game.player.unico;
+    const clean = {};
+    if ('hat' in o) clean.hat = OUTFIT.hat.includes(o.hat) ? o.hat : null;
+    if ('scarf' in o) clean.scarf = OUTFIT.scarf.includes(o.scarf) ? o.scarf : null;
+    if ('goggles' in o) clean.goggles = !!o.goggles;
+    if ('sprout' in o) clean.sprout = !!o.sprout;
+    u.setOutfit(clean);
+    this.sim.outfit = { ...this.sim.outfit, ...clean, set: true };
+    this.game.onEvent('outfit');
   }
 
   /** 집 창 */
@@ -177,6 +345,7 @@ export class HomeView {
     eco.money -= cost; eco.stats.spent += cost;
     g.ui.closePanel();
     this.build();
+    if (this.inside) { const e = this.room.entry; g.player.position.set(IO.x + e.x, IO.y, IO.z + e.z); this.room.group.visible = true; g.followCam.distance = [9.5, 10.5, 12][this.sim.level]; }
     g.audio.play('levelup');
     g.juice.pop(this.root, 0.25);
     g.fx.burst(this.root.position.x, 2.5, this.root.position.z, 0xfff3a0, 34);
@@ -201,6 +370,7 @@ export class HomeView {
     setTimeout(() => {
       w.time = r.time;
       if (r.newDay) { w.day = r.day; w.onNewDay?.(r.day); }
+      if (this.inside) { const b = this.room.spots.find((x) => x.key === 'bed'); if (b) g.player.position.set(IO.x + b.x, IO.y, IO.z + b.z); }
       g.player.unico.playAction('cheer', 1.2);
       fade.classList.remove('on');
       setTimeout(() => fade.remove(), 900);
@@ -221,7 +391,11 @@ export class HomeView {
   }
 
   toJSON() { return this.sim.toJSON(); }
-  load(d) { this.sim.load(d); this.build(); }
+  load(d) {
+    this.sim.load(d);
+    this.build();
+    if (d?.outfit?.set) { const { hat, scarf, goggles, sprout } = this.sim.outfit; this.game.player.unico.setOutfit({ hat, scarf, goggles, ...(sprout === undefined ? {} : { sprout }) }); this.sim.outfit.set = true; }
+  }
 }
 
 export { HOME_LEVELS };
