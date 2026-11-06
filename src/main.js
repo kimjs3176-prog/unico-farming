@@ -218,6 +218,20 @@ class Game {
     this.ui.toast('💾 저장된 농장을 불러왔어요');
   }
 
+  /** 로딩 화면 뒤에서 인트로 전경 시점으로 한 번 그려 둠: 처음 화면에 들어오는 물체·그림자를 미리 준비해 인트로 첫 몇 초의 끊김을 줄임 */
+  warmUp() {
+    if (this.flags.intro) return; // 인트로를 이미 본 저장이면 생략
+    const cam = this.camera, p = cam.position.clone(), q = cam.quaternion.clone();
+    try {
+      for (const [pos, look] of [[[10, 22, 30], [0, 0, 0]], [[16, 16, 26], [0, 0, 0]]]) {
+        cam.position.set(...pos); cam.lookAt(...look); cam.updateMatrixWorld();
+        this.renderer.shadowMap.needsUpdate = true;
+        this.postfx.render();
+      }
+    } catch { /* 첫 프레임에 준비 */ }
+    cam.position.copy(p); cam.quaternion.copy(q); cam.updateMatrixWorld();
+  }
+
   /** 로딩 화면이 사라진 뒤 실행 (첫 접속 컷신 등) */
   whenShown(fn) { if (this._shown) fn(); else (this._onShown ||= []).push(fn); }
   shown() { this._shown = true; for (const fn of this._onShown || []) fn(); this._onShown = null; }
@@ -240,7 +254,8 @@ class Game {
     const pp = this.player.position;
     this.flags.intro = true;
     return this.cinema.play([
-      { cam: [[0, 34, 46], [0, 0, -4], 0.01], hold: 0 },
+      // 첫 장면: 비스듬한 마을 전경 (정면 높은 전경보다 그리기 25% 가벼움 — 인트로 첫 몇 초 끊김 완화)
+      { cam: [[10, 22, 30], [0, 0, 0], 0.01], hold: 0 },
       { cam: [[16, 16, 26], [0, 0, 0], 3.2] },
       { say: [{ ...G, text: `안녕, ${this.playerName}! 유니코 팜에 온 걸 환영해 🦄` }] },
       { cam: [[6, 6, -2], [0, 1, -10], 2.0] },
@@ -330,7 +345,8 @@ class Game {
     const dt = Math.min(0.05, rawDt);
     this.fpsDt = rawDt;
     // 자동 품질: 화면이 계속 끊기면 한 단계 낮춤 (탭을 숨겼다 돌아온 공백은 visibilitychange 에서 측정 초기화)
-    if (rawDt < 3 && this.governor.tick(rawDt)) {
+    // 컷신 중에는 측정하지 않음: 전경 샷은 평소보다 1.5배 무거워 화질이 중간에 바뀌며(화면 재구성) 더 끊김
+    if (rawDt < 3 && !this.cinema.locked && this.governor.tick(rawDt)) {
       this.ui.updateFps?.(this.governor.fps);
       if (this.gfx.preset === 'auto') {
         const i = LEVELS.indexOf(this.gfx.autoLevel);
@@ -435,9 +451,11 @@ class Game {
     this.saveTimer += dt;
     if (this.saveTimer > 10) { this.saveTimer = 0; saveGame(this); }
     // 그림자 맵 갱신 주기 (낮음: 3프레임, 보통: 2프레임마다 — 정적 장면이 대부분이라 체감 차이 작음)
-    if (this.quality.shadowEvery > 1) {
+    const shEvery = this.cinema.locked ? Math.max(3, this.quality.shadowEvery) : this.quality.shadowEvery;
+    this.renderer.shadowMap.autoUpdate = shEvery <= 1;
+    if (shEvery > 1) {
       this.frameNo = (this.frameNo || 0) + 1;
-      if (this.frameNo % this.quality.shadowEvery === 0) this.renderer.shadowMap.needsUpdate = true;
+      if (this.frameNo % shEvery === 0) this.renderer.shadowMap.needsUpdate = true;
     }
     this.postfx.render();
     input.endFrame();
@@ -473,6 +491,7 @@ async function boot() {
     // (compileAsync 는 일부 환경에서 끝나지 않아 동기 compile 사용 + 안전장치: 길어도 로딩 화면은 내려감)
     await new Promise((r) => requestAnimationFrame(r)); // '화면 준비 중' 문구가 먼저 보이게
     try { window.game.renderer.compile(window.game.world.scene, window.game.camera); } catch { /* 첫 프레임에 컴파일 */ }
+    window.game.warmUp?.();
     await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), new Promise((r) => setTimeout(r, 1500))]);
     ld.classList.add('out');
     setTimeout(() => ld.remove(), 650);

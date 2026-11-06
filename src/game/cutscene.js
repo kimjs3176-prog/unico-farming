@@ -36,6 +36,7 @@ export class Cinematics {
     this.from.pos.copy(this.pos); this.from.look.copy(this.look);
     this.to.pos.set(...pos); this.to.look.set(...look);
     this.t = 0; this.dur = Math.max(0.01, dur); this.orbit = orbit;
+    this.t0 = performance.now(); // 이동 진행은 실제 경과 시간 기준 (wait() 와 같은 시계)
     this.want = 1;
   }
 
@@ -66,7 +67,7 @@ export class Cinematics {
     if (this.hidden) for (const u of this.hidden) { if (u.label) u.label.visible = false; }
     if (this.blend <= 0) return;
     if (this.t < 1) {
-      this.t = Math.min(1, this.t + dt / this.dur);
+      this.t = Math.min(1, (performance.now() - this.t0) / 1000 / this.dur);
       const e = easeInOut(this.t);
       this.pos.lerpVectors(this.from.pos, this.to.pos, e);
       this.look.lerpVectors(this.from.look, this.to.look, e);
@@ -107,5 +108,6 @@ export class Cinematics {
     this.release();
     g.player.frozen = false;
     this.locked = false;
+    g.governor?.reset(); // 컷신 동안의 프레임은 화질 자동 조절 측정에서 뺌 (끝난 뒤 새로 잼)
   }
 }
