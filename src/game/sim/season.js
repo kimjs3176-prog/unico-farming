@@ -11,22 +11,22 @@ export const SEASONS = [
   {
     id: 'spring', name: '봄', icon: '🌸', crops: ['strawberry', 'cabbage'], growth: 1,
     desc: '꽃잎이 흩날려요. 딸기·양배추가 제철!',
-    look: { grass: [0.27, 0.6, 0.47], grassJitter: 0.04, leaf: [0xb4e07a, 0.22], leafAlt: [0xf6b6cf, 0.35], ground: [1.0, 1.02, 0.98], flowers: 1, snow: 0, fall: 'petal' },
+    look: { grass: [0.26, 0.6, 0.4], grassJitter: 0.04, leaf: [0xb4e07a, 0.22], leafAlt: [0xf6b6cf, 0.35], ground: [1.0, 1.02, 0.98], flowers: 1, snow: 0, fall: 'petal' },
   },
   {
     id: 'summer', name: '여름', icon: '☀️', crops: ['tomato', 'corn'], growth: 1,
     desc: '초록이 짙어지는 계절. 토마토·옥수수가 제철!',
-    look: { grass: [0.28, 0.58, 0.38], grassJitter: 0.035, leaf: [0x3f9a35, 0.18], leafAlt: null, ground: [0.98, 1.02, 0.96], flowers: 0.75, snow: 0, fall: null },
+    look: { grass: [0.28, 0.62, 0.31], grassJitter: 0.035, leaf: [0x3f9a35, 0.18], leafAlt: null, ground: [0.98, 1.02, 0.96], flowers: 0.75, snow: 0, fall: null },
   },
   {
     id: 'autumn', name: '가을', icon: '🍁', crops: ['carrot', 'cabbage'], growth: 1,
     desc: '단풍이 들고 낙엽이 져요. 당근·양배추가 제철!',
-    look: { grass: [0.13, 0.55, 0.45], grassJitter: 0.07, leaf: [0xe0802c, 0.6], leafAlt: [0xd4372c, 0.55], ground: [1.06, 0.97, 0.84], flowers: 0.3, snow: 0, fall: 'leaf' },
+    look: { grass: [0.11, 0.65, 0.42], grassJitter: 0.05, leaf: [0xe0802c, 0.6], leafAlt: [0xd4372c, 0.55], ground: [1.06, 0.97, 0.84], flowers: 0.3, snow: 0, fall: 'leaf' },
   },
   {
     id: 'winter', name: '겨울', icon: '❄️', crops: [], growth: 0.6,
     desc: '눈이 소복이 쌓여요. 바깥 밭은 천천히 자라니 스마트팜을 써 보세요',
-    look: { grass: [0.24, 0.16, 0.62], grassJitter: 0.03, leaf: [0x8a9a88, 0.5], leafAlt: null, ground: [1.04, 1.05, 1.1], flowers: 0, snow: 0.55, fall: null },
+    look: { grass: [0.22, 0.12, 0.66], grassJitter: 0.03, leaf: [0x8a9a88, 0.5], leafAlt: null, ground: [1.04, 1.05, 1.1], flowers: 0, snow: 0.55, fall: null },
   },
 ];
 export const SEASON = Object.fromEntries(SEASONS.map((s) => [s.id, s]));

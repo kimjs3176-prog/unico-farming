@@ -95,6 +95,7 @@ export class UI {
     mk('🛒', '장터', () => this.openMarket());
     mk('📖', '도감', () => this.openBook());
     mk('🏢', '체험관', () => game.goKoat());
+    mk('🪑', '꾸미기', () => (game.decor?.mode ? game.decor.stop() : game.decor?.open()));
     this.bar.append(h('div', 'sep'));
     mk('🏡', '농장 방', () => this.openRooms());
     this.soundBtn = mk('🔊', '소리', () => {

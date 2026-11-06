@@ -40,6 +40,8 @@ export const QUESTS = [
   { id: 'greet1',    title: '반가워요',             desc: '다른 플레이어 가까이에서 E → 👋 인사하기',          event: 'greet',    goal: 1, reward: { money: 60, xp: 50 } },
   { id: 'five3',     title: '하이파이브 세 번',     desc: '다른 플레이어와 하이파이브를 3번 하세요',            event: 'highfive', goal: 3, reward: { money: 150, xp: 120 } },
   { id: 'friend1',   title: '첫 친구',              desc: '다른 플레이어와 친구가 되세요 (⭐ 친구 추가)',       event: 'friend',   goal: 1, absolute: true, reward: { money: 120, xp: 100 } },
+  { id: 'decor1',    title: '첫 꾸미기',            desc: '🪑 꾸미기에서 소품을 하나 골라 농장에 놓아 보세요',  event: 'decor',    goal: 1, absolute: true, reward: { money: 80, xp: 60 } },
+  { id: 'decor10',   title: '꾸미기 장인',          desc: '농장에 꾸미기 소품을 10개 놓으세요',                event: 'decor',    goal: 10, absolute: true, reward: { money: 400, xp: 300 } },
   { id: 'cos1',      title: '첫 코스튬',            desc: '장터 👗 의상 탭에서 코스튬을 하나 사 입어 보세요', event: 'costume',  goal: 1, absolute: true, reward: { money: 100, xp: 80 } },
   { id: 'cos4',      title: '옷장 수집가',          desc: '코스튬을 4벌 모으세요 (체험관 조끼·축제 한복 포함)', event: 'costume', goal: 4, absolute: true, reward: { money: 600, xp: 400 } },
   { id: 'home2',     title: '더 넓은 집',           desc: '유니코 집을 아늑한 집으로 넓히세요',              event: 'homeup',   goal: 1, reward: { money: 200, xp: 150 } },

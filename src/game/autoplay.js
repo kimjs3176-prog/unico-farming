@@ -50,7 +50,7 @@ export class AutoPlay {
   _busy() {
     const g = this.g;
     return !!(g.home?.inside || g.ui.panel || g.dialogue.active || g.cinema.locked || g.tractor.driving || g.player.frozen || g.farm.job
-      || g.herding?.active || g.smartfarm?.active || document.querySelector('.mg-count, .mg-wrap'));
+      || g.herding?.active || g.smartfarm?.active || g.decor?.mode || document.querySelector('.mg-count, .mg-wrap'));
   }
 
   /** 계획에 넘길 현재 상태 */

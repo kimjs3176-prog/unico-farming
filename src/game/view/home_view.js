@@ -3,7 +3,7 @@ import { LAYOUT } from '../world.js';
 import { HomeSim, HOME_LEVELS, OUTFIT } from '../sim/home.js';
 import { COSTUMES, COSTUME } from '../sim/costume.js';
 import { buildRoom, IO } from './home_interior.js';
-import { SURF } from '../surface.js';
+import { SURF, enhanceMaterial } from '../surface.js';
 import { ITEMS } from '../sim/items.js';
 import { saveGame } from '../save.js';
 
@@ -22,6 +22,8 @@ const MAT = {
   stone: M(0xcfc4b2), door: M(0xe58a3a), knob: M(0xfac03e, { metalness: 0.4, roughness: 0.4 }), white: M(0xffffff),
   leaf: M(0x6dbb4f), red: M(0xe35d5d), pink: M(0xf28bb0), yellow: M(0xfac03e), purple: M(0x9b7fd1), mail: M(0x4a90d9),
 };
+// 다른 건물처럼 질감 셰이더 + '시야 구멍'(카메라와 유니코 사이를 가리면 점묘로 비침) — 커진 집이 유니코를 가리지 않게
+for (const [k, m] of Object.entries(MAT)) { m.name = `home_${k}`; enhanceMaterial(m); }
 const box = (w, h, d, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); return o; };
 const ball = (r, m, x, y, z) => { const o = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), m); o.position.set(x, y, z); return o; };
 

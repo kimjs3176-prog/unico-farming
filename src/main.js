@@ -50,6 +50,7 @@ import { joinQrBox } from './ui/join_qr.js';
 import { SocialSim } from './game/sim/social.js';
 import { SocialView } from './game/view/social_view.js';
 import { SeasonView } from './game/view/season_view.js';
+import { DecorView } from './game/view/decor_view.js';
 import { DIVISIONS } from './game/sim/koat.js';
 
 class Game {
@@ -112,6 +113,7 @@ class Game {
     this.net = new Net(this);
     this.socialView = new SocialView(this);
     this.season = new SeasonView(this); // 계절 (7일마다 봄·여름·가을·겨울)
+    this.decor = new DecorView(this);   // 농장 꾸미기
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
     this.pointer = new PointerNav(this);
@@ -231,6 +233,7 @@ class Game {
     this.home.load(s.home);
     this.costume.load(s.costume);
     this.social.load(s.social);
+    this.decor.load(s.decor);
     this.applyLook(false);
     if (this.pet.ok) this.pet.load(s.pet);
     if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원');
@@ -426,6 +429,7 @@ class Game {
       pick(this.farmcraft.update(dt, pw));
       pick(this.town.update(dt, pw));
       pick(this.net.prompt(pw)); // 가까운 다른 플레이어
+      pick(this.decor.update(dt, pp)); // 꾸미기 모드 (켜져 있을 때만, 다른 안내보다 먼저)
       const homePrompt = this.home.update(dt, pp);
       if (this.home.inside) prompt = homePrompt; else pick(homePrompt); // 집 안에서는 가구 안내만
       this.pointer.update(dt, input);

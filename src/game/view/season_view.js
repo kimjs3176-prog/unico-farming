@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { seasonOf, growthMult, priceMult } from '../sim/season.js';
+import { SURF } from '../surface.js';
 
 /**
  * 계절 화면 (규칙은 sim/season.js)
@@ -48,12 +49,13 @@ export class SeasonView {
     g.economy.seasonMult = (item) => priceMult(s, item);
     // 풀 색: 인스턴스마다 정해진 난수로 (계절이 바뀌어도 같은 풀은 같은 결)
     if (sc?.grass?.instanceColor) {
+      sc.grass.material.color.setHex(0xffffff); // 재질의 초록을 빼고 계절 색을 그대로 (가을 풀이 연두로 보이지 않게)
       const col = new THREE.Color(), n = sc.grassTotal || sc.grass.count;
       for (let i = 0; i < n; i++) {
         const r1 = hash(i * 3.1), r2 = hash(i * 7.7), r3 = hash(i * 1.3);
         let [h, sa, l] = L.grass;
-        if (s.id === 'autumn' && r3 < 0.35) { h = 0.22; sa = 0.45; l = 0.4; } // 가을에도 군데군데 초록
-        if (s.id === 'winter' && r3 < 0.25) { h = 0.27; sa = 0.25; l = 0.42; }
+        if (s.id === 'autumn' && r3 < 0.3) { h = 0.2; sa = 0.5; l = 0.34; } // 가을에도 군데군데 초록
+        if (s.id === 'winter' && r3 < 0.25) { h = 0.26; sa = 0.22; l = 0.36; }
         col.setHSL(h + (r1 - 0.5) * 2 * L.grassJitter, sa + (r2 - 0.5) * 0.15, l + (r3 - 0.5) * 0.1);
         sc.grass.setColorAt(i, col);
       }
@@ -76,6 +78,7 @@ export class SeasonView {
     const gm = w.groundMat;
     if (gm) { gm.userData.baseColor ||= gm.color.clone(); gm.color.copy(gm.userData.baseColor).multiply(new THREE.Color(...L.ground)); }
     w.seasonSnow = L.snow;
+    if (!announce) { w.snowCover = Math.max(w.snowCover || 0, L.snow); SURF.snow.value = Math.max(SURF.snow.value, L.snow * 0.85); } // 겨울에 접속하면 처음부터 눈이 쌓인 채로
     // 꽃잎·낙엽 색
     if (L.fall) {
       const cols = L.fall === 'petal' ? [0xffc4d8, 0xffd9e6, 0xfff0f5, 0xf7a8c4] : [0xe0802c, 0xd4372c, 0xe8b23a, 0xa8642a];
