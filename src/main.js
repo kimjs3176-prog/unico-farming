@@ -50,6 +50,8 @@ class Game {
     this.playerName = name;
     this.assets = assets;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    // 배포판: 셰이더마다 오류 확인을 기다리지 않음 → 드라이버가 여러 셰이더를 한꺼번에(병렬) 준비 (개발 중에는 오류를 보려고 켜 둠)
+    if (import.meta.env.PROD) this.renderer.debug.checkShaderErrors = false;
     this.gfx = loadSettings();
     this.quality = resolveQuality(this.gfx);
     this.governor = new FpsGovernor();
@@ -482,15 +484,20 @@ async function boot() {
     started = true;
     const name = (nick.value.trim() || randomName()).slice(0, 12);
     const ld = document.getElementById('loading');
+    btn.disabled = true;
+    if (lt) lt.textContent = '농장을 만드는 중…';
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); // 문구가 먼저 그려지게 (월드 만들기는 한 번에 실행돼 화면이 잠시 멈춤)
     window.game = new Game(canvas, assets, name);
     window.game.audio.play('click'); // 사용자 동작 안에서 오디오 시작
     window.game.music.start();
     // 첫 화면 끊김 방지: 로딩 화면 뒤에서 셰이더를 미리 컴파일(가능하면 병렬)하고 두 프레임 그린 뒤 보여 줌
-    btn.disabled = true;
     if (lt) lt.textContent = '화면 준비 중…';
-    // (compileAsync 는 일부 환경에서 끝나지 않아 동기 compile 사용 + 안전장치: 길어도 로딩 화면은 내려감)
     await new Promise((r) => requestAnimationFrame(r)); // '화면 준비 중' 문구가 먼저 보이게
-    try { window.game.renderer.compile(window.game.world.scene, window.game.camera); } catch { /* 첫 프레임에 컴파일 */ }
+    // 셰이더 미리 준비: 지원 브라우저(KHR_parallel_shader_compile)는 병렬로, 화면을 멈추지 않고 기다림.
+    // 일부 환경에서 compileAsync 가 끝나지 않는 일이 있어 최대 5초만 기다림 (남은 것은 첫 프레임에)
+    const R = window.game.renderer, sc = window.game.world.scene, cm = window.game.camera;
+    try { await Promise.race([R.compileAsync(sc, cm), new Promise((r) => setTimeout(r, 5000))]); }
+    catch { try { R.compile(sc, cm); } catch { /* 첫 프레임에 컴파일 */ } }
     window.game.warmUp?.();
     await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), new Promise((r) => setTimeout(r, 1500))]);
     ld.classList.add('out');

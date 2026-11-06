@@ -234,7 +234,8 @@ export class World {
     const S = this.quality.level === 'low' ? 1024 : 2048, G = this.groundSize;
     const c = document.createElement('canvas');
     c.width = c.height = S;
-    const ctx = c.getContext('2d');
+    const main = c.getContext('2d');
+    let ctx = main; // soft() 안에서는 잠시 작은 캔버스를 가리킴
     const P = (x) => ((x + G / 2) / G) * S; // 월드 → 픽셀
     const M = (m) => (m / G) * S;
     const rnd = mulberry32(31);
@@ -246,7 +247,20 @@ export class World {
       ctx.fillStyle = `hsla(${88 + rnd() * 22}, ${45 + rnd() * 20}%, ${42 + rnd() * 16}%, 0.22)`;
       ctx.beginPath(); ctx.ellipse(rnd() * S, rnd() * S, r, r * (0.5 + rnd() * 0.5), rnd() * 3, 0, 7); ctx.fill();
     }
-    const soft = (blur, fn) => { ctx.save(); ctx.filter = `blur(${blur}px)`; fn(); ctx.restore(); };
+    // 흐린 경계: ctx.filter='blur()' 는 큰 캔버스에서 CPU 로 계산돼 매우 느림(입장 로딩 대부분을 차지)
+    // → 1/k 크기 캔버스에 그린 뒤 부드럽게 늘려 붙임 (늘릴 때의 보간이 흐림 역할, 결과는 거의 같음)
+    const soft = (blur, fn) => {
+      const k = Math.max(1, Math.min(16, Math.round(blur / 1.1)));
+      const w = Math.ceil(S / k);
+      const sc = document.createElement('canvas');
+      sc.width = sc.height = w;
+      const sx = sc.getContext('2d');
+      sx.scale(w / S, w / S);
+      ctx = sx; fn(); ctx = main;
+      main.save(); main.imageSmoothingEnabled = true; main.imageSmoothingQuality = 'high';
+      main.drawImage(sc, 0, 0, S, S);
+      main.restore();
+    };
     // 흙길: 넓고 흐린 가장자리 → 본체 → 자갈 점
     const stroke = (pts, w, color, alpha) => {
       ctx.strokeStyle = color; ctx.globalAlpha = alpha; ctx.lineWidth = M(w); ctx.lineCap = ctx.lineJoin = 'round';

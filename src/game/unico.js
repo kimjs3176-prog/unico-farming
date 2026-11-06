@@ -1,3 +1,4 @@
+import { fetchModel } from './fetch_gz.js';
 import * as THREE from 'three';
 import { heightAt } from './terrain.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -101,7 +102,7 @@ const OFFICIAL = { body: 0xffffff, snout: 0xf7e1ec, mane: 0x30b6aa, maneD: 0x249
 /** 게임 시작 전 한 번 호출 (assets.loadAll) */
 /** key: 리그 이름 또는 '<리그>_lod' (멀리 있을 때 쓰는 저해상도) */
 export async function loadUnicoMesh(url, key = 'quad') {
-  const ab = await (await fetch(url)).arrayBuffer();
+  const ab = await fetchModel(url); // 배포 빌드는 미리 눌러 둔 .gz 를 받아 풂
   SKINS[key] = { ...parseUnicoBin(ab), byPalette: new Map() };
   // 화면 밖 캐릭터는 그리지 않도록(절두체 컬링) 경계 구를 애니메이션 여유만큼 키움
   const g = SKINS[key].geometry;

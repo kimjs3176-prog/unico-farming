@@ -1,3 +1,4 @@
+import { fetchModel } from './fetch_gz.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -39,6 +40,12 @@ export class Assets {
     this.anims = new Map();
   }
 
+  /** GLB 받기 (배포 빌드는 .gz 로 받아 풂) → 해석 */
+  async loadGlb(n) {
+    const buf = await fetchModel(`${BASE}${n}.glb`);
+    return this.loader.parseAsync(buf, BASE);
+  }
+
   async loadAll(onProgress) {
     let done = 0;
     const total = ENV_MODELS.length + PACK_MODELS.length + ANIMATED_MODELS.length + 2;
@@ -50,7 +57,7 @@ export class Assets {
       loadUnicoMesh(`${BASE}unico_biped_lod.bin`, 'biped_lod').catch(() => {}),
       ...PACK_MODELS.map(async (n) => {
         try {
-          const gltf = await this.loader.loadAsync(`${BASE}${n}.glb`);
+          const gltf = await this.loadGlb(n);
           for (const node of [...gltf.scene.children]) {
             const g = new THREE.Group();
             g.name = node.name;
@@ -66,7 +73,7 @@ export class Assets {
       }),
       ...ANIMATED_MODELS.map(async (n) => {
         try {
-          const gltf = await this.loader.loadAsync(`${BASE}${n}.glb`);
+          const gltf = await this.loadGlb(n);
           prepare(gltf.scene, { fur: true, spots: n === 'q_cow' ? 'Main' : null }); // 젖소: 얼룩무늬 (양은 털 질감)
           this.scenes.set(n, gltf.scene);
           this.anims.set(n, gltf.animations);
@@ -79,7 +86,7 @@ export class Assets {
       }),
       ...ENV_MODELS.map(async (n) => {
         try {
-          const gltf = await this.loader.loadAsync(`${BASE}${n}.glb`);
+          const gltf = await this.loadGlb(n);
           gltf.scene.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh) dequantize(o.geometry); }); // 합치기 전에 압축 좌표 풀기
           if (MERGE_PARTS.has(n)) mergeSiblings(gltf.scene, MERGE_LOOSE.has(n));
           prepare(gltf.scene);

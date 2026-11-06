@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/precompress-models.mjs",
     "preview": "vite preview",
     "server": "node server/index.js",
     "start": "NODE_ENV=production node server/index.js",
