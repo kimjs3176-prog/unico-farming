@@ -345,7 +345,7 @@ function makeProp(kind) {
   return g;
 }
 
-const EMOTE_ICON = { cheer: '🎉', heart: '❤️', wave: '👋', think: '❓', water: '💧', tablet: '📱', present: '📊', megaphone: '📣', lab: '🧪' };
+const EMOTE_ICON = { startle: '❗', cheer: '🎉', heart: '❤️', wave: '👋', think: '❓', water: '💧', tablet: '📱', present: '📊', megaphone: '📣', lab: '🧪' };
 
 export class Unico {
   /**
@@ -730,6 +730,22 @@ export class Unico {
       const a = this.actionT;
       const [AL, AR] = arms;
       switch (this.action) {
+        case 'startle': { // 깜짝 놀람: 펄쩍 뛰며 몸을 뒤로 젖히고(네 발이면 앞발을 번쩍), 잠깐 부르르 떨기
+          const up = Math.sin(Math.min(1, a / 0.38) * Math.PI);
+          const shiver = a > 0.38 ? Math.sin(a * 42) * Math.max(0, 1 - (a - 0.38) / 0.8) : 0;
+          bodyY += up * (bp ? 0.34 : 0.4);
+          headPitch = -0.38; headRoll = shiver * 0.08;
+          if (bp) {
+            bodyPitch = -0.16 * Math.min(1, a / 0.2);
+            AL.rotation.set(-0.25, 0, -2.25 + shiver * 0.12); AR.rotation.set(-0.25, 0, 2.25 - shiver * 0.12);
+            legs[0].rotation.x = 0.35 * up; legs[1].rotation.x = -0.3 * up;
+          } else {
+            bodyPitch = -0.5 * Math.min(1, a / 0.22) * (1 - Math.max(0, a - 0.9) / 0.4);
+            legs[0].rotation.x = legs[1].rotation.x = -1.15 + shiver * 0.15;
+            legs[2].rotation.x = legs[3].rotation.x = 0.3;
+          }
+          break;
+        }
         case 'cheer': { // 깡총깡총 + 한 바퀴 (두 발이면 만세)
           const j = Math.abs(Math.sin(a * 9));
           bodyY += j * (bp ? 0.24 : 0.32);

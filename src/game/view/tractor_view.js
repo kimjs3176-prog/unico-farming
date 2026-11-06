@@ -135,11 +135,32 @@ export class TractorView {
     // 경계/장애물 (연못, 건물)
     const next = new THREE.Vector3(v.x, 0, v.z);
     this.game.world.resolveCollision(next, 1.4);
+    // 트랙터 마당 밖으로는 못 나감 (사람이 드나드는 문도 트랙터는 막힘)
+    const Y = LAYOUT.tractorYard, m = 1.55;
+    if (Y) { next.x = THREE.MathUtils.clamp(next.x, Y.x0 + m, Y.x1 - m); next.z = THREE.MathUtils.clamp(next.z, Y.z0 + m, Y.z1 - m); }
     if (next.x !== v.x || next.z !== v.z) {
       // 막힌 만큼만 감속 (담장을 스치면 살짝, 정면으로 박으면 크게)
       const want = Math.hypot(v.x - prevX, v.z - prevZ), got = Math.hypot(next.x - prevX, next.z - prevZ);
       v.speed *= want > 1e-4 ? Math.max(0.3, Math.min(1, got / want)) : 0.3;
       v.x = next.x; v.z = next.z;
+    }
+    // 주민에게 부딪히면: 트랙터가 튕겨 멈추고 주민이 깜짝 놀람
+    for (const e of this.game.npcs?.list || []) {
+      const p = e.u.group.position;
+      if (Math.hypot(p.x - v.x, p.z - v.z) < 2.2 && this.game.npcs.startle(e, v) && Math.abs(v.speed) > 0.4) {
+        v.speed *= -0.25; v.pedal = 0; v.x = prevX; v.z = prevZ;
+        this.game.juice?.shake(0.35);
+        this.game.ui.toast(`😲 ${e.n.name}이(가) 깜짝 놀랐어요! 천천히 운전해요`);
+      }
+    }
+    // 다른 플레이어(접속자)에게 부딪혀도 마찬가지로 튕기고, 그 유니코가 깜짝 놀람 (내 화면에서)
+    for (const r of this.game.net?.remote?.values() || []) {
+      const p = r.unico.group.position, now = performance.now() / 1000;
+      if (Math.hypot(p.x - v.x, p.z - v.z) < 2.0 && (r.startleUntil || 0) < now) {
+        r.startleUntil = now + 4;
+        r.unico.playAction('startle', 1.3); r.unico.say('깜짝이야!', 1.6);
+        if (Math.abs(v.speed) > 0.4) { v.speed *= -0.25; v.pedal = 0; v.x = prevX; v.z = prevZ; this.game.juice?.shake(0.35); }
+      }
     }
     if (input.justPressed('Space')) { this.plowDown = !this.plowDown; this.game.audio.play('click'); }
     // 쟁기 위치 = 트랙터 뒤 2.3m

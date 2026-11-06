@@ -43,10 +43,28 @@ export class NPCs {
     });
   }
 
+  /** 트랙터에 깜짝 놀람: 펄쩍 + ❗ + 말풍선, 돌아다니던 주민은 트랙터 반대쪽으로 비켜남 (4초에 한 번) */
+  startle(e, from) {
+    const now = performance.now() / 1000;
+    if ((e.startleUntil || 0) > now) return false;
+    e.startleUntil = now + 4;
+    const p = e.u.group.position;
+    e.u.facing = Math.atan2(from.x - p.x, from.z - p.z); // 트랙터 쪽을 돌아봄
+    e.u.playAction('startle', 1.3);
+    e.u.say(['깜짝이야!', '으악! 트랙터다!', '조심해~!', '어이쿠!'][Math.floor(Math.random() * 4)], 1.8);
+    e.idle = 0;
+    if (e.n.wander) { const dx = p.x - from.x, dz = p.z - from.z, l = Math.hypot(dx, dz) || 1; e.target = { x: p.x + (dx / l) * 2.5, z: p.z + (dz / l) * 2.5 }; e.wait = 0; e.spd = 3.5; }
+    this.game.audio.play('bump', 0.35);
+    return true;
+  }
+
   update(dt, playerPos) {
     let hit = null, hd = 2.6;
+    // 트랙터가 빠르게 스쳐 지나가면 가까운 주민이 놀람
+    const tr = this.game.tractor, tv = tr?.driving ? tr.vehicle : null;
     for (const e of this.list) {
       const p = e.u.group.position;
+      if (tv && Math.abs(tv.speed) > 1.2 && Math.hypot(p.x - tv.x, p.z - tv.z) < 2.9) this.startle(e, tv);
       const d = Math.hypot(p.x - playerPos.x, p.z - playerPos.z);
       // 꼬마는 들판을 돌아다님 (플레이어가 가까우면 멈춰서 바라봄)
       if (e.n.wander && d > 3) {

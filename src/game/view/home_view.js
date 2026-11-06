@@ -46,6 +46,10 @@ function windowAt(x, y, z, w, h, glass) {
   return g;
 }
 
+/** 집 전체 크기 배율: 벽 높이 1.9m × 1.5 ≈ 2.9m (키 1.8m 유니코보다 넉넉히 크게, 문 높이 약 2m) */
+const HOUSE_SCALE = 1.5;
+const HOUSE_BACK = 0.55; // 커진 만큼 뒤로 물려 앞문 위치는 그대로
+
 /** 단계별 집 모양 (앞 = +z, 문은 앞 가운데) */
 function buildHouse(level, glass) {
   const g = new THREE.Group();
@@ -94,12 +98,12 @@ function buildHouse(level, glass) {
 function buildYard(level, lampMat) {
   const g = new THREE.Group();
   if (level >= 1) {
-    for (let k = 0; k < 7; k++) { const a = k / 7; g.add(ball(0.11, [MAT.red, MAT.pink, MAT.yellow, MAT.purple][k % 4], -2.6 + a * 0.9, 0.18, 1.2 + (k % 2) * 0.25)); g.add(box(0.03, 0.18, 0.03, MAT.leaf, -2.6 + a * 0.9, 0.09, 1.2 + (k % 2) * 0.25)); }
-    g.add(box(0.08, 1.0, 0.08, MAT.woodD, 1.6, 0.5, 2.3));                  // 우편함 기둥
-    g.add(box(0.36, 0.3, 0.5, MAT.mail, 1.6, 1.1, 2.3));
-    g.add(box(0.04, 0.22, 0.12, MAT.red, 1.8, 1.25, 2.4));                    // 깃발
+    for (let k = 0; k < 7; k++) { const a = k / 7; g.add(ball(0.11, [MAT.red, MAT.pink, MAT.yellow, MAT.purple][k % 4], -3.0 + a * 1.1, 0.18, 2.35 + (k % 2) * 0.25)); g.add(box(0.03, 0.18, 0.03, MAT.leaf, -3.0 + a * 1.1, 0.09, 2.35 + (k % 2) * 0.25)); } // 커진 집 앞 마당으로
+    g.add(box(0.08, 1.0, 0.08, MAT.woodD, 1.9, 0.5, 3.0));                  // 우편함 기둥
+    g.add(box(0.36, 0.3, 0.5, MAT.mail, 1.9, 1.1, 3.0));
+    g.add(box(0.04, 0.22, 0.12, MAT.red, 2.1, 1.25, 3.1));                    // 깃발
   }
-  if (level >= 2) for (const x of [-1.0, 1.0]) { g.add(box(0.08, 0.9, 0.08, MAT.woodD, x, 0.45, 3.0)); g.add(box(0.22, 0.22, 0.22, lampMat, x, 1.0, 3.0)); }
+  if (level >= 2) for (const x of [-1.1, 1.1]) { g.add(box(0.08, 0.9, 0.08, MAT.woodD, x, 0.45, 3.4)); g.add(box(0.22, 0.22, 0.22, lampMat, x, 1.0, 3.4)); }
   return g;
 }
 
@@ -114,7 +118,7 @@ export class HomeView {
     game.world.scene.add(this.root);
     this.glass = new THREE.MeshStandardMaterial({ color: 0x9fd3ea, roughness: 0.2, emissive: 0xffc46b, emissiveIntensity: 0 });
     this.lamp = new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffc46b, emissiveIntensity: 0 });
-    this.obstacle = { x: H.x, z: H.z, r: 2.3 };
+    this.obstacle = { x: H.x, z: H.z + HOUSE_BACK, r: 2.8 };
     game.world.obstacles.push(this.obstacle);
     this.smokeT = 0;
     // 실내 (맵 밖 IO 에 지어 둠). 불빛은 처음부터 장면에 넣어 두고(셰이더 다시 만들기 방지) 밖에서는 꺼 둠
@@ -141,9 +145,11 @@ export class HomeView {
   build() {
     if (this.house) this.root.remove(this.house, this.yard);
     this.house = buildHouse(this.sim.level, this.glass);
+    this.house.scale.setScalar(HOUSE_SCALE);
+    this.house.position.z = -HOUSE_BACK;
     this.yard = buildYard(this.sim.level, this.lamp);
     for (const o of [this.house, this.yard]) { o.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); this.root.add(o); }
-    this.obstacle.r = [2.1, 2.5, 2.7][this.sim.level];
+    this.obstacle.r = [2.8, 3.2, 3.5][this.sim.level];
     this.buildRoom();
   }
 
@@ -157,7 +163,8 @@ export class HomeView {
     this.smokeT -= dt;
     if (this.smokeT <= 0 && (night > 0.2 || this.sim.level >= 2) && Math.hypot(pp.x - this.root.position.x, pp.z - this.root.position.z) < 30) {
       this.smokeT = 0.7;
-      const c = this.house.userData.chimney.clone().applyMatrix4(this.root.matrixWorld);
+      this.root.updateMatrixWorld(true);
+      const c = this.house.localToWorld(this.house.userData.chimney.clone());
       g.fx.burst(c.x, c.y, c.z, 0xdedede, 3);
     }
     g.player.speedMult = this.sim.speedMult(w.day) * this._wetMult();

@@ -124,9 +124,9 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
 
 /** 후처리 색 보정 (대비·채도·하이라이트 따뜻하게·그림자 살짝 차갑게) */
 export const ColorGradeShader = {
-  uniforms: { tDiffuse: { value: null }, contrast: { value: 1.07 }, saturation: { value: 1.12 }, warmth: { value: 0.035 } },
+  uniforms: { tDiffuse: { value: null }, contrast: { value: 1.07 }, saturation: { value: 1.12 }, warmth: { value: 0.035 }, tint: { value: new THREE.Vector3(1, 1, 1) } },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float contrast, saturation, warmth; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float contrast, saturation, warmth; uniform vec3 tint; varying vec2 vUv;
     void main(){
       vec3 c = texture2D(tDiffuse, vUv).rgb;
       c = (c - 0.5) * contrast + 0.5;
@@ -134,6 +134,7 @@ export const ColorGradeShader = {
       c = mix(vec3(l), c, saturation);
       c += vec3(warmth, warmth * 0.45, -warmth * 0.6) * smoothstep(0.45, 1.0, l);
       c += vec3(-0.012, 0.0, 0.022) * (1.0 - smoothstep(0.0, 0.35, l));
+      c *= tint; // 시간대 색 (sim/tod.js: 아침 금빛·노을 주황·밤 푸른빛)
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
     }`,
 };

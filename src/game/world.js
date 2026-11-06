@@ -4,6 +4,8 @@ import { Scenery } from './scenery.js';
 import { Precipitation } from './precip.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { enhanceMaterial } from './surface.js';
+import { timeOfDay } from './sim/tod.js';
+import { Birds } from './birds.js';
 
 /** 월드 레이아웃 상수 (m). +X 동쪽, +Z 남쪽, 스폰 (0,0,9) */
 export const LAYOUT = {
@@ -20,6 +22,8 @@ export const LAYOUT = {
   sensor: { x: -17, z: -12.5 },
   field: { x0: 6, z0: 14, cols: 10, rows: 6, cell: 2 },
   tractorHome: { x: 28.5, z: 17, heading: -Math.PI / 2 },
+  // 트랙터 마당: 밭갈이 밭 + 트랙터 자리를 울타리로 둘러 트랙터가 밖으로 나가지 않게 (사람은 북쪽 문으로 드나듦)
+  tractorYard: { x0: 6.0, z0: 12.0, x1: 31.6, z1: 27.8, gate: { x: 8.2, w: 3.2 } }, // 문은 농장에서 오는 흙길 끝(북서쪽)
   windmill: { x: -27, z: 15 },
   pond: { x: -12, z: 18, r: 4.5 },
   // 논 (3x2), 탈곡장, 허수아비
@@ -113,7 +117,9 @@ export const LAYOUT = {
     [-14.2, -9.5, -7.4, -1.4], // 농사 시설 (나무가 가리지 않게)
     [27.5, -11.2, 34, -6.5], // 목장 가공소
     [-21, 3.4, -15.8, 8.2],
-    [13, -39, 37, -18.4], [29.5, -14.5, 32.5, -11.5], [32, 14, 38, 20], [-18, -27, -12, -21], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5]],
+    [13, -39, 37, -18.4], [29.5, -14.5, 32.5, -11.5], [32, 14, 38, 20], [-18, -27, -12, -21], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5],
+    [-1.6, 15.2, 6.0, 23.6], // 유니코 집 (커진 집과 마당에 나무가 겹치지 않게)
+    [6.0, 12.0, 31.6, 27.8]], // 트랙터 마당(밭갈이) — 나무가 안에 나지 않게
 };
 
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
@@ -204,9 +210,9 @@ export class World {
          vec3 d = texture2D(detailMap, vMapUv * 46.0).rgb;
          diffuseColor.rgb *= mix(vec3(1.0), d * 1.55, 0.42);
          // 흘러가는 구름 그림자 (넓고 부드럽게)
-         vec2 cp = vMapUv * 7.0 + vec2(uTime * 0.012, uTime * 0.005);
+         vec2 cp = vMapUv * 5.2 + vec2(uTime * 0.011, uTime * 0.0045);
          float cn = sin(cp.x * 3.1 + sin(cp.y * 2.3)) * sin(cp.y * 2.7 + sin(cp.x * 1.7)) + 0.35 * sin(cp.x * 7.3 + cp.y * 5.1);
-         diffuseColor.rgb *= 1.0 - smoothstep(0.35, 0.9, cn) * 0.16;`);
+         diffuseColor.rgb *= 1.0 - smoothstep(0.3, 0.85, cn) * 0.22;`);
     };
     // 연못 바닥 / 테두리 (물은 scenery 가 그림)
     const pondBed = new THREE.Mesh(new THREE.CircleGeometry(LAYOUT.pond.r, 48), new THREE.MeshStandardMaterial({ color: 0x3f7fa8, roughness: 0.9 }));
@@ -410,6 +416,7 @@ export class World {
     this.place('trough', L.trough.x, L.trough.z, 0);
     for (let i = 0; i < 4; i++) this.place('hay_bale', 23 + (i % 2) * 1.1, -9 + Math.floor(i / 2) * 1.1, i * 0.3, 1, { collide: i < 2 });
     this._fenceRect(L.ranch.x0, L.ranch.z0, L.ranch.x1, L.ranch.z1, { gapX: null, gapZ: L.ranch.gate.z });
+    this._fenceYard(L.tractorYard);
     // 스마트팜
     const sf = this.place('smartfarm', L.smartfarm.x, L.smartfarm.z, 0, 1, { collide: false });
     this.boxes.push({ x0: L.smartfarm.x - 4.2, z0: L.smartfarm.z - 4.6, x1: L.smartfarm.x + 4.2, z1: L.smartfarm.z + 4.6 });
@@ -701,6 +708,21 @@ export class World {
     });
   }
 
+  /** 트랙터 마당 울타리: 북쪽(z0)에 사람이 드나드는 문, 나머지는 막힘 (트랙터는 tractor_view 에서 문까지 막음) */
+  _fenceYard(Y) {
+    const { x0, z0, x1, z1, gate } = Y, g0 = gate.x - gate.w / 2, g1 = gate.x + gate.w / 2, t = 0.25;
+    for (let x = x0 + 1; x < x1; x += 2) {
+      if (x + 1 <= g0 || x - 1 >= g1) this.place('fence', x, z0, 0, 1, { collide: false });
+      this.place('fence', x, z1, 0, 1, { collide: false });
+    }
+    for (let z = z0 + 1; z < z1; z += 2) { this.place('fence', x0, z, Math.PI / 2, 1, { collide: false }); this.place('fence', x1, z, Math.PI / 2, 1, { collide: false }); }
+    // 문기둥 + 문 위 간판
+    for (const gx of [g0, g1]) this.place('fence', gx, z0, Math.PI / 2, 0.5, { collide: false });
+    this.boxes.push({ x0: x0 - t, z0: z0 - t, x1: g0, z1: z0 + t }, { x0: g1, z0: z0 - t, x1: x1 + t, z1: z0 + t });
+    this.boxes.push({ x0: x0 - t, z0: z1 - t, x1: x1 + t, z1: z1 + t });
+    this.boxes.push({ x0: x0 - t, z0, x1: x0 + t, z1 }, { x0: x1 - t, z0, x1: x1 + t, z1 });
+  }
+
   _fenceRect(x0, z0, x1, z1, { gapZ = null } = {}) {
     const seg = 2;
     for (let x = x0 + 1; x < x1; x += seg) {
@@ -823,7 +845,9 @@ export class World {
     const snowCover = W.kind === 'snow' ? Math.min(1, W.precip * 1.2) : 0;
     this.snowCover = (this.snowCover || 0) + (snowCover - (this.snowCover || 0)) * Math.min(1, dt * 0.15);
     this.groundMat.emissive.setRGB(1, 1, 1).multiplyScalar(this.snowCover * 0.32 * (0.3 + daylight * 0.7));
-    this.hemi.color.setHex(0xd8eeff).lerp(GREY, overcast * 0.6);
+    const tod = this.tod = timeOfDay(t); // 시간대 빛 색 (부드럽게 이어짐)
+    this.sun.color.setRGB(tod.sun[0], tod.sun[1], tod.sun[2]);
+    this.hemi.color.setHex(0xd8eeff).lerp(this.sun.color, 0.16).lerp(GREY, overcast * 0.6);
     const dayCol = new THREE.Color(0xbfe4ff), duskCol = new THREE.Color(0xf4b183), nightCol = new THREE.Color(0x1d2a4a);
     const sky = new THREE.Color();
     if (elev > 0.25) sky.copy(dayCol);
@@ -836,7 +860,6 @@ export class World {
     this.scene.fog.far = THREE.MathUtils.lerp(110, 38, W.fog);
     this.precip.set(W.kind, W.precip, W.wind);
     this.precip.update(dt, focus || { x: 0, z: 0 });
-    this.sun.color.setHex(elev < 0.15 ? 0xffb080 : 0xfff3dd);
     const night = daylight < 0.4 ? 1 : 0;
     for (const m of this.lampMaterials) m.emissiveIntensity = 1 + night * 3;
     const dusk = THREE.MathUtils.clamp(1 - daylight * 1.6, 0, 1);
@@ -847,6 +870,8 @@ export class World {
     this.rim.intensity = 0.25 + daylight * 0.45;
     this.ambient.intensity = 0.03 + daylight * 0.12;
     this.scenery?.update(dt, daylight, this.sun.position.clone().sub(new THREE.Vector3(fx, 0, fz)), W);
+    // 하늘을 가로지르는 새 떼 (낮·맑을 때)
+    (this.birds ||= new Birds(this.scene)).update(dt, focus, W.precip > 0.3 ? 0 : daylight);
   }
 
   clockText() {

@@ -506,6 +506,7 @@ class Game {
       this.frameNo = (this.frameNo || 0) + 1;
       if (this.frameNo % shEvery === 0) this.renderer.shadowMap.needsUpdate = true;
     }
+    this.postfx.setGrade(this.home?.inside ? null : this.world.tod, this.world.weatherCur?.cloud || 0); // 시간대 색 (집 안은 그대로)
     this.postfx.render();
     input.endFrame();
   }

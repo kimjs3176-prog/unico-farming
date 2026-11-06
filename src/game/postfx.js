@@ -71,6 +71,17 @@ export class PostFX {
     this.bloom?.dispose?.();
   }
 
+  /** 시간대 색 보정 (world.tod): 흐린 날은 약하게 */
+  setGrade(tod, overcast = 0) {
+    if (!this.grade) return;
+    const u = this.grade.uniforms;
+    if (!tod) { u.warmth.value = 0.035; u.saturation.value = 1.12; u.tint.value.set(1, 1, 1); return; } // 기본 (실내 등)
+    const k = 1 - Math.min(1, overcast) * 0.6;
+    u.warmth.value = tod.warmth * k;
+    u.saturation.value = 1 + (tod.sat - 1) * (0.55 + 0.45 * k);
+    u.tint.value.set(1 + (tod.tint[0] - 1) * k, 1 + (tod.tint[1] - 1) * k, 1 + (tod.tint[2] - 1) * k);
+  }
+
   render() {
     if (this.enabled) this.composer.render();
     else this.renderer.render(this.scene, this.camera);

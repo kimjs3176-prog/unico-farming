@@ -23,7 +23,32 @@ const WEED_GEO = (() => {
 const FERT_TINT = new THREE.Color(0.78, 0.68, 0.62);
 const WEED_MAT = new THREE.MeshStandardMaterial({ color: 0x5e8f2e, roughness: 0.9 });
 
-const EMPTY_MAT = new THREE.MeshStandardMaterial({ color: 0x8d6a45, roughness: 1, transparent: true, opacity: 0.85 });
+/** 빈 밭 흙 질감: 고랑 줄무늬 + 흙 알갱이 + 가장자리는 풀밭으로 부드럽게 사라짐 (딱 잘린 사각형처럼 보이지 않게) */
+function soilTexture() {
+  if (typeof document === 'undefined') return null;
+  const N = 128, c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d'), img = g.createImageData(N, N);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = x / (N - 1), v = y / (N - 1);
+    const furrow = 0.5 + 0.5 * Math.cos(v * Math.PI * 2 * 5);        // 고랑 5줄
+    const grain = rnd();
+    const shade = 0.78 + furrow * 0.26 + (grain - 0.5) * 0.16;
+    const edge = Math.min(u, 1 - u, v, 1 - v);                        // 가장자리까지 거리
+    const a = Math.min(1, edge / 0.12) ** 1.5;
+    const i = (y * N + x) * 4;
+    img.data[i] = 141 * shade; img.data[i + 1] = 106 * shade; img.data[i + 2] = 69 * shade;
+    img.data[i + 3] = 255 * a * (grain > 0.985 ? 0.6 : 1);           // 군데군데 흙덩이 틈
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+const EMPTY_MAT = new THREE.MeshStandardMaterial({ color: 0xffffff, map: soilTexture(), roughness: 1, transparent: true, opacity: 0.95, depthWrite: false });
 
 export class FarmView {
   constructor(game) {
