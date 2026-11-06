@@ -845,7 +845,7 @@ export class World {
     // 눈: 지면이 점점 하얗게 덮임
     const snowCover = Math.max(W.kind === 'snow' ? Math.min(1, W.precip * 1.2) : 0, this.seasonSnow || 0); // 겨울엔 눈이 안 와도 소복이
     this.snowCover = (this.snowCover || 0) + (snowCover - (this.snowCover || 0)) * Math.min(1, dt * 0.15);
-    this.groundMat.emissive.setRGB(1, 1, 1).multiplyScalar(this.snowCover * 0.32 * (0.3 + daylight * 0.7));
+    this.groundMat.emissive.setRGB(0.94, 0.97, 1).multiplyScalar(this.snowCover * 0.62 * (0.3 + daylight * 0.7)); // 눈 덮인 땅 (겨울·눈 오는 날)
     const tod = this.tod = timeOfDay(t); // 시간대 빛 색 (부드럽게 이어짐)
     this.sun.color.setRGB(tod.sun[0], tod.sun[1], tod.sun[2]);
     this.hemi.color.setHex(0xd8eeff).lerp(this.sun.color, 0.16).lerp(GREY, overcast * 0.6);

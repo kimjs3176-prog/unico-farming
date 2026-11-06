@@ -26,7 +26,7 @@ export const SEASONS = [
   {
     id: 'winter', name: '겨울', icon: '❄️', crops: [], growth: 0.6,
     desc: '눈이 소복이 쌓여요. 바깥 밭은 천천히 자라니 스마트팜을 써 보세요',
-    look: { grass: [0.22, 0.12, 0.66], grassJitter: 0.03, leaf: [0x8a9a88, 0.5], leafAlt: null, ground: [1.04, 1.05, 1.1], flowers: 0, snow: 0.55, fall: null },
+    look: { grass: [0.2, 0.1, 0.78], grassJitter: 0.03, leaf: [0xdfe8e6, 0.5], leafAlt: [0x8a9a88, 0.45], ground: [0.92, 0.95, 1.02], flowers: 0, snow: 0.7, fall: null },
   },
 ];
 export const SEASON = Object.fromEntries(SEASONS.map((s) => [s.id, s]));
