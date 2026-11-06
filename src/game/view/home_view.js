@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
 import { HomeSim, HOME_LEVELS, OUTFIT } from '../sim/home.js';
 import { buildRoom, IO } from './home_interior.js';
+import { SURF } from '../surface.js';
 import { ITEMS } from '../sim/items.js';
 import { saveGame } from '../save.js';
 
@@ -188,6 +189,7 @@ export class HomeView {
       const e = this.room.entry;
       g.player.position.set(IO.x + e.x, IO.y, IO.z + e.z);
       g.player.unico.floorY = IO.y; // 바닥 높이는 방바닥 (지형 높이 대신)
+      SURF.floor.value = IO.y;
       g.player.moveTarget = null; g.player.vel?.set(0, 0, 0);
       g.player.unico.facing = -Math.PI / 2;
       cam.yaw = 0; cam.pitch = 0.92; cam.distance = [9.5, 10.5, 12][this.sim.level]; cam.first = true;
@@ -206,6 +208,7 @@ export class HomeView {
       g.world.playerCollision = null;
       this.roomLight.intensity = 0;
       g.player.unico.floorY = null;
+      SURF.floor.value = 0;
       g.player.position.set(this.outPos.x, 0, this.outPos.z);
       g.player.moveTarget = null; g.player.vel?.set(0, 0, 0);
       g.player.unico.facing = Math.PI; // 북쪽(길)을 보고 나옴

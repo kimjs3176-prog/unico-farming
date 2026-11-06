@@ -451,6 +451,7 @@ class Game {
     const snowTarget = this.world.weatherKind === 'snow' ? 1 : 0;
     if (this.snowSeen === undefined && this.world.weatherKind) { this.snowSeen = true; SURF.snow.value = snowTarget; }
     SURF.snow.value += (snowTarget - SURF.snow.value) * Math.min(1, dt * 0.35);
+    if (this.home.inside) SURF.snow.value = 0; // 실내 가구에는 눈이 쌓이지 않음 (나가면 다시 서서히)
     this.minimap.update(dt);
     this.guide.update(dt);
     this.ui.updateHud();

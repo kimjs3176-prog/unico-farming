@@ -9,6 +9,7 @@ import * as THREE from 'three';
 /** 모든 재질이 공유하는 시간·바람 (main 루프에서 갱신) */
 export const SURF = {
   time: { value: 0 }, wind: { value: 0.15 }, snow: { value: 0 },
+  floor: { value: 0 }, // 바닥 높이 (실내처럼 땅속 방에서는 그 방바닥 → 발치 접지 음영 기준)
   // 시야 구멍: 카메라와 캐릭터 사이를 가리는 물체를 캐릭터 둘레만 점묘로 투명하게 (카메라를 당기지 않음)
   seeCam: { value: new THREE.Vector3(0, 50, 0) }, seeTarget: { value: new THREE.Vector3() }, seeOn: { value: 1 },
 };
@@ -65,6 +66,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
     sh.uniforms.uSeeCam = SURF.seeCam;
     sh.uniforms.uSeeTarget = SURF.seeTarget;
     sh.uniforms.uSeeOn = SURF.seeOn;
+    sh.uniforms.uSurfFloor = SURF.floor;
     let vs = 'varying vec3 vSW; varying vec3 vSN; varying vec3 vOP; uniform float uSurfTime; uniform float uSurfWind;\n' + sh.vertexShader;
     if (kind === 'foliage') {
       // 나무 잎: 바람에 흔들림 (높을수록 크게)
@@ -85,7 +87,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
       vSW = (modelMatrix * sw4).xyz;
       vOP = position; // 바인드 포즈 기준 좌표: 뼈대 애니메이션에도 무늬가 몸에 붙어 다님
       vSN = normalize(mat3(modelMatrix) * objectNormal);`);
-    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn;\n' + NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow; uniform float uSurfFloor; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn;\n' + NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       ${KIND_CODE[kind] || KIND_CODE.base}
       ${spots ? `float spt = smoothstep(0.5, 0.53, sfbm(vOP * ${spots.toFixed(2)} + vec3(3.7, 1.3, 8.1)));
       #ifdef USE_COLOR
@@ -107,7 +109,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
       ${kind !== 'fur' ? `// 눈 오는 날: 위를 향한 면에 서서히 눈이 쌓임
       float snowCov = uSurfSnow * smoothstep(0.45, 0.85, vSN.y) * smoothstep(0.25, 0.6, sfbm(vSW * 1.7) + uSurfSnow * 0.35);
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 1.0), snowCov);` : ''}
-      ${contact ? 'k *= mix(0.62, 1.0, smoothstep(0.0, 0.32, vSW.y));' : ''}
+      ${contact ? 'k *= mix(0.62, 1.0, smoothstep(0.0, 0.32, vSW.y - uSurfFloor));' : ''}
       diffuseColor.rgb *= k;`);
     if (rim > 0) {
       sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>

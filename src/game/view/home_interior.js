@@ -104,8 +104,9 @@ export function buildRoom(level, mats) {
     // 벽난로 (뒤 벽 오른쪽, 불꽃이 일렁임) + 계단(오른쪽 앞, 2층으로 가는 듯)
     const fx = W / 2 - 2.3, fz = -D / 2 + 0.35;
     g.add(box(1.4, 1.2, 0.6, MAT.stone, fx, 0.6, fz), box(1.6, 0.12, 0.7, MAT.woodD, fx, 1.25, fz), box(0.8, 0.55, 0.1, MAT.dark, fx, 0.4, fz + 0.26));
-    fire = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.45, 6), new THREE.MeshStandardMaterial({ color: 0xffa340, emissive: 0xff7a1a, emissiveIntensity: 1.6 }));
-    fire.position.set(fx, 0.38, fz + 0.2); g.add(fire);
+    fire = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.4, 6), new THREE.MeshStandardMaterial({ color: 0xffa340, emissive: 0xff7a1a, emissiveIntensity: 1.6 }));
+    fire.position.set(fx, 0.34, fz + 0.37); g.add(fire); // 화덕 입구 바로 앞 (돌 안쪽이면 가려짐)
+    g.add(box(0.5, 0.08, 0.14, MAT.woodD, fx, 0.1, fz + 0.38)); // 장작
     solid(fx, fz, 1.45, 0.65);
     for (let k = 0; k < 6; k++) g.add(box(0.9, 0.18, 0.4, MAT.wood, W / 2 - 0.55, 0.09 + k * 0.36, D / 2 - 0.6 - k * 0.38));
     solid(W / 2 - 0.55, D / 2 - 1.55, 0.95, 2.4);
