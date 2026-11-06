@@ -203,6 +203,7 @@ export class DecorView {
     p.classList.add('decor');
     const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
     p.append(el('p', 'soc-sub', `놓은 소품 ${sim.count}/${DECOR_MAX} · 고르면 유니코 앞에 미리보기가 나와요. 걸어가서 E 로 놓아요`));
+    p.append(el('p', 'mk-note', '🏡 집 주변과 빈 풀밭에 놓을 수 있어요 (밭·논·목장·트랙터 마당·낚시터·길목·문 앞은 비워 둬요)'));
     const tabs = el('div', 'mk-tabs');
     for (const [id, label] of DECOR_CATS) { const t = el('button', id === cat ? 'on' : '', label); t.onclick = () => this.open(id); tabs.append(t); }
     p.append(tabs);
