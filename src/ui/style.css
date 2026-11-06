@@ -609,3 +609,7 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
   .dlg { bottom: 70px; }
   .drive-pad { bottom: 70px; }
 }
+/* 유니코 집: 잠잘 때 화면이 어두워졌다 밝아짐 */
+.sleep-fade { position: absolute; inset: 0; background: #0d1426; opacity: 0; pointer-events: none; transition: opacity 0.6s ease; display: flex; align-items: center; justify-content: center; z-index: 40; }
+.sleep-fade.on { opacity: 1; pointer-events: auto; }
+.sleep-fade span { color: #fff7d6; font-family: var(--display); font-size: 34px; letter-spacing: 2px; text-shadow: 0 0 18px rgba(255,220,140,0.6); }

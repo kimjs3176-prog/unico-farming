@@ -1,3 +1,4 @@
+import { HomeView } from './game/view/home_view.js';
 import { TownView } from './game/view/town_view.js';
 import { AutoPlay } from './game/autoplay.js';
 import * as THREE from 'three';
@@ -98,6 +99,7 @@ class Game {
     this.lake = new LakeView(this);
     this.farmcraft = new FarmCraftView(this);
     this.town = new TownView(this);
+    this.home = new HomeView(this);
     this.net = new Net(this);
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
@@ -109,6 +111,7 @@ class Game {
       const ev = this.economy.newDay(day);
       this.ranch.sim.newDay(day);
       this.town.newDay();
+      this.home.newDay();
       this.ui.toast(`🌅 ${day}일차 아침! 장터 시세가 바뀌었어요`);
       if (ev) this.ui.toast('📈 ' + ev.name);
       if (this.economy.festival) { this.ui.toast(this.economy.festival.name + ' (장터에서 팔면 이득!)'); this.audio.play('levelup'); this.onEvent('festival'); }
@@ -213,6 +216,7 @@ class Game {
     this.angling.load(s.angling);
     this.farmcraft.load(s.farmcraft);
     this.town.load(s.town);
+    this.home.load(s.home);
     if (this.pet.ok) this.pet.load(s.pet);
     if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원');
     if (s.world) { this.world.time = s.world.time; this.world.day = s.world.day; }
@@ -388,6 +392,7 @@ class Game {
       pick(this.lake.update(dt, pp));
       pick(this.farmcraft.update(dt, pp));
       pick(this.town.update(dt, pp));
+      pick(this.home.update(dt, pp));
       this.pointer.update(dt, input);
       this.autoplay.update(dt, input);
       const arrived = this.player.arrivedInteract;
@@ -412,6 +417,7 @@ class Game {
       this.lake.update(dt, pp);
       this.farmcraft.update(dt, pp);
       this.town.update(dt, pp);
+      this.home.update(dt, pp);
       // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스로 돌려도 천천히 복귀)
       const behind = this.tractor.vehicle.heading + Math.PI;
       const dy = ((behind - this.followCam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;

@@ -30,6 +30,7 @@ export class Player {
     this.group.position.set(0, 0, 9);
     this.velocity = new THREE.Vector3();
     this.frozen = false; // 미니게임/UI 중 이동 금지
+    this.speedMult = 1; // 집에서 푹 자고 일어난 날 +15% (home_view)
     this.swimming = false;
     this.hidden = false;
     world.scene.add(this.group);
@@ -76,7 +77,7 @@ export class Player {
     }
     // 가감속: 약 0.12초 만에 최고 속도, 손을 떼면 짧게 미끄러지듯 멈춤 (급출발·급정지 방지)
     const vel = (this.vel ||= new THREE.Vector3());
-    const want = dir.multiplyScalar(wants ? (this.swimming ? SWIM_SPEED : SPEED) : 0);
+    const want = dir.multiplyScalar(wants ? (this.swimming ? SWIM_SPEED : SPEED) * this.speedMult : 0);
     vel.lerp(want, 1 - Math.exp(-dt * (wants ? 16 : 20)));
     if (!wants && vel.lengthSq() < 0.01) vel.set(0, 0, 0);
     if (vel.lengthSq() > 0) {

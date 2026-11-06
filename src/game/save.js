@@ -14,6 +14,7 @@ export function saveGame(game) {
       angling: game.angling?.toJSON(),
       farmcraft: game.farmcraft?.toJSON(),
       town: game.town?.toJSON(),
+      home: game.home?.toJSON(),
       pet: game.pet?.ok ? game.pet.toJSON() : undefined,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
