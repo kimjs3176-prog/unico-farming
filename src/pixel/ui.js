@@ -193,8 +193,9 @@ export class UI {
     if (this.dlg) {
       const D = this.dlg;
       if (D.choices && D.shown >= D.text.length) {
-        if (k === 'up') { D.sel = (D.sel + D.choices.length - 1) % D.choices.length; this.audio.play('click', 0.5); this.renderDlg(); return true; }
-        if (k === 'down') { D.sel = (D.sel + 1) % D.choices.length; this.audio.play('click', 0.5); this.renderDlg(); return true; }
+        // 선택지가 가로로 놓여 있어 ←/→ 로 고름 (↑/↓ 도 됨)
+        if (k === 'up' || k === 'left') { D.sel = (D.sel + D.choices.length - 1) % D.choices.length; this.audio.play('click', 0.5); this.renderDlg(); return true; }
+        if (k === 'down' || k === 'right') { D.sel = (D.sel + 1) % D.choices.length; this.audio.play('click', 0.5); this.renderDlg(); return true; }
         if (k === 'back') { this.dlgChoose(D.choices.length - 1); return true; }
         if (/^[1-9]$/.test(k) && +k <= D.choices.length) { D.sel = +k - 1; this.dlgChoose(D.sel); return true; }
       }

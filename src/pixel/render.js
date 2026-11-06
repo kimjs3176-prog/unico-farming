@@ -306,6 +306,9 @@ export class Renderer {
         case 'boat': decals.push({ img: S.boat, x: Math.round(o.px) - 30, y: Math.round(o.py) - 14, bob: 3 }); break;
         case 'site': list.push({ site: o.site, x: o.x * T, y: by(o) - 132, sy: by(o) - 2, tall: true, lot: { x: o.x * T, y: by(o) - 98 } }); break;
         case 'lookout': list.push({ img: S.lookout, x: o.x * T, y: by(o) - 58, sy: by(o) - 2, tall: true }); break;
+        case 'jars': list.push({ jars: true, img: S.jarBase, x: o.x * T, y: by(o) - 40, sy: by(o) - 4, tall: true }); break;
+        case 'composter': list.push({ composter: true, x: cx(o) - 18, y: by(o) - 34, sy: by(o) - 4 }); break;
+        case 'workshop': list.push({ img: S.workshop.day, glow: S.workshop.night, x: o.x * T, y: by(o) - 98, sy: by(o) - 2, tall: true }); this.lights.push({ x: (o.x + 1.5) * T, y: by(o) - 30, r: 60, c: [255, 190, 100] }); break;
         case 'hive': list.push({ hive: o.hive, img: S.hive, x: cx(o) - 15, y: by(o) - 40, sy: by(o) - 4, shadow: 's', sx: cx(o), shy: by(o) - 4 }); break;
         case 'chest': list.push({ chest: o.chest, x: cx(o) - 15, y: by(o) - 28, sy: by(o) - 6 }); break;
         case 'thresher': list.push({ thresher: true, x: o.x * T - 3, y: by(o) - 58, sy: by(o) - 4, tall: true }); break;
@@ -426,6 +429,18 @@ export class Renderer {
       if (d.sensor) img = S.sensor[Math.floor(this.t * 3) % 3];
       if (d.fountain) img = S.fountain[Math.floor(this.t * 4) % 2];
       if (d.hive !== undefined && game.hives[d.hive].honey >= 1) d.bubble = 'honey'; else if (d.hive !== undefined) d.bubble = null;
+      if (d.composter) { const C = game.composter; img = S.composter[C.ready ? 4 : Math.min(3, Math.ceil((C.mats / 12) * 3))]; d.bubble = C.ready ? 'heart' : null; }
+      if (d.jars) {
+        // 돌 단 위에 옹기를 장독 수만큼 (다 익으면 뚜껑이 들썩·반짝)
+        g.drawImage(img, x, y);
+        const P = game.jars;
+        for (let i = 0; i < P.jars; i++) {
+          const done = P.isDone(i), jx = x + 6 + i * 21, jy = y - 12 + (i % 2) * 3 + (done ? Math.round(Math.sin(this.t * 8 + i)) : 0);
+          g.drawImage(S.onggi[done ? 1 : 0], jx, jy);
+          if (done && Math.floor(this.t * 3 + i) % 3 === 0) g.drawImage(S.sparkle[Math.floor(this.t * 8) % 4], jx + 14, jy - 4);
+        }
+        return;
+      }
       if (d.chest !== undefined) img = S.chest[game.chestDay[d.chest] === game.day ? 1 : 0];
       if (d.site !== undefined) {
         // 건설 부지: 빈 땅 → 공사(건물이 아래부터 차오르고 비계) → 완성 (풍차는 날개가 돎)

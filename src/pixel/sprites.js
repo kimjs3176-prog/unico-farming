@@ -92,6 +92,10 @@ export function buildSprites() {
   S.lookout = cv(W.lookout());
   S.chest = [cv(W.chest(false)), cv(W.chest(true))];
   S.hive = cv(W.beehive());
+  S.jarBase = cv(W.jarBase());
+  S.onggi = [cv(W.onggi(false)), cv(W.onggi(true))];
+  S.composter = [0, 0.25, 0.5, 0.75, 1].map((f) => cv(W.composter(f)));
+  S.workshop = { day: cv(W.workshop(false)), night: glow(W.workshop(true)) };
   S.bubble = Object.fromEntries(['!', '?', 'heart', 'note', 'zz', 'dots', 'honey'].map((k) => [k, cv(W.bubble(k))]));
   S.sparkle = [0, 1, 2, 3].map((f) => cv(W.sparkle(f)));
   S.bobber = cv(W.bobber());

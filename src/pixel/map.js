@@ -145,6 +145,10 @@ export function buildMap() {
   objs.push({ type: 'crate', x: 67, y: 57 }); block(67, 57, 67, 57); objs.push({ type: 'hay', x: 66, y: 58 }); block(66, 58, 66, 58);
   // ── 언덕 전망대·보물 상자 ──
   for (const H of HILLS) { objs.push({ type: 'lookout', x: H.look.x, y: H.look.y, w: 2, h: 1, hill: H.id }); block(H.look.x, H.look.y, H.look.x + 1, H.look.y); }
+  // ── 가공: 밭 서쪽 장독대·퇴비통, 목장 앞 가공소 ──
+  objs.push({ type: 'jars', x: 32, y: 15, w: 3, h: 2 }); block(32, 14, 34, 15);
+  objs.push({ type: 'composter', x: 35, y: 13 }); block(35, 13, 35, 13);
+  objs.push({ type: 'workshop', x: 46, y: 23, w: 3, h: 2 }); block(46, 22, 48, 23);
   HIVES.forEach((H, i) => { objs.push({ type: 'hive', x: H.x, y: H.y, hive: i }); block(H.x, H.y, H.x, H.y); });
   objs.push({ type: 'sign', x: 7, y: 19, text: '유니코 양봉장' }); block(7, 19, 7, 19);
   CHESTS.forEach((C, i) => { objs.push({ type: 'chest', x: C.x, y: C.y, chest: i }); block(C.x, C.y, C.x, C.y); });
