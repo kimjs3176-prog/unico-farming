@@ -4,9 +4,16 @@
  * - 클라이언트 빌드: VITE_WS_URL=wss://<worker>.workers.dev/ws
  * - 프로토콜은 Node 서버(server/index.js)와 같음: join → welcome / joined / state / chat / left / full
  * 배포: cd deploy/cloudflare && npx wrangler deploy  (docs/DEPLOY.md 참고)
+ * 무료 플랜 한도 지키기 (budget.js): 방마다 쓴 양을 1분마다 장부 객체(__ledger__)에 모으고,
+ *   하루 안전선(무료 한도의 85%)을 넘으면 그날은 새 접속을 받지 않고 접속 중인 사람도 오프라인으로 (UTC 0시 = 한국 오전 9시에 다시 열림)
+ *   사용량 보기: GET /usage
  */
-const MAX_PLAYERS = 50;
-const MAX_ROOMS = 20;
+import { Meter, addToLedger, limits, nextReset } from './budget.js';
+import { sanitizeAct, ACT_LIMIT } from '../../server/rooms.js';
+
+const MAX_PLAYERS = 30;         // 방 하나 인원 (무료 플랜에 맞춰 4개 방 × 30명 = 최대 120명)
+const MAX_ROOMS = 4;
+const LEDGER = '__ledger__';
 const MAX_MSG = 4096;           // 메시지 최대 길이(바이트)
 const CHAT_LIMIT = 5;           // 10초에 채팅 5번까지
 const BOUND = 80;               // 위치 좌표 범위 (맵 밖 값 무시)
@@ -15,21 +22,30 @@ const JOIN_MS = 10000;          // 접속 후 입장(join)까지 기다리는 �
 const roomName = (i) => `${i}번 농장`;
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
 
-/** 접속을 받아 '가득 참'을 알리고 닫음 (클라이언트가 오프라인 모드로 전환) */
-function fullSocket() {
+/** 접속을 받아 알림 하나를 보내고 닫음: '가득 참'(full) / '오늘 사용량 다 참'(quota) → 클라이언트는 오프라인 모드 */
+function noticeSocket(msg) {
   const pair = new WebSocketPair();
   const [client, server] = Object.values(pair);
   server.accept();
-  server.send(JSON.stringify({ t: 'full' }));
-  server.close(1013, 'full');
+  server.send(JSON.stringify(msg));
+  server.close(1013, msg.t);
   return new Response(null, { status: 101, webSocket: client });
 }
+const fullSocket = () => noticeSocket({ t: 'full' });
+const quotaSocket = () => noticeSocket({ t: 'quota', until: nextReset(Date.now()) });
 
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     const count = async (name) => (await (await env.ROOM.get(env.ROOM.idFromName(name)).fetch('https://room/count')).json()).count;
+    const ledger = () => env.ROOM.get(env.ROOM.idFromName(LEDGER));
+
+    // 오늘 쓴 양 (무료 한도 대비)
+    if (url.pathname === '/usage') {
+      const b = await (await ledger().fetch('https://ledger/status')).json();
+      return Response.json(b, { headers: { ...CORS, 'Cache-Control': 'no-store' } });
+    }
 
     // 방 목록 (방 선택 창): 사람이 있는 방 + 1번 방. 빈 방이 두 번 연속이면 그 뒤는 보지 않음(요청 수 절약)
     if (url.pathname === '/rooms') {
@@ -48,6 +64,8 @@ export default {
       // 다른 사이트가 방문자 브라우저로 방을 채우지 못하게: wrangler.toml [vars] ALLOWED_ORIGINS="https://내게임.vercel.app" (쉼표로 여러 개, 비우면 모두 허용)
       const allowed = String(env.ALLOWED_ORIGINS || '').split(',').map((x) => x.trim()).filter(Boolean);
       if (allowed.length && !allowed.includes(req.headers.get('Origin'))) return new Response('forbidden origin', { status: 403 });
+      // 오늘 무료 한도 안전선을 넘었으면 방을 찾지 않고 바로 '내일 다시' (요청 수 절약)
+      if ((await (await ledger().fetch('https://ledger/status')).json()).over) return quotaSocket();
       // 원하는 방(있고 자리가 있으면) → 없으면 자리가 있는 가장 낮은 번호 방
       let name = url.searchParams.get('room');
       const valid = name && /^[1-9]\d?번 농장$/.test(name) && +name.split('번')[0] <= MAX_ROOMS; // 1~20번만 ('0번'·'01번' 같은 목록 밖 방 금지)
@@ -68,8 +86,10 @@ export default {
 };
 
 export class FarmRoom {
-  constructor(state) {
+  constructor(state, env) {
     this.state = state;
+    this.env = env || {};
+    this.meter = new Meter();
     // 잠들었다 깨어나면 생성자가 다시 불리므로, 남아 있는 접속의 id 다음 번호부터 (id 중복 방지)
     this.nextId = 1 + Math.max(0, ...state.getWebSockets().map((ws) => ws.deserializeAttachment()?.id || 0));
   }
@@ -80,8 +100,44 @@ export class FarmRoom {
 
   pub(p) { return { id: p.id, name: p.name, x: p.x, z: p.z, f: p.f, a: p.a, l: p.l || '' }; }
 
+  /** 1분마다 쓴 양을 장부에 넘기고, 안전선을 넘었으면 모두 오프라인으로 */
+  async report(now) {
+    if (!this.meter.due(now, +this.env.REPORT_MS || 60000)) return;
+    const r = this.meter.take(now);
+    try {
+      const res = await this.env.ROOM.get(this.env.ROOM.idFromName(LEDGER)).fetch('https://ledger/report', { method: 'POST', body: JSON.stringify(r) });
+      if ((await res.json()).over) this.kickAll({ t: 'quota', until: nextReset(now) });
+    } catch { /* 장부가 잠깐 안 되면 다음 번에 */ }
+  }
+
+  kickAll(msg) {
+    const s = JSON.stringify(msg);
+    for (const ws of this.state.getWebSockets()) { try { ws.send(s); ws.close(1013, msg.t); } catch { /* 끊김 */ } }
+  }
+
+  /** 장부 객체 (이름 __ledger__): 하루치 합계를 저장소에 보관 */
+  async ledgerFetch(url, req) {
+    const now = Date.now(), lim = limits(this.env);
+    let book = await this.state.storage.get('book');
+    if (url.pathname === '/report') {
+      let r = {};
+      try { r = await req.json(); } catch { /* 빈 보고 */ }
+      book = addToLedger(book, { requests: r.requests, awakeSec: (+r.awakeSec || 0) + 0.1 }, now, lim);
+      await this.state.storage.put('book', book);
+      return Response.json({ over: book.over });
+    }
+    // 상태: 이 조회도 1건으로 셈
+    book = addToLedger(book, { requests: 0, awakeSec: 0.05 }, now, lim);
+    await this.state.storage.put('book', book);
+    return Response.json({ ...book, limit: lim, resetAt: new Date(nextReset(now)).toISOString() });
+  }
+
   async fetch(req) {
     const url = new URL(req.url);
+    if (url.hostname === 'ledger') return this.ledgerFetch(url, req);
+    const now = Date.now();
+    this.meter.tick(now, 'fetch');
+    this.report(now);
     // 인원은 입장(join)한 사람만 셈: 입장 안 한 빈 소켓으로 방을 '가득 참'으로 만들지 못하게
     if (url.pathname === '/count') return Response.json({ count: this.players().length });
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
@@ -119,6 +175,9 @@ export class FarmRoom {
     if (!m || typeof m !== 'object') return; // null·숫자·문자열 JSON 무시
     const p = ws.deserializeAttachment();
     if (!p) return;
+    const now0 = Date.now();
+    this.meter.tick(now0, 'msg');
+    this.report(now0);
     if (m.t === 'join') {
       if (p.name) return; // 한 번만
       // 접속은 방 인원의 2배까지 받으므로, 입장 때 다시 확인 (동시에 붙은 소켓이 한꺼번에 입장해 50명을 넘지 않게)
@@ -143,6 +202,17 @@ export class FarmRoom {
       p.l = String(m.l || '').replace(/[^a-z0-9.-]/g, '').slice(0, 48);
       ws.serializeAttachment(p);
       this.broadcast({ t: 'state', players: [this.pub(p)] }, p.id);
+    } else if (m.t === 'act') {
+      // 플레이어끼리 상호작용: 같은 방의 받는 사람에게만 전달, 10초에 8번까지
+      const a = sanitizeAct(m);
+      if (!a) return;
+      const now = Date.now();
+      p.acts = (p.acts || []).filter((t) => now - t < 10000);
+      if (p.acts.length >= ACT_LIMIT) return;
+      p.acts.push(now);
+      ws.serializeAttachment(p);
+      const target = this.state.getWebSockets().find((w) => { const q = w.deserializeAttachment(); return q?.name && q.id === a.to && q.id !== p.id; });
+      if (target) { try { target.send(JSON.stringify({ t: 'act', from: p.id, name: p.name, k: a.k, item: a.item, n: a.n })); } catch { /* 끊김 */ } }
     } else if (m.t === 'chat') {
       const text = String(m.text || '').replace(/[<>]/g, '').trim().slice(0, 80);
       if (!text) return;

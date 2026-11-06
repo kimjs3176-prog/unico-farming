@@ -25,8 +25,41 @@ export class Net {
     try { this.ws = new WebSocket(url); } catch { return; }
     this.ws.onopen = () => { this.connected = true; this.send({ t: 'join', name: this.game.playerName, l: this.game.look?.() || '' }); };
     this.ws.onmessage = (e) => { try { this.handle(JSON.parse(e.data)); } catch {} };
-    this.ws.onclose = () => { this.connected = false; this.clearRemote(); this.game.ui.setOnline(0, ''); if (!this.switching) this.reconnect = setTimeout(() => this.connect(this.wantRoom), 5000); this.switching = false; };
+    this.ws.onclose = () => {
+      this.connected = false; this.clearRemote(); this.game.ui.setOnline(0, '');
+      if (!this.switching) this.reconnect = setTimeout(() => this.connect(this.wantRoom), this.retryDelay());
+      this.switching = false;
+    };
     this.ws.onerror = () => {};
+  }
+
+  /** 다시 접속할 때까지 기다릴 시간: 실패할수록 길게(5초→5분), 오늘 무료 사용량이 다 찼으면 초기화(한국 오전 9시) 뒤로 — 서버 요청 수 절약 */
+  retryDelay() {
+    const now = Date.now();
+    if (this.blockedUntil > now) return this.blockedUntil - now + Math.random() * 300000;
+    this.fails = (this.fails || 0) + 1;
+    return Math.min(300000, 5000 * 2 ** Math.min(6, this.fails - 1)) * (0.8 + Math.random() * 0.4);
+  }
+
+  /** 다른 플레이어에게 상호작용 보내기 (인사·하이파이브·선물·친구) */
+  sendAct(to, k, extra = {}) { if (this.connected) this.send({ t: 'act', to, k, ...extra }); }
+
+  /** 가까운 다른 플레이어 안내 (E: 상호작용 창) */
+  prompt(pp) {
+    let best = null, bd = 2.4;
+    for (const [id, r] of this.remote) {
+      const p = r.unico.group.position, d = Math.hypot(p.x - pp.x, p.z - pp.z);
+      if (d < bd) { bd = d; best = [id, r]; }
+    }
+    if (!best) return null;
+    const [id, r] = best;
+    return { d: bd, label: `${this.game.social?.isFriend(r.name) ? '⭐' : '👤'} ${r.name} · 인사·하이파이브·선물`, key: 'player', onInteract: () => this.game.socialView.open(id) };
+  }
+
+  /** 이름표 (친구면 ⭐, 금색) */
+  labelOf(r) {
+    const fr = this.game.social?.isFriend(r.name);
+    r.unico.setName(`${fr ? '⭐' : '👤'} ${r.name}`, '#ffffff', fr ? 'rgba(214,150,20,0.92)' : 'rgba(74,144,217,0.9)');
   }
 
   switchRoom(name) {
@@ -51,12 +84,17 @@ export class Net {
   handle(m) {
     const g = this.game;
     switch (m.t) {
-      case 'welcome': this.id = m.id; this.room = m.room; this.count = m.count; g.ui.setOnline(m.count, m.room); for (const p of m.players) this.upsert(p); break;
-      case 'joined': this.upsert(m.p); this.count = m.count; g.ui.setOnline(m.count, this.room); g.ui.toast(`🦄 ${m.p.name} 님이 입장했어요`); break;
+      case 'welcome': this.fails = 0; this.id = m.id; this.room = m.room; this.count = m.count; g.ui.setOnline(m.count, m.room); for (const p of m.players) this.upsert(p); break;
+      case 'joined': this.upsert(m.p); this.count = m.count; g.ui.setOnline(m.count, this.room); g.ui.toast(g.social?.isFriend(m.p.name) ? `⭐ 친구 ${m.p.name} 님이 들어왔어요!` : `🦄 ${m.p.name} 님이 입장했어요`); break;
       case 'left': this.removeRemote(m.id); this.count = m.count; g.ui.setOnline(m.count, this.room); break;
       case 'state': for (const p of m.players) this.upsert(p); break;
       case 'chat': { const r = this.remote.get(m.id); if (m.id === this.id) { g.ui.chatLine(g.playerName, m.text, true); g.player.unico.say(m.text); } else { g.ui.chatLine(m.name, m.text); r?.unico.say(m.text); } break; }
-      case 'full': g.ui.toast('⚠️ 모든 방이 가득 찼어요. 오프라인으로 플레이합니다.'); break;
+      case 'full': g.ui.toast('⚠️ 모든 방이 가득 찼어요. 혼자 플레이하다가 자리가 나면 다시 들어가요'); break;
+      case 'quota': // 무료 서버의 오늘 사용량이 다 참 → 초기화 시각까지 다시 접속하지 않음
+        this.blockedUntil = Math.max(Date.now() + 60000, +m.until || 0);
+        if (!this.quotaShown) { this.quotaShown = true; g.ui.toast('🌙 오늘 멀티플레이 서버 사용량이 다 찼어요. 내일 오전 9시에 다시 열려요 (농장은 계속 혼자 플레이할 수 있어요)'); }
+        break;
+      case 'act': g.socialView?.onAct(m); break;
     }
   }
 
@@ -65,6 +103,7 @@ export class Net {
     let r = this.remote.get(p.id);
     if (!r) {
       const u = new Unico(this.game.assets, { name: `👤 ${p.name}`, labelColor: '#ffffff', labelBg: 'rgba(74,144,217,0.9)', rig: 'biped', outfit: { scarf: ['red', 'green', 'blue'][p.id % 3] } });
+      if (this.game.social?.isFriend(p.name)) setTimeout(() => this.labelOf(r), 0);
       this.game.world.scene.add(u.group);
       r = { unico: u, target: { x: p.x ?? 0, z: p.z ?? 9 }, name: p.name };
       u.group.position.set(r.target.x, 0, r.target.z);

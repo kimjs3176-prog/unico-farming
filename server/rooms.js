@@ -16,6 +16,20 @@ export function sanitizeLook(s) {
   return String(s ?? '').replace(/[^a-z0-9.-]/g, '').slice(0, 48);
 }
 
+/** 플레이어끼리 상호작용 (인사·하이파이브·선물·친구): 정해진 종류·값만, 받는 사람에게만 전달 */
+export const ACTS = ['wave', 'five', 'five_ok', 'gift', 'friend', 'friend_ok'];
+export const ACT_LIMIT = 8; // 10초에 8번까지
+export function sanitizeAct(m) {
+  const k = String(m?.k ?? '');
+  const to = Number(m?.to);
+  if (!ACTS.includes(k) || !Number.isInteger(to) || to < 1 || to > 1e9) return null;
+  if (k !== 'gift') return { to, k };
+  const item = String(m.item ?? '');
+  const n = Number(m.n);
+  if (!/^[a-z0-9_]{1,24}$/.test(item) || !Number.isInteger(n) || n < 1 || n > 5) return null;
+  return { to, k, item, n };
+}
+
 export function sanitizeChat(text) {
   return String(text ?? '').replace(/[<>]/g, '').trim().slice(0, 80);
 }
@@ -31,6 +45,7 @@ export class Player {
     this.x = 0; this.z = 9; this.f = 0; this.a = ''; this.l = ''; this.lookAt = -1e9;
     this.dirty = true;
     this.chatTimes = [];
+    this.actTimes = [];
   }
   public() { return { id: this.id, name: this.name, x: this.x, z: this.z, f: this.f, a: this.a, l: this.l }; }
   send(obj) { try { if (this.ws.readyState === 1) this.ws.send(JSON.stringify(obj)); } catch {} }
@@ -113,6 +128,18 @@ export class Rooms {
         p.lookAt = t;
         p.l = sanitizeLook(m.l);
         p.dirty = true;
+        return;
+      }
+      case 'act': {
+        const a = sanitizeAct(m);
+        if (!a) return;
+        const t = this.now();
+        p.actTimes = p.actTimes.filter((x) => t - x < 10000);
+        if (p.actTimes.length >= ACT_LIMIT) return;
+        p.actTimes.push(t);
+        const target = p.room.players.get(a.to); // 같은 방 사람에게만
+        if (!target || target === p) return;
+        target.send({ t: 'act', from: p.id, name: p.name, ...a, to: undefined });
         return;
       }
       case 'ping': return p.send({ t: 'pong' });

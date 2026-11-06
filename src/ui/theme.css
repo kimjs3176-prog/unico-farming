@@ -121,3 +121,19 @@ button:disabled { opacity: 1; filter: grayscale(0.85) brightness(1.08); box-shad
 .cos-slot.locked { opacity: 1; filter: none; background: #f4f1ea; }
 .cos-slot.locked .ic { filter: grayscale(1); opacity: 0.45; }
 .mk-row.none-soft .ic { filter: saturate(0.6); }
+
+/* ---------------- 다른 플레이어와 상호작용 ---------------- */
+.panel.soc { width: min(calc(94vw / var(--ui-zoom, 1)), 420px); }
+.soc-sub { margin: 0 0 10px; color: #7d6a55; font-size: 13px; }
+.soc-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.soc-act { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px 10px; background: #fff; color: var(--ink); text-shadow: none; border: 2px solid var(--line); box-shadow: 0 2px 0 #e6e0d2; }
+.soc-act .ic { font-size: 30px; line-height: 1.1; }
+.soc-act b { font-size: 15px; }
+.soc-act small { font-size: 11px; color: #7d6a55; text-align: center; line-height: 1.3; }
+.soc-act:hover:not(:disabled) { border-color: var(--teal); }
+.soc-reqs { position: absolute; left: 50%; bottom: 178px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; z-index: 6; }
+.soc-req { pointer-events: auto; display: flex; align-items: center; gap: 8px; background: linear-gradient(180deg, #fffdf7, #f6efe0); border: 2px solid var(--wood-l); border-left: 6px solid var(--gold); border-radius: 12px; padding: 6px 8px 6px 12px; box-shadow: var(--chip-shadow); color: var(--wood-d); font-size: 14px; max-width: min(92vw, 460px); animation: popin 0.3s cubic-bezier(.3,1.5,.5,1); transition: opacity 0.25s, transform 0.25s; }
+.soc-req span { flex: 1; min-width: 0; }
+.soc-req button { padding: 6px 10px; font-size: 13px; flex: 0 0 auto; }
+.soc-req.out { opacity: 0; transform: translateY(6px); }
+@media (max-width: 600px) { .soc-reqs { bottom: 220px; } }

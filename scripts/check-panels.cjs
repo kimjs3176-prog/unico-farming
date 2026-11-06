@@ -1,8 +1,8 @@
 // 상세창(패널) 글자 점검: 글자끼리 겹침 · 칸 밖으로 넘침 · 한국어 낱말 쪼개짐 · 창이 화면 밖 · 닫기 버튼 가려짐
-// 사용: npx vite build && node scripts/check-panels.cjs <이름> <너비> <높이> [글자배율] [mobile]   (예: desk 1280 800 / mob 390 844 1 mobile / big 1100 740 1.3)
+// 사용: VITE_WS_URL= npm run build && node scripts/check-panels.cjs <이름> <너비> <높이> [글자배율] [mobile]   (예: desk 1280 800 / mob 390 844 1 mobile / big 1100 740 1.3)
 // 결과: 창마다 스크린샷과 report.json (OUT_DIR 환경변수 또는 임시 폴더). Playwright Chromium(swiftshader) 필요
 const http = require('http'), fs = require('fs'), path = require('path'); const { chromium, devices } = require('playwright');
-const DIST = path.resolve(__dirname, '..', 'dist');
+const DIST = process.env.DIST_DIR ? path.resolve(process.env.DIST_DIR) : path.resolve(__dirname, '..', 'dist'); // 점검 중 다시 빌드해도 깨지지 않게 복사본을 쓸 수 있음
 const [NAME = 'desk', W = '1280', H = '800', SCALE = '1', MOBILE = ''] = process.argv.slice(2);
 const OUT = path.resolve(process.env.OUT_DIR || require('os').tmpdir(), `panels_${NAME}`);
 fs.mkdirSync(OUT, { recursive: true });

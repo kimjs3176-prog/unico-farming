@@ -46,6 +46,8 @@ import { Angling } from './game/sim/angling.js';
 import { WaterFX } from './game/waterfx.js';
 import { FarmCraftView } from './game/view/farmcraft_view.js';
 import { CostumeSim, COSTUME, encodeLook } from './game/sim/costume.js';
+import { SocialSim } from './game/sim/social.js';
+import { SocialView } from './game/view/social_view.js';
 import { DIVISIONS } from './game/sim/koat.js';
 
 class Game {
@@ -74,6 +76,7 @@ class Game {
     this.followCam = new FollowCamera(this.camera);
     this.economy = new Economy();
     this.costume = new CostumeSim(); // 코스튬 (옷장·장터 의상 탭)
+    this.social = new SocialSim();   // 다른 플레이어와 상호작용 (인사·하이파이브·선물·친구)
     this.economy.bonus = (k) => this.costume.mult(k);
     this.quests = new Quests();
     this.player = new Player(assets, this.world, name);
@@ -105,6 +108,7 @@ class Game {
     this.town = new TownView(this);
     this.home = new HomeView(this);
     this.net = new Net(this);
+    this.socialView = new SocialView(this);
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
     this.pointer = new PointerNav(this);
@@ -116,6 +120,7 @@ class Game {
       this.ranch.sim.newDay(day);
       this.town.newDay();
       this.home.newDay();
+      this.social.newDay(day);
       this.ui.toast(`🌅 ${day}일차 아침! 장터 시세가 바뀌었어요`);
       if (ev) this.ui.toast('📈 ' + ev.name);
       if (this.economy.festival) { this.ui.toast(this.economy.festival.name + ' (장터에서 팔면 이득!)'); this.audio.play('levelup'); this.onEvent('festival'); }
@@ -222,10 +227,12 @@ class Game {
     this.town.load(s.town);
     this.home.load(s.home);
     this.costume.load(s.costume);
+    this.social.load(s.social);
     this.applyLook(false);
     if (this.pet.ok) this.pet.load(s.pet);
     if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원');
     if (s.world) { this.world.time = s.world.time; this.world.day = s.world.day; }
+    this.social.newDay(this.world.day);
     if (s.player) this.player.position.set(s.player.x, 0, s.player.z);
     this.ui.toast('💾 저장된 농장을 불러왔어요');
   }
@@ -414,6 +421,7 @@ class Game {
       pick(this.lake.update(dt, pw));
       pick(this.farmcraft.update(dt, pw));
       pick(this.town.update(dt, pw));
+      pick(this.net.prompt(pw)); // 가까운 다른 플레이어
       const homePrompt = this.home.update(dt, pp);
       if (this.home.inside) prompt = homePrompt; else pick(homePrompt); // 집 안에서는 가구 안내만
       this.pointer.update(dt, input);

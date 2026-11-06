@@ -16,6 +16,7 @@ export function saveGame(game) {
       town: game.town?.toJSON(),
       home: game.home?.toJSON(),
       costume: game.costume?.toJSON(),
+      social: game.social?.toJSON(),
       pet: game.pet?.ok ? game.pet.toJSON() : undefined,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
