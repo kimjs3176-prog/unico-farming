@@ -87,9 +87,18 @@ const MAX_PER_IP = +(process.env.MAX_PER_IP || 6);
 const perIp = new Map();
 // 다른 사이트가 방문자 브라우저로 방을 채우지 못하게: ALLOWED_ORIGINS="https://a.com,https://b.com" 이면 그 주소에서만 접속 (비우면 모두 허용)
 const ALLOWED = (process.env.ALLOWED_ORIGINS || '').split(',').map((x) => x.trim()).filter(Boolean);
+// 리버스 프록시(nginx/Caddy 등) 뒤에서는 모든 접속이 프록시 주소 하나로 보여 6명만 들어오게 됨 →
+// 같은 기계의 프록시(127.0.0.1·::1)에서 왔거나 TRUST_PROXY=1 이면 X-Forwarded-For 의 마지막 값(프록시가 직접 붙인 주소)을 씀.
+// 맨 앞 값은 접속자가 마음대로 적을 수 있어 쓰지 않음
+const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+function clientIp(peer, xff, trustProxy = TRUST_PROXY) {
+  peer = peer || '?';
+  if (!xff || !(trustProxy || /^(::1$|127\.|::ffff:127\.)/.test(peer))) return peer;
+  return String(xff).split(',').pop().trim() || peer;
+}
 
 wss.on('connection', (ws, req) => {
-  const ip = req.socket.remoteAddress || '?';
+  const ip = clientIp(req.socket.remoteAddress, req.headers['x-forwarded-for']);
   if (ALLOWED.length && !ALLOWED.includes(req.headers.origin)) return ws.close(1008, 'origin');
   if ((perIp.get(ip) || 0) >= MAX_PER_IP) return ws.close(1013, 'too many');
   perIp.set(ip, (perIp.get(ip) || 0) + 1);
