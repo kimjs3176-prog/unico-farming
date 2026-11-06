@@ -40,6 +40,8 @@ export const HILLS = [
 /** 숨은 보물 상자 (하루 한 번) */
 export const CHESTS = [[4, 33], [50, 4], [58, 24], [95, 36], [47, 66], [80, 65]].map(([x, y]) => ({ x, y }));
 export const FISH_SHOP = { x: 26, y: 47, w: 4 };
+/** 양봉: 마을 서쪽 들꽃 옆 벌통 3개 */
+export const HIVES = [{ x: 4, y: 15 }, { x: 6, y: 17 }, { x: 4, y: 18 }];
 export const paddyAt = (x, y) => PADDIES.findIndex((p) => x >= p.x && x < p.x + 2 && y >= p.y && y < p.y + 2);
 
 export function buildMap() {
@@ -143,6 +145,8 @@ export function buildMap() {
   objs.push({ type: 'crate', x: 67, y: 57 }); block(67, 57, 67, 57); objs.push({ type: 'hay', x: 66, y: 58 }); block(66, 58, 66, 58);
   // ── 언덕 전망대·보물 상자 ──
   for (const H of HILLS) { objs.push({ type: 'lookout', x: H.look.x, y: H.look.y, w: 2, h: 1, hill: H.id }); block(H.look.x, H.look.y, H.look.x + 1, H.look.y); }
+  HIVES.forEach((H, i) => { objs.push({ type: 'hive', x: H.x, y: H.y, hive: i }); block(H.x, H.y, H.x, H.y); });
+  objs.push({ type: 'sign', x: 7, y: 19, text: '유니코 양봉장' }); block(7, 19, 7, 19);
   CHESTS.forEach((C, i) => { objs.push({ type: 'chest', x: C.x, y: C.y, chest: i }); block(C.x, C.y, C.x, C.y); });
 
   // ── 목장 울타리 ──
@@ -197,7 +201,7 @@ export function buildMap() {
   ];
   for (const [t, x, y] of deco) if (isFree(x, y)) { objs.push({ type: t, x, y, seed: x * 13 + y * 7, kind: 'fol' }); block(x, y, x, y); }
   // 꽃밭 (지나갈 수 있음)
-  const flowerSpots = [[40, 59], [43, 62], [38, 63], [45, 60], [42, 58], [88, 60], [92, 56], [60, 32], [65, 31], [7, 45], [78, 40], [84, 47], [90, 50], [36, 44], [62, 26], [20, 15], [21, 16], [29, 15], [30, 16], [19, 19], [35, 15], [17, 22], [28, 26], [32, 27], [24, 26], [11, 24], [18, 29], [9, 11], [12, 9], [47, 21], [51, 18]];
+  const flowerSpots = [[5, 15], [3, 17], [5, 18], [6, 16], [3, 14], [6, 19], [40, 59], [43, 62], [38, 63], [45, 60], [42, 58], [88, 60], [92, 56], [60, 32], [65, 31], [7, 45], [78, 40], [84, 47], [90, 50], [36, 44], [62, 26], [20, 15], [21, 16], [29, 15], [30, 16], [19, 19], [35, 15], [17, 22], [28, 26], [32, 27], [24, 26], [11, 24], [18, 29], [9, 11], [12, 9], [47, 21], [51, 18]];
   for (const [x, y] of flowerSpots) if (isFree(x, y)) objs.push({ type: 'flowers', x, y, seed: x + y, walk: true });
   // 연못 소품
   objs.push({ type: 'lily', px: (POND.cx - 2) * 32, py: (POND.cy - 0.8) * 32, seed: 1 });

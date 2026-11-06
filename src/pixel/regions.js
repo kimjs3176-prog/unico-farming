@@ -6,7 +6,9 @@ import { Angling, RODS, BAIT_RARE, ReelFight, needsFight } from '../game/sim/ang
 import { TownSim, BUILDINGS } from '../game/sim/town.js';
 import { CROPS } from '../game/sim/crops.js';
 import { ITEMS } from '../game/sim/items.js';
-import { LAKE, HILLS, CHESTS, SITES, SMART } from './map.js';
+import { LAKE, HILLS, CHESTS, SITES, SMART, HIVES, DOCK, G, MW } from './map.js';
+
+const HONEY_TIME = 150; // 3D 판과 같음: 낮·맑은 날 기준 꿀이 가득 차는 시간(초)
 
 /**
  * 도트판 새 지역: 스마트팜 · KOAT 체험관 · 낚시터 · 새 마을 부지 · 언덕 전망대 · 보물 상자
@@ -29,13 +31,26 @@ export function initRegions(g) {
   g.lookouts = {};        // 전망대 첫 방문
   g.chestDay = CHESTS.map(() => 0);
   g.pano = null;          // 전망대 파노라마 연출
+  g.hives = HIVES.map(() => ({ honey: Math.random() * 0.6 }));
+  g.swimming = false; g.swimT = 0;
+  g.diving = null;        // 잠수 { t, spot }
+  // 잠수 보물 자리: 호수 안쪽 반짝이는 곳 5개 (부두는 피해서)
+  g.diveSpots = [];
+  for (let k = 0; g.diveSpots.length < 5 && k < 200; k++) {
+    const a = Math.random() * Math.PI * 2, r = 0.25 + Math.random() * 0.45;
+    const x = (LAKE.cx + Math.cos(a) * r * LAKE.rx) * T, y = (LAKE.cy + Math.sin(a) * r * LAKE.ry) * T;
+    if (Math.abs(x - (DOCK.x + 1) * T) < 80) continue;
+    if (g.diveSpots.some((p) => Math.hypot(p.x - x, p.y - y) < 120)) continue;
+    g.diveSpots.push({ x, y, on: true, respawn: 0 });
+  }
 }
 
-export const regionSave = (g) => ({ smartBoostT: g.smartBoostT, smartBoostMult: g.smartBoostMult, stamps: g.stamps.toJSON(), angling: g.angling.toJSON(), town: g.town.toJSON(), lookouts: g.lookouts, chestDay: g.chestDay });
+export const regionSave = (g) => ({ hives: g.hives.map((h) => +h.honey.toFixed(3)), smartBoostT: g.smartBoostT, smartBoostMult: g.smartBoostMult, stamps: g.stamps.toJSON(), angling: g.angling.toJSON(), town: g.town.toJSON(), lookouts: g.lookouts, chestDay: g.chestDay });
 export function regionLoad(g, d) {
   if (!d) return;
   g.smartBoostT = d.smartBoostT || 0; g.smartBoostMult = d.smartBoostMult || 1;
   g.stamps.load(d.stamps); g.angling.load(d.angling); g.town.load(d.town);
+  if (Array.isArray(d.hives)) d.hives.forEach((v, i) => { if (g.hives[i]) g.hives[i].honey = v; });
   g.lookouts = d.lookouts || {}; if (Array.isArray(d.chestDay)) g.chestDay = CHESTS.map((_, i) => d.chestDay[i] || 0);
   applyTown(g);
 }
@@ -69,6 +84,7 @@ export const RegionMethods = {
         const p = this.player; if (Math.hypot(p.wx - (S.x + 2) * T, p.wy - (S.y + 2) * T) < 260 && Math.random() < 0.3) this.audio.play('dig', 0.15);
       });
     }
+    this.waterTick(dt, busy);
     if (this.smartRun) this.smartTick(dt);
     if (this.fight) this.fightTick(dt);
     if (this.pano) { this.pano.t += dt; if (this.pano.t >= this.pano.len) this.pano = null; }
@@ -96,6 +112,7 @@ export const RegionMethods = {
       case 'board': return { label: '낚시터 기록판 · 오늘의 의뢰', run: () => this.fishBoard() };
       case 'site': return this.siteInfo(o.site);
       case 'lookout': return { label: `${HILLS.find((h) => h.id === o.hill).name} 전망대`, run: () => this.lookout(o.hill) };
+      case 'hive': return this.hiveTarget(o.hive);
       case 'chest': return { label: this.chestDay[o.chest] === this.day ? '빈 보물 상자 (내일 다시)' : '보물 상자 열기', run: () => this.openChest(o.chest) };
     }
     return undefined;
@@ -362,6 +379,109 @@ export const RegionMethods = {
     else { const f = ['fruit_apple', 'fruit_peach', 'fruit_pear', 'fruit_persimmon'][Math.floor(Math.random() * 4)]; this.econ.addItem(f, 2); msg = `${nameOf(f)} 2개`; }
     this.audio.play('coin'); this.report('chest');
     this.ui.toast(`보물 상자: ${msg}!`, 'gift');
+  },
+
+  /* ─────────── 양봉 ─────────── */
+  beesWorking() { return this.night < 0.5 && !this.raining; },
+  hiveTarget(i) {
+    const h = this.hives[i];
+    if (h.honey >= 1) return { label: '꿀 거두기', run: () => this.collectHoney(i) };
+    return { label: `꿀 모으는 중 ${Math.floor(h.honey * 100)}%${this.beesWorking() ? '' : ' (벌들이 쉬는 중)'}`, run: () => this.ui.say('양봉', `벌들이 들꽃에서 꿀을 모아요. 낮에 맑은 날이면 ${HONEY_TIME / 60 | 0}분 남짓이면 가득 차요. 비 오는 날과 밤에는 벌도 쉬어요.`) };
+  },
+  collectHoney(i) {
+    const h = this.hives[i]; if (h.honey < 1) return;
+    h.honey = 0;
+    this.econ.addProduct('honey', 1);
+    this.audio.play('harvest'); this.report('honey');
+    const H = HIVES[i]; this.popIcon('honey', H.x * T + 16, H.y * T - 10);
+    this.ui.toast('달콤한 꿀 1병을 거뒀어요! 장터에서 팔 수 있어요', 'honey');
+  },
+
+  /* ─────────── 수영 · 잠수 (호수) ─────────── */
+  /** 주인공만 들어갈 수 있는 물: 낚시터 호수 (마을 연못은 얕아서 안 됨) */
+  swimOK(x, y) { return x >= 0 && y >= 0 && this.map.ground[y * MW + x] === G.water && this.isLakeTile(x, y) && !this.entityAt(x, y); },
+  waterTick(dt, busy) {
+    // 꿀
+    if (!busy && this.beesWorking()) for (const h of this.hives) if (h.honey < 1) h.honey = Math.min(1, h.honey + dt / HONEY_TIME);
+    if (this.beesWorking() && Math.random() < dt * 1.2) {
+      const p = this.player;
+      if (HIVES.some((H) => Math.hypot(p.wx - H.x * T, p.wy - H.y * T) < 90)) this.audio.tone(220 + Math.random() * 40, 0.25, 'sawtooth', 0.012, 10, { lp: 700, rev: 0.05 }); // 윙윙
+    }
+    // 보물 자리 다시 반짝임
+    for (const sp of this.diveSpots) if (!sp.on && (sp.respawn -= dt) <= 0) sp.on = true;
+    // 물에 들어감/나옴
+    const p = this.player;
+    const inWater = !this.tr.driving && this.map.ground[p.y * MW + p.x] === G.water;
+    if (inWater !== this.swimming) {
+      this.swimming = inWater;
+      this.audio.play('splash', inWater ? 0.8 : 0.4);
+      this.splash(p.wx, p.wy);
+      if (inWater) { this.report('swim'); if (!this.swimTip) { this.swimTip = true; this.ui.toast('첨벙! 헤엄치는 중이에요. 반짝이는 곳에서 E 로 잠수!', 'fish'); } }
+    }
+    if (this.swimming) this.swimT += dt * (p.speed > 10 ? 1 : 0.4);
+    // 잠수
+    if (this.diving) {
+      const D = this.diving; D.t += dt;
+      if (Math.random() < dt * 14) this.parts.push({ kind: 'bubble', x: p.wx + (Math.random() - 0.5) * 10, y: p.wy - 6, vx: (Math.random() - 0.5) * 6, vy: -14 - Math.random() * 10, life: 0.8, decay: 1.4 });
+      if (D.t >= 1.4) this.diveDone();
+    }
+  },
+  swimTarget() {
+    const p = this.player;
+    const sp = this.diveSpots.filter((s) => s.on).find((s) => Math.hypot(s.x - p.wx, s.y - (p.wy - 6)) < 34);
+    if (sp) return { label: '잠수해서 반짝이는 곳 살펴보기', run: () => this.dive(sp) };
+    return { label: '헤엄치는 중 · 반짝이는 곳을 찾아 보세요', run: () => {} };
+  },
+  dive(sp) {
+    if (this.diving) return;
+    this.diving = { t: 0, spot: sp };
+    this.player.vx = this.player.vy = 0;
+    this.audio.play('splash', 0.9); this.splash(this.player.wx, this.player.wy);
+  },
+  diveDone() {
+    const D = this.diving; this.diving = null;
+    D.spot.on = false; D.spot.respawn = 35 + Math.random() * 40;
+    const p = this.player; this.splash(p.wx, p.wy); this.audio.play('splash', 0.5);
+    const r = Math.random();
+    let text, icon = 'gift';
+    if (r < 0.07) { this.econ.addItem('pearl', 1); text = `반짝반짝 ${ITEMS.pearl.name}`; this.audio.play('levelup'); icon = 'star'; }
+    else if (r < 0.62) { this.econ.addItem('clam', 1); text = ITEMS.clam.name; this.audio.play('coin'); }
+    else if (r < 0.82) { const n = 30 + Math.floor(Math.random() * 6) * 10; this.econ.earn(n); text = `물에 빠진 동전 ${n}`; this.audio.play('coin'); icon = 'coin'; }
+    else { this.econ.addItem('fish_snail', 1); const rec = this.book.add('fish_snail', { size: 4 + Math.round(Math.random() * 3), day: this.day }); text = `우렁이${rec.isNew ? ' (도감 등록!)' : ''}`; this.audio.play('harvest'); icon = 'fish'; }
+    this.popIcon(icon, p.wx, p.wy - 30);
+    this.ui.toast(`잠수해서 ${text}을(를) 찾았어요!`, icon);
+    this.report('dive');
+  },
+  /** 물 위 그림: 보물 반짝임 · 벌 · 헤엄칠 때 물결 */
+  drawWater(g, camX, camY, t) {
+    const S = this.S;
+    for (const sp of this.diveSpots) {
+      if (!sp.on) continue;
+      const x = Math.round(sp.x - camX), y = Math.round(sp.y - camY);
+      if (x < -20 || y < -20 || x > 4000 || y > 4000) continue;
+      g.drawImage(S.sparkle[Math.floor(t * 6 + sp.x) % 4], x - 5, y - 5);
+      if (Math.floor(t * 2 + sp.y) % 3 === 0) { g.fillStyle = 'rgba(255,255,255,0.7)'; g.fillRect(x - 7, y + 4, 4, 1); g.fillRect(x + 4, y + 3, 3, 1); }
+    }
+    // 벌: 벌통마다 6마리 8자 비행 (쉬는 중이면 입구 근처에 옹기종기)
+    const work = this.beesWorking();
+    HIVES.forEach((H, i) => {
+      const hx = H.x * T + 16 - camX, hy = H.y * T - 4 - camY;
+      for (let b = 0; b < 6; b++) {
+        const ph = t * (1.6 + b * 0.13) + b * 0.8 + i;
+        const r = work ? 12 + (b % 3) * 7 : 4;
+        const x = Math.round(hx + Math.sin(ph) * r), y = Math.round(hy - (work ? 10 + Math.sin(ph * 2.3) * 7 + (b % 2) * 5 : -2) + Math.sin(ph * 2) * r * 0.35);
+        g.fillStyle = '#ffc53a'; g.fillRect(x, y, 2, 1); g.fillStyle = '#2a2140'; g.fillRect(x + (Math.sin(ph) > 0 ? 1 : 0), y, 1, 1);
+        if (work && Math.floor(t * 30 + b) % 2) { g.fillStyle = 'rgba(255,255,255,0.8)'; g.fillRect(x, y - 1, 1, 1); }
+      }
+    });
+    // 헤엄칠 때: 허리께 물결 고리 (몸 아래쪽이 물에 잠긴 듯)
+    if (this.swimming && !this.diving) {
+      const p = this.player, x = Math.round(p.wx - camX), y = Math.round(p.wy - camY - 14);
+      const w = 13 + Math.round(Math.sin(this.swimT * 4) * 1.5);
+      g.fillStyle = 'rgba(200,238,252,0.85)';
+      for (let k = -w; k <= w; k++) { const yy = Math.round(Math.sqrt(Math.max(0, 1 - (k / w) ** 2)) * 4); g.fillRect(x + k, y + yy, 1, 1); if (Math.abs(k) > w - 5) g.fillRect(x + k, y - yy, 1, 1); }
+      if (p.speed > 10) { g.fillRect(x - w - 3, y + 1, 2, 1); g.fillRect(x + w + 2, y + 1, 2, 1); }
+    }
   },
 
   /** 전망대 파노라마: 마을 위를 천천히 한 바퀴 */

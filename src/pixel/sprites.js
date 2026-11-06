@@ -91,7 +91,8 @@ export function buildSprites() {
   S.mill = Array.from({ length: 8 }, (_, f) => cv(W.millBlades(f)));
   S.lookout = cv(W.lookout());
   S.chest = [cv(W.chest(false)), cv(W.chest(true))];
-  S.bubble = Object.fromEntries(['!', '?', 'heart', 'note', 'zz', 'dots'].map((k) => [k, cv(W.bubble(k))]));
+  S.hive = cv(W.beehive());
+  S.bubble = Object.fromEntries(['!', '?', 'heart', 'note', 'zz', 'dots', 'honey'].map((k) => [k, cv(W.bubble(k))]));
   S.sparkle = [0, 1, 2, 3].map((f) => cv(W.sparkle(f)));
   S.bobber = cv(W.bobber());
   S.iconCanvas = {};
