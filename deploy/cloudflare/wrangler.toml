@@ -9,3 +9,7 @@ class_name = "FarmRoom"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["FarmRoom"]
+
+# 게임 화면이 올라간 주소에서 온 접속만 받음 (쉼표로 여러 개). 미리보기 배포 주소는 여기 없으면 혼자 플레이(오프라인)로 동작
+[vars]
+ALLOWED_ORIGINS = "https://unico-farming.vercel.app"

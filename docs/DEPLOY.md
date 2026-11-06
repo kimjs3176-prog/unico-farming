@@ -17,6 +17,7 @@ PORT=8787 MAX_PLAYERS_PER_ROOM=50 MAX_ROOMS=20 npm start
 
 > **현재 배포 상태 (2026-11-06)**: 멀티플레이 서버가 `https://unico-farm-relay.kimjs1408.workers.dev` 에 올라가 있습니다 (`/health` → ok, `/rooms` → 방 목록).
 > 게임 빌드는 저장소의 `.env.production` 에 적힌 `VITE_WS_URL=wss://unico-farm-relay.kimjs1408.workers.dev/ws` 로 자동 접속하므로 Vercel 환경변수는 없어도 됩니다 (넣으면 그 값이 우선).
+> 게임 화면은 `https://unico-farming.vercel.app` 에 있고, 서버는 그 주소(Origin)에서 온 접속만 받습니다 (`wrangler.toml` `[vars] ALLOWED_ORIGINS`). 다른 주소(미리보기 배포 등)에서 열면 혼자 플레이(오프라인)로 동작하므로, 주소를 더 허용하려면 쉼표로 이어 적고 다시 배포하세요.
 > 서버(`deploy/cloudflare/worker.js`)를 고치면 다시 배포해야 합니다: 아래 1단계의 `npx wrangler deploy`, 또는 API 토큰을 `CLOUDFLARE_API_TOKEN` 으로 주고 `npx wrangler deploy`.
 
 ### 1단계. Cloudflare에 멀티플레이 서버 올리기 (약 5분)
