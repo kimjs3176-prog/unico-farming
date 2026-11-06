@@ -136,10 +136,17 @@ export const RegionMethods = {
   async koatBooth(i) {
     const d = DIVISIONS[i];
     const best = this.stamps.best[d.id];
-    const c = await this.ui.say(`${d.name}`, `${d.summary} [체험] ${d.game.title}: ${d.game.how} (${PASS_SCORE}점 이상이면 스탬프${best !== undefined ? ` · 최고 ${best}점` : ''}${this.stamps.stamps[d.id] ? ' · 스탬프 있음' : ''})`, ['체험 시작', '담당 팀 듣기', '다음에']);
+    const link = d.game.type === 'link'; // 기술사업본부: 외부 특허 체험 페이지
+    const rule = link ? '체험하면 스탬프' : `${PASS_SCORE}점 이상이면 스탬프${best !== undefined ? ` · 최고 ${best}점` : ''}`;
+    const c = await this.ui.say(`${d.name}`, `${d.summary} [체험] ${d.game.title}: ${d.game.how} (${rule}${this.stamps.stamps[d.id] ? ' · 스탬프 있음' : ''})`, [link ? `${d.game.title} (새 창)` : '체험 시작', '담당 팀 듣기', '다음에']);
     if (c === 1) { await this.ui.say(d.name, `우리 본부에는 ${d.teams.join(', ')}이(가) 있어요.`); return this.koatBooth(i); }
     if (c !== 0) return;
     const type = d.game.type;
+    if (type === 'link') { // 새 창(탭)으로 열고, 처음이면 체험 완료로 스탬프
+      window.open(d.game.url, '_blank', 'noopener,noreferrer');
+      if (!this.stamps.stamps[d.id]) return this.koatResult(i, 100, ['특허 체험 페이지를 새 창으로 열었어요']);
+      return this.ui.say(d.name, '새 창에서 특허 체험 페이지를 열었어요.');
+    }
     if (type === 'smartfarm') return this.beginSmart(i);
     let score = 0; const lines = [];
     if (type === 'match') {
