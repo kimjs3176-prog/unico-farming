@@ -24,5 +24,6 @@ export function sheetGroups() {
   g.push(['fx', [...['!', '?', 'heart', 'note', 'zz', 'dots'].map(W.bubble), ...[0, 1, 2, 3].map(W.sparkle), W.bobber()]]);
   g.push(['rice', [W.paddyBase('dry'), W.paddyBase('tilled'), W.paddyWater(0), ...[0, 1, 2, 3].map(W.ricePlants), W.thresher(0), W.fieldCell(false), W.fieldCell(true)]]);
   g.push(['tractor', [0, 4, 8, 12, 16, 20, 24, 28].map((k) => W.tractorStack((k / 32) * Math.PI * 2, k % 8 === 0)).concat([W.tractorStack(0.3, false)])]);
+  g.push(['region', [W.greenhouse(), W.sensorPole(0), W.solar(), W.drone(0), W.koatHQ(), W.koatHQ(true), W.koatDesk(), ...[0, 1, 2, 3, 4, 5].map(W.booth), W.fountain(0), W.flag('scarf'), W.fishShop(), W.board(), W.boat(), W.siteLot(), W.scaffold(), ...['pavilion', 'tank', 'stand', 'glasshouse', 'mill'].map((t) => W.building(t)), W.millBlades(0), W.lookout(), W.chest(false), W.chest(true)]]);
   return g;
 }

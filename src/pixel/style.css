@@ -150,3 +150,20 @@ body.touch .hint { bottom: calc(var(--u) * 4 + 52px); }
 .gauge b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--gold); }
 .gauge b.ok { background: #7cc04a; }
 .gauge b.hot { background: #d8443e; }
+
+/* 스마트팜 조작반 */
+.smartp { position: fixed; left: 50%; top: calc(var(--u) * 4); transform: translateX(-50%); width: min(94vw, calc(var(--fs) * 30)); }
+.smartp .mh { display: flex; justify-content: space-between; }
+.smartp .mt { color: var(--gold); }
+.smartp .mtime.warn { color: #ff8670; }
+.smartp .bar { display: grid; grid-template-columns: 4em 1fr 5.5em; align-items: center; gap: calc(var(--u) * 3); margin: calc(var(--u) * 1.5) 0; }
+.smartp .bv { text-align: right; }
+.smartp .bv.ok { color: #c8ea80; }
+.smartp .gauge { margin: 0; }
+.smartp .gauge b.pin { position: absolute; top: calc(var(--u) * -2); bottom: calc(var(--u) * -2); width: calc(var(--u) * 2); margin-left: calc(var(--u) * -1); z-index: 2; background: var(--gold); }
+.smartp .gauge b.pin.ok { background: #c8ea80; }
+.smartp .gauge b.pin.hot { background: #ff8670; }
+.smartp .ms { font-size: 0.9em; text-align: center; min-height: 1.5em; }
+.smartp .acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(var(--u) * 2); margin-top: calc(var(--u) * 2); }
+.smartp .acts button { background: var(--navy2); border: var(--u) solid var(--gold); color: var(--cream); padding: calc(var(--u) * 2) 0; cursor: pointer; touch-action: none; }
+.smartp .acts button:active { background: var(--gold); color: var(--ink); }

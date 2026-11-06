@@ -59,6 +59,7 @@ addEventListener('keyup', (e) => {
 addEventListener('blur', () => { game.held = []; game.run = false; });
 
 /* ── 마우스·터치: 누른 곳으로 걸어가기 ── */
+canvas.addEventListener('pointerup', () => { if (game.fight) game.reeling = false; });
 canvas.addEventListener('pointerdown', (e) => {
   if (!started) return;
   audio._ctx();
@@ -68,6 +69,7 @@ canvas.addEventListener('pointerdown', (e) => {
 const pad = document.querySelector('.pad'), ab = document.querySelector('.abtns');
 pad.addEventListener('pointerdown', (e) => { const d = e.target.closest('[data-d]')?.dataset.d; if (d) { e.preventDefault(); game.press(d); e.target.setPointerCapture?.(e.pointerId); } });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) pad.addEventListener(ev, (e) => { const d = e.target.closest('[data-d]')?.dataset.d; if (d) game.release(d); });
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) ab.addEventListener(ev, (e) => { if (e.target.closest('[data-k]')?.dataset.k === 'a') game.release('ok'); });
 ab.addEventListener('pointerdown', (e) => { const k = e.target.closest('[data-k]')?.dataset.k; if (!k) return; e.preventDefault(); if (k === 'a') game.press('ok'); else if (game.tr.driving) game.togglePlow(); else if (ui.busy || game.fish) game.press('back'); else { game.run = !game.run; e.target.classList.toggle('on', game.run); } });
 if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
 

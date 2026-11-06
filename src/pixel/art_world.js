@@ -582,3 +582,254 @@ export function tractorStack(angle, plowDown) {
   return s;
 }
 export const TRACTOR_ANCHOR = { x: 48, y: 48 + Math.ceil(TR.H * 1.6) - 6 };
+
+/* ───────────── 새 지역 ───────────── */
+
+// 작은 픽셀 글꼴 (간판용 영문·숫자 3×5)
+const FONT = { K: '101101110101101', O: '111101101101111', A: '010101111101101', T: '111010010010010', S: '111100111001111', M: '101111111101101', R: '110101110101101', F: '111100110100100', '-': '000000111000000' };
+function pixText(s, x, y, text, R, l) {
+  [...text].forEach((ch, i) => { const g = FONT[ch]; if (!g) return; for (let k = 0; k < 15; k++) if (g[k] === '1') s.set(x + i * 4 + (k % 3), y + Math.floor(k / 3), R, l); });
+}
+
+/** 스마트팜 비닐하우스 (8×4칸): 반원 지붕 비닐 + 갈빗대, 안에 비치는 작물 줄 */
+export function greenhouse() {
+  const s = new Spr(256, 168);
+  const top = 20, bot = 150;
+  // 지붕 몸체 (위에서 본 반원통: 가운데가 밝고 양끝이 어두움)
+  for (let y = top; y < bot - 24; y++) for (let x = 4; x < 252; x++) {
+    const u = (x - 128) / 124; const sh = 1 - u * u;
+    // 비닐: 가운데가 하늘을 비춰 밝고, 양 끝으로 갈수록 안이 비쳐 어두움 (흰색은 갈빗대와 가는 반사선만)
+    let l = sh > 0.55 ? 2 : 1;
+    if ((x - 4) % 24 === 0) l = 3;
+    else if (Math.abs(u) < 0.03 && (y & 3) !== 0) l = 3;
+    s.set(x, y, 'glass', l);
+  }
+  // 안에 비치는 작물 줄 (비닐 너머라 흐릿하게)
+  for (let row = 0; row < 4; row++) for (let x = 14; x < 244; x += 6) { const y = top + 18 + row * 22; if ((x + row) % 24 > 2) { s.set(x, y, 'cabbage', 2); s.set(x + 1, y, 'cabbage', 1); s.set(x + 2, y + 1, 'cabbage', 1); } }
+  // 앞면 (아치 모양 마구리)
+  for (let y = bot - 24; y < bot; y++) for (let x = 4; x < 252; x++) s.set(x, y, 'glass', 1);
+  s.poly([4, bot - 24, 128, bot - 40, 252, bot - 24], 'glass', { level: 2 });
+  s.rect(112, bot - 30, 32, 30, 'iron', 1); s.rect(114, bot - 28, 13, 28, 'glass', 0); s.rect(129, bot - 28, 13, 28, 'glass', 0); // 미닫이문
+  s.hline(4, 251, bot - 24, 'stone', 4); s.hline(4, 251, bot - 1, 'stone', 1);
+  for (let x = 4; x < 252; x += 24) s.vline(x, bot - 24, bot - 1, 'stone', 4);
+  // 환기창 줄 (지붕 옆)
+  s.rect(10, top + 2, 236, 3, 'stone', 3);
+  s.outline();
+  return s;
+}
+export function sensorPole(f = 0) {
+  const s = new Spr(28, 74);
+  s.rect(12, 14, 4, 58, 'stone', 3); s.vline(12, 14, 71, 'stone', 4);
+  s.rect(3, 24, 22, 16, 'iron', 1); s.rect(5, 26, 18, 12, 'glass', 0); // 조작반 화면
+  for (let i = 0; i < 3; i++) s.hline(7, 7 + 4 + ((i * 3 + f) % 9), 28 + i * 3, 'mane', 3);
+  s.ell(14, 8, 5, 5, 'stone', { lo: 2 }); s.set(14, 3, 'tomato', 3); s.vline(14, 0, 3, 'iron', 2); // 센서·안테나
+  s.rect(8, 70, 12, 4, 'stone', 1);
+  s.outline();
+  return s;
+}
+export function solar() {
+  const s = new Spr(128, 44);
+  for (const x0 of [2, 66]) {
+    s.poly([x0, 34, x0 + 6, 6, x0 + 60, 6, x0 + 54, 34], 'roofb', { level: 2 });
+    for (let k = 1; k < 4; k++) s.line(x0 + 6 + k * 13.5, 6, x0 + k * 13.5, 34, 'stone', 3);
+    for (let k = 1; k < 3; k++) { const y = 6 + k * 9.3; s.hline(Math.round(x0 + 6 - k * 2), Math.round(x0 + 60 - k * 2), Math.round(y), 'stone', 3); }
+    s.line(x0 + 8, 9, x0 + 18, 9, 'glass', 3);
+    s.rect(x0 + 26, 34, 4, 10, 'iron', 2);
+  }
+  s.outline();
+  return s;
+}
+export function drone(f = 0) {
+  const s = new Spr(30, 14);
+  s.rect(11, 5, 8, 5, 'stone', 4); s.rect(13, 10, 4, 2, 'iron', 1); s.set(15, 7, 'tomato', 3);
+  for (const x of [3, 22]) { s.hline(x, x + 5, 4, 'iron', 2); const w = f % 2 ? 4 : 2; s.hline(x + 3 - w, x + 2 + w, 2, 'stone', 4); }
+  s.outline();
+  return s;
+}
+
+/** KOAT 본관 (10×4칸): 흰 벽·유리창 격자·청록 띠·입구 캐노피·간판 */
+export function koatHQ(night = false) {
+  const s = new Spr(320, 196);
+  // 탑 (가운데)
+  s.rect(120, 4, 80, 60, 'wall', 4); s.rect(120, 4, 80, 4, 'stone', 3); s.vline(199, 4, 63, 'wall', 2);
+  // 본체
+  s.rect(4, 56, 312, 136, 'wall', 4);
+  s.rect(4, 56, 312, 6, 'stone', 4); s.hline(4, 315, 62, 'stone', 2);
+  s.vline(315, 56, 191, 'wall', 2); s.vline(4, 56, 191, 'wall', 3);
+  // 청록 띠
+  s.rect(4, 140, 312, 8, 'mane', 3); s.hline(4, 315, 140, 'mane', 4); s.hline(4, 315, 147, 'mane', 1);
+  // 창문 격자 (층마다)
+  for (let fl = 0; fl < 2; fl++) for (let x = 16; x < 304; x += 28) {
+    if (x > 124 && x < 190) continue;
+    const y = 72 + fl * 34;
+    s.rect(x, y, 20, 24, night ? 'win' : 'glass', night ? (x * 7 + fl) % 3 === 0 ? 1 : 2 : 1);
+    if (!night) { s.line(x + 2, y + 20, x + 14, y + 4, 'glass', 2); s.set(x + 2, y + 2, 'glass', 3); }
+    s.hline(x, x + 19, y + 12, 'stone', 3);
+  }
+  for (let fl = 0; fl < 2; fl++) for (let x = 132; x < 188; x += 14) s.rect(x, 14 + fl * 22, 10, 16, night ? 'win' : 'glass', night ? 2 : 1);
+  // 간판 KOAT
+  s.rect(128, 116, 64, 18, 'mane', 1); pixText(s, 145, 122, 'KOAT', 'gold', 4);
+  // 입구 (유리문 + 캐노피)
+  s.rect(140, 150, 40, 42, night ? 'win' : 'glass', night ? 2 : 1); s.vline(160, 150, 191, 'iron', 2);
+  s.rect(124, 146, 72, 6, 'stone', 4); s.hline(124, 195, 151, 'stone', 1);
+  for (const x of [128, 190]) s.rect(x, 152, 3, 40, 'stone', 3);
+  // 화단
+  for (const x0 of [16, 216]) { s.rect(x0, 180, 88, 12, 'wood', 2); for (let i = 0; i < 14; i++) s.ell(x0 + 4 + i * 6, 178, 3, 2.6, i % 3 ? 'leaf' : 'flowr', { lo: 1 }); }
+  s.outline();
+  return s;
+}
+export function koatDesk() {
+  const s = new Spr(64, 40);
+  s.rect(2, 12, 60, 26, 'wall', 4); s.rect(2, 8, 60, 6, 'stone', 4); s.hline(2, 61, 13, 'stone', 1);
+  s.rect(2, 24, 60, 4, 'mane', 3); pixText(s, 24, 16, 'KOAT', 'mane', 1);
+  s.outline();
+  return s;
+}
+const BOOTH_RAMP = ['apron', 'scarf', 'hay', 'mane', 'leaf', 'roofb'];
+const BOOTH_ICON = [
+  '..kkk..\n.kwwwk.\n.kwwwk.\n.kwwwk.\n..kkk..\n..kgk..\n..kkk..', // 전구 (기술)
+  '...k...\n..kwk..\n..kwk..\n.kwwwk.\n.kwwwk.\nkk.k.kk\n..rrr..', // 로켓 (창업)
+  '...g...\n..ggg..\n.g.g.g.\n...g...\n..kkk..\n.kwwwk.\n..kkk..', // 새싹·씨앗 (종자)
+  'k.....k\n.k...k.\n..kwk..\n...w...\n...k...\n..kkk..\n.kkkkk.', // 안테나 (스마트)
+  '.kkk...\n.kwk...\nkkkkkk.\nkwwwwk.\nkkkkkkk\n.kk..kk\n.kk..kk', // 트랙터 (농기계)
+  '..kkk..\n.kgwgk.\nkggwggk\nkwwggwk\nkggwggk\n.kgggk.\n..kkk..', // 지구 (환경)
+];
+/** 본부 부스 (3×2칸): 본부 색 지붕·간판·아이콘 */
+export function booth(i) {
+  const R = BOOTH_RAMP[i];
+  const s = new Spr(96, 92);
+  s.rect(6, 36, 84, 52, 'wall', 4); s.vline(89, 36, 87, 'wall', 2);
+  s.rect(6, 64, 84, 24, 'wood', 3); s.hline(6, 89, 64, 'wood', 5); s.hline(6, 89, 87, 'wood', 1); // 안내 탁자
+  // 지붕 (본부 색, 앞 물결)
+  for (let y = 12; y < 36; y++) for (let x = 0; x < 96; x++) { const t = (y - 12) / 24; if (x < 6 * (1 - t) || x > 95 - 6 * (1 - t)) continue; s.set(x, y, R, y < 16 ? 3 : (Math.floor(x / 12) % 2 ? 2 : 1)); }
+  for (let x = 0; x < 96; x++) { const k = x % 12; s.vline(x, 36, 36 + (k < 6 ? k >> 1 : (11 - k) >> 1), R, Math.floor(x / 12) % 2 ? 2 : 1); }
+  // 간판 + 아이콘
+  s.rect(30, 0, 36, 14, R, 2); s.hline(30, 65, 0, R, 3); s.hline(30, 65, 13, R, 0);
+  s.ell(48, 50, 11, 11, R, { lo: 2 });
+  s.grid(45, 47, BOOTH_ICON[i], { k: ['ink', 1], w: ['white', 4], g: ['leaf', 3], r: ['scarf', 2] });
+  for (const x of [6, 86]) s.rect(x, 36, 4, 52, 'iron', 2);
+  s.outline();
+  return s;
+}
+export function fountain(f = 0) {
+  const s = new Spr(64, 60);
+  s.ell(32, 40, 30, 16, 'stone', { lo: 2 }); s.ell(32, 38, 24, 11, 'water', { lo: 2, hi: 4 });
+  s.ell(32, 36, 22, 9, 'water', { lo: 3, clip: (x, y) => y < 34 });
+  s.rect(28, 14, 8, 24, 'stone', 3); s.ell(32, 14, 10, 4, 'stone', { lo: 3 });
+  for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI + (f % 2) * 0.25; s.line(32, 10, Math.round(32 + Math.cos(a) * 12), Math.round(10 - Math.sin(a) * 8), 'water', 5); }
+  s.outline();
+  return s;
+}
+export function flag(R = 'mane') { const s = new Spr(28, 84); s.rect(4, 4, 3, 80, 'stone', 4); s.ell(5.5, 3, 2.4, 2.4, 'gold', { lo: 2 }); s.poly([7, 8, 27, 12, 27, 30, 7, 28], R, { level: 2 }); s.line(8, 12, 26, 16, R, 3); s.rect(1, 80, 9, 4, 'stone', 2); s.outline(); return s; }
+
+/** 낚시 가게 (4×2칸): 나무 오두막·파란 지붕·물고기 간판 */
+export function fishShop() {
+  const s = new Spr(128, 104);
+  planks(s, 6, 44, 116, 58, 'wood');
+  s.poly([0, 46, 14, 10, 114, 10, 128, 46], 'roofb', { level: 2 });
+  roofTiles(s, 0, 12, 128, 46, 14, 'roofb', 6);
+  s.rect(50, 64, 28, 38, 'wood', 1); s.rect(52, 66, 24, 36, 'wood', 2); s.rect(70, 82, 2, 3, 'gold', 3);
+  window(s, 16, 60, 20, 16, false); window(s, 92, 60, 20, 16, false);
+  // 물고기 간판
+  s.rect(44, 0, 40, 14, 'wood', 3); s.ell(60, 7, 9, 4, 'water', { lo: 2 }); s.poly([68, 7, 75, 3, 75, 11], 'water', { level: 3 }); s.set(55, 6, 'eye', 0);
+  // 그물·통
+  s.rect(110, 86, 14, 16, 'wood', 2); s.hline(110, 123, 90, 'iron', 1); s.hline(110, 123, 97, 'iron', 1);
+  s.outline();
+  return s;
+}
+export function board() { const s = new Spr(40, 44); for (const x of [6, 31]) s.rect(x, 18, 3, 26, 'wood', 2); s.rect(2, 2, 36, 26, 'wood', 3); s.rect(5, 5, 30, 20, 'cream', 3); for (let y = 8; y < 23; y += 4) s.hline(8, 8 + ((y * 7) % 18) + 6, y, 'wood', 1); s.rect(24, 12, 8, 6, 'water', 3); s.outline(); return s; }
+export function boat() { const s = new Spr(60, 28); s.poly([2, 10, 58, 10, 50, 24, 10, 24], 'wood', { level: 2 }); s.poly([5, 10, 55, 10, 50, 16, 10, 16], 'wood', { level: 1 }); s.hline(2, 57, 10, 'wood', 4); s.rect(26, 12, 8, 3, 'wood', 3); s.line(18, 6, 34, 20, 'wood', 3); s.outline(); return s; }
+
+/** 건설 부지 (4×3칸): 빈 땅(말뚝·줄) / 비계 / 완성 건물 */
+export function siteLot() {
+  const s = new Spr(128, 100);
+  s.rect(2, 8, 124, 90, 'path', 2);
+  for (const [x, y] of [[4, 8], [122, 8], [4, 94], [122, 94]]) { s.rect(x - 1, y - 8, 3, 12, 'wood', 3); }
+  for (let x = 6; x < 122; x += 4) { s.set(x, 4 + ((x >> 2) % 2), 'cloth', 1); s.set(x, 90 + ((x >> 2) % 2), 'cloth', 1); }
+  for (let y = 8; y < 94; y += 4) { s.set(3 + ((y >> 2) % 2), y, 'cloth', 1); s.set(122 + ((y >> 2) % 2), y, 'cloth', 1); }
+  for (let k = 0; k < 6; k++) s.rect(20 + k * 16, 60 + (k % 2) * 12, 6, 2, 'path', 4);
+  s.outline();
+  return s;
+}
+export function scaffold() {
+  const s = new Spr(128, 132);
+  for (const x of [8, 44, 84, 118]) s.rect(x, 8, 3, 122, 'wood', 3);
+  for (let y = 20; y < 130; y += 26) { s.rect(6, y, 116, 3, 'wood', 4); s.line(8, y, 44, y + 26, 'wood', 2); s.line(84, y, 118, y + 26, 'wood', 2); }
+  s.outline();
+  return s;
+}
+/** 완성 건물 5종: pavilion 정자 · tank 물탱크 · stand 직판장 · glasshouse 유리 온실 · mill 풍차 방앗간 */
+export function building(type, night = false) {
+  const s = new Spr(128, 132);
+  if (type === 'pavilion') {
+    for (const x of [16, 52, 74, 108]) { s.rect(x, 58, 6, 66, 'barn', 2); s.vline(x, 58, 123, 'barn', 3); }
+    s.rect(10, 112, 108, 14, 'wood', 3); s.hline(10, 117, 112, 'wood', 5);
+    // 기와 지붕 (처마 끝이 살짝 올라감)
+    s.poly([0, 62, 8, 52, 20, 24, 108, 24, 120, 52, 128, 62, 104, 58, 24, 58], 'stone', { level: 2 });
+    roofTiles(s, 6, 26, 122, 58, 16, 'stone', 5);
+    s.rect(14, 58, 100, 6, 'mane', 2); for (let x = 16; x < 112; x += 8) s.rect(x, 58, 4, 6, 'gold', 3); // 단청
+    s.hline(20, 108, 24, 'stone', 4);
+  } else if (type === 'tank') {
+    for (const x of [30, 92]) { s.rect(x, 60, 5, 66, 'iron', 2); }
+    s.line(34, 70, 92, 120, 'iron', 1); s.line(92, 70, 34, 120, 'iron', 1);
+    s.rect(18, 14, 92, 54, 'roofb', 3); s.ell(64, 14, 46, 10, 'roofb', { lo: 3 }); s.ell(64, 68, 46, 8, 'roofb', { lo: 1, clip: (x, y) => y > 66 });
+    for (let x = 22; x < 108; x += 12) s.vline(x, 18, 66, 'roofb', 2);
+    s.rect(40, 30, 48, 14, 'white', 4); s.ell(64, 37, 4, 5, 'water', { lo: 3 }); // 물방울 표시
+    s.line(110, 20, 110, 126, 'iron', 2); for (let y = 24; y < 126; y += 8) s.hline(106, 110, y, 'iron', 2); // 사다리
+  } else if (type === 'stand') {
+    planks(s, 6, 64, 116, 62, 'wood');
+    for (let y = 34; y < 62; y++) for (let x = 0; x < 128; x++) s.set(x, y, 'cloth', Math.floor(x / 14) % 2 ? 2 : 1);
+    for (let x = 0; x < 128; x++) { const k = x % 14; s.vline(x, 62, 62 + (k < 7 ? k >> 1 : (13 - k) >> 1), 'cloth', Math.floor(x / 14) % 2 ? 2 : 0); }
+    s.rect(30, 12, 68, 20, 'leaf', 2); s.hline(30, 97, 12, 'leaf', 4); pixText(s, 50, 18, 'FARM', 'white', 4);
+    for (let i = 0; i < 4; i++) { const x = 12 + i * 28; s.rect(x, 84, 22, 14, 'wood', 2); for (let k = 0; k < 4; k++) s.ell(x + 4 + k * 5, 82, 3, 2.6, ['carrot', 'tomato', 'cabbage', 'corn'][i], { lo: 1 }); }
+  } else if (type === 'glasshouse') {
+    s.rect(8, 44, 112, 82, 'glass', 2);
+    s.poly([4, 46, 64, 8, 124, 46], 'glass', { level: 3 });
+    for (let x = 8; x < 120; x += 14) s.vline(x, 44, 125, 'stone', 4);
+    for (let y = 58; y < 126; y += 22) s.hline(8, 119, y, 'stone', 4);
+    s.line(4, 46, 64, 8, 'stone', 4); s.line(64, 8, 124, 46, 'stone', 4);
+    for (let k = 0; k < 10; k++) s.ell(16 + k * 10.5, 112, 4, 6, 'leaf', { lo: 2 }); // 안의 화분
+    for (let k = 0; k < 6; k++) s.ell(20 + k * 17, 80, 5, 4, 'flowr', { lo: 1 });
+    if (night) s.rect(10, 60, 108, 40, 'win', 1);
+  } else if (type === 'mill') {
+    s.poly([36, 128, 48, 28, 80, 28, 92, 128], 'wall', { level: 3 });
+    for (let y = 40; y < 128; y += 12) s.hline(Math.round(36 + (128 - y) * 0.12), Math.round(92 - (128 - y) * 0.12), y, 'wall', 2);
+    s.poly([42, 30, 64, 6, 86, 30], 'roof', { level: 2 });
+    s.rect(56, 100, 16, 28, 'wood', 2); window(s, 58, 60, 12, 12, night);
+  }
+  s.outline();
+  return s;
+}
+export function millBlades(f = 0) {
+  const s = new Spr(96, 96);
+  for (let k = 0; k < 4; k++) {
+    const a = f * (Math.PI / 16) + k * (Math.PI / 2);
+    const cx = 48, cy = 48, ex = cx + Math.cos(a) * 44, ey = cy + Math.sin(a) * 44;
+    s.line(cx, cy, Math.round(ex), Math.round(ey), 'wood', 2);
+    const px = -Math.sin(a), py = Math.cos(a);
+    s.poly([cx + Math.cos(a) * 12, cy + Math.sin(a) * 12, ex, ey, ex + px * 9, ey + py * 9, cx + Math.cos(a) * 12 + px * 9, cy + Math.sin(a) * 12 + py * 9], 'cloth', { level: 2 });
+  }
+  s.ell(48, 48, 5, 5, 'wood', { lo: 1 });
+  s.outline();
+  return s;
+}
+export function lookout() {
+  const s = new Spr(64, 60);
+  s.rect(4, 30, 56, 14, 'wood', 3); for (let x = 4; x < 60; x += 8) s.vline(x, 30, 43, 'wood', 2); s.hline(4, 59, 30, 'wood', 5);
+  for (const x of [4, 56]) s.rect(x, 42, 4, 16, 'wood', 1);
+  s.rect(4, 18, 56, 3, 'wood', 4); for (let x = 6; x < 60; x += 10) s.vline(x, 18, 30, 'wood', 2); // 난간
+  // 망원경
+  s.vline(32, 10, 30, 'iron', 2); s.line(26, 8, 40, 4, 'gold', 3); s.line(26, 9, 40, 5, 'gold', 2); s.ell(41, 4, 2, 2, 'glass', { level: 2 });
+  s.outline();
+  return s;
+}
+export function chest(open = false) {
+  const s = new Spr(30, 26);
+  s.rect(3, 11, 24, 13, 'wood', 3); s.hline(3, 26, 23, 'wood', 1);
+  if (open) { s.rect(3, 4, 24, 6, 'wood', 2); s.rect(5, 10, 20, 3, 'gold', 4); s.set(10, 9, 'spark', 2); }
+  else { s.ell(15, 11, 12, 6, 'wood', { lo: 3, clip: (x, y) => y < 12 }); s.rect(3, 11, 24, 2, 'gold', 2); }
+  for (const x of [8, 21]) s.vline(x, open ? 11 : 6, 23, 'gold', 2);
+  s.rect(13, 13, 4, 4, 'gold', 4); s.set(15, 15, 'ink', 0);
+  s.outline();
+  return s;
+}

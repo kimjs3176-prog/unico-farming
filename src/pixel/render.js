@@ -1,7 +1,11 @@
-import { MW, MH, G, POND, PLOTS, PADDIES, FIELD } from './map.js';
+import { MW, MH, G, PLOTS, PADDIES, FIELD, WATERS } from './map.js';
+
+const CHUNK = 256;
+
 import { rampRGB, bayer } from './pxl.js';
 
 const T = 32;
+const EXACT = new Set([G.paddy, G.field, G.plaza, G.hill, G.cliff, G.stairs]);
 const hash = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 function vnoise(x, y) {
   const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
@@ -44,6 +48,7 @@ export class Renderer {
     this.t = 0;
     this.bakeGround();
     this.buildStatics();
+    this.warmChunks();
     this.resize();
   }
 
@@ -68,120 +73,188 @@ export class Renderer {
     this.vignette = v;
   }
 
-  /* ─────────── 지형 굽기: 픽셀마다 재질·명암 ─────────── */
+  /* ─────────── 지형 굽기: 256px 조각마다, 처음 보일 때 (넓은 지도도 가볍게) ─────────── */
   bakeGround() {
-    const W = MW * T, H = MH * T;
-    const { ground } = this.map;
-    const mat = new Uint8Array(W * H);
-    const tileAt = (x, y) => { const tx = Math.floor(x / T), ty = Math.floor(y / T); if (tx < 0 || ty < 0 || tx >= MW || ty >= MH) return G.grass; return ground[ty * MW + tx]; };
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      // 경계를 구불구불하게: 낮은 주파수 노이즈로 표본 위치를 흔듦 (물은 원래 타원 그대로)
-      const u = (x + 0.5) / T - POND.cx, v = (y + 0.5) / T - POND.cy;
-      const pondEdge = (u / POND.rx) ** 2 + (v / POND.ry) ** 2 + (vnoise(x / 18, y / 18) - 0.5) * 0.18;
-      if (pondEdge < 1) { mat[y * W + x] = G.water; continue; }
-      const wx = (vnoise(x / 20, y / 20) - 0.5) * 12, wy = (vnoise(x / 20 + 50, y / 20 + 50) - 0.5) * 12;
-      let m = tileAt(x + wx, y + wy);
-      const exact = tileAt(x, y);
-      if (exact === G.paddy || exact === G.field) m = exact;
-      else if (m === G.paddy || m === G.field) m = G.path;
-      if (m === G.water) m = G.grass;
-      mat[y * W + x] = m;
-    }
-    // 물까지 거리 (모래톱·깊이)
-    const INF = 999;
-    const dl = new Float32Array(W * H), dw = new Float32Array(W * H);
-    for (let i = 0; i < W * H; i++) { const w = mat[i] === G.water; dl[i] = w ? INF : 0; dw[i] = w ? 0 : INF; }
-    const chamfer = (d) => {
-      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x; let v = d[i]; if (x > 0) v = Math.min(v, d[i - 1] + 1); if (y > 0) { v = Math.min(v, d[i - W] + 1); if (x > 0) v = Math.min(v, d[i - W - 1] + 1.41); if (x < W - 1) v = Math.min(v, d[i - W + 1] + 1.41); } d[i] = v; }
-      for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) { const i = y * W + x; let v = d[i]; if (x < W - 1) v = Math.min(v, d[i + 1] + 1); if (y < H - 1) { v = Math.min(v, d[i + W] + 1); if (x < W - 1) v = Math.min(v, d[i + W + 1] + 1.41); if (x > 0) v = Math.min(v, d[i + W - 1] + 1.41); } d[i] = v; }
-    };
-    chamfer(dl); chamfer(dw);
-    this.landDist = dl;
+    this.chunks = new Map();
+    // 물 반짝임 점 (연못·호수의 깊은 곳)
+    this.glints = [];
+    WATERS.forEach((Wt, wi) => {
+      for (let k = 0; k < Wt.rx * Wt.ry * 3.4; k++) {
+        const a = hash(k, 7 + wi) * Math.PI * 2, r = Math.sqrt(hash(k, 9 + wi)) * 0.82;
+        const x = Math.floor((Wt.cx + Math.cos(a) * r * Wt.rx) * T), y = Math.floor((Wt.cy + Math.sin(a) * r * Wt.ry) * T);
+        if (this.matAt(x, y) === G.water) this.glints.push({ x, y, ph: hash(k, 3 + wi) * 6.28, len: 2 + Math.floor(hash(k, 4 + wi) * 4) });
+      }
+    });
+  }
 
-    const c = document.createElement('canvas'); c.width = W; c.height = H;
+  tileAt(x, y) { const tx = Math.floor(x / T), ty = Math.floor(y / T); if (tx < 0 || ty < 0 || tx >= MW || ty >= MH) return G.grass; return this.map.ground[ty * MW + tx]; }
+  /** 픽셀의 재질. 땅끼리의 경계는 노이즈로 구불구불, 논·밭·광장·언덕·부두는 칸 그대로 */
+  matAt(x, y) {
+    const exact = this.tileAt(x, y);
+    if (exact === G.dock) return G.dock;
+    for (const Wt of WATERS) {
+      const u = (x + 0.5) / T - Wt.cx, v = (y + 0.5) / T - Wt.cy;
+      if (Math.abs(u) > Wt.rx + 1 || Math.abs(v) > Wt.ry + 1) continue;
+      if ((u / Wt.rx) ** 2 + (v / Wt.ry) ** 2 + (vnoise(x / 18, y / 18) - 0.5) * 0.18 < 1) return G.water;
+    }
+    if (EXACT.has(exact)) return exact;
+    const wx = (vnoise(x / 20, y / 20) - 0.5) * 12, wy = (vnoise(x / 20 + 50, y / 20 + 50) - 0.5) * 12;
+    let m = this.tileAt(x + wx, y + wy);
+    if (EXACT.has(m)) m = exact === G.grass ? G.grass : G.path;
+    if (m === G.water) m = G.grass;
+    return m;
+  }
+
+  chunk(cx, cy) {
+    const key = cy * 1000 + cx;
+    let c = this.chunks.get(key);
+    if (!c) { c = this.bakeChunk(cx, cy); this.chunks.set(key, c); }
+    return c;
+  }
+
+  bakeChunk(cx, cy) {
+    const CH = CHUNK, MG = 24;
+    const X0 = cx * CH - MG, Y0 = cy * CH - MG, EW = CH + MG * 2;
+    const mat = new Uint8Array(EW * EW);
+    let anyWater = false, nearWater = false;
+    for (const Wt of WATERS) if (X0 < (Wt.cx + Wt.rx + 2) * T && X0 + EW > (Wt.cx - Wt.rx - 2) * T && Y0 < (Wt.cy + Wt.ry + 2) * T && Y0 + EW > (Wt.cy - Wt.ry - 2) * T) nearWater = true;
+    for (let y = 0; y < EW; y++) for (let x = 0; x < EW; x++) { const m = this.matAt(X0 + x, Y0 + y); mat[y * EW + x] = m; if (m === G.water) anyWater = true; }
+    const INF = 999;
+    const dl = new Float32Array(EW * EW), dw = new Float32Array(EW * EW);
+    for (let i = 0; i < dl.length; i++) { const w = mat[i] === G.water; dl[i] = w ? INF : 0; dw[i] = w ? 0 : INF; }
+    if (anyWater || nearWater) {
+      const chamfer = (d) => {
+        const W = EW, H = EW;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x; let v = d[i]; if (x > 0) v = Math.min(v, d[i - 1] + 1); if (y > 0) { v = Math.min(v, d[i - W] + 1); if (x > 0) v = Math.min(v, d[i - W - 1] + 1.41); if (x < W - 1) v = Math.min(v, d[i - W + 1] + 1.41); } d[i] = v; }
+        for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) { const i = y * W + x; let v = d[i]; if (x < W - 1) v = Math.min(v, d[i + 1] + 1); if (y < H - 1) { v = Math.min(v, d[i + W] + 1); if (x < W - 1) v = Math.min(v, d[i + W + 1] + 1.41); if (x > 0) v = Math.min(v, d[i + W - 1] + 1.41); } d[i] = v; }
+      };
+      chamfer(dl); chamfer(dw);
+    }
+    const M = (gx, gy) => { const x = gx - X0, y = gy - Y0; return x < 0 || y < 0 || x >= EW || y >= EW ? this.matAt(gx, gy) : mat[y * EW + x]; };
+    const DW = (gx, gy) => { const x = gx - X0, y = gy - Y0; return x < 0 || y < 0 || x >= EW || y >= EW ? INF : dw[y * EW + x]; };
+
+    const c = document.createElement('canvas'); c.width = CH; c.height = CH;
     const g = c.getContext('2d');
-    const img = g.createImageData(W, H);
-    const put = (i, rgb) => { img.data[i * 4] = rgb[0]; img.data[i * 4 + 1] = rgb[1]; img.data[i * 4 + 2] = rgb[2]; img.data[i * 4 + 3] = 255; };
-    const M = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? G.grass : mat[y * W + x]);
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const i = y * W + x, m = mat[i];
+    const img = g.createImageData(CH, CH);
+    for (let yy = 0; yy < CH; yy++) for (let xx = 0; xx < CH; xx++) {
+      const x = cx * CH + xx, y = cy * CH + yy;
+      const ei = (yy + MG) * EW + xx + MG, m = mat[ei];
       const n = vnoise(x / 54, y / 54) * 0.7 + vnoise(x / 17, y / 17) * 0.3 + bayer(x, y) * 0.035;
       const n2 = vnoise(x / 13 + 9, y / 13 + 3);
+      let rgb;
       if (m === G.water) {
-        const d = dl[i];
+        const d = dl[ei];
         let l = d < 3 ? 4 : d < 12 + n * 4 ? 3 : 2;
-        if (d < 1.2) l = 5; // 물가 거품 띠
-        put(i, rampRGB('water', l));
-        continue;
-      }
-      const wd = dw[i];
-      if (wd < 7 + n2 * 4) { put(i, rampRGB('sand', wd < 2.5 ? 1 : wd < 4.5 ? 2 : 3 + (n > 0.6 ? 1 : 0))); continue; }
-      if (m === G.grass) {
-        let l = n > 0.74 ? 4 : 3;
-        // 길·밭과 닿는 풀 가장자리: 아래쪽은 그림자, 위쪽 둘레는 밝은 풀끝
-        if (M(x, y + 1) !== G.grass || M(x, y + 2) !== G.grass) l = 2;
-        else if (M(x, y - 1) !== G.grass) l = 5;
-        put(i, rampRGB('grass', l));
-      } else if (m === G.path) {
-        let l = n > 0.76 ? 4 : 3;
-        // 풀 바로 아래 길은 풀 그림자
-        if (M(x, y - 1) === G.grass || M(x, y - 2) === G.grass) l = 1;
-        else if (M(x, y - 3) === G.grass) l = 2;
-        put(i, rampRGB('path', l));
-      } else if (m === G.paddy || m === G.field) {
-        put(i, rampRGB(m === G.paddy ? 'soil' : 'path', m === G.paddy ? 1 : 3));
-      } else if (m === G.soil) {
-        let l = 2;
-        if (M(x, y - 1) === G.grass || M(x, y - 2) === G.grass) l = 0;
-        put(i, rampRGB('soil', l));
-      }
+        if (d < 1.2) l = 5;
+        rgb = rampRGB('water', l);
+      } else if (m !== G.dock && m !== G.cliff && m !== G.stairs && dw[ei] < 7 + n2 * 4) {
+        const wd = dw[ei];
+        rgb = rampRGB('sand', wd < 2.5 ? 1 : wd < 4.5 ? 2 : 3 + (n > 0.6 ? 1 : 0));
+      } else rgb = this.groundPixel(m, x, y, n, M);
+      const o = (yy * CH + xx) * 4;
+      img.data[o] = rgb[0]; img.data[o + 1] = rgb[1]; img.data[o + 2] = rgb[2]; img.data[o + 3] = 255;
     }
     g.putImageData(img, 0, 0);
-    // 풀잎 다발: 8px 칸마다 확률적으로 (풀이 있는 곳만, 경계에서 떨어진 곳)
-    const tuft = (x, y, big) => {
-      const px = (dx, dy, l) => { g.fillStyle = `rgb(${rampRGB('grass', l)})`; g.fillRect(x + dx, y + dy, 1, 1); };
+    // 풀잎 다발·자갈 (조각 경계를 넘어가도 이어지게 바깥 칸까지 확인)
+    const tuft = (x, y, big, R) => {
+      const px = (dx, dy, l) => { g.fillStyle = `rgb(${rampRGB('grass', Math.min(5, l + (R ? 1 : 0)))})`; g.fillRect(x + dx - cx * CH, y + dy - cy * CH, 1, 1); };
       px(0, 0, 5); px(-1, 1, 4); px(1, 1, 4); px(0, 1, 4); px(-2, 2, 3); px(2, 2, 3); px(0, 2, 1); px(-1, 2, 1); px(1, 2, 1);
       if (big) { px(-2, 1, 5); px(2, 0, 5); px(3, 1, 4); }
     };
-    for (let cy = 0; cy < H; cy += 8) for (let cx = 0; cx < W; cx += 8) {
-      const h = hash(cx * 3 + 1, cy * 5 + 7);
-      const cl = vnoise(cx / 60 + 3, cy / 60 + 8); // 다발이 무리 지어 남
+    const gx0 = Math.floor((cx * CH - 8) / 8) * 8, gy0 = Math.floor((cy * CH - 8) / 8) * 8;
+    for (let ccy = gy0; ccy < cy * CH + CH + 8; ccy += 8) for (let ccx = gx0; ccx < cx * CH + CH + 8; ccx += 8) {
+      const h = hash(ccx * 3 + 1, ccy * 5 + 7);
+      const cl = vnoise(ccx / 60 + 3, ccy / 60 + 8);
       if (h > 0.08 + cl * 0.35) continue;
-      const x = cx + Math.floor(hash(cx, cy) * 6) + 1, y = cy + Math.floor(hash(cy, cx) * 5) + 1;
+      const x = ccx + Math.floor(hash(ccx, ccy) * 6) + 1, y = ccy + Math.floor(hash(ccy, ccx) * 5) + 1;
+      const base = M(x, y);
+      if (base !== G.grass && base !== G.hill) continue;
       let ok = true;
-      for (let dy = -3; dy <= 5 && ok; dy++) for (let dx = -4; dx <= 4; dx++) if (M(x + dx, y + dy) !== G.grass || dw[Math.max(0, Math.min(H - 1, y + dy)) * W + Math.max(0, Math.min(W - 1, x + dx))] < 10) { ok = false; break; }
-      if (ok) tuft(x, y, h < 0.03);
+      for (let dy = -3; dy <= 5 && ok; dy++) for (let dx = -4; dx <= 4; dx++) if (M(x + dx, y + dy) !== base || DW(x + dx, y + dy) < 10) { ok = false; break; }
+      if (ok) tuft(x, y, h < 0.03, base === G.hill);
     }
-    // 길 위 자갈 (자갈길이라 알갱이가 이유 있음, 드문드문)
-    for (let cy = 0; cy < H; cy += 11) for (let cx = 0; cx < W; cx += 11) {
-      if (hash(cx + 5, cy + 9) > 0.16) continue;
-      const x = cx + Math.floor(hash(cx, cy + 2) * 8), y = cy + Math.floor(hash(cx + 2, cy) * 8);
+    const px0 = Math.floor((cx * CH - 11) / 11) * 11, py0 = Math.floor((cy * CH - 11) / 11) * 11;
+    for (let ccy = py0; ccy < cy * CH + CH + 11; ccy += 11) for (let ccx = px0; ccx < cx * CH + CH + 11; ccx += 11) {
+      if (hash(ccx + 5, ccy + 9) > 0.16) continue;
+      const x = ccx + Math.floor(hash(ccx, ccy + 2) * 8), y = ccy + Math.floor(hash(ccx + 2, ccy) * 8);
       if (M(x, y) !== G.path || M(x + 2, y) !== G.path || M(x, y - 3) !== G.path) continue;
-      g.fillStyle = `rgb(${rampRGB('path', 5)})`; g.fillRect(x, y, 2, 1);
-      g.fillStyle = `rgb(${rampRGB('path', 1)})`; g.fillRect(x, y + 1, 2, 1);
-    }
-    this.groundC = c;
-
-    // 물 반짝임 점 목록 (물 깊은 곳)
-    this.glints = [];
-    for (let k = 0; k < 140; k++) {
-      const x = Math.floor((POND.cx + (hash(k, 1) - 0.5) * POND.rx * 1.8) * T), y = Math.floor((POND.cy + (hash(k, 2) - 0.5) * POND.ry * 1.8) * T);
-      if (x < 0 || y < 0 || x >= W || y >= H) continue;
-      if (mat[y * W + x] === G.water && dl[y * W + x] > 5) this.glints.push({ x, y, ph: hash(k, 3) * 6.28, len: 2 + Math.floor(hash(k, 4) * 4) });
+      g.fillStyle = `rgb(${rampRGB('path', 5)})`; g.fillRect(x - cx * CH, y - cy * CH, 2, 1);
+      g.fillStyle = `rgb(${rampRGB('path', 1)})`; g.fillRect(x - cx * CH, y - cy * CH + 1, 2, 1);
     }
     // 물가 거품 두 장 (번갈아)
-    this.foam = [0, 1].map((ph) => {
-      const fc = document.createElement('canvas'); fc.width = W; fc.height = H; const fg = fc.getContext('2d');
-      const x0 = Math.floor((POND.cx - POND.rx - 1) * T), x1 = Math.ceil((POND.cx + POND.rx + 1) * T), y0 = Math.floor((POND.cy - POND.ry - 1) * T), y1 = Math.ceil((POND.cy + POND.ry + 1) * T);
-      fg.fillStyle = `rgb(${rampRGB('water', 5)})`;
-      for (let y = Math.max(0, y0); y < Math.min(H, y1); y++) for (let x = Math.max(0, x0); x < Math.min(W, x1); x++) {
-        const i = y * W + x; if (mat[i] !== G.water) continue;
-        const d = dl[i];
-        const wave = Math.sin((x + y * 0.6) / 6 + ph * Math.PI) > 0.2;
-        if (d > 1.2 && d < 3.2 && wave && ((x + y + ph) & 1)) fg.fillRect(x, y, 1, 1);
-      }
-      return fc;
-    });
+    let foam = null;
+    if (anyWater) {
+      foam = [0, 1].map((ph) => {
+        const fc = document.createElement('canvas'); fc.width = CH; fc.height = CH; const fg = fc.getContext('2d');
+        fg.fillStyle = `rgb(${rampRGB('water', 5)})`;
+        for (let yy = 0; yy < CH; yy++) for (let xx = 0; xx < CH; xx++) {
+          const ei = (yy + MG) * EW + xx + MG; if (mat[ei] !== G.water) continue;
+          const d = dl[ei], x = cx * CH + xx, y = cy * CH + yy;
+          if (d > 1.2 && d < 3.2 && Math.sin((x + y * 0.6) / 6 + ph * Math.PI) > 0.2 && ((x + y + ph) & 1)) fg.fillRect(xx, yy, 1, 1);
+        }
+        return fc;
+      });
+    }
+    return { c, foam, x: cx * CH, y: cy * CH };
+  }
+
+  /** 땅 재질별 픽셀 색 (M: 주변 재질 조회) */
+  groundPixel(m, x, y, n, M) {
+    if (m === G.grass) {
+      let l = n > 0.74 ? 4 : 3;
+      if (M(x, y + 1) !== G.grass || M(x, y + 2) !== G.grass) l = M(x, y + 1) === G.hill ? 3 : 2;
+      else if (M(x, y - 1) !== G.grass) l = M(x, y - 1) === G.cliff ? 1 : 5;
+      return rampRGB('grass', l);
+    }
+    if (m === G.path) {
+      let l = n > 0.76 ? 4 : 3;
+      const up = M(x, y - 1), up2 = M(x, y - 2);
+      if (up === G.grass || up2 === G.grass || up === G.cliff || up2 === G.cliff) l = 1;
+      else if (M(x, y - 3) === G.grass) l = 2;
+      return rampRGB('path', l);
+    }
+    if (m === G.paddy || m === G.field) return rampRGB(m === G.paddy ? 'soil' : 'path', m === G.paddy ? 1 : 3);
+    if (m === G.soil) return rampRGB('soil', M(x, y - 1) === G.grass || M(x, y - 2) === G.grass ? 0 : 2);
+    if (m === G.plaza) {
+      // 돌판 (16px), 줄눈, 판마다 살짝 다른 색, 왼쪽 위 모서리 빛
+      const tx = Math.floor(x / 16), ty = Math.floor(y / 16), lx = x & 15, ly = y & 15;
+      if (lx === 0 || ly === 0) return rampRGB('stone', 3);
+      let l = hash(tx, ty) > 0.9 ? 3 : 4;
+      if (lx === 1 || ly === 1) l = 5;
+      if (M(x, y - 1) === G.grass || M(x, y - 2) === G.grass) l = 2;
+      return rampRGB('stone', l);
+    }
+    if (m === G.hill) {
+      // 언덕 위: 한 단계 밝은 풀, 가장자리는 비탈 그늘
+      let l = n > 0.7 ? 5 : 4;
+      const edgeL = M(x - 1, y) !== G.hill && M(x - 1, y) !== G.cliff, edgeR = M(x + 1, y) !== G.hill && M(x + 1, y) !== G.cliff, edgeT = M(x, y - 1) !== G.hill;
+      if (edgeL || edgeR || edgeT || M(x - 2, y) === G.grass || M(x + 2, y) === G.grass) l = 3;
+      if (M(x, y - 3) !== G.hill && M(x, y - 3) !== G.cliff) l = Math.min(l, 3);
+      return rampRGB('grass', l);
+    }
+    if (m === G.cliff) {
+      // 절벽 면: 위 풀 끝 → 돌 줄 (어긋난 이음매) → 아래 그늘
+      const ly = y & 31;
+      if (ly < 3) return rampRGB('grass', ly === 2 ? 2 : 4);
+      if (ly > 29) return rampRGB('stone', 0);
+      const row = Math.floor((ly - 3) / 7), ry = (ly - 3) % 7;
+      if (ry === 6) return rampRGB('stone', 1);
+      if (((x + row * 6) % 13) === 0) return rampRGB('stone', 1);
+      return rampRGB('stone', ry === 0 ? 4 : ly < 12 ? 3 : 2);
+    }
+    if (m === G.stairs) {
+      const ly = y & 31, k = ly % 6;
+      if ((x & 31) < 2 || (x & 31) > 61) return rampRGB('stone', 1);
+      return rampRGB('stone', k === 0 ? 5 : k < 3 ? 4 : k === 5 ? 1 : 3);
+    }
+    if (m === G.dock) {
+      // 부두 널판 (가로), 틈, 양옆 테두리, 기둥
+      const lx = x & 63, ly = y % 6;
+      if (lx < 2 || lx > 61) return rampRGB('wood', 1);
+      if (ly === 5) return rampRGB('wood', 1);
+      return rampRGB('wood', ly === 0 ? 4 : 3);
+    }
+    return rampRGB('grass', 3);
   }
 
   /* ─────────── 고정 소품 → 그리기 목록 ─────────── */
@@ -217,6 +290,23 @@ export class Renderer {
         case 'stall': list.push({ img: S.stall, x: o.x * T, y: by(o) - 110, sy: by(o) - 4, tall: true }); break;
         case 'well': list.push({ img: S.well, x: o.x * T + 4, y: by(o) - 72, sy: by(o) - 4, tall: true }); break;
         case 'lamp': list.push({ img: S.lamp.day, glow: S.lamp.night, x: cx(o) - 10, y: by(o) - 66, sy: by(o) - 4, tall: true, shadow: 's', sx: cx(o), shy: by(o) - 4 }); this.lights.push({ x: cx(o), y: by(o) - 56, r: 92, c: [255, 200, 120], lamp: true }); break;
+        case 'greenhouse': list.push({ img: S.greenhouse, x: o.x * T, y: by(o) - 166, sy: by(o) - 2, tall: true }); this.lights.push({ x: (o.x + 4) * T, y: by(o) - 60, r: 120, c: [150, 210, 255], k: 0.5 }); break;
+        case 'sensor': list.push({ sensor: true, x: cx(o) - 14, y: by(o) - 74, sy: by(o) - 4, tall: true, shadow: 's', sx: cx(o), shy: by(o) - 4 }); this.lights.push({ x: cx(o), y: by(o) - 44, r: 40, c: [120, 255, 220], k: 0.7 }); break;
+        case 'solar': list.push({ img: S.solar, x: o.x * T, y: by(o) - 42, sy: by(o) - 4 }); break;
+        case 'koat_hq': list.push({ img: S.hq.day, glow: S.hq.night, x: o.x * T, y: by(o) - 194, sy: by(o) - 2, tall: true });
+          for (const k of [1, 3, 7, 9]) this.lights.push({ x: (o.x + k) * T, y: by(o) - 90, r: 70, c: [255, 210, 130] });
+          this.lights.push({ x: (o.x + 5) * T, y: by(o) - 20, r: 80, c: [255, 210, 140] });
+          break;
+        case 'desk': list.push({ img: S.desk, x: o.x * T, y: by(o) - 38, sy: by(o) - 2 }); break;
+        case 'booth': list.push({ img: S.booth[o.div], x: o.x * T, y: by(o) - 90, sy: by(o) - 2, tall: true }); this.lights.push({ x: (o.x + 1.5) * T, y: by(o) - 30, r: 60, c: [255, 220, 160], k: 0.8 }); break;
+        case 'fountain': list.push({ fountain: true, x: o.x * T, y: by(o) - 58, sy: by(o) - 4 }); break;
+        case 'flag': list.push({ img: S.flag, x: cx(o) - 6, y: by(o) - 84, sy: by(o) - 4, tall: true }); break;
+        case 'fishshop': list.push({ img: S.fishshop, x: o.x * T, y: by(o) - 102, sy: by(o) - 2, tall: true }); this.lights.push({ x: (o.x + 1) * T, y: by(o) - 30, r: 50, c: [255, 190, 100] }, { x: (o.x + 3.4) * T, y: by(o) - 30, r: 50, c: [255, 190, 100] }); break;
+        case 'board': list.push({ img: S.board, x: cx(o) - 20, y: by(o) - 44, sy: by(o) - 4 }); break;
+        case 'boat': decals.push({ img: S.boat, x: Math.round(o.px) - 30, y: Math.round(o.py) - 14, bob: 3 }); break;
+        case 'site': list.push({ site: o.site, x: o.x * T, y: by(o) - 132, sy: by(o) - 2, tall: true, lot: { x: o.x * T, y: by(o) - 98 } }); break;
+        case 'lookout': list.push({ img: S.lookout, x: o.x * T, y: by(o) - 58, sy: by(o) - 2, tall: true }); break;
+        case 'chest': list.push({ chest: o.chest, x: cx(o) - 15, y: by(o) - 28, sy: by(o) - 6 }); break;
         case 'thresher': list.push({ thresher: true, x: o.x * T - 3, y: by(o) - 58, sy: by(o) - 4, tall: true }); break;
         case 'sign': list.push({ img: S.sign, x: cx(o) - 18, y: by(o) - 36, sy: by(o) - 4 }); break;
         case 'mailbox': list.push({ img: S.mailbox, x: cx(o) - 10, y: by(o) - 36, sy: by(o) - 4 }); break;
@@ -253,9 +343,14 @@ export class Renderer {
 
     g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
     g.fillStyle = '#173d30'; g.fillRect(0, 0, VW, VH);
-    g.drawImage(this.groundC, camX, camY, VW, VH, 0, 0, VW, VH);
-    // 물: 거품 번갈아 + 반짝임 줄
-    g.drawImage(this.foam[Math.floor(this.t * 1.6) % 2], camX, camY, VW, VH, 0, 0, VW, VH);
+    // 땅 조각 (처음 보이면 굽기) + 물가 거품 번갈아
+    const fi = Math.floor(this.t * 1.6) % 2;
+    for (let cy = Math.max(0, Math.floor(camY / CHUNK)); cy <= Math.min(Math.ceil(WH / CHUNK) - 1, Math.floor((camY + VH) / CHUNK)); cy++)
+      for (let cx = Math.max(0, Math.floor(camX / CHUNK)); cx <= Math.min(Math.ceil(WW / CHUNK) - 1, Math.floor((camX + VW) / CHUNK)); cx++) {
+        const ch = this.chunk(cx, cy);
+        g.drawImage(ch.c, ch.x - camX, ch.y - camY);
+        if (ch.foam) g.drawImage(ch.foam[fi], ch.x - camX, ch.y - camY);
+      }
     g.fillStyle = `rgb(${rampRGB('water', 5)})`;
     for (const p of this.glints) {
       const k = Math.sin(this.t * 1.7 + p.ph);
@@ -327,6 +422,22 @@ export class Renderer {
         x += Math.round(sway);
       }
       if (d.trough) img = S.trough[game.ranch.trough > 0 ? 1 : 0];
+      if (d.sensor) img = S.sensor[Math.floor(this.t * 3) % 3];
+      if (d.fountain) img = S.fountain[Math.floor(this.t * 4) % 2];
+      if (d.chest !== undefined) img = S.chest[game.chestDay[d.chest] === game.day ? 1 : 0];
+      if (d.site !== undefined) {
+        // 건설 부지: 빈 땅 → 공사(건물이 아래부터 차오르고 비계) → 완성 (풍차는 날개가 돎)
+        const st = game.town.sites[d.site];
+        g.drawImage(S.lot, Math.round(d.lot.x - camX), Math.round(d.lot.y - camY));
+        if (st.type) {
+          const B = S.bld[st.type], k = game.town.progress(d.site), h = Math.round(B.day.height * k);
+          if (h > 0) g.drawImage(B.day, 0, B.day.height - h, B.day.width, h, x, y + B.day.height - h, B.day.width, h);
+          if (st.state === 'building') g.drawImage(S.scaffold, x, y);
+          else if (B.night && night > 0.01) glowList.push([B.night, x, y]);
+          if (st.type === 'mill' && st.state === 'done') g.drawImage(S.mill[Math.floor(this.t * 6) % 8], x + 16, y - 26);
+        }
+        return;
+      }
       if (d.thresher) img = S.thresher[Math.floor(this.t * (game.threshing ? 6 + game.threshing.gauge * 30 : 1.5)) % 3];
       if (!img) return;
       if (d.alpha !== undefined) g.globalAlpha = d.alpha;
@@ -463,6 +574,25 @@ export class Renderer {
       if (p.grav) p.vy += p.grav * dt;
     }
     this.particles = this.particles.filter((p) => p.life > 0 && p.y < camY + VH + 20).slice(-260);
+  }
+
+  /** 쉬는 시간에 나머지 땅 조각을 미리 구움 (처음 가는 지역에서 끊기지 않게) */
+  warmChunks() {
+    const nx = Math.ceil((MW * T) / CHUNK), ny = Math.ceil((MH * T) / CHUNK);
+    const all = [];
+    for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) all.push([x, y]);
+    const idle = window.requestIdleCallback || ((f) => setTimeout(f, 40));
+    const step = (dl) => {
+      const start = performance.now();
+      while (all.length && (dl?.timeRemaining ? dl.timeRemaining() > 6 : performance.now() - start < 10)) {
+        // 카메라에서 가까운 조각부터
+        const fx = (this.camX || 0) / CHUNK, fy = (this.camY || 0) / CHUNK;
+        all.sort((a, b) => Math.hypot(a[0] - fx, a[1] - fy) - Math.hypot(b[0] - fx, b[1] - fy));
+        const [x, y] = all.shift(); this.chunk(x, y);
+      }
+      if (all.length) idle(step);
+    };
+    setTimeout(() => idle(step), 1200);
   }
 
   /** 화면 좌표(CSS px) → 월드 타일 */

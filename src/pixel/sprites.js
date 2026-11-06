@@ -72,6 +72,25 @@ export function buildSprites() {
   const step = () => { if (warm >= 64) return; S.tractor(warm >= 32, warm % 32); warm++; idle(step); };
   setTimeout(() => idle(step), 1500);
   S.tractorAnchor = W.TRACTOR_ANCHOR;
+  // 새 지역
+  S.greenhouse = cv(W.greenhouse());
+  S.sensor = [0, 1, 2].map((f) => cv(W.sensorPole(f * 3)));
+  S.solar = cv(W.solar());
+  S.drone = [0, 1].map((f) => cv(W.drone(f)));
+  S.hq = { day: cv(W.koatHQ(false)), night: glow(W.koatHQ(true)) };
+  S.desk = cv(W.koatDesk());
+  S.booth = [0, 1, 2, 3, 4, 5].map((i) => cv(W.booth(i)));
+  S.fountain = [0, 1].map((f) => cv(W.fountain(f)));
+  S.flag = cv(W.flag('mane'));
+  S.fishshop = cv(W.fishShop());
+  S.board = cv(W.board());
+  S.boat = cv(W.boat());
+  S.lot = cv(W.siteLot());
+  S.scaffold = cv(W.scaffold());
+  S.bld = Object.fromEntries(['pavilion', 'tank', 'stand', 'glasshouse', 'mill'].map((t) => [t, { day: cv(W.building(t, false)), night: glow(W.building(t, true)) }]));
+  S.mill = Array.from({ length: 8 }, (_, f) => cv(W.millBlades(f)));
+  S.lookout = cv(W.lookout());
+  S.chest = [cv(W.chest(false)), cv(W.chest(true))];
   S.bubble = Object.fromEntries(['!', '?', 'heart', 'note', 'zz', 'dots'].map((k) => [k, cv(W.bubble(k))]));
   S.sparkle = [0, 1, 2, 3].map((f) => cv(W.sparkle(f)));
   S.bobber = cv(W.bobber());

@@ -25,6 +25,7 @@ export class UI {
       <div class="seedbar panel" data-act="seed"><img class="ico"><div><b class="sn"></b><span class="sc"></span></div><kbd>Q</kbd></div>
       <div class="hint hidden"></div>
       <div class="meter panel hidden"></div>
+      <div class="smartp panel hidden"></div>
       <div class="toasts"></div>
       <div class="dialog hidden"><div class="nametag"></div><div class="text"></div><div class="choices"></div><i class="more">▼</i></div>
       <div class="menu hidden"><div class="menu-card panel"><div class="menu-head"><b class="mt"></b><div class="tabs"></div><button class="x">✕</button></div><div class="menu-sub"></div><div class="list"></div><div class="menu-foot"></div></div></div>
@@ -69,7 +70,28 @@ export class UI {
     if (!m) { el.classList.add('hidden'); return; }
     el.classList.remove('hidden');
     const bar = m.gauge !== undefined ? `<div class="gauge"><i class="band" style="left:${m.band[0] * 100}%;width:${(m.band[1] - m.band[0]) * 100}%"></i><b style="width:${m.gauge * 100}%" class="${m.ok ? 'ok' : m.hot ? 'hot' : ''}"></b></div>` : '';
-    el.innerHTML = `<div class="mh"><span class="mt">${m.title}</span><span class="mtime${m.time <= 5 ? ' warn' : ''}">${Math.ceil(m.time)}초</span></div>${bar}<div class="ms">${m.text}</div>`;
+    el.innerHTML = `<div class="mh"><span class="mt">${m.title}</span>${m.time === undefined ? '' : `<span class="mtime${m.time <= 5 ? ' warn' : ''}">${Math.ceil(m.time)}초</span>`}</div>${bar}<div class="ms">${m.text}</div>`;
+  }
+
+  /** 스마트팜 조작반: 온도·습도·CO₂ 막대(초록 = 적정 범위) + 버튼 4개. sim null 이면 숨김 */
+  smart(sim, onAct, text) {
+    const el = this.q('.smartp');
+    if (!sim) { el.classList.add('hidden'); this.smartAct = null; return; }
+    if (onAct) {
+      this.smartAct = onAct;
+      el.innerHTML = `<div class="mh"><span class="mt">스마트팜 환경 제어</span><span class="mtime"></span></div><div class="bars"></div><div class="ms"></div>
+        <div class="acts">${[['heater', '1 난방'], ['vent', '2 환기'], ['mist', '3 분무'], ['co2', '4 CO₂']].map(([k, l]) => `<button data-sa="${k}">${l}</button>`).join('')}</div>`;
+      el.querySelectorAll('[data-sa]').forEach((b) => b.addEventListener('pointerdown', (e) => { e.preventDefault(); this.smartAct?.(b.dataset.sa); }));
+    }
+    el.classList.remove('hidden');
+    el.querySelector('.mtime').textContent = `${Math.ceil(sim.time)}초`;
+    el.querySelector('.mtime').classList.toggle('warn', sim.time <= 5);
+    el.querySelector('.bars').innerHTML = Object.values(sim.vars).map((v) => {
+      const k = (x) => ((x - v.lo) / (v.hi - v.lo)) * 100;
+      const ok = v.value >= v.min && v.value <= v.max;
+      return `<div class="bar"><span class="bn">${v.name}</span><div class="gauge"><i class="band" style="left:${k(v.min)}%;width:${k(v.max) - k(v.min)}%"></i><b class="pin ${ok ? 'ok' : 'hot'}" style="left:${k(v.value)}%"></b></div><span class="bv ${ok ? 'ok' : ''}">${Math.round(v.value)}${v.unit}</span></div>`;
+    }).join('');
+    if (text !== undefined) el.querySelector('.ms').textContent = text;
   }
 
   hint(text) {
