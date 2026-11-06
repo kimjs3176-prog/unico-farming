@@ -289,7 +289,7 @@ function applyPalette(root, id) {
 // 감정표현 → 머리 위 아이콘
 // 행동별 손에 드는 도구 (두 발 캐릭터 오른손)
 const PROP_OF = { hoe: 'hoe', water: 'can', net: 'net', cast: 'rod', fishwait: 'rod', reel: 'rod', brush: 'brush' };
-const HAND_R = [0.215, -0.32, 0.09]; // 오른팔 뼈 기준 손 위치
+const HAND_R = [0.16, -0.34, 0.045]; // 오른팔 뼈 기준 손 위치
 
 /** 손 도구 (팔 뼈 로컬 좌표: 팔을 내리고 있을 때 -y 가 손끝 방향, +z 가 앞) */
 function makeProp(kind) {

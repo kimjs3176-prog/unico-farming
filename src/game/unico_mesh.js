@@ -99,6 +99,8 @@ function rcyl(c, r, hh, round) {
   };
 }
 const add = (v, o) => [v.x + o[0], v.y + o[1], v.z + o[2]];
+/** 앞뒤(z)로 납작하게: 근사 SDF (s<1) */
+const squashZ = (f, s) => (x, y, z) => f(x, y, z / s) * s;
 
 /** 프리미티브 목록: f(SDF), k(녹이는 정도), slot(색), bone(뼈) */
 function primitives() {
@@ -138,23 +140,26 @@ function primitivesBiped() {
   const push = (f, k, slot, bone) => P.push({ f, k, slot, bone });
   const Hb = bonePos('biped', 'head');
   const F = RIGS.biped.face;
-  // 몸통: 짧고 통통한 콩 모양 + 둥근 배 (머리와 거의 같은 높이)
-  push(ell([0, 0.6, 0], [0.32, 0.37, 0.27]), 0, 'body', 'body');
-  push(sph([0, 0.52, 0.04], 0.29), 0.12, 'body', 'body');
-  // 큰 머리: 몸통 위에 얹혀 짧은 목으로 부드럽게 이어짐
-  push(ell([Hb.x, Hb.y, Hb.z], [0.44, 0.42, 0.42]), 0.14, 'body', 'head');
+  // 몸통: 원본 일러스트처럼 어깨는 좁고 엉덩이 쪽이 넓은 종 모양 (목 없이 머리 밑으로 녹아듦) + 살짝 나온 배
+  push(squashZ(rcone([0, 0.46, 0.01], [0, 0.95, 0], 0.28, 0.14), 0.9), 0, 'body', 'body');
+  push(sph([0, 0.5, 0.06], 0.24), 0.12, 'body', 'body');
+  // 큰 머리: 몸통 위에 얹혀 부드럽게 이어짐
+  push(ell([Hb.x, Hb.y, Hb.z], [0.44, 0.42, 0.42]), 0.16, 'body', 'head');
   push(ell(add(Hb, F.snout), [0.25, 0.19, 0.22]), 0.09, 'snout', 'head');
   for (const sx of [-1, 1]) push(ell(add(Hb, [sx * F.ear[0], F.ear[1], F.ear[2]]), [0.075, 0.16, 0.06], sx * -0.45), 0.06, 'body', 'head');
-  // 다리: 짧고 위가 굵게 가늘어지는 다리 + 청록 발굽
+  // 다리: 몸통 아래로 짧게 나온 기둥 (두 다리 사이를 띄워 걸을 때 허벅지가 들러붙지 않게) + 청록 발굽
   for (const [sx, bone] of [[-1, 'legL'], [1, 'legR']]) {
-    push(rcone([sx * 0.14, 0.36, 0], [sx * 0.14, 0.12, 0.02], 0.135, 0.11), 0.1, 'body', bone);
-    push(rcyl([sx * 0.14, 0.065, 0.03], 0.128, 0.065, 0.032), 0.03, 'hoof', bone);
+    push(rcone([sx * 0.135, 0.34, 0], [sx * 0.135, 0.11, 0.015], 0.112, 0.1), 0.08, 'body', bone);
+    push(rcyl([sx * 0.135, 0.062, 0.025], 0.108, 0.062, 0.03), 0.03, 'hoof', bone);
   }
-  // 팔: 어깨에서 손까지 한 번에 매끈하게 가늘어지는 짧은 팔 + 둥근 청록 손
+  // 팔: 어깨에서 몸 옆으로 길게 내려오는 가는 팔 + 청록 손끝.
+  //  어깨는 몸통에 녹아든 둥근 '공 관절'(몸통 뼈)이고, 팔 뿌리는 그 공 안(팔 뼈 회전 중심)에서 나옴
+  //  → 팔을 어느 쪽으로 돌려도 뿌리가 공 안에 숨어 겨드랑이가 찢기거나 늘어나지 않음. 아래팔은 몸통과 띄워 둠
   for (const [sx, bone] of [[-1, 'armL'], [1, 'armR']]) {
-    const S = [sx * 0.25, 0.83, 0.02], Hd = [sx * 0.47, 0.53, 0.1];
-    push(rcone(S, Hd, 0.1, 0.08), 0.045, 'body', bone);
-    push(sph([sx * 0.485, 0.5, 0.11], 0.092), 0.05, 'hoof', bone);
+    const J = bonePos('biped', bone).toArray(), Hd = [sx * 0.42, 0.53, 0.06];
+    push(sph(J, 0.086), 0.11, 'body', 'body');
+    push(rcone(J, Hd, 0.074, 0.06), 0.015, 'body', bone);
+    push(ell([sx * 0.43, 0.485, 0.065], [0.066, 0.07, 0.066]), 0.03, 'hoof', bone);
   }
   // 갈기: 정수리 곱슬 → 뒤통수 → 등
   const headMane = [[0, 0.38, -0.1, 0.16], [0, 0.26, -0.3, 0.16], [0, 0.06, -0.4, 0.15], [0.13, 0.36, 0.15, 0.1], [0.03, 0.41, 0.08, 0.095], [-0.12, 0.37, 0.02, 0.09]];
@@ -177,7 +182,7 @@ export function makeSDF(rig = 'quad') {
   const P = rig === 'biped' ? primitivesBiped() : primitives();
   const sdf = (x, y, z) => {
     let d = P[0].f(x, y, z);
-    for (let i = 1; i < P.length; i++) d = smin(d, P[i].f(x, y, z), P[i].k);
+    for (let i = 1; i < P.length; i++) { const k = P[i].k; d = smin(d, P[i].f(x, y, z), typeof k === 'function' ? k(x, y, z) : k); }
     return d;
   };
   return { P, sdf };
