@@ -393,6 +393,7 @@ export function icon(id) {
     case 'sun': s.ell(8, 8, 4.5, 4.5, 'gold', { lo: 2 }); for (const [x, y] of [[8, 1], [8, 14], [1, 8], [14, 8], [3, 3], [13, 3], [3, 13], [13, 13]]) s.set(x, y, 'gold', 3); break;
     case 'moon': s.ell(8, 8, 5.5, 5.5, 'corn', { lo: 3 }); s.ell(11, 6, 4.5, 4.5, 'corn', { clip: () => false }); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if ((x - 11) ** 2 + (y - 6) ** 2 < 18) s.set(x, y, null); break;
     case 'rain': s.ell(8, 6, 6, 3.5, 'stone', { lo: 3 }); for (const x of [4, 8, 12]) s.line(x, 11, x - 1, 14, 'water', 4); break;
+    case 'bug': s.ell(5, 6, 3.4, 3.4, 'corn', { lo: 2 }); s.ell(11, 6, 3.4, 3.4, 'corn', { lo: 2 }); s.ell(5, 11, 2.6, 2.6, 'corn', { lo: 1 }); s.ell(11, 11, 2.6, 2.6, 'corn', { lo: 1 }); s.vline(8, 3, 14, 'ink', 1); s.set(7, 2, 'ink', 1); s.set(9, 2, 'ink', 1); break;
     case 'rice': for (let i = 0; i < 5; i++) s.line(4 + i * 2, 15, 3 + i * 2.4, 3, 'hay', 2 + (i % 2)); for (const [x, y] of [[3, 3], [6, 2], [9, 2], [12, 3], [5, 5], [11, 5]]) s.ell(x, y, 1.3, 1.6, 'corn', { lo: 2 }); s.hline(3, 12, 10, 'scarf', 2); break;
     case 'bag': s.ell(8, 10, 6, 5, 'wood', { lo: 2 }); s.rect(6, 3, 4, 3, 'wood', 3); s.hline(5, 10, 5, 'scarf', 2); break;
     case 'quest': s.rect(3, 2, 10, 13, 'cream', 3); s.rect(3, 2, 10, 2, 'wood', 3); for (let y = 6; y < 14; y += 3) s.hline(5, 11, y, 'wood', 2); break;

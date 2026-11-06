@@ -18,6 +18,7 @@ import { initRegions, regionSave, regionLoad, RegionMethods } from './regions.js
 import { initCraft, craftSave, craftLoad, CraftMethods } from './craft.js';
 import { initPests, PestMethods } from './pests.js';
 import { Battle } from './battle.js';
+import { initBugs, BugMethods } from './bugs.js';
 
 const T = 32;
 export const DAY_LENGTH = 360; // 3D 버전과 같은 하루 6분
@@ -25,9 +26,9 @@ const SAVE_KEY = 'unico-pixel-save-v1';
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const dirOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down');
 const nameOf = (k) => (CROPS[k] || PRODUCTS[k] || ITEMS[k])?.name || k;
-const iconOf = (k) => (k === 'rice_seed' || k === 'paddy' || k.startsWith('rice_') ? 'rice' : CROPS[k] ? k : PRODUCTS[k] ? k : k === 'feed' ? 'feed' : k === 'pet_treat' ? 'treat' : k.startsWith('fish_') ? 'fish' : k === 'compost' ? 'compost' : k.startsWith('fruit_') ? 'tomato' : k.endsWith('_gold') ? 'star' : 'gift');
+const iconOf = (k) => (k.startsWith('bug_') ? 'bug' : k === 'rice_seed' || k === 'paddy' || k.startsWith('rice_') ? 'rice' : CROPS[k] ? k : PRODUCTS[k] ? k : k === 'feed' ? 'feed' : k === 'pet_treat' ? 'treat' : k.startsWith('fish_') ? 'fish' : k === 'compost' ? 'compost' : k.startsWith('fruit_') ? 'tomato' : k.endsWith('_gold') ? 'star' : 'gift');
 // 도트 버전에서 할 수 있는 퀘스트만 보여 줌
-const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built', 'swim', 'dive', 'honey', 'process', 'rprocess', 'fert', 'shoo']);
+const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built', 'swim', 'dive', 'honey', 'process', 'rprocess', 'fert', 'shoo', 'bug', 'book']);
 const THRESH_TIME = 6, THRESH_BAND = [0.55, 0.9]; // 3D 판과 같은 탈곡 규칙
 const M = 16; // 트랙터 시뮬레이션 1m = 16px (밭 한 칸 2m = 32px)
 
@@ -97,6 +98,7 @@ export class Game {
     initRegions(this);
     initCraft(this);
     initPests(this);
+    initBugs(this);
     this.battle = null;
     this.load();
     this.refreshDayWeather(false);
@@ -205,6 +207,7 @@ export class Game {
     }
     this.regionTick(dt, busy);
     this.pestTick(dt, busy);
+    this.bugTick(dt, busy || !!this.battle);
     if (this.battle) this.battle.update(dt);
     if (!busy) this.craftTick(dt);
     const frozen = busy || !!this.battle || !!this.smartRun || !!this.fight || !!this.pano;
@@ -447,7 +450,7 @@ export class Game {
     return null;
   }
   /** 앞 칸에 할 게 없으면 서 있는 논 (논 안에 들어가 일하기) */
-  target() { if (this.swimming) return this.diving ? null : this.swimTarget(); const pe = this.pestNear(); if (pe) return { label: `${pe.name}와 배틀! (쫓아내기)`, run: () => this.startBattle(pe) }; const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) return t; const pd = paddyAt(this.player.x, this.player.y); return pd >= 0 ? this.paddyInfo(pd) : null; }
+  target() { if (this.swimming) return this.diving ? null : this.swimTarget(); const pe = this.pestNear(); if (pe) return { label: `${pe.name}와 배틀! (쫓아내기)`, run: () => this.startBattle(pe) }; const bu = this.bugNear(); if (bu) return { label: `곤충채로 잡기 · ${this.book.entries[bu.kind] ? ITEMS[bu.kind].name : '처음 보는 곤충!'}`, run: () => this.catchBug(bu) }; const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) return t; const pd = paddyAt(this.player.x, this.player.y); return pd >= 0 ? this.paddyInfo(pd) : null; }
   hintText() { if (this.player.speed > 70) return null; return this.target()?.label || null; }
   interact() { const t = this.target(); if (t) t.run(); }
 
@@ -523,6 +526,9 @@ export class Game {
     o.shaken = true; o.lastShake = this.day; o.shakeT = 0.45;
     const n = 3;
     this.econ.addItem(o.item, n); this.book.add(o.item, { day: this.day });
+    // 가끔 나무에서 곤충이 툭 (3D 판과 같음)
+    if (Math.random() < 0.15) { const bug = Math.random() < 0.5 ? 'bug_beetle' : 'bug_ladybug'; this.econ.addItem(bug); const r = this.book.add(bug, { day: this.day }); this.report('bug'); setTimeout(() => this.ui.toast(`앗, ${ITEMS[bug].name}도 떨어졌어요!${r.isNew ? ' (도감 등록!)' : ''}`, 'bug'), 500); }
+    this.checkBook();
     this.audio.play('stroke'); setTimeout(() => this.audio.play('pop'), 200);
     for (let k = 0; k < n; k++) this.parts.push({ kind: 'icon', img: this.S.icon(o.fruit === 'tomato' ? 'tomato' : o.fruit === 'apron' ? 'carrot' : 'strawberry'), x: o.x * T + 6 + k * 10, y: o.y * T - 50, vx: (k - 1) * 10, vy: -20, grav: 220, life: 0.9, decay: 1 });
     this.report('shake');
@@ -1000,6 +1006,7 @@ export class Game {
   /** 낚싯줄·찌 */
   drawOverlay(g, camX, camY, t) {
     this.drawWater(g, camX, camY, t);
+    this.drawBugs(g, camX, camY, t);
     const f = this.fish || (this.fight && this.fishFight), p = this.player;
     if (!f) return;
     // 힘겨루기 중에는 찌가 물속으로 끌려 들어갔다 나왔다 함
@@ -1109,4 +1116,10 @@ Game.prototype.kitchenMenu = function () {
       return { sub: `작물로 콩이 간식을 만들어요 · 지금 간식 ${e.inventory.items.pet_treat || 0}개`, empty: '작물이 없어요. 밭에서 거둬 오세요', items };
     },
   });
+};
+Object.assign(Game.prototype, BugMethods);
+/** 도감: 종 수 퀘스트 + 카테고리 완성 보상 (3D 판과 같은 Collection) */
+Game.prototype.checkBook = function () {
+  this.report('book', Object.keys(this.book.entries).length);
+  for (const r of this.book.claimCompletions()) { this.econ.earn(r.money); this.audio.play('levelup'); this.ui.toast(`${CATEGORY_NAMES[r.cat]} 도감 완성! 보상 ${r.money}코인`, 'star'); }
 };

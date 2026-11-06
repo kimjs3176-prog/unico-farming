@@ -90,7 +90,7 @@ export class NatureView {
     }
     b.home = b.home || new THREE.Vector3(-6, 0, 4);
     const glow = b.kind === 'bug_firefly';
-    b.mat.color.setHex(BUG_COLOR[b.kind]);
+    b.mat.color.setHex(BUG_COLOR[b.kind] ?? ITEMS[b.kind]?.color ?? 0xffffff);
     b.mat.emissive = new THREE.Color(glow ? 0xd8ff6a : 0x000000);
     b.mat.emissiveIntensity = glow ? 3 : 0;
     b.g.visible = true;
@@ -123,9 +123,9 @@ export class NatureView {
     const night = this.night;
     for (const b of this.bugs) {
       if (!b.g.visible) { b.respawn -= dt; if (b.respawn <= 0) this.spawnBug(b); continue; }
-      if ((b.kind === 'bug_firefly') !== night && Math.random() < dt * 0.2) { this.spawnBug(b); continue; }
+      if ((b.kind === 'bug_firefly' || !!ITEMS[b.kind]?.night) !== night && Math.random() < dt * 0.2) { this.spawnBug(b); continue; }
       b.phase += dt;
-      const fly = b.kind !== 'bug_ladybug' && b.kind !== 'bug_beetle';
+      const fly = b.kind !== 'bug_ladybug' && b.kind !== 'bug_beetle' && !ITEMS[b.kind]?.ground;
       const r = fly ? 1.6 : 0.3;
       const bx = b.home.x + Math.sin(b.phase * 0.7) * r + Math.sin(b.phase * 1.9) * 0.4, bz = b.home.z + Math.cos(b.phase * 0.5) * r;
       b.g.position.set(bx, heightAt(bx, bz) + (fly ? 0.7 + Math.sin(b.phase * 2.3) * 0.35 : 0.08), bz);

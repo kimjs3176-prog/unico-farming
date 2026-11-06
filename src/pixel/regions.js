@@ -288,7 +288,7 @@ export const RegionMethods = {
   },
   /** 잡은 물고기 기록 (연못·호수 공통) */
   catchFish(fish, size, lake, fought = false) {
-    this.econ.addItem(fish); const b = this.book.add(fish, { size, day: this.day });
+    this.econ.addItem(fish); const b = this.book.add(fish, { size, day: this.day }); this.checkBook();
     this.audio.play('win'); this.report('fish');
     let extra = '';
     if (lake) {
@@ -447,7 +447,7 @@ export const RegionMethods = {
     if (r < 0.07) { this.econ.addItem('pearl', 1); text = `반짝반짝 ${ITEMS.pearl.name}`; this.audio.play('levelup'); icon = 'star'; }
     else if (r < 0.62) { this.econ.addItem('clam', 1); text = ITEMS.clam.name; this.audio.play('coin'); }
     else if (r < 0.82) { const n = 30 + Math.floor(Math.random() * 6) * 10; this.econ.earn(n); text = `물에 빠진 동전 ${n}`; this.audio.play('coin'); icon = 'coin'; }
-    else { this.econ.addItem('fish_snail', 1); const rec = this.book.add('fish_snail', { size: 4 + Math.round(Math.random() * 3), day: this.day }); text = `우렁이${rec.isNew ? ' (도감 등록!)' : ''}`; this.audio.play('harvest'); icon = 'fish'; }
+    else { this.econ.addItem('fish_snail', 1); const rec = this.book.add('fish_snail', { size: 4 + Math.round(Math.random() * 3), day: this.day }); this.checkBook(); text = `우렁이${rec.isNew ? ' (도감 등록!)' : ''}`; this.audio.play('harvest'); icon = 'fish'; }
     this.popIcon(icon, p.wx, p.wy - 30);
     this.ui.toast(`잠수해서 ${text}을(를) 찾았어요!`, icon);
     this.report('dive');
