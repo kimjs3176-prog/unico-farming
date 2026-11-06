@@ -194,7 +194,7 @@ export class Game {
     for (const t of this.fruitTrees) if (t.shakeT > 0) t.shakeT -= dt;
     if (this.fish) this.fishTick(dt);
     this.saveT -= dt; if (this.saveT <= 0) { this.saveT = 10; this.save(); }
-    this.ui.hint(this.threshing ? '연타! (Space 도 되고, 화면을 눌러도 돼요)' : this.tr.driving ? `내리기 · W/S 앞뒤 · A/D 핸들 · Space 쟁기 ${this.tr.plowDown ? '내림' : '올림'}` : this.fish ? (this.fish.state === 'bite' ? '지금 당기기!' : '찌가 쑥 들어가면 당기기 (Esc: 그만)') : this.hintText());
+    this.ui.hint(this.threshing ? '연타! (Space 도 되고, 화면을 눌러도 돼요)' : this.tr.driving ? `내리기 · 방향키 = 가고 싶은 쪽 · Space 쟁기 ${this.tr.plowDown ? '내림' : '올림'}` : this.fish ? (this.fish.state === 'bite' ? '지금 당기기!' : '찌가 쑥 들어가면 당기기 (Esc: 그만)') : this.hintText());
     this.ui.hud(this.hudState());
     this.music?.setScene({ daylight: 1 - this.night, kind: this.raining ? 'rain' : 'clear', precip: this.raining ? 0.7 : 0, wind: 0.2 });
   }
@@ -641,10 +641,10 @@ export class Game {
 
   /* ── 트랙터 밭갈이: 3D 판과 같은 차량 모델(Vehicle)과 밭 규칙(FieldSim) ── */
   async beginTractor() {
-    const c = await this.ui.say('트랙터 밭갈이', `${TRACTOR_TIME}초 안에 쟁기로 밭 칸을 최대한 많이 갈아요. W/S 앞뒤, A/D 핸들, Space 쟁기. 쉬지 않고 이어 갈면 연속 보너스, 바위에 부딪히면 -3초! (최고 ${this.tr.best}칸)`, ['출발!', '다음에']);
+    const c = await this.ui.say('트랙터 밭갈이', `${TRACTOR_TIME}초 안에 쟁기로 밭 칸을 최대한 많이 갈아요. 방향키(WASD)를 누른 쪽으로 트랙터가 알아서 돌아가요. Space 쟁기. 쉬지 않고 이어 갈면 연속 보너스, 바위에 부딪히면 -3초! (최고 ${this.tr.best}칸)`, ['출발!', '다음에']);
     if (c !== 0) return;
     const tr = this.tr;
-    Object.assign(tr, { driving: true, plowDown: true, counting: 3, streak: 0, maxStreak: 0, lastPlow: -9 });
+    Object.assign(tr, { backT: 0, driving: true, plowDown: true, counting: 3, streak: 0, maxStreak: 0, lastPlow: -9 });
     this.held = []; this.path = null;
     this.field.start(); this.field.running = false;
     this.audio.play('engine');
@@ -655,14 +655,38 @@ export class Game {
     let ax = 0, ay = 0;
     if (!busy && tr.counting <= 0) for (const k of this.held) { ax += DIRS[k][0]; ay += DIRS[k][1]; }
     if (tr.counting > 0) { const before = Math.ceil(tr.counting); tr.counting -= dt; if (Math.ceil(tr.counting) !== before) this.audio.play(tr.counting <= 0 ? 'win' : 'pop'); if (tr.counting <= 0) F.running = true; }
-    const px = v.x, pz = v.z, ph = v.heading;
-    v.step(dt, -ay, ax);
+    const px = v.x, pz = v.z;
+    // 화면 기준 조작: 누른 방향(↑ 화면 위, ← 화면 왼쪽…)으로 트랙터가 알아서 핸들을 꺾어 향함
+    let throttle = 0, steer = 0;
+    const len = Math.hypot(ax, ay);
+    if (len > 0) {
+      const want = Math.atan2(ax, ay); // 앞 방향 (sin h, cos h) 이 (ax, ay) 가 되는 각
+      let diff = want - v.heading;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // -π..π
+      if (tr.backT > 0) {
+        // 벽에 막혔으면 잠깐 후진하면서 가려는 쪽으로 돎
+        throttle = -0.7; steer = Math.max(-1, Math.min(1, diff * 2));
+      } else {
+        // 많이 돌아야 하면 천천히 (작은 반경으로 돌기)
+        throttle = Math.abs(diff) > 1.7 ? 0.35 : Math.abs(diff) > 0.8 ? 0.6 : 1;
+        steer = Math.max(-1, Math.min(1, -diff * 2.2));
+      }
+    }
+    if (tr.backT > 0) tr.backT -= dt;
+    v.step(dt, throttle, steer);
+    // 회전 보조: 움직이는 동안 가려는 쪽으로 더 빨리 돎 (화면 기준 조작이 답답하지 않게)
+    if (len > 0 && Math.abs(v.speed) > 0.2) {
+      let diff = Math.atan2(ax, ay) - v.heading; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      const rate = 1.9 * Math.min(1, Math.abs(v.speed) / 2) * dt;
+      v.heading += Math.sign(diff) * Math.min(Math.abs(diff), rate);
+    }
     // 충돌: 차체 중심과 앞 끝이 막힌 칸이면 되돌리고 감속
     const hit = (x, z) => { const tx = Math.floor(x * M / T), ty = Math.floor(z * M / T); return this.solid(tx, ty) || !!this.entityAt(tx, ty) || this.isWater(tx, ty); };
     const fx = v.x + Math.sin(v.heading) * 1.4, fz = v.z + Math.cos(v.heading) * 1.4, bx = v.x - Math.sin(v.heading) * 1.4, bz = v.z - Math.cos(v.heading) * 1.4;
     if (hit(v.x, v.z) || hit(v.speed >= 0 ? fx : bx, v.speed >= 0 ? fz : bz)) {
       const rock = F.isRock(fx, fz) && Math.abs(v.speed) > 1;
-      v.x = px; v.z = pz; v.heading = ph; v.speed *= rock ? -0.2 : -0.1; v.pedal = 0;
+      v.x = px; v.z = pz; v.speed *= rock ? -0.2 : -0.1; v.pedal = 0;
+      if (len > 0 && !(tr.backT > 0)) { tr.backT = 0.9; v.pedal = -0.6; } // 막히면 바로 후진
       if (rock) { F.hits++; F.time = Math.max(0, F.time - 3); this.ui.toast('바위에 부딪혔어요! -3초', 'star'); this.audio.play('bump'); }
       else if (!this.bumpT || this.bumpT < performance.now()) { this.audio.play('bump', 0.4); this.bumpT = performance.now() + 500; }
     }
