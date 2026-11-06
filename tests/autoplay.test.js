@@ -75,3 +75,32 @@ test('장보기: 남겨 둘 돈은 쓰지 않고, 사료 먼저, 필요한 만�
   assert.ok(capped.seeds.n <= 10 && capped.feed <= 10);
   assert.ok(capped.feed * FEED_PRICE + capped.seeds.n * CROPS[capped.seeds.crop].seedPrice === capped.cost);
 });
+
+test('그 밖의 콘텐츠: 불청객 쫓기는 가장 급하고, 곤충 잡기는 가장 느긋함', () => {
+  const extra = [{ kind: 'spot', type: 'bug', key: 'bug:0', x: 1, z: 0 }, { kind: 'spot', type: 'shoo', key: 'shoo:1', x: 12, z: 0 }];
+  assert.equal(chooseTask(base({ extra, plots: [{ i: 0, x: 2, z: 0, type: 'water' }] })).key, 'shoo:1');
+  assert.equal(chooseTask(base({ extra: [extra[0]], plots: [{ i: 0, x: 2, z: 0, type: 'till' }] })).key, 'plot:0');
+  assert.equal(chooseTask(base({ extra: [extra[0]] })).key, 'bug:0');
+});
+
+test('그 밖의 콘텐츠: 건너뛰는 대상은 고르지 않음', () => {
+  const extra = [{ kind: 'spot', type: 'honey', key: 'honey:0', x: 1, z: 0 }];
+  assert.equal(chooseTask(base({ extra, skip: new Set(['honey:0']) })), null);
+});
+
+test('볍씨가 없어 모내기를 못 하면 볍씨를 사러 장터에 감', () => {
+  const shop = shopList({ money: 500, level: 1, seedsOwned: 0, plotsFree: 0, feed: 0, hungry: 0, riceFree: 3, riceSeeds: 0 });
+  assert.equal(shop.rice, 3);
+  const t = chooseTask(base({ shop, riceBlocked: true }));
+  assert.equal(t.kind, 'market');
+  assert.equal(shopList({ money: 500, level: 1, seedsOwned: 0, plotsFree: 0, feed: 0, hungry: 0, riceFree: 2, riceSeeds: 2 }).rice, 0);
+});
+
+test('같은 콘텐츠만 계속하지 않음: 최근에 논 일을 많이 했으면 비슷한 급의 밭 일을 먼저', () => {
+  const extra = [{ kind: 'spot', type: 'rice_water', key: 'rice:0', x: 2, z: 0 }];
+  const plots = [{ i: 0, x: 6, z: 0, type: 'water' }];
+  assert.equal(chooseTask(base({ extra, plots })).key, 'rice:0');
+  assert.equal(chooseTask(base({ extra, plots, recent: ['rice', 'rice', 'rice'] })).key, 'plot:0');
+  // 불청객은 최근 기록과 상관없이 바로
+  assert.equal(chooseTask(base({ extra: [{ kind: 'spot', type: 'shoo', key: 's', x: 9, z: 0 }], plots, recent: Array(8).fill('shoo') })).key, 's');
+});

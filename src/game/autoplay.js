@@ -1,17 +1,21 @@
 import { LAYOUT } from './world.js';
 import { CROPS, PRODUCTS } from './sim/crops.js';
-import { chooseTask, shopList, bestSeed, TASK_LABEL } from './sim/autoplay.js';
+import { chooseTask, shopList, bestSeed, categoryOf, TASK_LABEL } from './sim/autoplay.js';
+import { NavGrid } from './sim/path.js';
 
 /**
  * 오토플레이 모드: 유니코가 알아서 밭·목장 일을 하고 장터에서 사고팜
  *  - 할 일 고르기는 sim/autoplay.js (수확 > 거두기 > 물 > 김매기 > 사료 > 심기 > 퇴비 > 밭 갈기 > 빗질 > 쓰다듬기)
  *  - 직접 움직이면(키보드·조이스틱·클릭 이동) 잠깐 멈췄다가 4초 뒤 다시 이어감
- *  - 창·대화·컷신·미니게임·트랙터 중에는 쉬고, 끝나면 다시 시작
- *  - 막혀서 못 가는 대상은 30초 동안 건너뜀
+ *  - 대화·컷신 대사는 읽을 시간만큼 기다렸다 자동으로 넘기고, 결과 창(레벨 업 등)은 3초 뒤 닫음
+ *  - 그 밖의 창·미니게임·트랙터 중에는 쉬고, 끝나면 다시 시작
+ *  - 길찾기(sim/path.js)로 건물·울타리·연못을 돌아서 감. 막히면 비켜서 길을 다시 찾고, 그래도 못 가면 30초 동안 건너뜀
  */
 const REACH = { plot: 1.1, animal: 1.6, market: 1.4 };
 const HOLD_MANUAL = 4;      // 직접 조작 후 다시 이어가기까지 (초)
-const TASK_TIMEOUT = 25;    // 한 일에 이만큼 넘게 걸리면 포기
+const TASK_TIMEOUT = 40;    // 한 일에 이만큼 넘게 걸리면 포기
+const MAX_STUCK = 4;        // 막혀서 길을 다시 찾는 최대 횟수
+const WP_STOP = 0.35;       // 경유점 도착 거리
 const SKIP_FOR = 30;        // 못 간 대상 건너뛰는 시간
 
 export class AutoPlay {
@@ -33,7 +37,7 @@ export class AutoPlay {
     this.on = v;
     this._stopMove();
     this.task = null; this.hold = 0; this.cool = 0; this.skip.clear();
-    if (v) { this.done = 0; this.earned = 0; }
+    if (v) { this.done = 0; this.earned = 0; this.nav = null; this.recent = []; }
     g.ui.toast(v ? '🤖 오토플레이 시작! 유니코가 알아서 농사·목장 일을 하고 장터에서 사고팔아요 (P 또는 🤖 버튼으로 끄기 · 직접 움직이면 잠깐 멈춤)'
       : `🤖 오토플레이 끔${this.done ? ` · 한 일 ${this.done}가지${this.earned ? ` · 판매 +${this.earned}🪙` : ''}` : ''}`);
     g.audio.play('click');
@@ -61,8 +65,86 @@ export class AutoPlay {
     for (const bag of [eco.inventory.crops, eco.inventory.products]) for (const [k, n] of Object.entries(bag)) if (n > 0) { sellCount += n; sellValue += eco.sellPrice(k) * n; }
     const plotsFree = fs.plots.filter((p) => p.state === 'empty' || p.state === 'tilled').length;
     const hungry = rs.animals.filter((a) => !rs.isBaby(a) && !a.product && a.fedTimer <= 0).length;
-    const shop = shopList({ money: eco.money + sellValue, level: g.quests.level, seedsOwned, plotsFree, feed: eco.inventory.feed + rs.trough, hungry });
-    return { pos: g.player.position, plots, animals, feed: eco.inventory.feed, sellCount, shop, market: this._marketSpot(), skip: new Set(this.skip.keys()) };
+    const rice = this._riceInfo();
+    const shop = shopList({ money: eco.money + sellValue, level: g.quests.level, seedsOwned, plotsFree, feed: eco.inventory.feed + rs.trough, hungry, riceFree: rice.free, riceSeeds: eco.count('rice_seed') });
+    return { pos: g.player.position, plots, animals, feed: eco.inventory.feed, sellCount, shop, market: this._marketSpot(), skip: new Set(this.skip.keys()),
+      extra: this._extras(), riceBlocked: rice.blocked, recent: this.recent };
+  }
+
+  _riceInfo() {
+    const ps = this.g.rice?.sim?.paddies || [];
+    const free = ps.filter((p) => p.state === 'dry' || p.state === 'tilled' || p.state === 'flooded').length;
+    return { free, blocked: this.g.economy.count('rice_seed') <= 0 && ps.some((p) => p.state === 'flooded') };
+  }
+
+  /**
+   * 밭·목장 말고 다른 콘텐츠의 할 일 (미니게임이 없는 것만)
+   * 각 항목: { kind: 'spot', type, key, x, z, reach, name?, goal?() 움직이는 대상 위치, valid?() 도착했을 때 아직 할 수 있나, act() }
+   */
+  _extras() {
+    const g = this.g, eco = g.economy, day = g.world.day, out = [], pos = g.player.position;
+    const spot = (o) => { const p = o.goal ? o.goal() : o; if (p) out.push({ kind: 'spot', reach: 1.2, ...o, x: p.x, z: p.z }); };
+    // 불청객 (까마귀·여우·늑대): 쫓아내기
+    for (const pe of g.pests?.list || []) {
+      if (pe.state === 'flee' || pe.state === 'gone') continue;
+      spot({ type: 'shoo', key: `shoo:${(pe._aid ||= ++this._uid || (this._uid = 1))}`, name: pe.name, reach: 2.6, goal: () => (pe.state === 'flee' || pe.state === 'gone' ? null : pe.root.position), valid: () => pe.state !== 'flee' && pe.state !== 'gone', act: () => g.pests.shoo(pe) });
+    }
+    // 주민 부탁: 가진 것으로 들어줄 수 있으면 가져다 줌
+    if (g.npcs && g.villagers) {
+      const pool = g.npcs.requestPool();
+      for (const e of g.npcs.list) {
+        const r = g.villagers.requestFor(e.id, day, pool);
+        if (r.done || eco.count(r.item) < r.n) continue;
+        spot({ type: 'deliver', key: `deliver:${e.id}`, name: e.n.name, reach: 1.8, goal: () => e.u.group.position, valid: () => !r.done && eco.count(r.item) >= r.n, act: () => this._deliver(e, r) });
+      }
+    }
+    // 논농사 (탈곡은 미니게임이라 사람이 직접)
+    const R = g.rice;
+    if (R?.sim) R.sim.paddies.forEach((_, i) => {
+      const a = R.sim.actionsFor(i, eco.count('rice_seed') > 0)[0];
+      if (!a || a.type === 'check' || a.type === 'need_seed') return;
+      const v = R.paddies[i];
+      spot({ type: `rice_${a.type}`, key: `rice:${i}`, x: v.x, z: v.z, reach: 1.0, valid: () => R.sim.actionsFor(i, eco.count('rice_seed') > 0)[0]?.type === a.type, act: () => R.act(i, a.type) });
+    });
+    // 꿀
+    g.bees?.hives.forEach((h, i) => { if (h.honey >= 1) spot({ type: 'honey', key: `honey:${i}`, x: h.x, z: h.z, reach: 1.6, valid: () => h.honey >= 1, act: () => g.bees.collect(h) }); });
+    // 과일 나무 (하루 한 번)
+    g.nature?.trees.forEach((tr, i) => { if (tr.shakenDay !== day) spot({ type: 'shake', key: `shake:${i}`, x: tr.x, z: tr.z, reach: 2.2, valid: () => tr.shakenDay !== day, act: () => g.nature.shakeTree(tr) }); });
+    // 곤충: 가까운 것만 (멀리까지 쫓아가지 않게)
+    g.nature?.bugs.forEach((b, i) => {
+      if (!b.g.visible || Math.hypot(b.g.position.x - pos.x, b.g.position.z - pos.z) > 14) return;
+      spot({ type: 'bug', key: `bug:${i}`, reach: 1.5, goal: () => (b.g.visible ? b.g.position : null), valid: () => b.g.visible, act: () => g.nature.catchBug(b) });
+    });
+    // 보물 상자 (하루 한 번) · 전망대 첫 방문
+    const X = g.explore;
+    X?.chests.forEach((c) => { if (X.available(c)) spot({ type: 'chest', key: `chest:${c.id}`, x: c.x, z: c.z, reach: 1.3, valid: () => X.available(c), act: () => X.openChest(c) }); });
+    X?.lookouts.forEach((L) => { if (!X.seen[L.H.id]) spot({ type: 'lookout', key: `lookout:${L.H.id}`, name: L.H.name, x: L.x, z: L.z, reach: 2.0, valid: () => !X.seen[L.H.id], act: () => X.view(L) }); });
+    // 강아지: 찾아 온 것 받기 · 쓰다듬기
+    const P = g.pet;
+    if (P?.e && P.e.m.visible !== false) {
+      if (P.sim.found) spot({ type: 'petfind', key: 'petfind', reach: 1.6, goal: () => P.e.m.position, valid: () => !!P.sim.found, act: () => P.takeFound() });
+      else if (P.sim.petCool <= 0 && P.sim.hearts < 5) spot({ type: 'petdog', key: 'petdog', reach: 1.3, goal: () => P.e.m.position, valid: () => P.sim.petCool <= 0, act: () => P.pet() });
+    }
+    // 여물통: 거의 비었고 사료가 넉넉하면 채움
+    const rs = g.ranch?.sim, T = LAYOUT.trough;
+    if (rs && T && rs.trough < 2 && eco.inventory.feed >= 3) spot({ type: 'trough', key: 'trough', x: T.x, z: T.z, reach: 1.5, valid: () => eco.inventory.feed > 0, act: () => g.ranch.fillTrough() });
+    return out;
+  }
+
+  /** 주민 부탁 들어주기 (대화창 없이) */
+  _deliver(e, r) {
+    const g = this.g;
+    if (!g.economy.take(r.item, r.n)) return;
+    const rr = g.villagers.fulfill(e.id);
+    if (!rr) return;
+    g.economy.earn(rr.reward);
+    g.audio.play('coin');
+    e.u.playAction('cheer', 1.2);
+    g.npcs.applyRewards(e, rr);
+    g.ui.toast(`🤖📝 ${e.n.name}의 부탁을 들어줬어요! +${rr.reward}🪙 · 우정 +${rr.gained}`);
+  }
+
+  _reach(t) { return t.reach ?? REACH[t.kind];
   }
 
   _marketSpot() {
@@ -72,6 +154,7 @@ export class AutoPlay {
 
   /** 작업 대상의 현재 위치 */
   _goal(t) {
+    if (t.goal) return t.goal();
     if (t.kind === 'animal') { const e = this.g.ranch.ents.find((x) => x.a?.id === t.id); return e ? e.m.position : null; }
     return t;
   }
@@ -87,6 +170,7 @@ export class AutoPlay {
       return;
     }
     if (this.hold > 0) { this.hold -= dt; return; }
+    if (this._autoDismiss()) return;
     if (this._busy()) { this._stopMove(); this.task = null; g.ui.setAuto?.('⏸ 잠깐 쉬는 중 · 창·대화·미니게임이 끝나면 이어가요', true); return; }
     if (this.cool > 0) { this.cool -= dt; return; }
     if (!this.task) {
@@ -103,33 +187,83 @@ export class AutoPlay {
     const goal = this._goal(t);
     if (!goal || t.t > TASK_TIMEOUT) return this._fail(t);
     const d = Math.hypot(goal.x - p.position.x, goal.z - p.position.z);
-    if (d <= REACH[t.kind] + 0.15) { this._stopMove(); this.task = null; this._act(t); return; }
-    // 목장 울타리를 넘나들 때는 출입구(서쪽)를 거쳐 감
-    if (!t.via) t.via = this._via(goal);
-    if (t.via.length && Math.hypot(t.via[0].x - p.position.x, t.via[0].z - p.position.z) < 0.6) { t.via.shift(); this._stopMove(); }
+    if (d <= this._reach(t) + 0.15) { this._stopMove(); this.task = null; this._act(t); return; }
+    // 길: 처음, 막혔을 때, 움직이는 동물이 길 끝에서 멀어졌을 때 다시 찾음
+    if (!t.path || t.replan || (t.kind === 'animal' && Math.hypot(goal.x - t.end.x, goal.z - t.end.z) > 1.5)) {
+      this._stopMove();
+      t.path = this._plan(goal, t);
+      t.end = { x: goal.x, z: goal.z }; t.replan = false;
+      if (!t.path) return this._fail(t);
+    }
+    // 경유점에 닿으면 다음으로
+    while (t.path.length > 1 && Math.hypot(t.path[0].x - p.position.x, t.path[0].z - p.position.z) < WP_STOP + 0.25) { t.path.shift(); this._stopMove(); }
     if (!p.moveTarget) {
-      // 이동이 끝났는데 아직 멀고, 지난번보다 별로 가까워지지 않았으면 막힌 것
-      if (this.mt) { if (t.lastD !== undefined && t.lastD - d < 0.3) t.stuck = (t.stuck || 0) + 1; if (t.stuck > 2) return this._fail(t); }
-      t.lastD = d;
-      const wp = t.via[0];
-      if (wp) p.goTo(() => wp, 0.35, false);
-      else p.goTo(() => this._goal(t) || p.position, REACH[t.kind], false);
+      // 이동이 멈췄는데 목표(경유점) 근처가 아니면 막힌 것 → 비켜서 길을 다시 찾음
+      if (this.mt && t.leg) {
+        const w = t.leg.last ? goal : t.leg;
+        if (Math.hypot(w.x - p.position.x, w.z - p.position.z) > (t.leg.last ? this._reach(t) : WP_STOP) + 0.3) {
+          t.stuck = (t.stuck || 0) + 1;
+          if (t.stuck > MAX_STUCK) return this._fail(t);
+          t.replan = true; this.mt = null;
+          return;
+        }
+      }
+      const last = t.path.length === 1, wp = t.path[0];
+      t.leg = { x: wp.x, z: wp.z, last };
+      if (last) p.goTo(() => this._goal(t) || p.position, this._reach(t), false);
+      else p.goTo(() => wp, WP_STOP, false);
       this.mt = p.moveTarget;
     }
   }
 
-  /** 울타리 출입구 경유점 */
-  _via(goal) {
-    const R = LAYOUT.ranch, p = this.g.player.position;
-    const inR = (q) => q.x > R.x0 && q.x < R.x1 && q.z > R.z0 && q.z < R.z1;
-    const out = { x: R.gate.x - 1.8, z: R.gate.z }, inn = { x: R.gate.x + 1.8, z: R.gate.z };
-    if (inR(goal) === inR(p)) return [];
-    return inR(p) ? [inn, out] : [out, inn];
+  /** 대화 자동 넘김 · 결과 창 자동 닫기. 처리 중이면 true (이번 프레임은 그것만) */
+  _autoDismiss() {
+    const g = this.g;
+    if (g.dialogue.active) {
+      if (g.dialogue.autoStep()) { this._stopMove(); this.task = null; g.ui.setAuto?.('💬 대화 자동으로 넘기는 중', true); return true; }
+      return false;
+    }
+    const P = g.ui.panel;
+    if (P?.dataset.kind === 'result' && !g.cinema.locked) {
+      const now = performance.now();
+      if (P !== this._resPanel) { this._resPanel = P; this._resAt = now; }
+      if (now - this._resAt > 3000) { g.ui.closePanel(); this._resPanel = null; }
+      return true;
+    }
+    return false;
+  }
+
+  /** 길찾기 격자 (정적 장애물, 캐릭터 반지름 반영). 막혔을 때 오래된 격자면 다시 만듦 */
+  _grid(fresh = false) {
+    const now = performance.now();
+    if (!this.nav || (fresh && now - this.navAt > 5000)) {
+      const w = this.g.world;
+      this.nav = new NavGrid((x, z) => w.isBlocked(x, z, 0.6), LAYOUT.bounds - 1, 0.5);
+      this.navAt = now;
+    }
+    return this.nav;
+  }
+
+  /** 현재 위치 → 목표 경유점. 막혀서 다시 찾는 중이면 옆으로 비켜서는 점을 먼저 넣음 (동물·주민 같은 움직이는 장애물) */
+  _plan(goal, t) {
+    const p = this.g.player.position, nav = this._grid(!!t.stuck);
+    const path = nav.find(p, goal, Math.max(0, this._reach(t) - 0.3));
+    if (!path) return null;
+    if (t.stuck) {
+      const n = path[0], dx = n.x - p.x, dz = n.z - p.z, l = Math.hypot(dx, dz) || 1;
+      const side = t.stuck % 2 ? 1 : -1;
+      for (const k of [side, -side]) {
+        const sx = p.x + (-dz / l) * 1.3 * k - (dx / l) * 0.4, sz = p.z + (dx / l) * 1.3 * k - (dz / l) * 0.4;
+        if (nav.lineFree(p, { x: sx, z: sz })) { const rest = nav.find({ x: sx, z: sz }, goal, Math.max(0, this._reach(t) - 0.3)); if (rest) return [{ x: sx, z: sz }, ...rest]; }
+      }
+    }
+    return path;
   }
 
   _fail(t) { this.skip.set(t.key, SKIP_FOR); this._stopMove(); this.task = null; }
 
   _targetName(t) {
+    if (t.name) return ` (${t.name})`;
     if (t.kind === 'plot') { const c = this.g.farm.sim.plots[t.i]?.crop; return c ? ` (${CROPS[c].emoji}${CROPS[c].name})` : ''; }
     if (t.kind === 'animal') { const a = this.g.ranch.sim.animals.find((x) => x.id === t.id); return a ? ` (${a.name})` : ''; }
     return '';
@@ -145,6 +279,8 @@ export class AutoPlay {
   /** 도착: 상태를 다시 확인하고 실행 */
   _act(t) {
     const g = this.g, eco = g.economy;
+    (this.recent ||= []).push(categoryOf(t));
+    if (this.recent.length > 8) this.recent.shift();
     this.cool = 0.9;
     if (t.kind === 'plot') {
       const seeds = eco.inventory.seeds;
@@ -165,6 +301,13 @@ export class AutoPlay {
       else return;
       this.cool = 1.3;
     } else if (t.kind === 'market') this._shop();
+    else if (t.kind === 'spot') {
+      if (t.valid && !t.valid()) return;
+      const pp = g.player.position, q = this._goal(t);
+      if (q) g.player.unico.facing = Math.atan2(q.x - pp.x, q.z - pp.z);
+      t.act();
+      this.cool = 1.1;
+    }
     this.done++;
   }
 
@@ -182,10 +325,12 @@ export class AutoPlay {
       plotsFree: fs.plots.filter((p) => p.state === 'empty' || p.state === 'tilled').length,
       feed: eco.inventory.feed + rs.trough,
       hungry: rs.animals.filter((a) => !rs.isBaby(a) && !a.product && a.fedTimer <= 0).length,
+      riceFree: this._riceInfo().free, riceSeeds: eco.count('rice_seed'),
     });
     const bought = [];
     if (list.feed && eco.buyFeed(list.feed)) bought.push(`🌾 사료 ${list.feed}개`);
     if (list.seeds && eco.buySeed(list.seeds.crop, list.seeds.n)) { const C = CROPS[list.seeds.crop]; bought.push(`${C.emoji} ${C.name} 씨앗 ${list.seeds.n}개`); }
+    if (list.rice && eco.buyItem('rice_seed', list.rice)) bought.push(`🌾 볍씨 ${list.rice}개`);
     if (sold) { g.onEvent('sell', sold); g.onEvent('money', eco.money); }
     g.audio.play(sold || bought.length ? 'coin' : 'click');
     g.player.unico.playAction('cheer', 1);

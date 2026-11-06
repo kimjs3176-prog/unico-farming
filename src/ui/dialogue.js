@@ -103,8 +103,31 @@ export class Dialogue {
     });
   }
 
+  /**
+   * 오토플레이용 자동 넘김: 글자가 다 나오면 읽을 시간만큼 기다렸다 다음 줄로.
+   * 선택지는 '안녕/그만'(bye) 이 있을 때만 4초 기다렸다 그것을 고름 (다른 선택은 사람이 직접)
+   * 시간은 실제 시간 기준 (화면이 끊겨도 읽는 시간은 같게)
+   * @returns 자동으로 넘길 수 있는 대화인가
+   */
+  autoStep() {
+    const now = performance.now();
+    if (!this.active || this.typing) { this._autoAt = 0; return this.active; }
+    if (!this._autoAt) this._autoAt = now; // 이 줄(선택지)이 다 나온 때
+    const waited = (now - this._autoAt) / 1000;
+    if (this.choosing) {
+      const bye = this._choices?.find((c) => c.value === 'bye' && !c.disabled);
+      if (!bye) return false;
+      if (waited > 4) { this._autoAt = 0; this.choosing = false; this.game.audio.play('click'); this._resolveChoice?.(bye.value); }
+      return true;
+    }
+    const n = this.$('.dlg-text').textContent.length;
+    if (waited > Math.min(4, 1.2 + n * 0.04)) { this._autoAt = 0; this._advance(); }
+    return true;
+  }
+
   _showChoices(choices, resolve) {
     this.choosing = true;
+    this._choices = choices; this._resolveChoice = resolve; this._autoAt = 0;
     const box = this.$('.dlg-choices');
     box.innerHTML = '';
     choices.forEach((c, k) => {

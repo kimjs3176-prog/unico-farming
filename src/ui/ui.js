@@ -34,8 +34,8 @@ export class UI {
     this.boostChip = h('div', 'chip', '🌱 성장 부스트 <span></span>');
     this.boostChip.style.display = 'none';
     const right = h('div', 'hud-right');
-    this.btnBag = h('button', 'ghost', '🎒 가방 <span class="hint-kbd">(I)</span>');
-    this.btnQuest = h('button', 'ghost', '📜 퀘스트 <span class="hint-kbd">(Q)</span>');
+    this.btnBag = h('button', 'ghost', '🎒<span class="lbl"> 가방</span> <span class="hint-kbd">(I)</span>');
+    this.btnQuest = h('button', 'ghost', '📜<span class="lbl"> 퀘스트</span> <span class="hint-kbd">(Q)</span>');
     this.btnHelp = h('button', 'ghost', '❔');
     this.btnSettings = h('button', 'ghost', '⚙️');
     this.btnSettings.title = '환경설정 (그래픽 품질)';
@@ -103,6 +103,12 @@ export class UI {
     this.autoBtn = mk('🤖', '자동', () => game.autoplay.toggle());
     this.autoBtn.title = '오토플레이 (P)';
     root.append(this.bar);
+    // 모바일: 행동 막대는 ☰ 버튼 하나로 접어 두고, 누르면 펼침 (버튼을 고르면 다시 접힘)
+    this.barToggle = h('button', 'bar-toggle', '☰');
+    this.barToggle.title = '메뉴';
+    this.barToggle.onclick = () => this.setBarOpen(!this.root.classList.contains('bar-open'));
+    root.append(this.barToggle);
+    this.bar.addEventListener('click', (e) => { if (e.target.closest('button')) this.setBarOpen(false); });
     this.emoteMenu = null;
   }
 
@@ -408,7 +414,12 @@ export class UI {
     if (ev || fest) put('ban', this.banner, 'text', [fest?.name, ev && '📈 ' + ev.name].filter(Boolean).join('  ·  '));
     if (this._fest !== !!fest) { this._fest = !!fest; this.banner.classList.toggle('fest', !!fest); }
     const n = q.active().filter((x) => x.complete).length;
-    put('quest', this.btnQuest, 'html', `📜 퀘스트${n ? ` <b style="color:#d9534f">(${n})</b>` : ''} <span class="hint-kbd">(Q)</span>`);
+    put('quest', this.btnQuest, 'html', `📜<span class="lbl"> 퀘스트</span>${n ? ` <b style="color:#d9534f">(${n})</b>` : ''} <span class="hint-kbd">(Q)</span>`);
+  }
+
+  setBarOpen(open) {
+    this.root.classList.toggle('bar-open', open);
+    this.barToggle.textContent = open ? '✕' : '☰';
   }
 
   /** 오토플레이 상태 표시: text=null 이면 숨김 */
@@ -736,6 +747,7 @@ export class UI {
 
   result(title, lines) {
     const p = this.openPanel(title);
+    p.dataset.kind = 'result'; // 오토플레이 중에는 잠시 보여 준 뒤 자동으로 닫음
     p.append(h('div', 'rows', lines.map((t) => `<div class="row">${t}</div>`).join('')));
     const b = h('button', '', '확인');
     b.style.marginTop = '10px';
