@@ -14,11 +14,11 @@ Anthropic 이 공개한 **Agent Skills(SKILL.md) 포맷**의 커뮤니티 스킬
 | | `game-feel` | 트라우마(trauma²) 기반 화면 흔들림(바위 충돌·밭 갈기), 수확/수집 시 스쿼시&스트레치 팝 (`src/game/juice.js`) |
 | | `save-systems` | 저장 데이터 버전 필드 + 마이그레이션 훅 (`src/game/save.js`) |
 | | `camera-systems` | 3인칭 추적 카메라의 지수 감쇠 스무딩, 피치/거리 클램프 (`src/game/camera.js`) |
-| | `game-ui-ux` | HUD 는 DOM 으로 분리, 상호작용 프롬프트에 키 힌트, 토스트 중첩 제한 (`src/ui/ui.js`) |
+| | `game-ui-ux` | HUD 는 DOM 으로 분리, 상호작용 프롬프트에 키 힌트, 토스트 중첩 제한 (`src/ui/ui.js`). UI 테마 2: 모든 버튼에 마우스 올림·누름·키보드 포커스(`:focus-visible`)·비활성 상태, 바뀌는 숫자는 고정폭 숫자 (`src/ui/theme.css`) |
 | | `rpg` | 퀘스트 카운터/보상/레벨 테이블 구조 (`src/game/sim/quests.js`) |
 | | `procedural-gen` | 시드 기반 결정적 배치(mulberry32)로 나무·수풀·바위 산포 (`src/game/world.js`) |
 | [majidmanzarpour/threejs-game-skills](https://github.com/majidmanzarpour/threejs-game-skills) (MIT, 9개 스킬, 디렉터 라우팅) | `threejs-gameplay-systems` | "플레이 가능한 핵심 루프 먼저" 원칙: 경작→판매→해금 루프를 먼저 완성한 뒤 미니게임 추가. 게임 규칙을 렌더링과 분리(`src/game/sim/`) |
-| | `threejs-game-ui-designer` | 모바일 터치 컨트롤(가상 조이스틱 + 상호작용 버튼), 세이프 에어리어 고려한 하단 액션바 |
+| | `threejs-game-ui-designer` | 모바일 터치 컨트롤(가상 조이스틱 + 상호작용 버튼), 세이프 에어리어 고려한 하단 액션바. UI 테마 2: 스킬의 '웹 기본값처럼 보이는 크림색 판·알약 버튼 피하기, 세계의 소재로 바꾸기' 지침대로 창은 나무 액자 + 청록 리본 제목, 닫기는 빨간 둥근 단추, 하단 막대는 나무 선반 + 아이콘 칸, 안내·알림·목표는 같은 나무 테 이름표로 통일 (`src/ui/theme.css`) |
 | | `threejs-qa-release` | 프로덕션 빌드 + 헤드리스 브라우저 콘솔 체크 + 데스크톱/모바일 뷰포트 스크린샷 투어로 검증 (`docs/screenshots`) |
 | | `threejs-debug-profiler` | 검은 화면/리사이즈/모바일 버그 진단 플레이북 (초기 `obstacle` 미정의 크래시를 콘솔 체크로 발견·수정) |
 | | `threejs-aaa-graphics-builder` | "형태 → 재질 → 조명 → 효과" 순서와 10개 항목 시각 스코어카드로 필드 2차 개선: 한 장으로 칠한 지면(곡선 흙길·구운 AO), 근·중·원경 레이어(소품→과수원·논→원경 산맥), 키·필·림 조명, 블룸은 발광체에만, 렌더러 수치 보고 |

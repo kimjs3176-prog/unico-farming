@@ -1,0 +1,107 @@
+/*
+ * UI 테마 2 — '나무 액자 + 청록 리본' (style.css 위에 덮어씀)
+ * 근거: .claude/skills/vendor/threejs-game-skills/threejs-game-ui-designer (references/ui-patterns.md)
+ *       .claude/skills/vendor/awesome-gamedev-agent-skills/game-ui-ux
+ *  - 웹 기본값처럼 보이는 크림색 판·알약 버튼·회색 버튼 대신 게임 세계의 소재(농장 나무 간판, 유니코 갈기 청록, 금화)를 씀
+ *  - 모든 버튼에 마우스 올림·누름·키보드 포커스·비활성 상태
+ *  - 바뀌는 숫자는 고정폭 숫자(tabular-nums)로 → 값이 바뀌어도 HUD 가 흔들리지 않음
+ *  - 상태(코인·시간·레벨) → 목표 → 즉시 피드백(안내·알림) 순서로 눈에 띄게
+ */
+:root {
+  --wood: #9a6438; --wood-d: #6a4024; --wood-l: #d9a66e; --wood-hi: #f0c995;
+  --paper: #fffdf7; --paper-2: #f3f8ef; --line: #e4ebdc;
+  --teal-hi: #4fd0c3; --teal-dd: #1f857b;
+  --gold-d: #c98a12;
+  --frame: 0 0 0 3px var(--wood-hi), 0 0 0 6px var(--wood), 0 0 0 8px var(--wood-d);
+  --lift: 0 10px 0 2px rgba(74,44,24,0.55), 0 22px 44px rgba(20,14,10,0.35);
+  --chip-shadow: 0 3px 0 var(--wood-d), 0 6px 14px rgba(20,14,10,0.18);
+}
+
+/* ---------------- 버튼: 위쪽 하이라이트 + 아래 두께, 상태 4종 ---------------- */
+button { border-radius: 12px; background: linear-gradient(180deg, var(--teal-hi) 0%, var(--teal) 55%, var(--teal-d) 100%);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.35), inset 0 -2px 0 rgba(0,0,0,0.08), 0 4px 0 var(--teal-dd), 0 6px 10px rgba(20,14,10,0.15);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.18); }
+button:active:not(:disabled) { box-shadow: inset 0 2px 4px rgba(0,0,0,0.18), 0 1px 0 var(--teal-dd); }
+button:focus-visible { outline: 3px solid #ffd76a; outline-offset: 2px; }
+button.ghost { background: linear-gradient(180deg, #fffaf0 0%, #f4e6cf 100%); color: var(--wood-d); text-shadow: none;
+  box-shadow: inset 0 0 0 2px rgba(154,100,56,0.28), inset 0 2px 0 #fff, 0 3px 0 var(--wood-l), 0 5px 10px rgba(20,14,10,0.12); }
+button.ghost:active:not(:disabled) { box-shadow: inset 0 0 0 2px rgba(154,100,56,0.3), inset 0 2px 4px rgba(0,0,0,0.12), 0 1px 0 var(--wood-l); }
+button.gold { background: linear-gradient(180deg, #ffe08a 0%, var(--gold) 55%, #eaa91d 100%); color: #4a2f12; text-shadow: 0 1px 0 rgba(255,255,255,0.4);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.5), 0 4px 0 var(--gold-d), 0 6px 10px rgba(20,14,10,0.15); }
+button.gold:active:not(:disabled) { box-shadow: inset 0 2px 4px rgba(0,0,0,0.15), 0 1px 0 var(--gold-d); }
+button:disabled { opacity: 1; filter: grayscale(0.85) brightness(1.08); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.06); color: rgba(35,25,22,0.45); text-shadow: none; }
+
+/* ---------------- 상단 HUD: 나무 테 이름표 ---------------- */
+.chip { background: linear-gradient(180deg, #fffdf7 0%, #f6efe0 100%); border: 2px solid var(--wood-l); border-radius: 12px;
+  box-shadow: inset 0 1px 0 #fff, var(--chip-shadow); color: var(--wood-d); font-variant-numeric: tabular-nums; }
+.chip .money { color: #a8650a; text-shadow: 0 1px 0 #fff3c4; }
+.chip small { color: #8a6a4c; }
+.chip .xpbar { width: 76px; height: 10px; background: #e9dcc5; border-radius: 5px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.18); }
+.chip .xpbar i { background: linear-gradient(180deg, #9be07b, var(--leaf) 60%, #4f9c35); border-radius: 5px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.45); transition: width 0.4s cubic-bezier(.3,1.3,.5,1); }
+.weather-chip { box-shadow: inset 0 1px 0 #fff, var(--chip-shadow); text-shadow: none; }
+.hud-right button { border-radius: 12px; }
+
+/* ---------------- 창: 나무 액자 + 청록 리본 제목 ---------------- */
+.panel { background: linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%); border: 0; border-radius: 22px;
+  box-shadow: var(--frame), var(--lift); }
+.panel h2 { background: linear-gradient(180deg, var(--teal-hi) 0%, var(--teal) 60%, var(--teal-d) 100%); color: #fff;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.18); border-radius: 22px 22px 0 0; padding-top: 14px; padding-bottom: 12px;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.3), inset 0 -3px 0 rgba(0,0,0,0.1), 0 6px 10px -8px rgba(20,14,10,0.5); }
+/* 리본 아래 바느질 선 */
+.panel h2::after { content: ''; position: absolute; left: 14px; right: 14px; bottom: 5px; border-bottom: 2px dashed rgba(255,255,255,0.38); pointer-events: none; }
+.panel.koat h2 { background: linear-gradient(180deg, color-mix(in srgb, var(--div, #30b6aa) 78%, white) 0%, var(--div, #30b6aa) 70%); color: #fff; }
+.panel.koat { border-top: 0; }
+.panel.market h2 { position: relative; box-shadow: inset 0 2px 0 rgba(255,255,255,0.3), inset 0 -3px 0 rgba(0,0,0,0.1); margin-bottom: 10px; }
+/* 닫기: 빨간 둥근 나무 단추 */
+.panel h2 .close { background: linear-gradient(180deg, #ff8a7a 0%, #e8564a 60%, #c93c33 100%); color: #fff;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.35), 0 3px 0 #8f2a24, 0 0 0 3px rgba(255,255,255,0.85); }
+.panel h2 .close:active { box-shadow: inset 0 2px 4px rgba(0,0,0,0.25), 0 1px 0 #8f2a24, 0 0 0 3px rgba(255,255,255,0.85); }
+.panel h3 { color: var(--wood-d); display: flex; align-items: center; gap: 6px; }
+.panel h3::after { content: ''; flex: 1; border-bottom: 2px dotted rgba(154,100,56,0.28); margin-left: 4px; }
+
+/* 목록 줄: 흰 카드 + 아래 그림자 */
+.row { background: #fff !important; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 2px 0 #e6e0d2; transition: border-color 0.12s, transform 0.12s; }
+.row:hover { border-color: #bfe6df; }
+.row .pr { color: var(--teal-dd); font-variant-numeric: tabular-nums; }
+.quest { border-left: 5px solid #e0d6c2; }
+.quest.done { background: #f1fbe8 !important; border-left-color: var(--leaf); }
+.quest .bar, .objective .bar { background: #e9dcc5; box-shadow: inset 0 1px 1px rgba(0,0,0,0.12); }
+.quest .bar i, .objective .bar i { background: linear-gradient(180deg, var(--teal-hi), var(--teal)); }
+.book-cell, .room-list button, .seed-grid button, .koat-opt, .koat-match .pick { background: #fff; border: 2px solid var(--line); box-shadow: 0 2px 0 #e6e0d2; text-shadow: none; }
+.room-list button.cur { border-color: var(--teal); background: #e7f8f5; }
+.mk-tabs button { background: #efe5d3; color: var(--wood-d); text-shadow: none; box-shadow: inset 0 2px 3px rgba(106,64,36,0.15); }
+.mk-tabs button.on { background: linear-gradient(180deg, var(--teal-hi), var(--teal) 60%, var(--teal-d)); color: #fff; box-shadow: 0 3px 0 var(--teal-dd); text-shadow: 0 1px 0 rgba(0,0,0,0.18); }
+.mk-coin { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; box-shadow: 0 2px 0 #e6e0d2; }
+
+/* ---------------- 안내 · 알림 · 목표 ---------------- */
+.prompt { border-radius: 14px; background: linear-gradient(180deg, #3b2a22, #231916); box-shadow: 0 0 0 2px var(--wood-l), 0 5px 0 var(--wood-d), 0 10px 22px rgba(20,14,10,0.35); }
+.prompt kbd { background: linear-gradient(180deg, #ffe08a, var(--gold)); box-shadow: inset 0 -2px 0 var(--gold-d), 0 2px 0 #7a520c; border-radius: 7px; padding: 1px 8px 3px; }
+.prompt.clickable:hover { background: linear-gradient(180deg, #4a362c, #2c201b); }
+.toast { background: linear-gradient(180deg, #fffdf7, #f6efe0); border: 2px solid var(--wood-l); border-left: 6px solid var(--teal); border-radius: 12px; color: var(--wood-d); box-shadow: var(--chip-shadow); }
+.event-banner { border-radius: 12px; background: linear-gradient(180deg, #ffe08a, var(--gold)); box-shadow: 0 0 0 2px #fff, 0 4px 0 var(--gold-d), 0 8px 18px rgba(20,14,10,0.25); }
+.objective { background: linear-gradient(180deg, #fffdf7, #f6efe0); border: 2px solid var(--wood-l); border-radius: 14px; box-shadow: var(--chip-shadow); }
+.objective.done { border-color: #8fd06f; background: linear-gradient(180deg, #f6fdf0, #e6f7da); }
+.objective .dir { background: linear-gradient(180deg, #ffe08a, var(--gold)); box-shadow: inset 0 -2px 0 var(--gold-d); }
+
+/* ---------------- 하단 행동 막대: 나무 선반 + 아이콘 칸 ---------------- */
+.actionbar { background: linear-gradient(180deg, #a56c3e 0%, var(--wood) 45%, var(--wood-d) 100%); border-radius: 18px; padding: 6px 8px;
+  box-shadow: inset 0 2px 0 rgba(255,220,170,0.45), inset 0 -3px 0 rgba(0,0,0,0.2), 0 0 0 2px #4a2c18, 0 8px 18px rgba(20,14,10,0.35); backdrop-filter: none; }
+.actionbar button { color: #fff8ea; text-shadow: 0 1px 0 rgba(0,0,0,0.45); border-radius: 12px; }
+.actionbar button span { display: grid; place-items: center; width: 34px; height: 30px; border-radius: 10px; background: rgba(255,240,215,0.16); box-shadow: inset 0 1px 2px rgba(0,0,0,0.25); transition: transform 0.15s cubic-bezier(.3,1.6,.5,1), background 0.15s; }
+.actionbar button:hover { background: transparent; }
+.actionbar button:hover span { background: rgba(255,240,215,0.32); transform: translateY(-2px); }
+.actionbar .sep { background: rgba(0,0,0,0.3); box-shadow: 1px 0 0 rgba(255,220,170,0.25); }
+.actionbar button.on { background: transparent; box-shadow: none; }
+.actionbar button.on span { background: rgba(250,192,62,0.55); box-shadow: inset 0 0 0 2px #ffd76a; }
+.emote-menu { background: linear-gradient(180deg, var(--paper), var(--paper-2)); border-radius: 16px; box-shadow: var(--frame), 0 10px 22px rgba(20,14,10,0.3); }
+.emote-menu button { background: #fff; border: 2px solid var(--line); box-shadow: 0 2px 0 #e6e0d2; text-shadow: none; }
+
+/* 미니맵: 나무 액자 */
+.minimap { border: 3px solid var(--wood-hi); box-shadow: 0 0 0 3px var(--wood), 0 0 0 5px var(--wood-d), 0 8px 18px rgba(20,14,10,0.3); border-radius: 14px; }
+/* 채팅 입력 */
+.chat input { border-radius: 12px; border: 2px solid rgba(255,255,255,0.9); box-shadow: 0 3px 8px rgba(20,14,10,0.15); }
+.chat input:focus { outline: 3px solid #ffd76a; outline-offset: 1px; }
+/* 모바일 터치 버튼: 손가락 크기, 같은 금화 소재 */
+.touch-btn { background: radial-gradient(circle at 50% 35%, #ffe9a8, var(--gold) 60%, #eaa91d); box-shadow: inset 0 3px 0 rgba(255,255,255,0.5), 0 5px 0 var(--gold-d), 0 10px 18px rgba(20,14,10,0.3); }
+
+@media (prefers-reduced-motion: reduce) { .actionbar button span { transition: none; } }
