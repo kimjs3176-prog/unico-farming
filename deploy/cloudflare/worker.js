@@ -11,6 +11,7 @@ const MAX_MSG = 4096;           // 메시지 최대 길이(바이트)
 const CHAT_LIMIT = 5;           // 10초에 채팅 5번까지
 const BOUND = 80;               // 위치 좌표 범위 (맵 밖 값 무시)
 const MAX_PER_IP = 6;           // 한 IP 동시 접속 수
+const JOIN_MS = 10000;          // 접속 후 입장(join)까지 기다리는 시간 (Node 서버와 같음)
 const roomName = (i) => `${i}번 농장`;
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
 
@@ -49,7 +50,7 @@ export default {
       if (allowed.length && !allowed.includes(req.headers.get('Origin'))) return new Response('forbidden origin', { status: 403 });
       // 원하는 방(있고 자리가 있으면) → 없으면 자리가 있는 가장 낮은 번호 방
       let name = url.searchParams.get('room');
-      const valid = name && /^\d{1,2}번 농장$/.test(name) && +name.split('번')[0] <= MAX_ROOMS;
+      const valid = name && /^[1-9]\d?번 농장$/.test(name) && +name.split('번')[0] <= MAX_ROOMS; // 1~20번만 ('0번'·'01번' 같은 목록 밖 방 금지)
       if (!valid || (await count(name)) >= MAX_PLAYERS) {
         name = null;
         for (let i = 1; i <= MAX_ROOMS; i++) if ((await count(roomName(i))) < MAX_PLAYERS) { name = roomName(i); break; }
@@ -84,15 +85,22 @@ export class FarmRoom {
     // 인원은 입장(join)한 사람만 셈: 입장 안 한 빈 소켓으로 방을 '가득 참'으로 만들지 못하게
     if (url.pathname === '/count') return Response.json({ count: this.players().length });
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
-    if (this.players().length >= MAX_PLAYERS || this.state.getWebSockets().length >= MAX_PLAYERS * 2) return fullSocket();
+    // 입장(join) 안 하고 JOIN_MS 넘게 붙어 있는 소켓은 정리: 빈 소켓으로 소켓 총량을 채워 방(특히 1번 방)을 막지 못하게
+    const now = Date.now();
+    const live = this.state.getWebSockets().filter((w) => {
+      const a = w.deserializeAttachment();
+      if (a && !a.name && now - (a.at || 0) > JOIN_MS) { try { w.close(1008, 'join timeout'); } catch { /* 이미 닫힘 */ } return false; }
+      return true;
+    });
+    if (this.players().length >= MAX_PLAYERS || live.length >= MAX_PLAYERS * 2) return fullSocket();
     // 한 IP 동시 접속 제한
     const ip = req.headers.get('CF-Connecting-IP') || '';
-    if (ip && this.state.getWebSockets().filter((w) => w.deserializeAttachment()?.ip === ip).length >= MAX_PER_IP) return fullSocket();
+    if (ip && live.filter((w) => w.deserializeAttachment()?.ip === ip).length >= MAX_PER_IP) return fullSocket();
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     this.state.acceptWebSocket(server);
     const room = decodeURIComponent(req.headers.get('X-Room') || '') || roomName(1);
-    server.serializeAttachment({ id: this.nextId++, name: '', room, x: 0, z: 9, f: 0, a: '', chats: [], ip, at: Date.now() });
+    server.serializeAttachment({ id: this.nextId++, name: '', room, x: 0, z: 9, f: 0, a: '', chats: [], ip, at: now });
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -113,6 +121,8 @@ export class FarmRoom {
     if (!p) return;
     if (m.t === 'join') {
       if (p.name) return; // 한 번만
+      // 접속은 방 인원의 2배까지 받으므로, 입장 때 다시 확인 (동시에 붙은 소켓이 한꺼번에 입장해 50명을 넘지 않게)
+      if (this.players().length >= MAX_PLAYERS) { try { ws.send(JSON.stringify({ t: 'full' })); ws.close(1013, 'full'); } catch { /* 이미 닫힘 */ } return; }
       p.name = String(m.name || '').replace(/[<>&"'`]/g, '').trim().slice(0, 12) || '유니코';
       p.l = String(m.l || '').replace(/[^a-z0-9.-]/g, '').slice(0, 48); // 옷차림
       ws.serializeAttachment(p);

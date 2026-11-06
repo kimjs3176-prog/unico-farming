@@ -31,3 +31,28 @@ test('서버: 잘못된 주소·null 메시지·숫자 메시지에도 죽지 �
   ws.close();
   assert.equal(srv.exitCode, null, '프로세스가 종료되지 않음');
 });
+
+test('서버: 같은 기계의 리버스 프록시 뒤에서는 X-Forwarded-For(마지막 값)로 IP당 접속 수를 셈', async (t) => {
+  const port = PORT + 1;
+  const srv = spawn(process.execPath, ['server/index.js'], { env: { ...process.env, PORT: String(port) }, stdio: 'ignore' });
+  t.after(() => srv.kill());
+  const getP = (p) => new Promise((res) => { http.get({ host: '127.0.0.1', port, path: p }, (r) => { r.resume(); r.on('end', () => res(r.statusCode)); }).on('error', () => res(0)); });
+  for (let i = 0; i < 50 && (await getP('/health')) !== 200; i++) await sleep(100);
+  // 결과: 'open' 이면 계속 열려 있음, 숫자면 서버가 그 코드로 닫음
+  const open = (xff) => new Promise((res) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { 'X-Forwarded-For': xff } });
+    ws.on('close', (code) => res(code));
+    ws.on('error', () => res('error'));
+    ws.on('open', () => setTimeout(() => res(ws), 300));
+  });
+  // 서로 다른 접속자 7명 (예전에는 프록시 주소 하나로 보여 7번째부터 거절)
+  const many = [];
+  for (let i = 0; i < 7; i++) many.push(await open(`10.0.0.${i + 1}`));
+  assert.ok(many.every((w) => typeof w === 'object'), '다른 IP 7명은 모두 접속');
+  // 맨 앞 값을 바꿔 적어도(위조) 프록시가 붙인 마지막 값이 같으면 같은 사람
+  const same = [];
+  for (let i = 0; i < 7; i++) same.push(await open(`1.2.3.${i}, 10.9.9.9`));
+  assert.equal(same.filter((w) => typeof w === 'object').length, 6, '같은 IP 는 6개까지');
+  assert.equal(same[6], 1013);
+  for (const w of [...many, ...same]) if (typeof w === 'object') w.close();
+});

@@ -5,7 +5,7 @@
 npm ci && npm run build
 PORT=8787 MAX_PLAYERS_PER_ROOM=50 MAX_ROOMS=20 npm start
 ```
-`server/index.js` 가 `dist/` 정적 파일과 `/ws` WebSocket, `/rooms` 를 함께 서빙합니다. Fly.io, Render, Railway 등 상시 프로세스를 지원하는 호스팅이면 그대로 동작합니다. HTTPS 리버스 프록시(nginx/Caddy) 뒤에 두면 `wss://` 가 자동으로 맞춰집니다. 정적 파일은 서버가 처음 요청 때 brotli/gzip 으로 압축해 메모리에 보관한 뒤 보내므로(ETag·304 지원), 프록시에서 따로 압축을 켜지 않아도 됩니다.
+`server/index.js` 가 `dist/` 정적 파일과 `/ws` WebSocket, `/rooms` 를 함께 서빙합니다. Fly.io, Render, Railway 등 상시 프로세스를 지원하는 호스팅이면 그대로 동작합니다. HTTPS 리버스 프록시(nginx/Caddy) 뒤에 두면 `wss://` 가 자동으로 맞춰집니다. 같은 기계의 프록시(127.0.0.1)에서 온 접속은 `X-Forwarded-For` 의 마지막 값으로 IP당 접속 수(기본 6)를 세고, 다른 기계의 프록시 뒤(Fly.io·Render 등)라면 `TRUST_PROXY=1` 을 함께 지정하세요 (지정하지 않으면 모두 프록시 주소 하나로 보여 6명까지만 들어옵니다). 정적 파일은 서버가 처음 요청 때 brotli/gzip 으로 압축해 메모리에 보관한 뒤 보내므로(ETag·304 지원), 프록시에서 따로 압축을 켜지 않아도 됩니다.
 
 ## B. 게임 화면은 Vercel, 멀티플레이 서버는 Cloudflare (무료로 시작)
 
