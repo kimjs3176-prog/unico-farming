@@ -11,8 +11,8 @@
 import { Meter, addToLedger, limits, nextReset } from './budget.js';
 import { sanitizeAct, ACT_LIMIT } from '../../server/rooms.js';
 
-const MAX_PLAYERS = 30;         // 방 하나 인원 (무료 플랜에 맞춰 4개 방 × 30명 = 최대 120명)
-const MAX_ROOMS = 4;
+export const MAX_PLAYERS = 30;         // 방 하나 인원 (무료 플랜에 맞춰 4개 방 × 30명 = 최대 120명)
+export const MAX_ROOMS = 4;
 const LEDGER = '__ledger__';
 const MAX_MSG = 4096;           // 메시지 최대 길이(바이트)
 const CHAT_LIMIT = 5;           // 10초에 채팅 5번까지
@@ -68,7 +68,7 @@ export default {
       if ((await (await ledger().fetch('https://ledger/status')).json()).over) return quotaSocket();
       // 원하는 방(있고 자리가 있으면) → 없으면 자리가 있는 가장 낮은 번호 방
       let name = url.searchParams.get('room');
-      const valid = name && /^[1-9]\d?번 농장$/.test(name) && +name.split('번')[0] <= MAX_ROOMS; // 1~20번만 ('0번'·'01번' 같은 목록 밖 방 금지)
+      const valid = name && /^[1-9]\d?번 농장$/.test(name) && +name.split('번')[0] <= MAX_ROOMS; // 1~MAX_ROOMS번만 ('0번'·'01번' 같은 목록 밖 방 금지)
       if (!valid || (await count(name)) >= MAX_PLAYERS) {
         name = null;
         for (let i = 1; i <= MAX_ROOMS; i++) if ((await count(roomName(i))) < MAX_PLAYERS) { name = roomName(i); break; }
@@ -135,9 +135,9 @@ export class FarmRoom {
   async fetch(req) {
     const url = new URL(req.url);
     if (url.hostname === 'ledger') return this.ledgerFetch(url, req);
-    const now = Date.now();
-    this.meter.tick(now, 'fetch');
-    this.report(now);
+    const t0 = Date.now();
+    this.meter.tick(t0, 'fetch');
+    this.report(t0);
     // 인원은 입장(join)한 사람만 셈: 입장 안 한 빈 소켓으로 방을 '가득 참'으로 만들지 못하게
     if (url.pathname === '/count') return Response.json({ count: this.players().length });
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
