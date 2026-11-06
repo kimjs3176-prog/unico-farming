@@ -220,8 +220,9 @@ export class Scenery {
 
   /** 풀·들꽃 밀도 (0~1). 인스턴스는 무작위 순서라 앞쪽 일부만 그려도 고르게 줄어듦 */
   setDensity(d) {
+    this.density = d;
     if (this.grass) this.grass.count = Math.round(this.grassTotal * d);
-    if (this.flowers) this.flowers.count = Math.round(this.flowerTotal * Math.min(1, 0.25 + d * 0.75));
+    if (this.flowers) this.flowers.count = Math.round(this.flowerTotal * Math.min(1, 0.25 + d * 0.75) * (this.seasonFlowers ?? 1)); // 계절: 겨울엔 들꽃 없음
   }
 
   /** 수면에 파문 (amp 0.2 잔잔 ~ 1.5 크게 첨벙) */

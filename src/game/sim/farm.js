@@ -147,7 +147,7 @@ export class FarmSim {
       // 관리 점수: 물이 있었던 시간 (잡초가 있으면 절반만)
       p.careT = (p.careT || 0) + dt;
       p.careOk = (p.careOk || 0) + (p.water > 0 ? (p.weeds ? 0.5 : 1) : 0) * dt;
-      p.progress += (dt / CROPS[p.crop].growTime) * rate;
+      p.progress += (dt / CROPS[p.crop].growTime) * rate * (this.growthMult ? this.growthMult(p.crop) : 1); // 계절 (3D판 view 에서 연결, 없으면 1)
       p.water = Math.max(0, p.water - dt);
       if (p.progress >= 1) {
         p.progress = 1; p.state = 'ready';

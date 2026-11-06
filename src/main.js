@@ -49,6 +49,7 @@ import { CostumeSim, COSTUME, encodeLook } from './game/sim/costume.js';
 import { joinQrBox } from './ui/join_qr.js';
 import { SocialSim } from './game/sim/social.js';
 import { SocialView } from './game/view/social_view.js';
+import { SeasonView } from './game/view/season_view.js';
 import { DIVISIONS } from './game/sim/koat.js';
 
 class Game {
@@ -110,6 +111,7 @@ class Game {
     this.home = new HomeView(this);
     this.net = new Net(this);
     this.socialView = new SocialView(this);
+    this.season = new SeasonView(this); // 계절 (7일마다 봄·여름·가을·겨울)
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
     this.pointer = new PointerNav(this);
@@ -401,6 +403,7 @@ class Game {
 
     const pp = this.player.position;
     this.world.update(dt, this.tractor.driving ? this.tractor.riderGroup.position : pp);
+    this.season.update(dt);
     // 상호작용 후보: 진행 중인 미니게임(d<0)이 최우선, 그다음 가장 가까운 대상
     let prompt = null;
     const pick = (p) => { if (p && (!prompt || (p.d ?? 99) < (prompt.d ?? 99))) prompt = p; };
@@ -477,7 +480,7 @@ class Game {
     if (this.music.on) { const W = this.world.weatherCur || {}; this.music.setScene({ daylight: this.world.daylight, kind: this.world.weatherKind || 'clear', precip: W.precip || 0, wind: W.wind || 0.15 }); }
     SURF.wind.value = this.world.weatherCur?.wind ?? 0.15;
     // 눈 쌓임/녹음: 날씨가 바뀌면 서서히, 처음 접속했을 때 이미 눈이면 바로 덮인 상태
-    const snowTarget = this.world.weatherKind === 'snow' ? 1 : 0;
+    const snowTarget = Math.max(this.world.weatherKind === 'snow' ? 1 : 0, (this.world.seasonSnow || 0) * 0.85); // 겨울엔 지붕·나무에도 눈
     if (this.snowSeen === undefined && this.world.weatherKind) { this.snowSeen = true; SURF.snow.value = snowTarget; }
     SURF.snow.value += (snowTarget - SURF.snow.value) * Math.min(1, dt * 0.35);
     if (this.home.inside) SURF.snow.value = 0; // 실내 가구에는 눈이 쌓이지 않음 (나가면 다시 서서히)

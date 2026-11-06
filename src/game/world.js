@@ -843,7 +843,7 @@ export class World {
     this.hemi.intensity = 0.1 + daylight * 1.0 + this.precip.flash * 2.5;
     this.scene.environmentIntensity = 0.06 + daylight * 0.28; // 환경광도 밤에는 줄임
     // 눈: 지면이 점점 하얗게 덮임
-    const snowCover = W.kind === 'snow' ? Math.min(1, W.precip * 1.2) : 0;
+    const snowCover = Math.max(W.kind === 'snow' ? Math.min(1, W.precip * 1.2) : 0, this.seasonSnow || 0); // 겨울엔 눈이 안 와도 소복이
     this.snowCover = (this.snowCover || 0) + (snowCover - (this.snowCover || 0)) * Math.min(1, dt * 0.15);
     this.groundMat.emissive.setRGB(1, 1, 1).multiplyScalar(this.snowCover * 0.32 * (0.3 + daylight * 0.7));
     const tod = this.tod = timeOfDay(t); // 시간대 빛 색 (부드럽게 이어짐)

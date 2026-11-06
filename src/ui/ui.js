@@ -30,6 +30,8 @@ export class UI {
     this.top = h('div', 'hud-top');
     this.moneyChip = h('div', 'chip', '🪙 <span class="money">0</span>');
     this.clockChip = h('div', 'chip', '🕒 <span>1일차 08:00</span>');
+    this.seasonChip = h('div', 'chip season-chip', '🌸 봄 1/7');
+    this.seasonChip.title = '계절: 7일마다 바뀌어요. 제철 작물은 빨리 자라고 비싸게 팔려요';
     this.levelChip = h('div', 'chip', 'Lv.<span class="lv">1</span> <div class="xpbar"><i></i></div><small class="xp"></small>');
     this.weatherChip = h('button', 'chip weather-chip', '🌤️ <span>날씨 확인 중…</span>');
     this.weatherChip.onclick = () => this.openWeather();
@@ -48,7 +50,7 @@ export class UI {
     right.append(this.btnBag, this.btnQuest, this.btnSettings, this.btnHelp);
     this.fpsChip = h('div', 'fps-chip', '');
     root.append(this.fpsChip);
-    this.top.append(this.moneyChip, this.clockChip, this.weatherChip, this.levelChip, this.boostChip, right);
+    this.top.append(this.moneyChip, this.clockChip, this.seasonChip, this.weatherChip, this.levelChip, this.boostChip, right);
     root.append(this.top);
     this.banner = h('div', 'event-banner', '');
     this.banner.style.display = 'none';
@@ -538,7 +540,7 @@ export class UI {
         const seeds = h('div', 'rows');
         for (const [k, c] of Object.entries(CROPS)) {
           const locked = g.quests.level < c.unlockLevel ? `Lv.${c.unlockLevel} 해금` : '';
-          seeds.append(buyRow(c.emoji, `${c.name} 씨앗`, eco.inventory.seeds[k] || 0, c.seedPrice, [[1, (n) => eco.buySeed(k, n)], [5, (n) => eco.buySeed(k, n)]], `${c.growTime}초 · 판매 ${c.basePrice}🪙${c.regrow ? ` · ${c.regrow}번 더 열림` : ''}`, locked));
+          seeds.append(buyRow(c.emoji, `${c.name} 씨앗`, eco.inventory.seeds[k] || 0, c.seedPrice, [[1, (n) => eco.buySeed(k, n)], [5, (n) => eco.buySeed(k, n)]], `${g.season?.cur?.crops.includes(k) ? `${g.season.cur.icon} 제철 · ` : ''}${c.growTime}초 · 판매 ${c.basePrice}🪙${c.regrow ? ` · ${c.regrow}번 더 열림` : ''}`, locked));
         }
         body.append(seeds);
         body.append(h('h3', '', '🧺 농장 용품'));
