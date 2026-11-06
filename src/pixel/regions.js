@@ -64,6 +64,7 @@ export function applyTown(g) {
 }
 
 export const RegionMethods = {
+  boothName(i) { return DIVISIONS[i]?.name; },
   /* ── 매 프레임 ── */
   regionTick(dt, busy) {
     if (!busy) {
@@ -186,7 +187,7 @@ export const RegionMethods = {
     } else if (type === 'inspect') {
       const R = makeInspectRound(); const res = [];
       for (const it of R) {
-        const a = await this.askTimed(d.game.title, `${it.name}: 측정값 ${it.value}${it.unit} (기준 ${it.std}${it.unit})`, ['적합', '부적합'], 8);
+        const a = await this.askTimed(d.game.title, `${it.name}: 측정값 ${typeof it.value === 'number' ? it.value.toLocaleString('ko-KR', { maximumFractionDigits: 1 }) : it.value}${it.unit} (기준 ${it.std}${it.unit})`, ['적합', '부적합'], 8);
         const ok = a.i >= 0 && (a.i === 0) === it.pass; res.push({ ok, left: a.left });
         this.audio.play(ok ? 'coin' : 'bump', 0.5); lines.push(`${ok ? 'O' : 'X'} ${it.name} → ${it.pass ? '적합' : '부적합'}`);
       }
@@ -282,7 +283,7 @@ export const RegionMethods = {
     this.ui.meter({ title: `힘겨루기 · ${nameOf(F.fish)}`, gauge: sim.tension, band: [0, 0.75], ok: sim.tension < 0.75, hot: sim.tension >= 0.75, text: `${sim.surging ? '몸부림! 손을 떼요' : this.reeling ? '감는 중…' : '꾹 눌러 감기 (E·Space)'} · 남은 줄 ${Math.round(sim.line * 100)}%` });
     if (ev === 'landed' || ev === 'snapped' || ev === 'escaped') {
       this.fight = null; this.ui.meter(null); this.reeling = false;
-      if (ev === 'landed') { this.report('fightwin'); this.catchFish(F.fish, F.size, true, true); }
+      if (ev === 'landed') { this.startAct('pull', { ok: true }); this.report('fightwin'); this.catchFish(F.fish, F.size, true, true); }
       else { this.audio.play('bump'); this.ui.toast(ev === 'snapped' ? '줄이 끊어졌어요! 텐션이 빨간 구간이면 손을 떼요' : '물고기가 도망갔어요…', 'fish'); }
     }
   },

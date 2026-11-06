@@ -453,6 +453,7 @@ export class Renderer {
     let playerD = null, playerIdx = -1;
     const glowList = [];
     drawables.forEach((d, idx) => {
+      if (d.draw) { d.draw(g, camX, camY); return; } // 손에 든 도구 (낚싯대·곤충채 등)
       let img = d.img;
       let x = Math.round(d.x - camX), y = Math.round(d.y - camY);
       if (d.crown) {

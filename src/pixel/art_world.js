@@ -397,6 +397,10 @@ export function icon(id) {
     case 'rice': for (let i = 0; i < 5; i++) s.line(4 + i * 2, 15, 3 + i * 2.4, 3, 'hay', 2 + (i % 2)); for (const [x, y] of [[3, 3], [6, 2], [9, 2], [12, 3], [5, 5], [11, 5]]) s.ell(x, y, 1.3, 1.6, 'corn', { lo: 2 }); s.hline(3, 12, 10, 'scarf', 2); break;
     case 'bag': s.ell(8, 10, 6, 5, 'wood', { lo: 2 }); s.rect(6, 3, 4, 3, 'wood', 3); s.hline(5, 10, 5, 'scarf', 2); break;
     case 'quest': s.rect(3, 2, 10, 13, 'cream', 3); s.rect(3, 2, 10, 2, 'wood', 3); for (let y = 6; y < 14; y += 3) s.hline(5, 11, y, 'wood', 2); break;
+    case 'book': s.rect(3, 2, 10, 13, 'leaf', 2); s.rect(3, 2, 2, 13, 'leaf', 1); s.rect(6, 5, 5, 3, 'cream', 3); s.hline(5, 12, 13, 'cream', 2); break;
+    case 'note': s.vline(10, 2, 11, 'purple', 3); s.vline(11, 2, 6, 'purple', 3); s.hline(10, 13, 2, 'purple', 3); s.ell(7.5, 12, 3, 2.2, 'purple', { lo: 1 }); break;
+    case 'save': s.rect(2, 2, 12, 12, 'roofb', 2); s.rect(5, 2, 6, 4, 'silver', 3); s.rect(4, 9, 8, 5, 'cream', 3); s.hline(5, 10, 11, 'roofb', 1); break;
+    case 'cube': s.poly([8, 2, 14, 5, 8, 8, 2, 5], 'glass', { level: 3 }); s.poly([2, 5, 8, 8, 8, 14, 2, 11], 'glass', { level: 1 }); s.poly([8, 8, 14, 5, 14, 11, 8, 14], 'glass', { level: 2 }); break;
     case 'gift': s.rect(3, 6, 10, 9, 'rose', 2); s.rect(2, 5, 12, 3, 'rose', 3); s.vline(8, 5, 14, 'gold', 3); s.ell(6, 3.5, 2, 1.5, 'gold', { lo: 2 }); s.ell(10, 3.5, 2, 1.5, 'gold', { lo: 2 }); break;
     default: {
       if (id.startsWith('fish_')) return icon('fish');

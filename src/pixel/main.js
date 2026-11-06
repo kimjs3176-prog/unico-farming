@@ -30,19 +30,44 @@ ui.onAction = (a) => {
   else if (a === 'weather') { game.raining = !game.raining; ui.toast(game.raining ? '비가 내려요 (밭에 물이 저절로 차요)' : '날이 개었어요', game.raining ? 'rain' : 'sun'); }
   else if (a === 'fx') { const on = !R.fx.dof; R.fx.dof = R.fx.bloom = R.fx.vignette = on; R.auto = false; saveFx(); ui.toast(on ? 'HD-2D 효과 켬 (흐림·빛 번짐·비네팅)' : 'HD-2D 효과 끔 (순수 도트)', 'star'); }
   else if (a === 'sound') { audio.cycle(); }
+  else if (a === 'book') game.bookMenu?.();
+  else if (a === 'menu') systemMenu();
 };
+
+/** ☰ 메뉴: 자주 안 쓰는 설정은 여기로 모아 HUD 를 가볍게 (game-ui-design 스킬) */
+function systemMenu() {
+  if (ui.busy) return;
+  ui.openMenu({
+    title: '메뉴',
+    build: () => ({
+      sub: `${game.day}일차 · Lv.${game.level} · 자동 저장돼요`,
+      items: [
+        { icon: 'book', label: '도감', right: '수집 기록', onPick: () => { ui.closeMenu(); game.bookMenu?.(); } },
+        { icon: game.raining ? 'rain' : 'sun', label: '날씨 바꾸기', right: game.raining ? '비' : '맑음', onPick: () => ui.onAction('weather') },
+        { icon: 'star', label: 'HD-2D 효과', right: R.fx.dof ? '켬' : '끔', onPick: () => ui.onAction('fx') },
+        { icon: 'note', label: '소리', right: audio.enabled ? (audio.musicOn ? '켬' : '효과음만') : '끔', onPick: () => { audio.cycle(); } },
+        { icon: 'quest', label: '조작 안내', right: '', onPick: () => { ui.closeMenu(); ui.say('조작', '이동 WASD·방향키 (Shift 달리기) · 행동 E·Space · 씨앗 Q · 가방 I · 퀘스트 J · 마우스로 누른 곳까지 걸어가요. 대화 선택지가 가로로 놓이면 ←→ 로 골라요.'); } },
+        { icon: 'save', label: '저장하기', right: '', onPick: () => { game.save(); ui.toast('저장했어요', 'save'); } },
+        { icon: 'cube', label: '3D 버전으로', right: '', onPick: () => { game.save(); location.href = './'; } },
+      ],
+    }),
+  });
+}
 
 /* ── 키보드 ── */
 const KEYMAP = {
   ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
   KeyE: 'ok', Space: 'ok', Enter: 'ok', KeyZ: 'ok', Escape: 'back', KeyX: 'back', Backspace: 'back',
 };
+const setMode = (m) => { if (ui.inputMode !== m) { ui.inputMode = m; ui.hint(ui._hintText); } };
 addEventListener('keydown', (e) => {
+  setMode('key');
   if (!started) { if (e.code === 'Enter' || e.code === 'Space') start(); return; }
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { game.run = true; return; }
   if (e.code === 'Space' && game.tr.driving && !ui.busy) { e.preventDefault(); if (!e.repeat) game.togglePlow(); return; }
   const k = KEYMAP[e.code] || (/^Digit[1-9]$/.test(e.code) ? e.code.slice(5) : null);
+  if (e.code === 'Escape' && !ui.busy && !game.fish && !game.battle && !game.fight && !game.tr.driving && !game.smartRun && !game.threshing) { e.preventDefault(); systemMenu(); return; }
   if (k) { e.preventDefault(); if (!e.repeat || !['up', 'down', 'left', 'right'].includes(k) || ui.busy) game.press(k); return; }
   if (ui.busy) return;
   if (e.code === 'KeyQ') game.cycleSeed();
@@ -60,6 +85,7 @@ addEventListener('blur', () => { game.held = []; game.run = false; });
 
 /* ── 마우스·터치: 누른 곳으로 걸어가기 ── */
 canvas.addEventListener('pointerup', () => { if (game.fight) game.reeling = false; });
+addEventListener('pointerdown', (e) => setMode(e.pointerType === 'touch' ? 'touch' : 'mouse'), true);
 canvas.addEventListener('pointerdown', (e) => {
   if (!started) return;
   audio._ctx();

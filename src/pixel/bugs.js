@@ -87,6 +87,7 @@ export const BugMethods = {
   catchBug(b) {
     const ok = Math.random() < (isGround(b.kind) ? 0.9 : 0.8);
     this.audio.play('shoo', 0.6);
+    this.startAct('net', { ok });
     this.bugs.splice(this.bugs.indexOf(b), 1);
     if (!ok) { this.ui.toast('휙! 아깝게 놓쳤어요', 'bug'); return; }
     this.econ.addItem(b.kind);

@@ -19,6 +19,7 @@ import { initCraft, craftSave, craftLoad, CraftMethods } from './craft.js';
 import { initPests, PestMethods } from './pests.js';
 import { Battle } from './battle.js';
 import { initBugs, BugMethods } from './bugs.js';
+import { ActionMethods } from './actions.js';
 
 const T = 32;
 export const DAY_LENGTH = 360; // 3D 버전과 같은 하루 6분
@@ -88,6 +89,7 @@ export class Game {
     this.npcs = NPCS.map((n) => ({ ...n, a: new Actor(n.x, n.y, n.dir), home: [n.x, n.y], next: 2 + Math.random() * 4, bubble: null }));
     this.animals = this.ranch.animals.map((a, i) => ({ sim: a, a: new Actor(ANIMAL_START[i].x, ANIMAL_START[i].y, 'right'), face: Math.random() < 0.5 ? 0 : 1, next: Math.random() * 4, eat: 0 }));
     this.fruitTrees = this.map.objs.filter((o) => o.type === 'tree' && o.item);
+    this.setupPortraits();
     this.held = []; this.run = false; this.stuckT = 0; this.puffT = 0;
     this.path = null; this.pathAct = null;
     this.fish = null; // 낚시 상태
@@ -210,7 +212,8 @@ export class Game {
     this.bugTick(dt, busy || !!this.battle);
     if (this.battle) this.battle.update(dt);
     if (!busy) this.craftTick(dt);
-    const frozen = busy || !!this.battle || !!this.smartRun || !!this.fight || !!this.pano;
+    this.actTick(dt);
+    const frozen = busy || !!this.battle || !!this.smartRun || !!this.fight || !!this.pano || this.actLocked();
     if (this.tr.driving) this.drive(dt, busy); else this.movePlayer(dt, frozen);
     if (this.threshing && !busy) this.threshTick(dt);
     this.moveDog(dt);
@@ -463,20 +466,21 @@ export class Game {
   plotAct(i, a) {
     const cx = (PLOTS.x + (i % PLOTS.cols)) * T + 16, cy = (PLOTS.y + Math.floor(i / PLOTS.cols)) * T + 16;
     switch (a.type) {
-      case 'till': this.farm.till(i); this.audio.play('dig'); this.puff(cx, cy + 10, 6); this.report('till'); break;
+      case 'till': this.startAct('hoe'); this.farm.till(i); this.audio.play('dig'); this.puff(cx, cy + 10, 6); this.report('till'); break;
       case 'plant': {
         if (!this.econ.useSeed(this.seed)) return;
-        this.farm.plant(i, this.seed);
+        this.farm.plant(i, this.seed); this.startAct('plant');
         if (this.econ.useItem('compost')) { this.farm.fertilize(i); this.report('fert'); }
         this.audio.play('plant'); this.report('plant'); break;
       }
       case 'need_seed': this.ui.toast(`${CROPS[this.seed].name} 씨앗이 없어요. Q 로 바꾸거나 장터에서 사요`, 'seed'); this.audio.play('bump', 0.3); break;
-      case 'water': this.farm.water(i); this.audio.play('water'); for (let k = 0; k < 10; k++) this.parts.push({ kind: 'drop', x: cx + (Math.random() - 0.5) * 22, y: cy - 10, vx: 0, vy: 40 + Math.random() * 30, life: 0.5, decay: 1.6 }); this.report('water'); break;
-      case 'weed': this.farm.weed(i); this.econ.addItem('weed'); this.audio.play('dig'); this.report('weed'); break;
-      case 'fert': this.econ.useItem('compost'); this.farm.fertilize(i); this.audio.play('plant'); this.report('fert'); break;
+      case 'water': this.startAct('water'); this.farm.water(i); this.audio.play('water'); for (let k = 0; k < 10; k++) this.parts.push({ kind: 'drop', x: cx + (Math.random() - 0.5) * 22, y: cy - 10, vx: 0, vy: 40 + Math.random() * 30, life: 0.5, decay: 1.6 }); this.report('water'); break;
+      case 'weed': this.startAct('hoe'); this.farm.weed(i); this.econ.addItem('weed'); this.audio.play('dig'); this.report('weed'); break;
+      case 'fert': this.startAct('plant'); this.econ.useItem('compost'); this.farm.fertilize(i); this.audio.play('plant'); this.report('fert'); break;
       case 'harvest': {
         const out = this.farm.harvest(i);
         if (!out) return;
+        this.startAct('harvest');
         this.econ.addCrop(out.crop, out.amount);
         this.popIcon(out.crop, cx, cy - 8, Math.min(4, out.amount));
         this.audio.play('harvest'); this.report('harvest', out.amount);
@@ -492,6 +496,7 @@ export class Game {
     const a = v.sim, act = this.ranch.actionFor(a, this.day);
     const wx = v.a.wx, wy = v.a.wy - 20;
     if (this.night > 0.7 && act.type !== 'collect') { this.ui.toast(`${a.name}는 자고 있어요. 쉿!`, 'moon'); return; }
+    if (act.type !== 'wait') this.startAct('pet');
     if (act.type === 'feed') {
       if (!this.econ.useFeed()) { this.ui.toast('사료가 없어요. 장터에서 사 오세요', 'feed'); return; }
       this.ranch.feed(a, this.day); v.eat = 2.5; this.audio.play('plant'); this.report('feed');
@@ -523,7 +528,7 @@ export class Game {
 
   shake(o) {
     if (o.shaken) { this.ui.toast('내일 다시 열려요', 'tomato'); return; }
-    o.shaken = true; o.lastShake = this.day; o.shakeT = 0.45;
+    o.shaken = true; o.lastShake = this.day; o.shakeT = 0.45; this.startAct('push');
     const n = 3;
     this.econ.addItem(o.item, n); this.book.add(o.item, { day: this.day });
     // 가끔 나무에서 곤충이 툭 (3D 판과 같음)
@@ -861,8 +866,8 @@ export class Game {
     const lake = this.isLakeTile(bx, by);
     this.fishing.cast(this.castOpts(lake));
     p.vx = p.vy = 0; this.path = null;
-    this.fish = { lake, state: 'waiting', bx: bx * T + 16, by: by * T + 18, dip: 0, t: 0 };
-    this.audio.play('splash', 0.6);
+    this.fish = { lake, state: 'waiting', bx: bx * T + 16, by: by * T + 18, dip: 0, t: 0, castT: 0 };
+    this.audio.play('shoo', 0.4); // 휙 (첨벙은 찌가 물에 닿을 때)
   }
   fishTick(dt) {
     const f = this.fish; f.t += dt;
@@ -877,8 +882,9 @@ export class Game {
     const f = this.fish; this.fish = null;
     if (r.ok) {
       if (this.landFish(r, f.lake)) { this.fishFight = f; return; }
+      this.startAct('pull', { ok: true });
       this.catchFish(r.fish, r.size, f.lake);
-    } else this.ui.toast(r.early ? '너무 빨리 당겼어요. 찌가 쑥 들어갈 때!' : '놓쳤어요…', 'fish');
+    } else { this.startAct('pull', { ok: false }); this.ui.toast(r.early ? '너무 빨리 당겼어요. 찌가 쑥 들어갈 때!' : '놓쳤어요…', 'fish'); }
     void f;
   }
   cancelFish() { this.fish = null; this.fishing.reset(); }
@@ -969,8 +975,11 @@ export class Game {
       }
       return out.concat(this.drawOthers());
     }
-    const pImg = S.char('player', { scarf: 'scarf' }, p.dir, this.fish ? 0 : p.frame);
-    out.push({ img: pImg, x: p.wx - 20, y: p.wy - 50 + (this.fish ? 0 : 0), sy: p.wy, shadow: 'm', sx: p.wx, shy: p.wy - 1, player: true, bubble: this.fish?.state === 'bite' ? '!' : null });
+    const busyHands = this.fish || this.fight || this.act;
+    const pImg = S.char('player', { scarf: 'scarf' }, p.dir, busyHands ? 0 : p.frame);
+    const body = this.actBody();
+    this.pushActDrawables(out);
+    out.push({ img: pImg, x: p.wx - 20 + body.dx, y: p.wy - 50 + body.dy, sy: p.wy, shadow: 'm', sx: p.wx, shy: p.wy - 1, player: true, bubble: this.fish?.state === 'bite' ? '!' : null });
     return out.concat(this.drawOthers());
   }
   drawOthers() {
@@ -1011,13 +1020,20 @@ export class Game {
     if (!f) return;
     // 힘겨루기 중에는 찌가 물속으로 끌려 들어갔다 나왔다 함
     const dip = this.fight ? (this.fight.sim.surging ? 4 : 2) + Math.round(Math.sin(t * 20)) : f.dip > 0 ? (f.state === 'bite' ? 3 : 1) : Math.round(Math.sin(t * 3) * 0.6);
-    const bx = Math.round(f.bx - camX), by = Math.round(f.by - camY) + dip;
-    const hx = Math.round(p.wx - camX + (p.dir === 'left' ? -14 : p.dir === 'right' ? 14 : 8)), hy = Math.round(p.wy - camY - 30);
-    // 낚싯대 끝 → 찌 (처진 줄)
-    g.fillStyle = 'rgba(240,240,255,0.7)';
-    for (let k = 0; k <= 24; k++) { const u = k / 24; const x = hx + (bx - hx) * u, y = hy + (by - hy) * u + Math.sin(u * Math.PI) * 10; g.fillRect(Math.round(x), Math.round(y), 1, 1); }
-    g.fillStyle = '#5a3a20'; g.fillRect(hx - 1, hy - 1, 2, 2);
+    const fly = this.bobberPos(f);
+    const bx = Math.round((fly ? fly.x : f.bx) - camX), by = Math.round((fly ? fly.y : f.by) - camY) + (fly ? 0 : dip);
+    const tip = this._rodTip;
+    const hx = tip ? Math.round(tip[0] - camX) : Math.round(p.wx - camX + (p.dir === 'left' ? -14 : p.dir === 'right' ? 14 : 8)), hy = tip ? Math.round(tip[1] - camY) : Math.round(p.wy - camY - 30);
+    // 낚싯대 끝 → 찌: 기다릴 땐 축 처지고, 물면 팽팽
+    const pose = this.rodPose();
+    const sag = fly ? 4 : pose ? pose.sag : 10;
+    const n = Math.max(8, Math.ceil(Math.hypot(bx - hx, by - hy) / 2));
+    g.fillStyle = this.fight || f.state === 'bite' ? 'rgba(255,255,255,0.9)' : 'rgba(240,240,255,0.7)';
+    for (let k = 0; k <= n; k++) { const u = k / n; const x = hx + (bx - hx) * u, y = hy + (by - hy) * u + Math.sin(u * Math.PI) * sag; g.fillRect(Math.round(x), Math.round(y), 1, 1); }
     g.drawImage(this.S.bobber, bx - 4, by - 8);
+    if (fly) return;
+    // 물면 찌 둘레로 물결이 퍼짐
+    if (f.state === 'bite' || this.fight) { const r = 3 + ((t * 10) % 6); g.fillStyle = 'rgba(220,245,255,0.6)'; for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2; g.fillRect(Math.round(bx + Math.cos(a) * r * 1.6), Math.round(by + 1 + Math.sin(a) * r * 0.6), 1, 1); } }
     if (f.dip > 0 || Math.floor(t * 2) % 2) { g.fillStyle = 'rgba(220,245,255,0.8)'; g.fillRect(bx - 5, by + 1, 3, 1); g.fillRect(bx + 3, by + 1, 3, 1); }
   }
   drawGlow(g, gg, camX, camY, t, night) {
@@ -1118,8 +1134,43 @@ Game.prototype.kitchenMenu = function () {
   });
 };
 Object.assign(Game.prototype, BugMethods);
+Object.assign(Game.prototype, ActionMethods);
 /** 도감: 종 수 퀘스트 + 카테고리 완성 보상 (3D 판과 같은 Collection) */
 Game.prototype.checkBook = function () {
   this.report('book', Object.keys(this.book.entries).length);
   for (const r of this.book.claimCompletions()) { this.econ.earn(r.money); this.audio.play('levelup'); this.ui.toast(`${CATEGORY_NAMES[r.cat]} 도감 완성! 보상 ${r.money}코인`, 'star'); }
+};
+
+/** 대화창 얼굴: 말하는 이름으로 캐릭터를 찾아 머리 부분만 크게 잘라 씀 */
+Game.prototype.setupPortraits = function () {
+  const looks = new Map();
+  for (const n of NPCS) {
+    if (VILLAGERS[n.id]) looks.set(VILLAGERS[n.id].name, n.look);
+    if (n.koat === 'desk') { looks.set('안내데스크', n.look); looks.set('안내데스크 (기획운영본부)', n.look); }
+  }
+  this.portraitLooks = looks;
+  const cache = new Map();
+  this.ui.portraitFor = (name) => {
+    const key = String(name).replace(/\s*[♥]+$/, '').trim();
+    let look = looks.get(key);
+    if (!look) {
+      const booth = this.npcs.find((n) => typeof n.koat === 'number' && this.boothName?.(n.koat) === key);
+      if (booth) look = booth.look;
+    }
+    if (!look && key === this.pet?.name) look = 'dog';
+    if (!look && key === '유니코') look = {};
+    if (!look) return null;
+    if (cache.has(key)) return cache.get(key);
+    const src = look === 'dog' ? this.S.shiba.down[0] : this.S.char('npc:' + key, look, 'down', 0);
+    const box = look === 'dog' ? [0, 0, src.width, src.height] : [4, 2, 32, 32];
+    const k = 3, c = document.createElement('canvas');
+    c.width = c.height = 32 * k;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    const sc = Math.min(32 / box[2], 32 / box[3]);
+    const w = box[2] * sc * k, h = box[3] * sc * k;
+    g.drawImage(src, box[0], box[1], box[2], box[3], (c.width - w) / 2, c.height - h, w, h);
+    const url = c.toDataURL();
+    cache.set(key, url);
+    return url;
+  };
 };

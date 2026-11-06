@@ -8,30 +8,34 @@ const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls)
 export class UI {
   constructor(root, S, audio) {
     this.root = root; this.S = S; this.audio = audio;
+    // HUD 배치 (game-ui-design 스킬: 꼭 필요한 것만 늘 보이고, 나머지는 '메뉴' 안으로)
+    //  왼쪽 위: 시간·날씨·코인·레벨 한 장 + 지금 목표 / 오른쪽 위: 가방·퀘스트·메뉴 / 왼쪽 아래: 씨앗 칸 / 가운데 아래: 행동 안내
     root.innerHTML = `
       <div class="hud-left">
-        <div class="panel clock"><img class="ico" data-k="clock"><div><b class="day"></b><span class="time"></span></div></div>
-        <div class="panel money"><img class="ico" src="${S.iconURL('coin')}"><b class="coins">0</b><span class="lv"></span></div>
-        <div class="panel quest hidden"><div class="qt"></div><div class="qd"></div></div>
+        <div class="panel status">
+          <div class="srow"><img class="ico tod"><b class="day"></b><span class="time"></span><img class="ico wx"></div>
+          <div class="srow"><img class="ico" src="${S.iconURL('coin')}"><b class="coins">0</b><span class="lv chip"></span></div>
+        </div>
+        <div class="panel quest hidden" data-act="quests"><img class="ico" src="${S.iconURL('quest')}"><div class="qbody"><div class="qt"></div><div class="qbar"><i></i></div><div class="qd"></div></div></div>
       </div>
       <div class="hud-right">
-        <button class="pbtn" data-act="bag" title="가방 (I)"><img src="${S.iconURL('bag')}"><span>가방</span></button>
-        <button class="pbtn" data-act="quests" title="퀘스트 (J)"><img src="${S.iconURL('quest')}"><span>퀘스트</span></button>
-        <button class="pbtn" data-act="weather" title="날씨 바꾸기 (R)"><img data-k="weather"><span>날씨</span></button>
-        <button class="pbtn" data-act="fx" title="HD-2D 효과 (F)"><b>FX</b><span>효과</span></button>
-        <button class="pbtn" data-act="sound" title="소리 (M)"><b class="snd">♪</b><span>소리</span></button>
-        <a class="pbtn" href="./" title="3D 버전으로"><b>3D</b><span>3D판</span></a>
+        <button class="pbtn" data-act="bag" aria-label="가방 (I)"><img src="${S.iconURL('bag')}" alt=""><span>가방</span><kbd class="k">I</kbd></button>
+        <button class="pbtn" data-act="quests" aria-label="퀘스트 (J)"><img src="${S.iconURL('quest')}" alt=""><span>퀘스트</span><kbd class="k">J</kbd></button>
+        <button class="pbtn" data-act="menu" aria-label="메뉴 (Esc)"><b class="burger">☰</b><span>메뉴</span><kbd class="k">Esc</kbd></button>
       </div>
-      <div class="seedbar panel" data-act="seed"><img class="ico"><div><b class="sn"></b><span class="sc"></span></div><kbd>Q</kbd></div>
+      <div class="seedbar" data-act="seed" aria-label="씨앗 바꾸기 (Q)"><div class="slot"><img class="ico"><i class="cnt"></i></div><div class="slabel"><b class="sn"></b><span><kbd class="k">Q</kbd> 바꾸기</span></div></div>
       <div class="hint hidden"></div>
       <div class="meter panel hidden"></div>
       <div class="smartp panel hidden"></div>
       <div class="toasts"></div>
-      <div class="dialog hidden"><div class="nametag"></div><div class="text"></div><div class="choices"></div><i class="more">▼</i></div>
-      <div class="menu hidden"><div class="menu-card panel"><div class="menu-head"><b class="mt"></b><div class="tabs"></div><button class="x">✕</button></div><div class="menu-sub"></div><div class="list"></div><div class="menu-foot"></div></div></div>
-      <div class="pad"><button data-d="up">▲</button><button data-d="left">◀</button><button data-d="right">▶</button><button data-d="down">▼</button></div>
-      <div class="abtns"><button class="a" data-k="a">A</button><button class="b" data-k="b">B</button></div>
+      <div class="dialog panel hidden"><div class="portrait hidden"><img alt=""></div><div class="dbody"><div class="nametag"></div><div class="text"></div><div class="choices"></div></div><i class="more">▼</i></div>
+      <div class="menu hidden"><div class="menu-card panel"><div class="menu-head"><b class="mt"></b><div class="tabs"></div><button class="x" aria-label="닫기">✕</button></div><div class="menu-sub"></div><div class="list"></div><div class="menu-foot"></div></div></div>
+      <div class="pad"><button data-d="up" aria-label="위">▲</button><button data-d="left" aria-label="왼쪽">◀</button><button data-d="right" aria-label="오른쪽">▶</button><button data-d="down" aria-label="아래">▼</button></div>
+      <div class="abtns"><button class="a" data-k="a" aria-label="결정">A</button><button class="b" data-k="b" aria-label="달리기·뒤로">B</button></div>
       <div class="fade"></div>`;
+    this.inputMode = matchMedia('(pointer: coarse)').matches ? 'touch' : 'key';
+    this.makeFrame();
+    addEventListener('resize', () => this.makeFrame());
     this.q = (s) => $(s, root);
     this.dlg = null; this.menu = null;
     root.addEventListener('click', (e) => {
@@ -47,21 +51,31 @@ export class UI {
 
   /* ── HUD ── */
   hud(s) {
-    this.q('.day').textContent = `${s.day}일차${s.festival ? ' 🎉' : ''}`;
+    this.q('.day').textContent = `${s.day}일차${s.festival ? ' · 축제' : ''}`;
     this.q('.time').textContent = s.clock;
-    this.q('.clock .ico').src = this.S.iconURL(s.night ? 'moon' : 'sun');
-    this.q('[data-k="weather"]').src = this.S.iconURL(s.raining ? 'rain' : 'sun');
+    const tod = this.S.iconURL(s.night ? 'moon' : 'sun'), wx = this.S.iconURL(s.raining ? 'rain' : 'sun');
+    if (this.q('.tod').src !== tod) this.q('.tod').src = tod;
+    if (this.q('.wx').src !== wx) this.q('.wx').src = wx;
+    this.q('.wx').classList.toggle('hidden', !s.raining);
     const coins = this.q('.coins');
     if (coins.dataset.v !== String(s.money)) { coins.dataset.v = s.money; coins.textContent = s.money.toLocaleString(); coins.classList.remove('bump'); void coins.offsetWidth; coins.classList.add('bump'); }
     this.q('.lv').textContent = `Lv.${s.level}`;
     const qp = this.q('.quest');
-    if (s.quest) { qp.classList.remove('hidden'); qp.classList.toggle('done', !!s.quest.complete); this.q('.qt').textContent = (s.quest.complete ? '✔ ' : '') + s.quest.title; this.q('.qd').textContent = s.quest.complete ? '눌러서 보상 받기 (J)' : `${s.quest.desc} (${s.quest.count}/${s.quest.goal})`; qp.dataset.act = 'quests'; }
-    else qp.classList.add('hidden');
+    // 목표: 대화·메뉴 중에는 숨김 (화면을 가리지 않게)
+    if (s.quest && !this.busy) {
+      qp.classList.remove('hidden'); qp.classList.toggle('done', !!s.quest.complete);
+      this.q('.qt').textContent = (s.quest.complete ? '완료! ' : '') + s.quest.title;
+      this.q('.qd').textContent = s.quest.complete ? `${this.keyName('quest')} 보상 받기` : s.quest.desc;
+      this.q('.qbar i').style.width = `${Math.min(100, (s.quest.count / s.quest.goal) * 100)}%`;
+    } else qp.classList.add('hidden');
     const sb = this.q('.seedbar');
-    sb.querySelector('.ico').src = this.S.iconURL(s.seed.id);
+    const si = this.S.iconURL(s.seed.id); if (sb.querySelector('.ico').src !== si) sb.querySelector('.ico').src = si;
     sb.querySelector('.sn').textContent = `${s.seed.name} 씨앗`;
-    sb.querySelector('.sc').textContent = `× ${s.seed.n}`;
-    this.q('.snd').textContent = s.sound;
+    sb.querySelector('.cnt').textContent = s.seed.n;
+    sb.classList.toggle('empty', !s.seed.n);
+    this.sound = s.sound;
+    // 입력 방식에 맞춘 키 표시 (터치면 숨김)
+    if (this.shownMode !== this.inputMode) { this.shownMode = this.inputMode; this.root.classList.toggle('touchmode', this.inputMode === 'touch'); }
   }
 
   /** 미니게임 계기판 (탈곡 게이지·트랙터 시간/점수). null 이면 숨김 */
@@ -95,18 +109,69 @@ export class UI {
   }
 
   hint(text) {
+    this._hintText = text;
     const h = this.q('.hint');
     if (!text || this.busy) { h.classList.add('hidden'); return; }
     h.classList.remove('hidden');
-    if (h.dataset.t !== text) { h.dataset.t = text; h.innerHTML = `<kbd>E</kbd> ${text}`; }
+    const key = this.keyName('ok');
+    if (h.dataset.t !== text + key) { h.dataset.t = text + key; h.innerHTML = `<kbd class="act">${key}</kbd><span>${text}</span>`; }
   }
 
   toast(text, icon) {
-    const t = el('div', 'toast panel', `${icon ? `<img class="ico" src="${this.S.iconURL(icon)}">` : ''}<span>${text}</span>`);
-    this.q('.toasts').appendChild(t);
-    setTimeout(() => t.classList.add('out'), 2600);
-    setTimeout(() => t.remove(), 3100);
-    while (this.q('.toasts').children.length > 4) this.q('.toasts').firstChild.remove();
+    const box = this.q('.toasts');
+    const same = [...box.children].find((c) => c.dataset.t === text && !c.classList.contains('out'));
+    if (same) {
+      // 같은 알림은 합쳐서 ×n (game-ui-design: 알림 묶기)
+      same.dataset.n = (+same.dataset.n || 1) + 1;
+      same.querySelector('.n').textContent = `×${same.dataset.n}`;
+      clearTimeout(same._t1); clearTimeout(same._t2);
+      same.classList.remove('pop'); void same.offsetWidth; same.classList.add('pop');
+      same._t1 = setTimeout(() => same.classList.add('out'), 2600); same._t2 = setTimeout(() => same.remove(), 3000);
+      return;
+    }
+    const t = el('div', 'toast panel', `${icon ? `<img class="ico" src="${this.S.iconURL(icon)}" alt="">` : ''}<span>${text}</span><b class="n"></b>`);
+    t.dataset.t = text;
+    box.appendChild(t);
+    t._t1 = setTimeout(() => t.classList.add('out'), 2600);
+    t._t2 = setTimeout(() => t.remove(), 3000);
+    while (box.children.length > 3) box.firstChild.remove();
+  }
+
+  /** 지금 입력 방식에 맞는 버튼 이름 */
+  keyName(what) {
+    const touch = this.inputMode === 'touch';
+    if (what === 'ok') return touch ? 'A' : this.inputMode === 'mouse' ? '클릭' : 'E';
+    if (what === 'quest') return touch ? '눌러서' : 'J';
+    return '';
+  }
+
+  /** 도트 금테 틀 (9칸 나누기 이미지): 화면 배율(--u)에 맞춰 한 점 = u 픽셀로 다시 그림 */
+  makeFrame() {
+    const u = Math.max(1, Math.round(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 2));
+    if (this.frameU === u) return;
+    this.frameU = u;
+    const N = 18, C = 6; // 18×18 원본, 모서리 6칸
+    const c = document.createElement('canvas'); c.width = c.height = N * u;
+    const g = c.getContext('2d');
+    const px = (x, y, col) => { g.fillStyle = col; g.fillRect(x * u, y * u, u, u); };
+    const ink = '#140f22', d = '#a6621a', m = '#e0a23a', l = '#ffe08a', teal = '#36b9a4', tl = '#9ff2dc';
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const e = Math.min(i, j, N - 1 - i, N - 1 - j);
+      if (e === 0) px(i, j, ink);
+      else if (e === 1) px(i, j, (i <= 1 || j <= 1) && i < N - 2 && j < N - 2 ? l : d); // 위·왼쪽 빛, 아래·오른쪽 그늘
+      else if (e === 2) px(i, j, m);
+      else if (e === 3) px(i, j, ink);
+    }
+    // 모서리 보석 (청록 마름모 + 반짝임)
+    for (const [cx, cy] of [[2, 2], [N - 3, 2], [2, N - 3], [N - 3, N - 3]]) {
+      for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) px(cx + dx, cy + dy, ink);
+      px(cx, cy, teal); px(cx - 1 + (cx > N / 2 ? 2 : 0), cy - 1 + (cy > N / 2 ? 2 : 0), ink);
+      px(cx, cy, cx < N / 2 && cy < N / 2 ? tl : teal);
+    }
+    const st = document.documentElement.style;
+    st.setProperty('--frame', `url(${c.toDataURL()})`);
+    st.setProperty('--fslice', String(C * u));
+    st.setProperty('--fw', `${C * u}px`);
   }
 
   fade(on) { this.q('.fade').classList.toggle('on', on); }
@@ -119,6 +184,11 @@ export class UI {
       d.classList.remove('hidden');
       this.q('.nametag').textContent = name || '';
       this.q('.nametag').classList.toggle('hidden', !name);
+      // 말하는 캐릭터 얼굴 (이름으로 찾음)
+      const face = name && this.portraitFor?.(name);
+      const pt = this.q('.portrait');
+      pt.classList.toggle('hidden', !face);
+      if (face && pt.firstChild.src !== face) pt.firstChild.src = face;
       this.q('.choices').innerHTML = '';
       this.dlg = { text, shown: 0, choices, sel: 0, resolve, done: false };
       this.hint(null);
