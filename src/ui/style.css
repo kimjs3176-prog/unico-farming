@@ -555,3 +555,7 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
 /* 대화창 이름표는 한 줄 (좁은 화면에서 '🐕 / 콩이'로 쪼개지지 않게) */
 .dlg-name b { white-space: nowrap; }
 .dlg-name { flex-wrap: wrap; row-gap: 2px; }
+/* 링크형 체험 버튼 (a 태그를 버튼 모양으로) */
+.koat-link { display: block; box-sizing: border-box; text-align: center; text-decoration: none; color: var(--ink, #231916); background: var(--gold, #fac03e); border-radius: 14px; box-shadow: 0 4px 0 rgba(0,0,0,0.15); font-family: var(--display); }
+.koat-link small { font-size: 12px; opacity: 0.75; margin-left: 4px; }
+.koat-link:hover { filter: brightness(1.05); }

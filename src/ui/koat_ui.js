@@ -19,14 +19,27 @@ export function installKoatUI(UI) {
     p.append(h('div', 'koat-teams', d.teams.map((t) => `<span>${t}</span>`).join('')));
     p.append(h('div', 'koat-game', `<b>🎮 ${d.game.title}</b><br>${d.game.how}`));
     const best = book.best[d.id];
-    p.append(h('div', 'koat-meta', `${book.stamps[d.id] ? '✅ 스탬프 획득' : `⬜ ${PASS_SCORE}점 이상이면 스탬프`}${best !== undefined ? ` · 최고 ${best}점` : ''} · 스탬프 ${book.count}/${DIVISIONS.length}`));
+    p.append(h('div', 'koat-meta', `${book.stamps[d.id] ? '✅ 스탬프 획득' : d.game.type === 'link' ? '⬜ 체험하면 스탬프' : `⬜ ${PASS_SCORE}점 이상이면 스탬프`}${best !== undefined && d.game.type !== 'link' ? ` · 최고 ${best}점` : ''} · 스탬프 ${book.count}/${DIVISIONS.length}`));
+    if (d.game.type === 'link') { // 외부 체험 페이지: 새 창(탭)으로 열고, 처음 누르면 체험 완료 → 스탬프
+      const a = h('a', 'button gold koat-go koat-link', `${d.emoji} ${d.game.title} <small>↗ 새 창</small>`);
+      a.href = d.game.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.onclick = () => {
+        g.audio.play('click');
+        if (!book.stamps[d.id]) { g.koat.record(d.id, 100); this.toast(`🏷️ ${d.name} 스탬프 획득! (${book.count}/${DIVISIONS.length}) · 새 창에서 특허 체험을 즐겨 보세요`); }
+        else this.toast('🔗 새 창에서 특허 체험 페이지를 열었어요');
+        setTimeout(() => { if (this.panel === p) this.openKoatBooth(d); }, 50); // 스탬프 표시 갱신
+      };
+      p.append(a);
+      p.append(h('div', 'koat-meta', `<small>연결 주소: ${d.game.url.replace(/^https?:\/\//, '')}</small>`));
+      return;
+    }
     const go = h('button', 'gold koat-go', '체험 시작 ▶');
     go.onclick = () => this.startKoatGame(d);
     p.append(go);
   };
 
   UI.prototype.startKoatGame = function (d) {
-    const fn = { match: this.koatMatch, stages: this.koatStages, sort: this.koatSort, inspect: this.koatInspect, carbon: this.koatCarbon, smartfarm: this.koatSmart }[d.game.type];
+    const fn = { match: this.koatMatch, stages: this.koatStages, sort: this.koatSort, inspect: this.koatInspect, carbon: this.koatCarbon, smartfarm: this.koatSmart, link: this.openKoatBooth }[d.game.type];
     fn.call(this, d);
   };
 
@@ -346,7 +359,7 @@ export function installKoatUI(UI) {
     const grid = h('div', 'koat-stamps');
     for (const d of DIVISIONS) {
       const got = book.stamps[d.id];
-      const cell = h('button', `stamp ${got ? 'got' : ''}`, `<span class="em">${got ? d.emoji : '⬜'}</span><b>${d.name}</b><small>${d.game.title}${book.best[d.id] !== undefined ? ` · ${book.best[d.id]}점` : ''}</small>`);
+      const cell = h('button', `stamp ${got ? 'got' : ''}`, `<span class="em">${got ? d.emoji : '⬜'}</span><b>${d.name}</b><small>${d.game.title}${book.best[d.id] !== undefined && d.game.type !== 'link' ? ` · ${book.best[d.id]}점` : ''}</small>`);
       cell.style.setProperty('--div', hex(d.color));
       cell.onclick = () => this.openKoatBooth(d);
       grid.append(cell);

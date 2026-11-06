@@ -80,3 +80,12 @@ test('run scoring: accuracy first, speed bonus only for correct answers', async 
   assert.ok(seq.some((x) => x.kind !== 'good') && seq.some((x) => x.kind === 'good'));
   assert.ok(VENTURE_STAGES.every((s) => s.why));
 });
+
+test('기술사업본부 체험은 특허체험 외부 페이지 링크', () => {
+  const d = DIVISIONS.find((x) => x.id === 'tech');
+  assert.equal(d.game.type, 'link');
+  assert.equal(d.game.title, '특허체험하기');
+  assert.equal(d.game.url, 'https://atipsum.lovable.app');
+  // 나머지 본부는 그대로 미니게임
+  assert.ok(DIVISIONS.filter((x) => x.id !== 'tech').every((x) => x.game.type !== 'link'));
+});

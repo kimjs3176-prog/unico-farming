@@ -12,7 +12,8 @@ export const DIVISIONS = [
     id: 'tech', name: '기술사업본부', emoji: '💡', color: 0xf2a33a,
     teams: ['사업지원팀(치유농업지원센터)', '기술거래이전팀', '기술창출평가팀', '글로벌사업팀'],
     summary: '농식품 특허 창출부터 기술이전·사업화 지원, 치유농업, 농기자재 해외 수출까지 기술 사업화 전 과정을 지원해요.',
-    game: { type: 'match', title: '기술이전 매칭', how: '연구소에서 나온 우수 기술을 꼭 필요한 기업에 이어 주세요. 기술이전이 성사되면 사업화로 이어져요!' },
+    // 체험: 외부 특허 체험 페이지로 연결 (처음 누르면 체험 완료로 스탬프). 이전 '기술이전 매칭'(makeMatchRound)은 규칙·테스트만 남김
+    game: { type: 'link', title: '특허체험하기', how: '농식품 특허가 어떻게 만들어지고 쓰이는지 직접 체험해 보세요. 새 창에서 특허 체험 페이지가 열려요.', url: 'https://atipsum.lovable.app' },
   },
   {
     id: 'venture', name: '벤처창업본부', emoji: '🚀', color: 0xe35d5d,
