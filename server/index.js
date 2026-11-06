@@ -43,6 +43,11 @@ function loadStatic(file, st) {
 const rooms = new Rooms({ maxPlayers: MAX_PLAYERS_PER_ROOM, maxRooms: MAX_ROOMS });
 
 const server = http.createServer((req, res) => {
+  // 어떤 요청이 와도 서버 전체가 죽지 않게 (잘못된 주소·인코딩 등)
+  try { serve(req, res); } catch { try { res.writeHead(400); res.end(); } catch { /* 이미 응답 중 */ } }
+});
+
+function serve(req, res) {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/rooms') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -50,8 +55,10 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/health') { res.writeHead(200); return res.end('ok'); }
   // 정적 파일 (빌드 결과물)
-  let file = path.join(DIST, decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
-  if (!file.startsWith(DIST)) { res.writeHead(403); return res.end(); }
+  let rel;
+  try { rel = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname); } catch { res.writeHead(400); return res.end(); } // 잘못된 %인코딩
+  let file = path.join(DIST, rel);
+  if (file !== DIST && !file.startsWith(DIST + path.sep)) { res.writeHead(403); return res.end(); } // dist 밖(이웃 폴더 포함) 금지
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, 'index.html');
   if (!fs.existsSync(file)) { res.writeHead(404); return res.end('빌드 결과가 없습니다. npm run build 를 먼저 실행하세요.'); }
   const st = fs.statSync(file);
@@ -71,17 +78,35 @@ const server = http.createServer((req, res) => {
   headers['Content-Length'] = body.length;
   res.writeHead(200, headers);
   res.end(req.method === 'HEAD' ? undefined : body);
-});
+}
 
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
 
+// 접속 제한: 한 IP 에서 동시 접속 MAX_PER_IP 개까지, 입장(join) 전 대기는 10초까지
+const MAX_PER_IP = +(process.env.MAX_PER_IP || 6);
+const perIp = new Map();
+// 다른 사이트가 방문자 브라우저로 방을 채우지 못하게: ALLOWED_ORIGINS="https://a.com,https://b.com" 이면 그 주소에서만 접속 (비우면 모두 허용)
+const ALLOWED = (process.env.ALLOWED_ORIGINS || '').split(',').map((x) => x.trim()).filter(Boolean);
+
 wss.on('connection', (ws, req) => {
-  const url = new URL(req.url, 'http://x');
+  const ip = req.socket.remoteAddress || '?';
+  if (ALLOWED.length && !ALLOWED.includes(req.headers.origin)) return ws.close(1008, 'origin');
+  if ((perIp.get(ip) || 0) >= MAX_PER_IP) return ws.close(1013, 'too many');
+  perIp.set(ip, (perIp.get(ip) || 0) + 1);
+  let url;
+  try { url = new URL(req.url, 'http://x'); } catch { return ws.close(); }
   const wantRoom = url.searchParams.get('room');
   let player = null;
+  const joinTimer = setTimeout(() => { if (!player) ws.terminate(); }, 10000);
+  let lastPos = 0;
   ws.on('message', (raw) => {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
+    if (!m || typeof m !== 'object') return; // null·숫자·문자열 JSON 무시 (예전에는 여기서 서버가 죽었음)
+    try { onMessage(m); } catch { /* 한 사람의 잘못된 메시지로 서버가 죽지 않게 */ }
+  });
+  function onMessage(m) {
+    if (m.t === 'pos') { const t = Date.now(); if (t - lastPos < 100) return; lastPos = t; } // 위치는 초당 10번까지
     if (!player) {
       if (m.t !== 'join') return;
       player = rooms.join(ws, m.name, wantRoom);
@@ -91,13 +116,17 @@ wss.on('connection', (ws, req) => {
       return;
     }
     rooms.handle(player, m);
+  }
+  ws.on('close', () => {
+    clearTimeout(joinTimer);
+    const n = (perIp.get(ip) || 1) - 1; if (n > 0) perIp.set(ip, n); else perIp.delete(ip);
+    if (player) rooms.leave(player);
   });
-  ws.on('close', () => { if (player) rooms.leave(player); });
   ws.on('error', () => {});
 });
 
 setInterval(() => rooms.tick(), TICK_MS);
-setInterval(() => { for (const ws of wss.clients) { if (ws.isAlive === false) return ws.terminate(); ws.isAlive = false; ws.ping(); } }, 30000);
+setInterval(() => { for (const ws of wss.clients) { if (ws.isAlive === false) { ws.terminate(); continue; } ws.isAlive = false; ws.ping(); } }, 30000); // 응답 없는 접속 정리 (하나 끊고 멈추던 것 수정)
 wss.on('connection', (ws) => { ws.isAlive = true; ws.on('pong', () => (ws.isAlive = true)); });
 
 server.listen(PORT, () => console.log(`🦄 유니코 팜 서버 http://localhost:${PORT}  (방당 ${MAX_PLAYERS_PER_ROOM}명, 최대 ${MAX_ROOMS}방)`));

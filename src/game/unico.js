@@ -499,7 +499,7 @@ export class Unico {
     this.actionT = 0;
     this._hitCyc = undefined;
     this.actionUntil = seconds > 0 ? this.t + seconds : Infinity;
-    const icon = EMOTE_ICON[name];
+    const icon = Object.hasOwn(EMOTE_ICON, name) ? EMOTE_ICON[name] : null; // 원격 플레이어가 보낸 이름은 정해진 것만 ('constructor' 등 차단)
     if (icon) {
       if (this.emote) { this.group.remove(this.emote); this.emote.userData.dispose(); }
       this.emote = makeLabel(icon, { bg: 'rgba(0,0,0,0)', size: 64, scale: 0.008 });

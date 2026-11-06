@@ -215,7 +215,7 @@ export class UI {
       const nextIdx = rooms.length + 1;
       if (rooms.every((x) => x.count >= x.max)) rooms.push({ name: `${nextIdx}번 농장`, count: 0, max: d.maxPlayers });
       for (const room of rooms) {
-        const b = h('button', room.name === g.net.room ? 'cur' : '', `${room.name}<small>${room.count} / ${room.max}명${room.name === g.net.room ? ' · 현재' : ''}</small>`);
+        const b = h('button', room.name === g.net.room ? 'cur' : '', `${esc(room.name)}<small>${+room.count || 0} / ${+room.max || 0}명${room.name === g.net.room ? ' · 현재' : ''}</small>`);
         b.disabled = room.count >= room.max;
         b.onclick = () => { g.net.switchRoom(room.name); this.closePanel(); };
         list.append(b);
@@ -441,12 +441,13 @@ export class UI {
     if (!p) { this.prompt.classList.add('hidden'); return; }
     this.prompt.classList.remove('hidden');
     this.prompt.classList.toggle('clickable', !!p.onInteract);
-    const html = (p.onInteract ? '<kbd>E</kbd> ' : '') + p.label + (p.onInteract ? ' <span class="tapme">👆</span>' : '');
+    const html = (p.onInteract ? '<kbd>E</kbd> ' : '') + esc(p.label) + (p.onInteract ? ' <span class="tapme">👆</span>' : ''); // 동물·반려견 이름 등 사용자가 정한 글자
     if (html !== this.promptHtml) { this.prompt.innerHTML = html; this.promptHtml = html; }
   }
 
   toast(text) {
-    const t = h('div', 'toast', text);
+    const t = h('div', 'toast');
+    t.textContent = text; // 다른 플레이어 이름·방 이름·지명이 섞여도 HTML 로 해석하지 않음
     this.toasts.append(t);
     setTimeout(() => t.remove(), 3200);
     while (this.toasts.children.length > 4) this.toasts.firstChild.remove();

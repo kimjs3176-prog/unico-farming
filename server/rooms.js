@@ -88,7 +88,7 @@ export class Rooms {
     switch (m.t) {
       case 'pos': {
         if (typeof m.x !== 'number' || typeof m.z !== 'number') return;
-        p.x = clamp(m.x, -60, 60); p.z = clamp(m.z, -60, 60); p.f = Number(m.f) || 0; p.a = String(m.a || '').slice(0, 12);
+        p.x = clamp(m.x, -60, 60); p.z = clamp(m.z, -60, 60); p.f = clamp(Number(m.f) || 0, -20, 20); p.a = String(m.a || '').replace(/[^a-z_]/gi, '').slice(0, 12); // 동작 이름은 영문·밑줄만
         p.dirty = true;
         return;
       }
