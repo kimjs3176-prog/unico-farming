@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>유니코 팜 도트</title>
+  <meta name="description" content="한국농업기술진흥원 마스코트 유니코와 함께하는 도트(2.5D) 농장 게임" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦄</text></svg>" />
+</head>
+<body class="pixel">
+  <canvas id="game"></canvas>
+  <div id="ui"></div>
+  <div id="title">
+    <div class="title-card">
+      <div class="heroes"><img id="hero1" alt=""><img id="hero2" alt=""><img id="hero3" alt=""></div>
+      <h1>유니코 팜</h1>
+      <p class="sub">도트 에디션 · 2.5D</p>
+      <button id="start" disabled>▶ 시작하기</button>
+      <p class="keys">이동 <kbd>WASD</kbd>/<kbd>←↑↓→</kbd> · 달리기 <kbd>Shift</kbd> · 상호작용 <kbd>E</kbd>/<kbd>Space</kbd><br>씨앗 <kbd>Q</kbd> · 가방 <kbd>I</kbd> · 퀘스트 <kbd>J</kbd> · 날씨 <kbd>R</kbd> · 효과 <kbd>F</kbd><br>마우스·터치: 누른 곳으로 걸어가기</p>
+      <a class="to3d" href="./">3D 버전으로 가기 →</a>
+    </div>
+  </div>
+  <script type="module" src="/src/pixel/main.js"></script>
+</body>
+</html>
