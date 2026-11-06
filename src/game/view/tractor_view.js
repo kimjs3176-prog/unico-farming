@@ -3,6 +3,9 @@ import { FieldSim, Vehicle, TRACTOR_TIME } from '../sim/tractor.js';
 import { mgIntro, mgCountdown, mgResult, mgTick, starsFor } from '../../ui/minigame_frame.js';
 import { LAYOUT } from '../world.js';
 
+/** 이름 끝 글자에 받침이 있으면 '이', 없으면 '가' (안내 유니코가 · 할머니 곰돌이가 …) */
+const josaIGa = (w) => { const c = String(w).charCodeAt(String(w).length - 1); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? '이' : '가'; };
+
 /** 트랙터: 탑승/운전 + 밭갈이 미니게임 */
 export class TractorView {
   constructor(game) {
@@ -150,7 +153,7 @@ export class TractorView {
       if (Math.hypot(p.x - v.x, p.z - v.z) < 2.2 && this.game.npcs.startle(e, v) && Math.abs(v.speed) > 0.4) {
         v.speed *= -0.25; v.pedal = 0; v.x = prevX; v.z = prevZ;
         this.game.juice?.shake(0.35);
-        this.game.ui.toast(`😲 ${e.n.name}이(가) 깜짝 놀랐어요! 천천히 운전해요`);
+        this.game.ui.toast(`😲 ${e.n.name}${josaIGa(e.n.name)} 깜짝 놀랐어요! 천천히 운전해요`);
       }
     }
     // 다른 플레이어(접속자)에게 부딪혀도 마찬가지로 튕기고, 그 유니코가 깜짝 놀람 (내 화면에서)
