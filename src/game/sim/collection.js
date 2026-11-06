@@ -2,7 +2,7 @@ import { ITEMS, itemsOf } from './items.js';
 
 /** 도감: 처음 잡은 날, 개수, 최대 크기. 카테고리 완성 보상 */
 export const BOOK_CATS = ['fish', 'bug', 'fruit'];
-export const COMPLETE_REWARD = { fish: 1500, bug: 600, fruit: 300 };
+export const COMPLETE_REWARD = { fish: 2500, bug: 1200, fruit: 300 }; // 종류가 늘어난 만큼 완성 보상도 ↑
 
 export class Collection {
   constructor() { this.entries = {}; this.rewarded = {}; }

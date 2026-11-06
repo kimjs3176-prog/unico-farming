@@ -10,10 +10,16 @@ import { RiceSim, RICE_STAGES, thresh } from '../game/sim/rice.js';
 import { FieldSim, Vehicle, TRACTOR_TIME } from '../game/sim/tractor.js';
 import { CROPS, PRODUCTS, FEED_PRICE, ANIMALS } from '../game/sim/crops.js';
 import { ITEMS } from '../game/sim/items.js';
-import { MW, MH, G, PLOTS, RANCH, SPAWN, NPCS, ANIMAL_START, PADDIES, FIELD, TRACTOR_HOME, paddyAt, buildMap } from './map.js';
+import { MW, MH, G, PLOTS, RANCH, SPAWN, NPCS, ANIMAL_START, PADDIES, FIELD, TRACTOR_HOME, HOME, OUT, paddyAt, buildMap } from './map.js';
+import { BOOK_CATS } from '../game/sim/collection.js';
+import { itemsOf, CATEGORY_NAMES } from '../game/sim/items.js';
 import { nightness } from './render.js';
 import { initRegions, regionSave, regionLoad, RegionMethods } from './regions.js';
 import { initCraft, craftSave, craftLoad, CraftMethods } from './craft.js';
+import { initPests, PestMethods } from './pests.js';
+import { Battle } from './battle.js';
+import { initBugs, BugMethods } from './bugs.js';
+import { ActionMethods } from './actions.js';
 
 const T = 32;
 export const DAY_LENGTH = 360; // 3D 버전과 같은 하루 6분
@@ -21,9 +27,9 @@ const SAVE_KEY = 'unico-pixel-save-v1';
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const dirOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down');
 const nameOf = (k) => (CROPS[k] || PRODUCTS[k] || ITEMS[k])?.name || k;
-const iconOf = (k) => (k === 'rice_seed' || k === 'paddy' || k.startsWith('rice_') ? 'rice' : CROPS[k] ? k : PRODUCTS[k] ? k : k === 'feed' ? 'feed' : k === 'pet_treat' ? 'treat' : k.startsWith('fish_') ? 'fish' : k === 'compost' ? 'compost' : k.startsWith('fruit_') ? 'tomato' : k.endsWith('_gold') ? 'star' : 'gift');
+const iconOf = (k) => (k.startsWith('bug_') ? 'bug' : k === 'rice_seed' || k === 'paddy' || k.startsWith('rice_') ? 'rice' : CROPS[k] ? k : PRODUCTS[k] ? k : k === 'feed' ? 'feed' : k === 'pet_treat' ? 'treat' : k.startsWith('fish_') ? 'fish' : k === 'compost' ? 'compost' : k.startsWith('fruit_') ? 'tomato' : k.endsWith('_gold') ? 'star' : 'gift');
 // 도트 버전에서 할 수 있는 퀘스트만 보여 줌
-const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built', 'swim', 'dive', 'honey', 'process', 'rprocess', 'fert']);
+const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built', 'swim', 'dive', 'honey', 'process', 'rprocess', 'fert', 'shoo', 'bug', 'book']);
 const THRESH_TIME = 6, THRESH_BAND = [0.55, 0.9]; // 3D 판과 같은 탈곡 규칙
 const M = 16; // 트랙터 시뮬레이션 1m = 16px (밭 한 칸 2m = 32px)
 
@@ -83,6 +89,7 @@ export class Game {
     this.npcs = NPCS.map((n) => ({ ...n, a: new Actor(n.x, n.y, n.dir), home: [n.x, n.y], next: 2 + Math.random() * 4, bubble: null }));
     this.animals = this.ranch.animals.map((a, i) => ({ sim: a, a: new Actor(ANIMAL_START[i].x, ANIMAL_START[i].y, 'right'), face: Math.random() < 0.5 ? 0 : 1, next: Math.random() * 4, eat: 0 }));
     this.fruitTrees = this.map.objs.filter((o) => o.type === 'tree' && o.item);
+    this.setupPortraits();
     this.held = []; this.run = false; this.stuckT = 0; this.puffT = 0;
     this.path = null; this.pathAct = null;
     this.fish = null; // 낚시 상태
@@ -92,6 +99,9 @@ export class Game {
     this.saveT = 10;
     initRegions(this);
     initCraft(this);
+    initPests(this);
+    initBugs(this);
+    this.battle = null;
     this.load();
     this.refreshDayWeather(false);
     this.econ.newDay(this.day);
@@ -141,6 +151,7 @@ export class Game {
   press(k) {
     this.audio._ctx();
     if (this.ui.key(k)) return;
+    if (this.battle) { this.battle.key(k); return; }
     if (this.smartRun) { if (/^[1-4]$/.test(k)) this.smartAct(['heater', 'vent', 'mist', 'co2'][+k - 1]); return; }
     if (this.fight) { if (k === 'ok') this.reeling = true; return; }
     if (this.pano) return;
@@ -152,6 +163,7 @@ export class Game {
   }
   release(k) { this.held = this.held.filter((h) => h !== k); if (k === 'ok') this.reeling = false; }
   tapTile(tx, ty) {
+    if (this.battle) return;
     if (this.threshing) return this.mash();
     if (this.fight) { this.reeling = true; return; }
     if (this.smartRun || this.pano) return;
@@ -196,17 +208,23 @@ export class Game {
       this.simTick(dt);
     }
     this.regionTick(dt, busy);
+    this.pestTick(dt, busy);
+    this.bugTick(dt, busy || !!this.battle);
+    if (this.battle) this.battle.update(dt);
     if (!busy) this.craftTick(dt);
-    const frozen = busy || !!this.smartRun || !!this.fight || !!this.pano;
+    this.actTick(dt);
+    const frozen = busy || !!this.battle || !!this.smartRun || !!this.fight || !!this.pano || this.actLocked();
     if (this.tr.driving) this.drive(dt, busy); else this.movePlayer(dt, frozen);
     if (this.threshing && !busy) this.threshTick(dt);
     this.moveDog(dt);
+    // 집 안 문간을 밟으면 밖으로
+    if (this.indoors && this.player.y >= HOME.y1 && !this.doorBusy) this.exitHome();
     this.updateNpcs(dt, busy);
     this.updateAnimals(dt);
     for (const t of this.fruitTrees) if (t.shakeT > 0) t.shakeT -= dt;
     if (this.fish) this.fishTick(dt);
     this.saveT -= dt; if (this.saveT <= 0) { this.saveT = 10; this.save(); }
-    this.ui.hint(this.smartRun || this.pano ? null : this.fight ? '꾹 눌러 감기 · 빨간 구간·몸부림이면 손 떼기' : this.threshing ? '연타! (Space 도 되고, 화면을 눌러도 돼요)' : this.tr.driving ? `내리기 · 방향키 = 가고 싶은 쪽 · Space 쟁기 ${this.tr.plowDown ? '내림' : '올림'}` : this.fish ? (this.fish.state === 'bite' ? '지금 당기기!' : '찌가 쑥 들어가면 당기기 (Esc: 그만)') : this.hintText());
+    this.ui.hint(this.battle || this.smartRun || this.pano ? null : this.fight ? '꾹 눌러 감기 · 빨간 구간·몸부림이면 손 떼기' : this.threshing ? '연타! (Space 도 되고, 화면을 눌러도 돼요)' : this.tr.driving ? `내리기 · 방향키 = 가고 싶은 쪽 · Space 쟁기 ${this.tr.plowDown ? '내림' : '올림'}` : this.fish ? (this.fish.state === 'bite' ? '지금 당기기!' : '찌가 쑥 들어가면 당기기 (Esc: 그만)') : this.hintText());
     this.ui.hud(this.hudState());
     this.music?.setScene({ daylight: 1 - this.night, kind: this.raining ? 'rain' : 'clear', precip: this.raining ? 0.7 : 0, wind: 0.2 });
   }
@@ -215,7 +233,8 @@ export class Game {
     this.farm.tick(dt);
     this.rice.tick(dt, { raining: this.raining });
     if (this.raining) { this.rainT = (this.rainT || 0) - dt; if (this.rainT <= 0) { this.rainT = 8; this.farm.rain(); } }
-    const ready = this.ranch.tick(dt, this.day);
+    // 여우·늑대가 울타리에 붙어 있으면 동물들이 겁먹어 생산이 멈춤
+    const ready = this.ranch.tick(this.ranchThreat() ? 0 : dt, this.day);
     for (const a of ready) { const v = this.animals.find((x) => x.sim === a); if (v) v.eat = 0; }
     if (this.pet.tick(dt) === 'dig') { this.pet.dig(); this.dogBubble = '!'; this.audio.play('bark'); this.ui.toast(`${this.pet.name}가 땅을 파서 뭔가 찾았어요!`); }
   }
@@ -416,7 +435,9 @@ export class Game {
       if (rt !== undefined) return rt;
       const ct = this.craftTarget(o);
       if (ct !== undefined) return ct;
-      if (o.type === 'house') return { label: x === 25 && y === 13 ? '집에 들어가 쉬기' : '우리 집', run: () => this.house() };
+      if (o.type === 'house') return { label: '집에 들어가기', run: () => this.enterHome() };
+      const ht = this.homeTarget(o);
+      if (ht !== undefined) return ht;
       if (o.type === 'mailbox') return { label: '우편함 보기', run: () => this.mailbox() };
       if (o.type === 'sign') return { label: '팻말 읽기', run: () => this.ui.say('', o.text === '유니코 밭' ? '유니코 밭 — 갈고, 심고, 물 주고, 거두기! (Q 로 씨앗 바꾸기)' : '유니코 목장 — 사료를 주면 생산물이 나와요. 여물통에 사료를 채워 두면 알아서 먹어요.') };
       if (o.type === 'trough') return { label: `여물통 (${this.ranch.trough}/20) 사료 채우기`, run: () => this.fillTrough() };
@@ -432,7 +453,7 @@ export class Game {
     return null;
   }
   /** 앞 칸에 할 게 없으면 서 있는 논 (논 안에 들어가 일하기) */
-  target() { if (this.swimming) return this.diving ? null : this.swimTarget(); const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) return t; const pd = paddyAt(this.player.x, this.player.y); return pd >= 0 ? this.paddyInfo(pd) : null; }
+  target() { if (this.swimming) return this.diving ? null : this.swimTarget(); const pe = this.pestNear(); if (pe) return { label: `${pe.name}와 배틀! (쫓아내기)`, run: () => this.startBattle(pe) }; const bu = this.bugNear(); if (bu) return { label: `곤충채로 잡기 · ${this.book.entries[bu.kind] ? ITEMS[bu.kind].name : '처음 보는 곤충!'}`, run: () => this.catchBug(bu) }; const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) return t; const pd = paddyAt(this.player.x, this.player.y); return pd >= 0 ? this.paddyInfo(pd) : null; }
   hintText() { if (this.player.speed > 70) return null; return this.target()?.label || null; }
   interact() { const t = this.target(); if (t) t.run(); }
 
@@ -445,20 +466,21 @@ export class Game {
   plotAct(i, a) {
     const cx = (PLOTS.x + (i % PLOTS.cols)) * T + 16, cy = (PLOTS.y + Math.floor(i / PLOTS.cols)) * T + 16;
     switch (a.type) {
-      case 'till': this.farm.till(i); this.audio.play('dig'); this.puff(cx, cy + 10, 6); this.report('till'); break;
+      case 'till': this.startAct('hoe'); this.farm.till(i); this.audio.play('dig'); this.puff(cx, cy + 10, 6); this.report('till'); break;
       case 'plant': {
         if (!this.econ.useSeed(this.seed)) return;
-        this.farm.plant(i, this.seed);
+        this.farm.plant(i, this.seed); this.startAct('plant');
         if (this.econ.useItem('compost')) { this.farm.fertilize(i); this.report('fert'); }
         this.audio.play('plant'); this.report('plant'); break;
       }
       case 'need_seed': this.ui.toast(`${CROPS[this.seed].name} 씨앗이 없어요. Q 로 바꾸거나 장터에서 사요`, 'seed'); this.audio.play('bump', 0.3); break;
-      case 'water': this.farm.water(i); this.audio.play('water'); for (let k = 0; k < 10; k++) this.parts.push({ kind: 'drop', x: cx + (Math.random() - 0.5) * 22, y: cy - 10, vx: 0, vy: 40 + Math.random() * 30, life: 0.5, decay: 1.6 }); this.report('water'); break;
-      case 'weed': this.farm.weed(i); this.econ.addItem('weed'); this.audio.play('dig'); this.report('weed'); break;
-      case 'fert': this.econ.useItem('compost'); this.farm.fertilize(i); this.audio.play('plant'); this.report('fert'); break;
+      case 'water': this.startAct('water'); this.farm.water(i); this.audio.play('water'); for (let k = 0; k < 10; k++) this.parts.push({ kind: 'drop', x: cx + (Math.random() - 0.5) * 22, y: cy - 10, vx: 0, vy: 40 + Math.random() * 30, life: 0.5, decay: 1.6 }); this.report('water'); break;
+      case 'weed': this.startAct('hoe'); this.farm.weed(i); this.econ.addItem('weed'); this.audio.play('dig'); this.report('weed'); break;
+      case 'fert': this.startAct('plant'); this.econ.useItem('compost'); this.farm.fertilize(i); this.audio.play('plant'); this.report('fert'); break;
       case 'harvest': {
         const out = this.farm.harvest(i);
         if (!out) return;
+        this.startAct('harvest');
         this.econ.addCrop(out.crop, out.amount);
         this.popIcon(out.crop, cx, cy - 8, Math.min(4, out.amount));
         this.audio.play('harvest'); this.report('harvest', out.amount);
@@ -474,6 +496,7 @@ export class Game {
     const a = v.sim, act = this.ranch.actionFor(a, this.day);
     const wx = v.a.wx, wy = v.a.wy - 20;
     if (this.night > 0.7 && act.type !== 'collect') { this.ui.toast(`${a.name}는 자고 있어요. 쉿!`, 'moon'); return; }
+    if (act.type !== 'wait') this.startAct('pet');
     if (act.type === 'feed') {
       if (!this.econ.useFeed()) { this.ui.toast('사료가 없어요. 장터에서 사 오세요', 'feed'); return; }
       this.ranch.feed(a, this.day); v.eat = 2.5; this.audio.play('plant'); this.report('feed');
@@ -505,9 +528,12 @@ export class Game {
 
   shake(o) {
     if (o.shaken) { this.ui.toast('내일 다시 열려요', 'tomato'); return; }
-    o.shaken = true; o.lastShake = this.day; o.shakeT = 0.45;
+    o.shaken = true; o.lastShake = this.day; o.shakeT = 0.45; this.startAct('push');
     const n = 3;
     this.econ.addItem(o.item, n); this.book.add(o.item, { day: this.day });
+    // 가끔 나무에서 곤충이 툭 (3D 판과 같음)
+    if (Math.random() < 0.15) { const bug = Math.random() < 0.5 ? 'bug_beetle' : 'bug_ladybug'; this.econ.addItem(bug); const r = this.book.add(bug, { day: this.day }); this.report('bug'); setTimeout(() => this.ui.toast(`앗, ${ITEMS[bug].name}도 떨어졌어요!${r.isNew ? ' (도감 등록!)' : ''}`, 'bug'), 500); }
+    this.checkBook();
     this.audio.play('stroke'); setTimeout(() => this.audio.play('pop'), 200);
     for (let k = 0; k < n; k++) this.parts.push({ kind: 'icon', img: this.S.icon(o.fruit === 'tomato' ? 'tomato' : o.fruit === 'apron' ? 'carrot' : 'strawberry'), x: o.x * T + 6 + k * 10, y: o.y * T - 50, vx: (k - 1) * 10, vy: -20, grav: 220, life: 0.9, decay: 1 });
     this.report('shake');
@@ -524,8 +550,10 @@ export class Game {
     for (let s = 0; s < Math.min(skip, 200); s += 1) this.simTick(1);
     this.time = 0.26;
     this.newDay();
-    this.player.place(25, 14); this.player.dir = 'down';
-    this.dog.place(26, 14); this.trail = [];
+    // 집 안 침대에서 잤으면 침대 옆에서, 아니면 집 앞에서 일어남
+    if (this.indoors) { this.player.place(HOME.x0 + 3, HOME.y0 + 3); this.dog.place(HOME.x0 + 4, HOME.y0 + 4); }
+    else { this.player.place(25, 14); this.dog.place(26, 14); }
+    this.player.dir = 'down'; this.trail = []; this.cam = null;
     this.ui.fade(false);
   }
   mailbox() {
@@ -838,8 +866,8 @@ export class Game {
     const lake = this.isLakeTile(bx, by);
     this.fishing.cast(this.castOpts(lake));
     p.vx = p.vy = 0; this.path = null;
-    this.fish = { lake, state: 'waiting', bx: bx * T + 16, by: by * T + 18, dip: 0, t: 0 };
-    this.audio.play('splash', 0.6);
+    this.fish = { lake, state: 'waiting', bx: bx * T + 16, by: by * T + 18, dip: 0, t: 0, castT: 0 };
+    this.audio.play('shoo', 0.4); // 휙 (첨벙은 찌가 물에 닿을 때)
   }
   fishTick(dt) {
     const f = this.fish; f.t += dt;
@@ -854,8 +882,9 @@ export class Game {
     const f = this.fish; this.fish = null;
     if (r.ok) {
       if (this.landFish(r, f.lake)) { this.fishFight = f; return; }
+      this.startAct('pull', { ok: true });
       this.catchFish(r.fish, r.size, f.lake);
-    } else this.ui.toast(r.early ? '너무 빨리 당겼어요. 찌가 쑥 들어갈 때!' : '놓쳤어요…', 'fish');
+    } else { this.startAct('pull', { ok: false }); this.ui.toast(r.early ? '너무 빨리 당겼어요. 찌가 쑥 들어갈 때!' : '놓쳤어요…', 'fish'); }
     void f;
   }
   cancelFish() { this.fish = null; this.fishing.reset(); }
@@ -946,12 +975,16 @@ export class Game {
       }
       return out.concat(this.drawOthers());
     }
-    const pImg = S.char('player', { scarf: 'scarf' }, p.dir, this.fish ? 0 : p.frame);
-    out.push({ img: pImg, x: p.wx - 20, y: p.wy - 50 + (this.fish ? 0 : 0), sy: p.wy, shadow: 'm', sx: p.wx, shy: p.wy - 1, player: true, bubble: this.fish?.state === 'bite' ? '!' : null });
+    const busyHands = this.fish || this.fight || this.act;
+    const pImg = S.char('player', { scarf: 'scarf' }, p.dir, busyHands ? 0 : p.frame);
+    const body = this.actBody();
+    this.pushActDrawables(out);
+    out.push({ img: pImg, x: p.wx - 20 + body.dx, y: p.wy - 50 + body.dy, sy: p.wy, shadow: 'm', sx: p.wx, shy: p.wy - 1, player: true, bubble: this.fish?.state === 'bite' ? '!' : null });
     return out.concat(this.drawOthers());
   }
   drawOthers() {
     const S = this.S, out = [];
+    this.drawPests(out);
     // 스마트팜 드론 (비닐하우스 위를 천천히 돎)
     { const t = performance.now() / 1000, cx = (59 + 4) * T, cy = (17 - 2) * T; const dx = cx + Math.cos(t * 0.4) * 150, dy = cy + Math.sin(t * 0.4) * 60; out.push({ img: S.drone[Math.floor(t * 20) % 2], x: dx - 15, y: dy - 60 + Math.sin(t * 2) * 3, sy: dy + 200, shadow: 's', sx: dx, shy: dy + 10 }); }
     // 반려견
@@ -982,17 +1015,25 @@ export class Game {
   /** 낚싯줄·찌 */
   drawOverlay(g, camX, camY, t) {
     this.drawWater(g, camX, camY, t);
+    this.drawBugs(g, camX, camY, t);
     const f = this.fish || (this.fight && this.fishFight), p = this.player;
     if (!f) return;
     // 힘겨루기 중에는 찌가 물속으로 끌려 들어갔다 나왔다 함
     const dip = this.fight ? (this.fight.sim.surging ? 4 : 2) + Math.round(Math.sin(t * 20)) : f.dip > 0 ? (f.state === 'bite' ? 3 : 1) : Math.round(Math.sin(t * 3) * 0.6);
-    const bx = Math.round(f.bx - camX), by = Math.round(f.by - camY) + dip;
-    const hx = Math.round(p.wx - camX + (p.dir === 'left' ? -14 : p.dir === 'right' ? 14 : 8)), hy = Math.round(p.wy - camY - 30);
-    // 낚싯대 끝 → 찌 (처진 줄)
-    g.fillStyle = 'rgba(240,240,255,0.7)';
-    for (let k = 0; k <= 24; k++) { const u = k / 24; const x = hx + (bx - hx) * u, y = hy + (by - hy) * u + Math.sin(u * Math.PI) * 10; g.fillRect(Math.round(x), Math.round(y), 1, 1); }
-    g.fillStyle = '#5a3a20'; g.fillRect(hx - 1, hy - 1, 2, 2);
+    const fly = this.bobberPos(f);
+    const bx = Math.round((fly ? fly.x : f.bx) - camX), by = Math.round((fly ? fly.y : f.by) - camY) + (fly ? 0 : dip);
+    const tip = this._rodTip;
+    const hx = tip ? Math.round(tip[0] - camX) : Math.round(p.wx - camX + (p.dir === 'left' ? -14 : p.dir === 'right' ? 14 : 8)), hy = tip ? Math.round(tip[1] - camY) : Math.round(p.wy - camY - 30);
+    // 낚싯대 끝 → 찌: 기다릴 땐 축 처지고, 물면 팽팽
+    const pose = this.rodPose();
+    const sag = fly ? 4 : pose ? pose.sag : 10;
+    const n = Math.max(8, Math.ceil(Math.hypot(bx - hx, by - hy) / 2));
+    g.fillStyle = this.fight || f.state === 'bite' ? 'rgba(255,255,255,0.9)' : 'rgba(240,240,255,0.7)';
+    for (let k = 0; k <= n; k++) { const u = k / n; const x = hx + (bx - hx) * u, y = hy + (by - hy) * u + Math.sin(u * Math.PI) * sag; g.fillRect(Math.round(x), Math.round(y), 1, 1); }
     g.drawImage(this.S.bobber, bx - 4, by - 8);
+    if (fly) return;
+    // 물면 찌 둘레로 물결이 퍼짐
+    if (f.state === 'bite' || this.fight) { const r = 3 + ((t * 10) % 6); g.fillStyle = 'rgba(220,245,255,0.6)'; for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2; g.fillRect(Math.round(bx + Math.cos(a) * r * 1.6), Math.round(by + 1 + Math.sin(a) * r * 0.6), 1, 1); } }
     if (f.dip > 0 || Math.floor(t * 2) % 2) { g.fillStyle = 'rgba(220,245,255,0.8)'; g.fillRect(bx - 5, by + 1, 3, 1); g.fillRect(bx + 3, by + 1, 3, 1); }
   }
   drawGlow(g, gg, camX, camY, t, night) {
@@ -1030,3 +1071,106 @@ const TIPS = [
 
 Object.assign(Game.prototype, RegionMethods);
 Object.assign(Game.prototype, CraftMethods);
+Object.assign(Game.prototype, PestMethods);
+Game.prototype.startBattle = function (p) {
+  if (this.battle) return;
+  p.inBattle = true;
+  this.player.vx = this.player.vy = 0; this.path = null; this.held = [];
+  this.battle = new Battle(this, p);
+};
+
+/* ─────────── 유니코 집 안 ─────────── */
+Object.defineProperty(Game.prototype, 'indoors', { get() { return this.player.y >= OUT; } });
+Game.prototype.teleport = async function (tx, ty, dir) {
+  this.doorBusy = true;
+  this.audio.play('click');
+  this.ui.fade(true);
+  await new Promise((r) => setTimeout(r, 420));
+  this.player.place(tx, ty); this.player.dir = dir; this.player.vx = this.player.vy = 0;
+  this.dog.place(tx + 1, ty); this.trail = []; this.cam = null; this.path = null; this.held = [];
+  this.ui.fade(false);
+  setTimeout(() => (this.doorBusy = false), 300);
+};
+Game.prototype.enterHome = function () { this.teleport(HOME.spawn.x, HOME.spawn.y - 1, 'up'); };
+Game.prototype.exitHome = function () { this.teleport(HOME.outDoor.x, HOME.outDoor.y, 'down'); };
+Game.prototype.homeTarget = function (o) {
+  switch (o.type) {
+    case 'bed': return { label: '침대에서 자기 (다음 날 아침)', run: () => this.house() };
+    case 'shelf': return { label: `책장 · 도감 (${Object.keys(this.book.entries).length}종)`, run: () => this.bookMenu() };
+    case 'calendar': return { label: '달력 보기', run: () => this.calendar() };
+    case 'kitchen': return { label: '부엌 · 콩이 간식 만들기', run: () => this.kitchenMenu() };
+    case 'window': return { label: '창밖 보기', run: () => this.ui.say('', this.night > 0.5 ? '창밖에 별이 반짝이고 반딧불이가 날아다녀요.' : this.raining ? '빗방울이 창을 톡톡 두드려요. 밭에 물이 저절로 차겠어요.' : '햇살 아래 마을 나무가 바람에 살랑여요.') };
+    case 'table': return { label: '식탁', run: () => this.ui.say('', `식탁 위에 갓 구운 옥수수와 토마토가 있어요. 오늘은 ${this.day}일째 농장 일기!`) };
+    case 'plant': return { label: '화분', run: () => this.ui.say('', '작은 화분이 무럭무럭 자라고 있어요.') };
+    case 'floorlamp': return { label: '스탠드', run: () => this.ui.say('', '따뜻한 불빛이 방을 밝혀요.') };
+  }
+  return undefined;
+};
+Game.prototype.calendar = function () {
+  const toFest = 7 - (this.day % 7 || 7);
+  const e = this.econ;
+  this.ui.say('달력', `오늘은 ${this.day}일째. ${e.festival ? '오늘은 유니코 수확 축제! 모든 농산물이 1.3배예요.' : toFest === 0 ? '' : `다음 수확 축제까지 ${toFest}일 남았어요.`} 날씨: ${this.raining ? '비' : '맑음'}. ${e.event ? `장터 소식: ${e.event.name}` : '장터 시세는 평범해요.'} 레벨 ${this.level} · 밭 Lv.${this.farm.level} · 목장 Lv.${this.ranch.level} · 논 Lv.${this.rice.skillLevel}`);
+};
+Game.prototype.bookMenu = function () {
+  this.ui.openMenu({
+    title: '도감', tabs: BOOK_CATS.map((c) => ({ id: c, label: CATEGORY_NAMES[c] })), tab: BOOK_CATS[0],
+    build: (tab) => {
+      const all = itemsOf(tab), got = all.filter((k) => this.book.entries[k]).length;
+      return {
+        sub: `${CATEGORY_NAMES[tab]} ${got}/${all.length}종 · 다 모으면 보상!`,
+        items: all.map((k) => { const en = this.book.entries[k]; return { icon: en ? iconOf(k) : 'quest', label: en ? nameOf(k) : '???', right: en ? `${en.count}번${en.best ? ` · 최대 ${en.best}cm` : ''}` : '아직 못 봤어요', disabled: !en, onPick: () => {} }; }),
+      };
+    },
+  });
+};
+Game.prototype.kitchenMenu = function () {
+  const e = this.econ;
+  this.ui.openMenu({
+    title: '부엌',
+    build: () => {
+      const items = Object.keys(CROPS).filter((k) => (e.inventory.crops[k] || 0) > 0).map((k) => ({ icon: k, label: `${CROPS[k].name} 1개로 강아지 간식 2개 만들기`, right: `가진 것 ${e.inventory.crops[k]}`, onPick: () => { if (!e.take(k, 1)) return; e.addItem('pet_treat', 2); this.audio.play('plant'); this.ui.toast('강아지 간식 2개를 만들었어요! 콩이가 꼬리를 흔들어요', 'treat'); } }));
+      return { sub: `작물로 콩이 간식을 만들어요 · 지금 간식 ${e.inventory.items.pet_treat || 0}개`, empty: '작물이 없어요. 밭에서 거둬 오세요', items };
+    },
+  });
+};
+Object.assign(Game.prototype, BugMethods);
+Object.assign(Game.prototype, ActionMethods);
+/** 도감: 종 수 퀘스트 + 카테고리 완성 보상 (3D 판과 같은 Collection) */
+Game.prototype.checkBook = function () {
+  this.report('book', Object.keys(this.book.entries).length);
+  for (const r of this.book.claimCompletions()) { this.econ.earn(r.money); this.audio.play('levelup'); this.ui.toast(`${CATEGORY_NAMES[r.cat]} 도감 완성! 보상 ${r.money}코인`, 'star'); }
+};
+
+/** 대화창 얼굴: 말하는 이름으로 캐릭터를 찾아 머리 부분만 크게 잘라 씀 */
+Game.prototype.setupPortraits = function () {
+  const looks = new Map();
+  for (const n of NPCS) {
+    if (VILLAGERS[n.id]) looks.set(VILLAGERS[n.id].name, n.look);
+    if (n.koat === 'desk') { looks.set('안내데스크', n.look); looks.set('안내데스크 (기획운영본부)', n.look); }
+  }
+  this.portraitLooks = looks;
+  const cache = new Map();
+  this.ui.portraitFor = (name) => {
+    const key = String(name).replace(/\s*[♥]+$/, '').trim();
+    let look = looks.get(key);
+    if (!look) {
+      const booth = this.npcs.find((n) => typeof n.koat === 'number' && this.boothName?.(n.koat) === key);
+      if (booth) look = booth.look;
+    }
+    if (!look && key === this.pet?.name) look = 'dog';
+    if (!look && key === '유니코') look = {};
+    if (!look) return null;
+    if (cache.has(key)) return cache.get(key);
+    const src = look === 'dog' ? this.S.shiba.down[0] : this.S.char('npc:' + key, look, 'down', 0);
+    const box = look === 'dog' ? [0, 0, src.width, src.height] : [4, 2, 32, 32];
+    const k = 3, c = document.createElement('canvas');
+    c.width = c.height = 32 * k;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    const sc = Math.min(32 / box[2], 32 / box[3]);
+    const w = box[2] * sc * k, h = box[3] * sc * k;
+    g.drawImage(src, box[0], box[1], box[2], box[3], (c.width - w) / 2, c.height - h, w, h);
+    const url = c.toDataURL();
+    cache.set(key, url);
+    return url;
+  };
+};

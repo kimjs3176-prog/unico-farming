@@ -30,6 +30,7 @@ export class FishingSim {
     return itemsOf('fish').filter((k) => {
       const it = ITEMS[k];
       if (it.where === 'lake' && !c.lake) return false; // 호수 전용
+      if (it.where === 'pond' && c.lake) return false; // 연못·논 전용 (작은 물고기·가재·자라)
       if (c.lake && (k === 'fish_snail' || k === 'fish_loach' || k === 'fish_minnow')) return false; // 얕은 물 생물은 연못·논에서
       if (it.night && !c.night) return false;
       if (k === 'fish_snail') return c.paddy || this.rng() < 0.5;
@@ -85,8 +86,16 @@ export class FishingSim {
 
 /** 곤충 등장 추첨 (시간대·날씨) */
 export function rollBug(rng = Math.random, { night = false, raining = false } = {}) {
-  if (night) return rng() < 0.5 ? 'bug_firefly' : rng() < 0.6 ? 'bug_beetle' : 'bug_dragonfly';
-  const pool = itemsOf('bug').filter((k) => k !== 'bug_firefly');
+  if (night) {
+    if (rng() < 0.4) return 'bug_firefly';
+    // 밤: 장수풍뎅이·고추잠자리 + 밤에만 나오는 곤충(나방·귀뚜라미·사슴벌레)
+    const np = ['bug_beetle', 'bug_dragonfly', ...itemsOf('bug').filter((k) => ITEMS[k].night)];
+    const nw = np.map((k) => ({ 1: 10, 2: 5, 3: 2 }[ITEMS[k].rarity] || 1));
+    let y = rng() * nw.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < np.length; i++) { y -= nw[i]; if (y <= 0) return np[i]; }
+    return np[0];
+  }
+  const pool = itemsOf('bug').filter((k) => k !== 'bug_firefly' && !ITEMS[k].night);
   const w = pool.map((k) => ({ 1: 10, 2: 4, 3: raining ? 0.5 : 1.2 }[ITEMS[k].rarity]));
   let x = rng() * w.reduce((a, b) => a + b, 0);
   for (let i = 0; i < pool.length; i++) { x -= w[i]; if (x <= 0) return pool[i]; }

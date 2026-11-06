@@ -19,6 +19,7 @@ export function buildSprites() {
   const dirs = ['down', 'up', 'left', 'right'];
   S.shiba = Object.fromEntries(dirs.map((d) => [d, [0, 1].map((f) => cv(C.shiba(d, f)))]));
   const both = (make) => { const s = make(); return [cv(s), cv(s.flipped())]; };
+  S.pest = { crow: [0, 1, 2, 3].map((f) => both(() => C.crow(f))), fox: [0, 1].map((f) => both(() => C.fox(f))), wolf: [0, 1].map((f) => both(() => C.wolf(f))) };
   S.animal = {};
   for (const [type, fn] of [['cow', C.cow], ['sheep', C.sheep], ['chicken', C.chicken]]) {
     S.animal[type] = {};
@@ -92,6 +93,7 @@ export function buildSprites() {
   S.lookout = cv(W.lookout());
   S.chest = [cv(W.chest(false)), cv(W.chest(true))];
   S.hive = cv(W.beehive());
+  S.home = { bed: cv(W.bed()), shelf: cv(W.shelf()), calendar: cv(W.calendar()), window: [cv(W.homeWindow(false)), cv(W.homeWindow(true))], kitchen: cv(W.kitchen()), kitchenGlow: glow(W.kitchen()), table: cv(W.table()), chair: [cv(W.chair(false)), cv(W.chair(true))], rug: cv(W.rug()), plant: cv(W.plantPot()), lamp: { day: cv(W.floorLamp(false)), night: glow(W.floorLamp(true)) } };
   S.jarBase = cv(W.jarBase());
   S.onggi = [cv(W.onggi(false)), cv(W.onggi(true))];
   S.composter = [0, 0.25, 0.5, 0.75, 1].map((f) => cv(W.composter(f)));

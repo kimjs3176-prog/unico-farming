@@ -78,7 +78,8 @@ test('fishing rarity and bugs by time', () => {
   for (let i = 0; i < 3000; i++) { const k = f.cast(); counts[k] = (counts[k] || 0) + 1; }
   assert.ok((counts.fish_crucian || 0) > (counts.fish_goldfish || 0) * 5);
   assert.ok(counts.fish_goldfish > 0, 'legendary fish is possible');
-  assert.ok(['bug_firefly', 'bug_beetle', 'bug_dragonfly'].includes(rollBug(seeded(2), { night: true })));
+  for (let s = 1; s < 30; s++) { const b = rollBug(seeded(s), { night: true }); assert.ok(['bug_firefly', 'bug_beetle', 'bug_dragonfly'].includes(b) || ITEMS[b].night, b); }
+  for (let s = 1; s < 30; s++) assert.ok(!ITEMS[rollBug(seeded(s), { night: false })].night, '밤 곤충은 낮에 안 나옴');
   assert.notEqual(rollBug(seeded(2), { night: false }), 'bug_firefly');
 });
 
