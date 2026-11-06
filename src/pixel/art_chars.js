@@ -306,3 +306,50 @@ function half(s) {
   }
   return o;
 }
+
+/* ───────────── 해로운 동물 (오른쪽 보기) ───────────── */
+
+/** 까마귀 24×20. f: 0·1 쪼기/서기, 2·3 날갯짓 */
+export function crow(f = 0) {
+  const s = new Spr(26, 22);
+  const fly = f >= 2, up = f === 2;
+  if (!fly) { s.line(10, 16, 9, 20, 'gold', 1); s.line(13, 16, 14, 20, 'gold', 1); s.hline(7, 10, 20, 'gold', 2); s.hline(13, 16, 20, 'gold', 2); }
+  s.ell(11, 12, 7, 5, 'patch', { lo: 0, hi: 2 });
+  s.poly([4, 11, 0, 9, 1, 14, 5, 14], 'patch', { level: 1 }); // 꽁지
+  // 날개
+  if (fly) s.poly(up ? [7, 10, 12, 0, 16, 9] : [7, 12, 13, 20, 16, 12], 'patch', { level: 2 });
+  else s.ell(10, 12, 5, 3, 'patch', { lo: 1, hi: 2, clip: (x, y) => s.get(x, y) !== 0 });
+  const peck = f === 1;
+  const hx = peck ? 18 : 17, hy = peck ? 13 : 7;
+  s.ell(hx, hy, 4, 3.6, 'patch', { lo: 1 });
+  s.poly([hx + 3, hy - 1, hx + 8, hy + 1, hx + 3, hy + 2], 'stone', { level: 2 }); // 부리
+  s.set(hx + 1, hy - 1, 'eye', 2); s.set(hx + 1, hy - 2, 'white', 4);
+  s.outline({ ink: ['ink', 0] });
+  return s;
+}
+
+function canid(f, { R, belly, big }) {
+  const W = big ? 52 : 44, H = big ? 36 : 30, k = big ? 1.18 : 1;
+  const s = new Spr(W, H);
+  const st = f ? 1 : -1;
+  for (const [x, near, ph] of [[12, 0, 1], [30, 0, -1], [15, 1, -1], [33, 1, 1]]) {
+    const X = Math.round(x * k) + st * ph * 2;
+    s.rect(X - 1, Math.round(18 * k), 3, Math.round(10 * k), R, near ? 2 : 1); s.rect(X - 1, Math.round(27 * k), 3, 2, R, 0);
+  }
+  s.ell(22 * k, 16 * k, 13 * k, 6.5 * k, R, { dither: 0.08, hi: big ? 3 : undefined });
+  s.ell(22 * k, 19 * k, 8 * k, 3 * k, belly, { lo: 1, clip: (x, y) => s.get(x, y) !== 0 && y > 17 * k });
+  // 꼬리 (풍성하게, 끝은 밝게)
+  s.ell(6 * k, 13 * k, 6 * k, 3.4 * k, R, { lo: 1 }); s.ell(2.5 * k, 12 * k, 2.4 * k, 2 * k, belly, { lo: 1 });
+  // 머리
+  const hx = 37 * k, hy = 10 * k;
+  s.ell(hx, hy, 6 * k, 5.2 * k, R, { hi: big ? 3 : undefined });
+  s.poly([hx + 3, hy - 1, hx + 11 * k, hy + 2, hx + 3, hy + 4], R, { level: 2 }); // 주둥이
+  s.ell(hx + 5, hy + 2.4, 3.6 * k, 1.6, belly, { lo: 1 });
+  s.set(Math.round(hx + 11 * k), Math.round(hy + 2), 'eye', 0);
+  s.poly([hx - 4, hy - 3, hx - 2, hy - 11 * k, hx + 1, hy - 4], R, { level: 2 }); s.poly([hx, hy - 4, hx + 2, hy - 11 * k, hx + 4, hy - 4], R, { level: 3 });
+  s.grid(Math.round(hx + 1), Math.round(hy - 2), `kk\nyk`, { k: ['eye', 0], y: ['gold', 4] }); // 노란 눈
+  s.outline();
+  return s;
+}
+export const fox = (f = 0) => canid(f, { R: 'carrot', belly: 'cream' });
+export const wolf = (f = 0) => canid(f, { R: 'stone', belly: 'silver', big: true });

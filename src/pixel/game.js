@@ -14,6 +14,8 @@ import { MW, MH, G, PLOTS, RANCH, SPAWN, NPCS, ANIMAL_START, PADDIES, FIELD, TRA
 import { nightness } from './render.js';
 import { initRegions, regionSave, regionLoad, RegionMethods } from './regions.js';
 import { initCraft, craftSave, craftLoad, CraftMethods } from './craft.js';
+import { initPests, PestMethods } from './pests.js';
+import { Battle } from './battle.js';
 
 const T = 32;
 export const DAY_LENGTH = 360; // 3D 버전과 같은 하루 6분
@@ -23,7 +25,7 @@ const dirOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 
 const nameOf = (k) => (CROPS[k] || PRODUCTS[k] || ITEMS[k])?.name || k;
 const iconOf = (k) => (k === 'rice_seed' || k === 'paddy' || k.startsWith('rice_') ? 'rice' : CROPS[k] ? k : PRODUCTS[k] ? k : k === 'feed' ? 'feed' : k === 'pet_treat' ? 'treat' : k.startsWith('fish_') ? 'fish' : k === 'compost' ? 'compost' : k.startsWith('fruit_') ? 'tomato' : k.endsWith('_gold') ? 'star' : 'gift');
 // 도트 버전에서 할 수 있는 퀘스트만 보여 줌
-const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built', 'swim', 'dive', 'honey', 'process', 'rprocess', 'fert']);
+const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built', 'swim', 'dive', 'honey', 'process', 'rprocess', 'fert', 'shoo']);
 const THRESH_TIME = 6, THRESH_BAND = [0.55, 0.9]; // 3D 판과 같은 탈곡 규칙
 const M = 16; // 트랙터 시뮬레이션 1m = 16px (밭 한 칸 2m = 32px)
 
@@ -92,6 +94,8 @@ export class Game {
     this.saveT = 10;
     initRegions(this);
     initCraft(this);
+    initPests(this);
+    this.battle = null;
     this.load();
     this.refreshDayWeather(false);
     this.econ.newDay(this.day);
@@ -141,6 +145,7 @@ export class Game {
   press(k) {
     this.audio._ctx();
     if (this.ui.key(k)) return;
+    if (this.battle) { this.battle.key(k); return; }
     if (this.smartRun) { if (/^[1-4]$/.test(k)) this.smartAct(['heater', 'vent', 'mist', 'co2'][+k - 1]); return; }
     if (this.fight) { if (k === 'ok') this.reeling = true; return; }
     if (this.pano) return;
@@ -152,6 +157,7 @@ export class Game {
   }
   release(k) { this.held = this.held.filter((h) => h !== k); if (k === 'ok') this.reeling = false; }
   tapTile(tx, ty) {
+    if (this.battle) return;
     if (this.threshing) return this.mash();
     if (this.fight) { this.reeling = true; return; }
     if (this.smartRun || this.pano) return;
@@ -196,8 +202,10 @@ export class Game {
       this.simTick(dt);
     }
     this.regionTick(dt, busy);
+    this.pestTick(dt, busy);
+    if (this.battle) this.battle.update(dt);
     if (!busy) this.craftTick(dt);
-    const frozen = busy || !!this.smartRun || !!this.fight || !!this.pano;
+    const frozen = busy || !!this.battle || !!this.smartRun || !!this.fight || !!this.pano;
     if (this.tr.driving) this.drive(dt, busy); else this.movePlayer(dt, frozen);
     if (this.threshing && !busy) this.threshTick(dt);
     this.moveDog(dt);
@@ -206,7 +214,7 @@ export class Game {
     for (const t of this.fruitTrees) if (t.shakeT > 0) t.shakeT -= dt;
     if (this.fish) this.fishTick(dt);
     this.saveT -= dt; if (this.saveT <= 0) { this.saveT = 10; this.save(); }
-    this.ui.hint(this.smartRun || this.pano ? null : this.fight ? '꾹 눌러 감기 · 빨간 구간·몸부림이면 손 떼기' : this.threshing ? '연타! (Space 도 되고, 화면을 눌러도 돼요)' : this.tr.driving ? `내리기 · 방향키 = 가고 싶은 쪽 · Space 쟁기 ${this.tr.plowDown ? '내림' : '올림'}` : this.fish ? (this.fish.state === 'bite' ? '지금 당기기!' : '찌가 쑥 들어가면 당기기 (Esc: 그만)') : this.hintText());
+    this.ui.hint(this.battle || this.smartRun || this.pano ? null : this.fight ? '꾹 눌러 감기 · 빨간 구간·몸부림이면 손 떼기' : this.threshing ? '연타! (Space 도 되고, 화면을 눌러도 돼요)' : this.tr.driving ? `내리기 · 방향키 = 가고 싶은 쪽 · Space 쟁기 ${this.tr.plowDown ? '내림' : '올림'}` : this.fish ? (this.fish.state === 'bite' ? '지금 당기기!' : '찌가 쑥 들어가면 당기기 (Esc: 그만)') : this.hintText());
     this.ui.hud(this.hudState());
     this.music?.setScene({ daylight: 1 - this.night, kind: this.raining ? 'rain' : 'clear', precip: this.raining ? 0.7 : 0, wind: 0.2 });
   }
@@ -215,7 +223,8 @@ export class Game {
     this.farm.tick(dt);
     this.rice.tick(dt, { raining: this.raining });
     if (this.raining) { this.rainT = (this.rainT || 0) - dt; if (this.rainT <= 0) { this.rainT = 8; this.farm.rain(); } }
-    const ready = this.ranch.tick(dt, this.day);
+    // 여우·늑대가 울타리에 붙어 있으면 동물들이 겁먹어 생산이 멈춤
+    const ready = this.ranch.tick(this.ranchThreat() ? 0 : dt, this.day);
     for (const a of ready) { const v = this.animals.find((x) => x.sim === a); if (v) v.eat = 0; }
     if (this.pet.tick(dt) === 'dig') { this.pet.dig(); this.dogBubble = '!'; this.audio.play('bark'); this.ui.toast(`${this.pet.name}가 땅을 파서 뭔가 찾았어요!`); }
   }
@@ -432,7 +441,7 @@ export class Game {
     return null;
   }
   /** 앞 칸에 할 게 없으면 서 있는 논 (논 안에 들어가 일하기) */
-  target() { if (this.swimming) return this.diving ? null : this.swimTarget(); const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) return t; const pd = paddyAt(this.player.x, this.player.y); return pd >= 0 ? this.paddyInfo(pd) : null; }
+  target() { if (this.swimming) return this.diving ? null : this.swimTarget(); const pe = this.pestNear(); if (pe) return { label: `${pe.name}와 배틀! (쫓아내기)`, run: () => this.startBattle(pe) }; const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) return t; const pd = paddyAt(this.player.x, this.player.y); return pd >= 0 ? this.paddyInfo(pd) : null; }
   hintText() { if (this.player.speed > 70) return null; return this.target()?.label || null; }
   interact() { const t = this.target(); if (t) t.run(); }
 
@@ -952,6 +961,7 @@ export class Game {
   }
   drawOthers() {
     const S = this.S, out = [];
+    this.drawPests(out);
     // 스마트팜 드론 (비닐하우스 위를 천천히 돎)
     { const t = performance.now() / 1000, cx = (59 + 4) * T, cy = (17 - 2) * T; const dx = cx + Math.cos(t * 0.4) * 150, dy = cy + Math.sin(t * 0.4) * 60; out.push({ img: S.drone[Math.floor(t * 20) % 2], x: dx - 15, y: dy - 60 + Math.sin(t * 2) * 3, sy: dy + 200, shadow: 's', sx: dx, shy: dy + 10 }); }
     // 반려견
@@ -1030,3 +1040,10 @@ const TIPS = [
 
 Object.assign(Game.prototype, RegionMethods);
 Object.assign(Game.prototype, CraftMethods);
+Object.assign(Game.prototype, PestMethods);
+Game.prototype.startBattle = function (p) {
+  if (this.battle) return;
+  p.inBattle = true;
+  this.player.vx = this.player.vy = 0; this.path = null; this.held = [];
+  this.battle = new Battle(this, p);
+};

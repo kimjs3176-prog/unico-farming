@@ -19,6 +19,7 @@ export function buildSprites() {
   const dirs = ['down', 'up', 'left', 'right'];
   S.shiba = Object.fromEntries(dirs.map((d) => [d, [0, 1].map((f) => cv(C.shiba(d, f)))]));
   const both = (make) => { const s = make(); return [cv(s), cv(s.flipped())]; };
+  S.pest = { crow: [0, 1, 2, 3].map((f) => both(() => C.crow(f))), fox: [0, 1].map((f) => both(() => C.fox(f))), wolf: [0, 1].map((f) => both(() => C.wolf(f))) };
   S.animal = {};
   for (const [type, fn] of [['cow', C.cow], ['sheep', C.sheep], ['chicken', C.chicken]]) {
     S.animal[type] = {};

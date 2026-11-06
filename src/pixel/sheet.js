@@ -1,5 +1,5 @@
 import { definePalette } from './palette.js';
-import { unico, shiba, cow, sheep, chicken } from './art_chars.js';
+import { unico, shiba, cow, sheep, chicken, crow, fox, wolf } from './art_chars.js';
 import * as W from './art_world.js';
 import { Spr } from './pxl.js';
 const both = (o) => { const s = new Spr(o.trunk.w, o.trunk.h); s.stamp(o.trunk, 0, 0); s.stamp(o.crown, 0, 0); return s; };
@@ -25,5 +25,6 @@ export function sheetGroups() {
   g.push(['rice', [W.paddyBase('dry'), W.paddyBase('tilled'), W.paddyWater(0), ...[0, 1, 2, 3].map(W.ricePlants), W.thresher(0), W.fieldCell(false), W.fieldCell(true)]]);
   g.push(['tractor', [0, 4, 8, 12, 16, 20, 24, 28].map((k) => W.tractorStack((k / 32) * Math.PI * 2, k % 8 === 0)).concat([W.tractorStack(0.3, false)])]);
   g.push(['region', [W.greenhouse(), W.sensorPole(0), W.solar(), W.drone(0), W.koatHQ(), W.koatHQ(true), W.koatDesk(), ...[0, 1, 2, 3, 4, 5].map(W.booth), W.fountain(0), W.flag('scarf'), W.fishShop(), W.board(), W.boat(), W.siteLot(), W.scaffold(), ...['pavilion', 'tank', 'stand', 'glasshouse', 'mill'].map((t) => W.building(t)), W.millBlades(0), W.lookout(), W.chest(false), W.chest(true)]]);
+  g.push(['pests', [0, 1, 2, 3].map(crow).concat([fox(0), fox(1), wolf(0), wolf(1)])]);
   return g;
 }
