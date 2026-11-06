@@ -98,7 +98,10 @@ srv.listen(0, async () => {
     // 4) 창이 화면 밖으로 나감, 가로 스크롤
     if (pr.left < -1 || pr.top < -1 || pr.right > vw + 1 || pr.bottom > vh + 1) issues.push(`창이 화면 밖: ${[pr.left, pr.top, pr.right, pr.bottom].map(Math.round)} (화면 ${vw}×${vh})`);
     for (const el of [panel, ...panel.querySelectorAll('*')]) { const cs = getComputedStyle(el); if (/(auto|scroll)/.test(cs.overflowX) && el.scrollWidth > el.clientWidth + 2) issues.push(`가로 스크롤: <${el.tagName.toLowerCase()} .${String(el.className).split(' ')[0]}> ${el.scrollWidth}>${el.clientWidth}`); }
-    // 5) 닫기 버튼이 보이고 눌리는지
+    // 5) 제목줄(리본)이 창 위·양옆에 꼭 붙어 있는지 (위로 밀려 잘리거나 옆이 뜨면 어긋남)
+    const h2 = panel.querySelector(':scope > h2');
+    if (h2) { const hr = h2.getBoundingClientRect(); if (Math.abs(hr.top - pr.top) > 1.5 || Math.abs(hr.left - pr.left) > 1.5 || Math.abs(hr.right - pr.right) > 1.5) issues.push(`제목줄 어긋남: 창 ${[pr.left, pr.top, pr.right].map(Math.round)} / 제목 ${[hr.left, hr.top, hr.right].map(Math.round)}`); }
+    // 6) 닫기 버튼이 보이고 눌리는지
     const c = panel.querySelector('.close');
     if (c) { const r = c.getBoundingClientRect(); const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); if (!top || !(top === c || c.contains(top))) issues.push('닫기 버튼 가려짐/화면 밖'); }
     return { n: vis.length, issues: [...new Set(issues)].slice(0, 40) };
@@ -108,6 +111,7 @@ srv.listen(0, async () => {
     ['market_buy', () => game.ui.openMarket('buy')],
     ['market_sell', () => { game.ui.marketAll = true; game.ui.openMarket('sell'); }],
     ['market_fac', () => game.ui.openMarket('fac')],
+    ['market_cos', () => { game.costume.buy('overalls', { money: 99999 }); game.costume.wear('overalls'); game.ui.openMarket('cos'); }],
     ['inventory', () => game.ui.openInventory()],
     ['quests', () => game.ui.openQuests()],
     ['seed', () => game.ui.openSeedPicker(() => {}, { fert: 4 })],
@@ -134,6 +138,8 @@ srv.listen(0, async () => {
     ['mg_result', () => { const t = game.tractor; t.mount(); t.counting = false; t.field.start(); t.field.score = 37; t.maxStreak = 12; t.dismount(true); }],
     ['result', () => game.ui.result('🏅 도감 완성!', ['물고기 도감을 모두 채웠어요!', '보상 +500🪙'])],
     ['rooms', () => game.ui.openRooms()],
+    ['wardrobe', () => { game.home.enter(); setTimeout(() => game.home.openWardrobe('cos'), 900); }],
+    ['wardrobe_set', () => game.home.openWardrobe('set')],
   ];
   const report = {};
   for (const [id, fn] of PANELS) {
