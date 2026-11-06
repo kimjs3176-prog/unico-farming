@@ -86,3 +86,18 @@ test('도트 지도: 새 지역(스마트팜·KOAT·낚시터·새 마을·언�
   for (const H of HILLS) assert.ok(near(H.look.x, H.look.y), `${H.name} 전망대`);
   for (const [i, C] of CHESTS.entries()) assert.ok(near(C.x, C.y), `보물 상자 ${i}`);
 });
+
+test('도트 지도: 유니코 집 안은 바깥과 이어지지 않고, 문에서 침대·책장·부엌까지 걸어갈 수 있음', async () => {
+  const { HOME, OUT } = await import('../src/pixel/map.js');
+  const R = reachable(new Set());
+  for (const k of R) assert.ok(+k.split(',')[1] < OUT, `바깥에서 실내로 새는 길: ${k}`);
+  // 집 안 시작점에서 BFS
+  const seen = new Set([`${HOME.spawn.x},${HOME.spawn.y}`]), q = [[HOME.spawn.x, HOME.spawn.y]];
+  while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, k = `${nx},${ny}`; if (seen.has(k) || solid(nx, ny)) continue; seen.add(k); q.push([nx, ny]); } }
+  for (const t of ['bed', 'shelf', 'kitchen', 'calendar']) {
+    const o = map.objs.find((ob) => ob.type === t);
+    const near = [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [0, 2]].some(([dx, dy]) => seen.has(`${o.x + dx},${o.y + dy}`));
+    assert.ok(near, t);
+  }
+  assert.ok(HOME.door.every((x) => seen.has(`${x},${HOME.y1}`)), '문간');
+});

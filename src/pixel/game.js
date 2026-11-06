@@ -10,7 +10,9 @@ import { RiceSim, RICE_STAGES, thresh } from '../game/sim/rice.js';
 import { FieldSim, Vehicle, TRACTOR_TIME } from '../game/sim/tractor.js';
 import { CROPS, PRODUCTS, FEED_PRICE, ANIMALS } from '../game/sim/crops.js';
 import { ITEMS } from '../game/sim/items.js';
-import { MW, MH, G, PLOTS, RANCH, SPAWN, NPCS, ANIMAL_START, PADDIES, FIELD, TRACTOR_HOME, paddyAt, buildMap } from './map.js';
+import { MW, MH, G, PLOTS, RANCH, SPAWN, NPCS, ANIMAL_START, PADDIES, FIELD, TRACTOR_HOME, HOME, OUT, paddyAt, buildMap } from './map.js';
+import { BOOK_CATS } from '../game/sim/collection.js';
+import { itemsOf, CATEGORY_NAMES } from '../game/sim/items.js';
 import { nightness } from './render.js';
 import { initRegions, regionSave, regionLoad, RegionMethods } from './regions.js';
 import { initCraft, craftSave, craftLoad, CraftMethods } from './craft.js';
@@ -209,6 +211,8 @@ export class Game {
     if (this.tr.driving) this.drive(dt, busy); else this.movePlayer(dt, frozen);
     if (this.threshing && !busy) this.threshTick(dt);
     this.moveDog(dt);
+    // 집 안 문간을 밟으면 밖으로
+    if (this.indoors && this.player.y >= HOME.y1 && !this.doorBusy) this.exitHome();
     this.updateNpcs(dt, busy);
     this.updateAnimals(dt);
     for (const t of this.fruitTrees) if (t.shakeT > 0) t.shakeT -= dt;
@@ -425,7 +429,9 @@ export class Game {
       if (rt !== undefined) return rt;
       const ct = this.craftTarget(o);
       if (ct !== undefined) return ct;
-      if (o.type === 'house') return { label: x === 25 && y === 13 ? '집에 들어가 쉬기' : '우리 집', run: () => this.house() };
+      if (o.type === 'house') return { label: '집에 들어가기', run: () => this.enterHome() };
+      const ht = this.homeTarget(o);
+      if (ht !== undefined) return ht;
       if (o.type === 'mailbox') return { label: '우편함 보기', run: () => this.mailbox() };
       if (o.type === 'sign') return { label: '팻말 읽기', run: () => this.ui.say('', o.text === '유니코 밭' ? '유니코 밭 — 갈고, 심고, 물 주고, 거두기! (Q 로 씨앗 바꾸기)' : '유니코 목장 — 사료를 주면 생산물이 나와요. 여물통에 사료를 채워 두면 알아서 먹어요.') };
       if (o.type === 'trough') return { label: `여물통 (${this.ranch.trough}/20) 사료 채우기`, run: () => this.fillTrough() };
@@ -533,8 +539,10 @@ export class Game {
     for (let s = 0; s < Math.min(skip, 200); s += 1) this.simTick(1);
     this.time = 0.26;
     this.newDay();
-    this.player.place(25, 14); this.player.dir = 'down';
-    this.dog.place(26, 14); this.trail = [];
+    // 집 안 침대에서 잤으면 침대 옆에서, 아니면 집 앞에서 일어남
+    if (this.indoors) { this.player.place(HOME.x0 + 3, HOME.y0 + 3); this.dog.place(HOME.x0 + 4, HOME.y0 + 4); }
+    else { this.player.place(25, 14); this.dog.place(26, 14); }
+    this.player.dir = 'down'; this.trail = []; this.cam = null;
     this.ui.fade(false);
   }
   mailbox() {
@@ -1046,4 +1054,59 @@ Game.prototype.startBattle = function (p) {
   p.inBattle = true;
   this.player.vx = this.player.vy = 0; this.path = null; this.held = [];
   this.battle = new Battle(this, p);
+};
+
+/* ─────────── 유니코 집 안 ─────────── */
+Object.defineProperty(Game.prototype, 'indoors', { get() { return this.player.y >= OUT; } });
+Game.prototype.teleport = async function (tx, ty, dir) {
+  this.doorBusy = true;
+  this.audio.play('click');
+  this.ui.fade(true);
+  await new Promise((r) => setTimeout(r, 420));
+  this.player.place(tx, ty); this.player.dir = dir; this.player.vx = this.player.vy = 0;
+  this.dog.place(tx + 1, ty); this.trail = []; this.cam = null; this.path = null; this.held = [];
+  this.ui.fade(false);
+  setTimeout(() => (this.doorBusy = false), 300);
+};
+Game.prototype.enterHome = function () { this.teleport(HOME.spawn.x, HOME.spawn.y - 1, 'up'); };
+Game.prototype.exitHome = function () { this.teleport(HOME.outDoor.x, HOME.outDoor.y, 'down'); };
+Game.prototype.homeTarget = function (o) {
+  switch (o.type) {
+    case 'bed': return { label: '침대에서 자기 (다음 날 아침)', run: () => this.house() };
+    case 'shelf': return { label: `책장 · 도감 (${Object.keys(this.book.entries).length}종)`, run: () => this.bookMenu() };
+    case 'calendar': return { label: '달력 보기', run: () => this.calendar() };
+    case 'kitchen': return { label: '부엌 · 콩이 간식 만들기', run: () => this.kitchenMenu() };
+    case 'window': return { label: '창밖 보기', run: () => this.ui.say('', this.night > 0.5 ? '창밖에 별이 반짝이고 반딧불이가 날아다녀요.' : this.raining ? '빗방울이 창을 톡톡 두드려요. 밭에 물이 저절로 차겠어요.' : '햇살 아래 마을 나무가 바람에 살랑여요.') };
+    case 'table': return { label: '식탁', run: () => this.ui.say('', `식탁 위에 갓 구운 옥수수와 토마토가 있어요. 오늘은 ${this.day}일째 농장 일기!`) };
+    case 'plant': return { label: '화분', run: () => this.ui.say('', '작은 화분이 무럭무럭 자라고 있어요.') };
+    case 'floorlamp': return { label: '스탠드', run: () => this.ui.say('', '따뜻한 불빛이 방을 밝혀요.') };
+  }
+  return undefined;
+};
+Game.prototype.calendar = function () {
+  const toFest = 7 - (this.day % 7 || 7);
+  const e = this.econ;
+  this.ui.say('달력', `오늘은 ${this.day}일째. ${e.festival ? '오늘은 유니코 수확 축제! 모든 농산물이 1.3배예요.' : toFest === 0 ? '' : `다음 수확 축제까지 ${toFest}일 남았어요.`} 날씨: ${this.raining ? '비' : '맑음'}. ${e.event ? `장터 소식: ${e.event.name}` : '장터 시세는 평범해요.'} 레벨 ${this.level} · 밭 Lv.${this.farm.level} · 목장 Lv.${this.ranch.level} · 논 Lv.${this.rice.skillLevel}`);
+};
+Game.prototype.bookMenu = function () {
+  this.ui.openMenu({
+    title: '도감', tabs: BOOK_CATS.map((c) => ({ id: c, label: CATEGORY_NAMES[c] })), tab: BOOK_CATS[0],
+    build: (tab) => {
+      const all = itemsOf(tab), got = all.filter((k) => this.book.entries[k]).length;
+      return {
+        sub: `${CATEGORY_NAMES[tab]} ${got}/${all.length}종 · 다 모으면 보상!`,
+        items: all.map((k) => { const en = this.book.entries[k]; return { icon: en ? iconOf(k) : 'quest', label: en ? nameOf(k) : '???', right: en ? `${en.count}번${en.best ? ` · 최대 ${en.best}cm` : ''}` : '아직 못 봤어요', disabled: !en, onPick: () => {} }; }),
+      };
+    },
+  });
+};
+Game.prototype.kitchenMenu = function () {
+  const e = this.econ;
+  this.ui.openMenu({
+    title: '부엌',
+    build: () => {
+      const items = Object.keys(CROPS).filter((k) => (e.inventory.crops[k] || 0) > 0).map((k) => ({ icon: k, label: `${CROPS[k].name} 1개로 강아지 간식 2개 만들기`, right: `가진 것 ${e.inventory.crops[k]}`, onPick: () => { if (!e.take(k, 1)) return; e.addItem('pet_treat', 2); this.audio.play('plant'); this.ui.toast('강아지 간식 2개를 만들었어요! 콩이가 꼬리를 흔들어요', 'treat'); } }));
+      return { sub: `작물로 콩이 간식을 만들어요 · 지금 간식 ${e.inventory.items.pet_treat || 0}개`, empty: '작물이 없어요. 밭에서 거둬 오세요', items };
+    },
+  });
 };

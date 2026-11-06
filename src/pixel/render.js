@@ -1,11 +1,11 @@
-import { MW, MH, G, PLOTS, PADDIES, FIELD, WATERS } from './map.js';
+import { MW, MH, G, PLOTS, PADDIES, FIELD, WATERS, HOME, OUT } from './map.js';
 
 const CHUNK = 256;
 
 import { rampRGB, bayer } from './pxl.js';
 
 const T = 32;
-const EXACT = new Set([G.paddy, G.field, G.plaza, G.hill, G.cliff, G.stairs]);
+const EXACT = new Set([G.paddy, G.field, G.plaza, G.hill, G.cliff, G.stairs, G.floor, G.wall, G.void]);
 const hash = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 function vnoise(x, y) {
   const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
@@ -254,6 +254,32 @@ export class Renderer {
       if (ly === 5) return rampRGB('wood', 1);
       return rampRGB('wood', ly === 0 ? 4 : 3);
     }
+    if (m === G.void) return [7, 5, 15];
+    if (m === G.floor) {
+      // 마루: 가로 널판 8px, 이음매는 줄마다 어긋나게, 벽 바로 아래는 그늘
+      const ly = y & 7, row = y >> 3;
+      const ty = Math.floor(y / T);
+      if (ty === HOME.y0 + 2 && (y % T) < 6) return rampRGB('wood', 1);
+      if (ly === 7) return rampRGB('wood', 1);
+      if (((x + row * 21) % 48) === 0) return rampRGB('wood', 1);
+      return rampRGB('wood', ly === 0 ? 4 : 3);
+    }
+    if (m === G.wall) {
+      const tx = Math.floor(x / T), ty = Math.floor(y / T);
+      if (ty <= HOME.y0 + 1 && tx > HOME.x0 && tx < HOME.x1) {
+        // 윗벽: 몰딩 → 줄무늬 벽지 → 나무 징두리 → 걸레받이
+        const ly = y - HOME.y0 * T;
+        if (ly < 5) return rampRGB('wood', ly < 2 ? 0 : 2);
+        if (ly < 40) return rampRGB('wall', ((x >> 3) & 1) ? 4 : 3);
+        if (ly === 40) return rampRGB('wood', 4);
+        if (ly < 61) return rampRGB('wood', (x % 12) === 0 ? 1 : 2);
+        return rampRGB('wood', 0);
+      }
+      // 옆벽·아랫벽: 짙은 나무 기둥 (안쪽 모서리만 살짝 밝게)
+      const lx = x % T;
+      if ((tx === HOME.x0 && lx > 28) || (tx === HOME.x1 && lx < 3) || (ty === HOME.y1 && (y % T) < 3)) return rampRGB('wood', 3);
+      return rampRGB('wood', 1);
+    }
     return rampRGB('grass', 3);
   }
 
@@ -263,6 +289,7 @@ export class Renderer {
     const list = [];
     const decals = [];
     this.lights = [];
+    this.indoorLights = [];
     const cx = (o) => o.x * T + T / 2, by = (o) => o.y * T + T;
     for (const o of this.map.objs) {
       switch (o.type) {
@@ -309,6 +336,16 @@ export class Renderer {
         case 'jars': list.push({ jars: true, img: S.jarBase, x: o.x * T, y: by(o) - 40, sy: by(o) - 4, tall: true }); break;
         case 'composter': list.push({ composter: true, x: cx(o) - 18, y: by(o) - 34, sy: by(o) - 4 }); break;
         case 'workshop': list.push({ img: S.workshop.day, glow: S.workshop.night, x: o.x * T, y: by(o) - 98, sy: by(o) - 2, tall: true }); this.lights.push({ x: (o.x + 1.5) * T, y: by(o) - 30, r: 60, c: [255, 190, 100] }); break;
+        case 'bed': list.push({ img: S.home.bed, x: o.x * T, y: by(o) - 76, sy: by(o) - 40 }); break;
+        case 'shelf': list.push({ img: S.home.shelf, x: o.x * T, y: by(o) - 72, sy: by(o) - 4, tall: true }); break;
+        case 'calendar': decals.push({ img: S.home.calendar, x: o.x * T + 4, y: o.y * T - 2 }); break;
+        case 'window': list.push({ homeWindow: true, x: o.x * T, y: o.y * T - 14, sy: o.y * T }); break;
+        case 'kitchen': list.push({ img: S.home.kitchen, glow: S.home.kitchenGlow, x: o.x * T, y: by(o) - 64, sy: by(o) - 4, tall: true }); break;
+        case 'table': list.push({ img: S.home.table, x: o.x * T, y: by(o) - 44, sy: by(o) - 6 }); break;
+        case 'chair': list.push({ img: S.home.chair[o.flip ? 1 : 0], x: cx(o) - 12, y: by(o) - 36, sy: by(o) - 10 }); break;
+        case 'rug': decals.push({ img: S.home.rug, x: o.x * T, y: o.y * T - 16 }); break;
+        case 'plant': list.push({ img: S.home.plant, x: cx(o) - 14, y: by(o) - 40, sy: by(o) - 4 }); break;
+        case 'floorlamp': list.push({ img: S.home.lamp.day, glow: S.home.lamp.night, x: cx(o) - 12, y: by(o) - 70, sy: by(o) - 4, tall: true }); this.indoorLights.push({ x: cx(o), y: by(o) - 60, r: 150, c: [255, 200, 130] }); break;
         case 'hive': list.push({ hive: o.hive, img: S.hive, x: cx(o) - 15, y: by(o) - 40, sy: by(o) - 4, shadow: 's', sx: cx(o), shy: by(o) - 4 }); break;
         case 'chest': list.push({ chest: o.chest, x: cx(o) - 15, y: by(o) - 28, sy: by(o) - 6 }); break;
         case 'thresher': list.push({ thresher: true, x: o.x * T - 3, y: by(o) - 58, sy: by(o) - 4, tall: true }); break;
@@ -429,6 +466,7 @@ export class Renderer {
       if (d.sensor) img = S.sensor[Math.floor(this.t * 3) % 3];
       if (d.fountain) img = S.fountain[Math.floor(this.t * 4) % 2];
       if (d.hive !== undefined && game.hives[d.hive].honey >= 1) d.bubble = 'honey'; else if (d.hive !== undefined) d.bubble = null;
+      if (d.homeWindow) img = S.home.window[night > 0.5 ? 1 : 0];
       if (d.composter) { const C = game.composter; img = S.composter[C.ready ? 4 : Math.min(3, Math.ceil((C.mats / 12) * 3))]; d.bubble = C.ready ? 'heart' : null; }
       if (d.jars) {
         // 돌 단 위에 옹기를 장독 수만큼 (다 익으면 뚜껑이 들썩·반짝)
@@ -487,14 +525,15 @@ export class Renderer {
     }
 
     // ── 조명: 주변광(곱하기) + 등불(더하기) ──
-    const amb = ambientAt(game.time);
-    const dim = rain ? 0.78 : 1;
+    const indoor = game.player.y >= OUT;
+    const amb = indoor ? [255 - night * 55, 244 - night * 72, 228 - night * 70] : ambientAt(game.time);
+    const dim = rain && !indoor ? 0.78 : 1;
     const lt = this.lt;
     lt.globalCompositeOperation = 'source-over';
     lt.fillStyle = `rgb(${amb[0] * dim | 0},${amb[1] * dim | 0},${Math.min(255, amb[2] * dim * (rain ? 1.08 : 1)) | 0})`;
     lt.fillRect(0, 0, VW, VH);
     // 흘러가는 구름 그림자 (낮)
-    if (night < 0.6) {
+    if (night < 0.6 && !indoor) {
       for (let k = 0; k < 4; k++) {
         const cxw = ((this.t * 9 + k * 520) % (WW + 600)) - 300, cyw = (k * 337 + 140) % WH;
         const x = cxw - camX, y = cyw - camY;
@@ -504,14 +543,14 @@ export class Renderer {
         lt.fillStyle = gr; lt.fillRect(x - 200, y - 200, 400, 400);
       }
     }
-    if (night > 0.02) {
+    if (night > 0.02 || indoor) {
       lt.globalCompositeOperation = 'lighter';
-      const lights = [...this.lights, ...game.extraLights()];
+      const lights = indoor ? this.indoorLights.map((L) => ({ ...L, k: 0.35 + night * 0.7 })) : [...this.lights, ...game.extraLights()];
       for (const L of lights) {
         const x = L.x - camX, y = L.y - camY;
         if (x < -L.r || y < -L.r || x > VW + L.r || y > VH + L.r) continue;
         const flick = L.lamp ? 1 + Math.sin(this.t * 7 + L.x) * 0.03 : 1;
-        const k = night * (L.k ?? 1);
+        const k = indoor ? L.k : night * (L.k ?? 1);
         const gr = lt.createRadialGradient(x, y, 0, x, y, L.r * flick);
         gr.addColorStop(0, `rgba(${L.c[0] * k | 0},${L.c[1] * k | 0},${L.c[2] * k | 0},1)`);
         gr.addColorStop(0.45, `rgba(${L.c[0] * k * 0.5 | 0},${L.c[1] * k * 0.42 | 0},${L.c[2] * k * 0.3 | 0},1)`);
@@ -533,7 +572,7 @@ export class Renderer {
     game.drawGlow(g, gg, camX, camY, this.t, night);
 
     // 비
-    if (rain) this.drawRain(g, dt);
+    if (rain && !indoor) this.drawRain(g, dt);
 
     // ── 화면 출력 + HD-2D 후처리 ──
     const ctx = this.ctx, sc = this.scale;
@@ -583,8 +622,9 @@ export class Renderer {
   updateParticles(game, dt, night, camX, camY) {
     const VW = this.VW, VH = this.VH;
     // 떠다니는 빛 먼지(낮) · 떨어지는 잎
-    if (night < 0.5 && Math.random() < dt * 6) this.particles.push({ kind: 'dust', x: camX + Math.random() * VW, y: camY + Math.random() * VH, vx: 3 + Math.random() * 4, vy: -2 - Math.random() * 3, life: 1, decay: 0.25 });
-    if (Math.random() < dt * 0.8) this.particles.push({ kind: 'leaf', x: camX + Math.random() * VW, y: camY - 4, vx: 6 + Math.random() * 8, vy: 14 + Math.random() * 8, a: 0, life: 1, decay: 0.09, col: Math.random() < 0.5 ? `rgb(${rampRGB('fol', 4)})` : `rgb(${rampRGB('flowr', 3)})` });
+    const indoor = game.player.y >= OUT;
+    if (night < 0.5 && Math.random() < dt * (indoor ? 2 : 6)) this.particles.push({ kind: 'dust', x: camX + Math.random() * VW, y: camY + Math.random() * VH, vx: 3 + Math.random() * 4, vy: -2 - Math.random() * 3, life: 1, decay: 0.25 });
+    if (!indoor && Math.random() < dt * 0.8) this.particles.push({ kind: 'leaf', x: camX + Math.random() * VW, y: camY - 4, vx: 6 + Math.random() * 8, vy: 14 + Math.random() * 8, a: 0, life: 1, decay: 0.09, col: Math.random() < 0.5 ? `rgb(${rampRGB('fol', 4)})` : `rgb(${rampRGB('flowr', 3)})` });
     for (const p of game.takeParticles()) this.particles.push(p);
     for (const p of this.particles) {
       p.x += p.vx * dt; p.y += p.vy * dt; p.life -= p.decay * dt;

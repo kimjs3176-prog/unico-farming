@@ -5,8 +5,12 @@ import { rng } from './pxl.js';
  * 가운데 마을(광장·집·밭·장터·목장·연못·논·트랙터 밭) + 동쪽 스마트팜 + 북동쪽 KOAT 체험관
  * + 남서쪽 낚시터 호수 + 남동쪽 새 마을 부지 + 언덕 4곳. 지역 사이는 숲 띠, 길로 이어짐
  */
-export const MW = 100, MH = 70;
-export const G = { grass: 0, path: 1, soil: 2, water: 3, paddy: 4, field: 5, plaza: 6, hill: 7, cliff: 8, dock: 9, stairs: 10 };
+export const MW = 100, MH = 86;
+/** 바깥 지도는 0..OUT-1 줄. 그 아래는 바깥과 이어지지 않는 실내 칸 (검은 공간 + 유니코 집 안) */
+export const OUT = 70;
+export const G = { grass: 0, path: 1, soil: 2, water: 3, paddy: 4, field: 5, plaza: 6, hill: 7, cliff: 8, dock: 9, stairs: 10, floor: 11, wall: 12, void: 13 };
+/** 유니코 집 안: 벽 포함 12×8칸 (윗벽 2줄, 옆벽 1칸, 아랫벽 1줄에 문 2칸) */
+export const HOME = { x0: 44, y0: 75, x1: 55, y1: 82, door: [49, 50], spawn: { x: 49, y: 81 }, outDoor: { x: 25, y: 14 } };
 
 export const PLOTS = { x: 38, y: 13, cols: 6, rows: 4 }; // 밭 24칸
 export const RANCH = { x0: 35, y0: 24, x1: 50, y1: 35, gate: [41, 42] }; // 울타리 (안쪽 x0+1..x1-1)
@@ -145,6 +149,25 @@ export function buildMap() {
   objs.push({ type: 'crate', x: 67, y: 57 }); block(67, 57, 67, 57); objs.push({ type: 'hay', x: 66, y: 58 }); block(66, 58, 66, 58);
   // ── 언덕 전망대·보물 상자 ──
   for (const H of HILLS) { objs.push({ type: 'lookout', x: H.look.x, y: H.look.y, w: 2, h: 1, hill: H.id }); block(H.look.x, H.look.y, H.look.x + 1, H.look.y); }
+  // ── 실내: 검은 공간 + 유니코 집 안 ──
+  for (let y = OUT; y < MH; y++) for (let x = 0; x < MW; x++) { ground[y * MW + x] = G.void; solid[y * MW + x] = 1; }
+  for (let y = HOME.y0; y <= HOME.y1; y++) for (let x = HOME.x0; x <= HOME.x1; x++) {
+    const wall = y <= HOME.y0 + 1 || x === HOME.x0 || x === HOME.x1 || (y === HOME.y1 && !HOME.door.includes(x));
+    ground[y * MW + x] = wall ? G.wall : G.floor; solid[y * MW + x] = wall ? 1 : 0;
+  }
+  const H0 = HOME.x0, Y2 = HOME.y0 + 2; // 바닥 첫 줄
+  objs.push({ type: 'bed', x: H0 + 1, y: Y2 + 1, w: 2, h: 2 }); block(H0 + 1, Y2, H0 + 2, Y2 + 1);
+  objs.push({ type: 'calendar', x: H0 + 6, y: Y2 - 1 });
+  objs.push({ type: 'shelf', x: H0 + 4, y: Y2, w: 2, h: 1 }); block(H0 + 4, Y2, H0 + 5, Y2);
+  objs.push({ type: 'window', x: H0 + 7, y: Y2 - 1, w: 2, h: 1 });
+  objs.push({ type: 'kitchen', x: H0 + 9, y: Y2, w: 2, h: 1 }); block(H0 + 9, Y2, H0 + 10, Y2);
+  objs.push({ type: 'rug', x: H0 + 3, y: Y2 + 3, walk: true });
+  objs.push({ type: 'table', x: H0 + 7, y: Y2 + 2, w: 2, h: 1 }); block(H0 + 7, Y2 + 2, H0 + 8, Y2 + 2);
+  objs.push({ type: 'chair', x: H0 + 6, y: Y2 + 2, walk: true }); objs.push({ type: 'chair', x: H0 + 9, y: Y2 + 2, walk: true, flip: true });
+  objs.push({ type: 'plant', x: H0 + 1, y: HOME.y1 - 1 }); block(H0 + 1, HOME.y1 - 1, H0 + 1, HOME.y1 - 1);
+  objs.push({ type: 'plant', x: HOME.x1 - 1, y: HOME.y1 - 1 }); block(HOME.x1 - 1, HOME.y1 - 1, HOME.x1 - 1, HOME.y1 - 1);
+  objs.push({ type: 'floorlamp', x: H0 + 3, y: Y2 }); block(H0 + 3, Y2, H0 + 3, Y2);
+
   // ── 가공: 밭 서쪽 장독대·퇴비통, 목장 앞 가공소 ──
   objs.push({ type: 'jars', x: 32, y: 15, w: 3, h: 2 }); block(32, 14, 34, 15);
   objs.push({ type: 'composter', x: 35, y: 13 }); block(35, 13, 35, 13);
@@ -176,7 +199,7 @@ export function buildMap() {
     (y >= 37 && y <= 39 && x <= 55 && !(x >= 13 && x <= 16) && !(x >= 29 && x <= 32)) || // 마을 | 남쪽
     (y >= 37 && y <= 39 && x >= 56 && !(x >= 70 && x <= 73)) ||                         // 동쪽 | 새 마을
     (x >= 73 && x <= 74 && y <= 36 && !(y >= 19 && y <= 22));                            // 스마트팜 | KOAT
-  const edge = (x, y) => x < 3 || y < 3 || x >= MW - 3 || y >= MH - 3 || strip(x, y);
+  const edge = (x, y) => y < OUT && (x < 3 || y < 3 || x >= MW - 3 || y >= OUT - 3 || strip(x, y));
   for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
     if (!edge(x, y)) continue;
     if ((x + y * 3) % 2) continue;

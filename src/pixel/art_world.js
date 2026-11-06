@@ -890,3 +890,55 @@ export function beehive() {
   s.outline();
   return s;
 }
+
+/* ───────────── 유니코 집 안 ───────────── */
+export function bed() {
+  const s = new Spr(64, 76);
+  s.rect(4, 6, 56, 18, 'wood', 3); s.hline(4, 59, 6, 'wood', 5); for (let x = 8; x < 58; x += 10) s.vline(x, 8, 22, 'wood', 2); // 머리판
+  s.rect(6, 22, 52, 46, 'white', 4); // 이불 바탕
+  s.ell(20, 30, 11, 6, 'white', { lo: 3 }); s.ell(44, 30, 11, 6, 'white', { lo: 3 }); // 베개
+  s.rect(6, 40, 52, 28, 'mane', 3); s.hline(6, 57, 40, 'mane', 4); s.hline(6, 57, 41, 'white', 4); // 청록 이불
+  for (let x = 12; x < 56; x += 12) for (let y = 48; y < 66; y += 8) s.set(x + ((y / 8) % 2) * 6, y, 'white', 4); // 별무늬
+  s.rect(4, 66, 56, 6, 'wood', 2); s.hline(4, 59, 66, 'wood', 4); for (const x of [5, 56]) s.rect(x, 70, 3, 5, 'wood', 1);
+  s.outline();
+  return s;
+}
+export function shelf() {
+  const s = new Spr(64, 72);
+  s.rect(2, 2, 60, 68, 'wood', 2); s.vline(2, 2, 69, 'wood', 4); s.vline(61, 2, 69, 'wood', 1);
+  const cols = ['scarf', 'roofb', 'leaf', 'corn', 'purple', 'apron', 'mane'];
+  for (let r = 0; r < 4; r++) {
+    const y = 6 + r * 16;
+    s.rect(5, y, 54, 13, 'wood', 1); s.hline(4, 59, y + 13, 'wood', 4);
+    for (let x = 6, k = r; x < 56; k++) { const w = 3 + ((k * 7) % 3), h = 9 + ((k * 5) % 4); const R = cols[k % cols.length]; s.rect(x, y + 13 - h, w, h, R, 2); s.vline(x, y + 13 - h, y + 12, R, 3); x += w + ((k % 4) === 0 ? 3 : 0); }
+  }
+  s.outline();
+  return s;
+}
+export function calendar() { const s = new Spr(24, 26); s.rect(2, 3, 20, 21, 'white', 4); s.rect(2, 3, 20, 6, 'scarf', 2); for (let y = 11; y < 22; y += 3) for (let x = 4; x < 20; x += 3) s.set(x, y, 'stone', 2); s.rect(14, 14, 3, 3, 'scarf', 2); s.set(7, 2, 'iron', 1); s.set(16, 2, 'iron', 1); s.outline(); return s; }
+export function homeWindow(night = false) {
+  const s = new Spr(64, 44);
+  s.rect(2, 2, 60, 40, 'wood', 3); s.rect(6, 6, 52, 32, night ? 'roofb' : 'glass', night ? 0 : 2);
+  if (night) { s.set(18, 12, 'corn', 3); s.set(40, 16, 'corn', 3); s.set(30, 10, 'white', 4); s.ell(46, 13, 4, 4, 'corn', { lo: 3 }); }
+  else { s.ell(18, 30, 10, 5, 'fol', { lo: 3 }); s.ell(44, 31, 12, 5, 'fol', { lo: 3 }); s.line(10, 34, 22, 10, 'glass', 3); }
+  s.vline(32, 6, 37, 'wood', 2); s.hline(6, 57, 22, 'wood', 2);
+  s.rect(0, 38, 64, 5, 'wood', 4); // 창턱
+  for (const x of [8, 50]) { s.ell(x, 36, 4, 3, 'flowr', { lo: 1 }); s.ell(x, 39, 3, 2, 'leaf', { lo: 2 }); }
+  s.outline();
+  return s;
+}
+export function kitchen() {
+  const s = new Spr(64, 64);
+  s.rect(2, 24, 60, 38, 'wall', 3); s.rect(2, 20, 60, 6, 'stone', 4); s.hline(2, 61, 25, 'stone', 2);
+  for (const x of [4, 34]) { s.rect(x, 32, 26, 26, 'wall', 4); s.rect(x + 10, 42, 6, 2, 'iron', 2); } // 수납장 문
+  s.ell(16, 18, 9, 4, 'iron', { lo: 1 }); s.ell(16, 16, 7, 2.5, 'iron', { lo: 2 }); s.vline(16, 9, 13, 'iron', 2); // 냄비
+  s.rect(38, 8, 18, 12, 'iron', 2); s.rect(40, 10, 14, 6, 'win', 2); // 오븐 창
+  s.set(10, 6, 'white', 4); s.set(12, 3, 'white', 3); s.set(18, 5, 'white', 4); // 김
+  s.outline();
+  return s;
+}
+export function table() { const s = new Spr(64, 44); s.ell(32, 16, 30, 12, 'wood', { lo: 3 }); s.ell(32, 14, 26, 9, 'cloth', { lo: 2 }); s.ell(32, 13, 5, 4, 'corn', { lo: 2 }); s.ell(18, 15, 3, 2, 'tomato', { lo: 2 }); s.rect(30, 26, 4, 16, 'wood', 2); s.rect(22, 40, 20, 3, 'wood', 1); s.outline(); return s; }
+export function chair(flip = false) { const s = new Spr(24, 34); s.rect(4, 2, 16, 4, 'wood', 4); s.rect(5, 6, 2, 12, 'wood', 2); s.rect(17, 6, 2, 12, 'wood', 2); s.rect(3, 18, 18, 4, 'wood', 3); for (const x of [4, 18]) s.rect(x, 22, 2, 11, 'wood', 1); s.outline(); return flip ? s.flipped() : s; }
+export function rug() { const s = new Spr(128, 64); s.ell(64, 32, 62, 30, 'rose', { level: 2 }); s.ell(64, 32, 54, 24, 'rose', { level: 3 }); s.ell(64, 32, 44, 18, 'gold', { level: 3 }); s.ell(64, 32, 34, 12, 'rose', { level: 2 }); for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; s.set(Math.round(64 + Math.cos(a) * 49), Math.round(32 + Math.sin(a) * 21), 'white', 4); } return s; }
+export function plantPot() { const s = new Spr(28, 40); s.poly([7, 28, 21, 28, 19, 39, 9, 39], 'band', { level: 2 }); s.hline(6, 21, 28, 'band', 3); for (let k = 0; k < 6; k++) { const a = -Math.PI / 2 + (k - 2.5) * 0.45; s.ell(14 + Math.cos(a) * 8, 20 + Math.sin(a) * 12, 4, 6, 'leaf', { lo: 1 }); } s.outline(); return s; }
+export function floorLamp(night = false) { const s = new Spr(24, 70); s.rect(11, 18, 2, 48, 'iron', 2); s.rect(6, 64, 12, 4, 'iron', 1); s.poly([4, 18, 8, 2, 16, 2, 20, 18], night ? 'lamp' : 'cream', { level: night ? 2 : 2 }); s.outline(); return s; }
