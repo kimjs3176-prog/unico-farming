@@ -835,6 +835,50 @@ export function chest(open = false) {
   return s;
 }
 
+/** 장독대: 돌 단 (3칸) */
+export function jarBase() {
+  const s = new Spr(96, 40);
+  s.rect(2, 10, 92, 26, 'stone', 3); s.hline(2, 93, 10, 'stone', 5); s.hline(2, 93, 35, 'stone', 1);
+  for (let x = 2; x < 94; x += 15) s.vline(x + ((x / 15) % 2 ? 7 : 0), 11, 22, 'stone', 2);
+  s.hline(2, 93, 22, 'stone', 2); for (let x = 9; x < 94; x += 15) s.vline(x, 23, 34, 'stone', 2);
+  s.outline();
+  return s;
+}
+/** 옹기 (볼록한 갈색 항아리 + 뚜껑). done: 뚜껑이 들썩 (다 익음) */
+export function onggi(done = false) {
+  const s = new Spr(26, 30);
+  s.ell(13, 18, 11, 10, 'bark', { lo: 1, dither: 0.1 });
+  s.ell(9, 14, 3, 4, 'bark', { lo: 3, clip: (x, y) => s.get(x, y) !== 0 }); // 유약 반짝임
+  s.rect(6, 7, 14, 4, 'bark', 2); s.hline(6, 19, 7, 'bark', 3);
+  const ly = done ? 1 : 3;
+  s.ell(13, ly + 3, 9, 3, 'bark', { lo: 2 }); s.ell(13, ly + 1, 2.4, 1.6, 'bark', { lo: 3 });
+  s.outline();
+  return s;
+}
+export function composter(fill = 0) {
+  const s = new Spr(36, 34);
+  s.rect(3, 8, 30, 24, 'wood', 2);
+  for (let x = 3; x < 33; x += 6) s.vline(x, 8, 31, 'wood', 1);
+  s.hline(3, 32, 8, 'wood', 4); s.hline(3, 32, 31, 'wood', 1);
+  if (fill > 0) { const h = Math.round(fill * 16); s.rect(5, 26 - h + 4, 26, Math.min(h, 18), 'soil', 3); for (let k = 0; k < 4; k++) s.set(8 + k * 6, 27 - h + 4, 'leaf', 3); }
+  s.outline();
+  return s;
+}
+/** 목장 가공소 (치즈 공방): 크림색 벽·빨간 지붕·치즈 간판 */
+export function workshop(night = false) {
+  const s = new Spr(96, 100);
+  planks(s, 6, 44, 84, 54, 'wall');
+  s.poly([0, 46, 12, 14, 84, 14, 96, 46], 'roof', { level: 2 });
+  roofTiles(s, 0, 16, 96, 46, 12, 'roof', 6);
+  s.rect(36, 62, 24, 36, 'wood', 1); s.rect(38, 64, 20, 34, 'wood', 3); s.rect(54, 80, 2, 3, 'gold', 3);
+  window(s, 12, 58, 16, 14, night); window(s, 68, 58, 16, 14, night);
+  // 치즈 간판 (구멍 난 노란 쐐기)
+  s.rect(30, 2, 36, 14, 'wood', 3); s.poly([38, 13, 58, 13, 58, 5], 'corn', { level: 2 }); s.set(52, 10, 'corn', 0); s.set(55, 8, 'corn', 0); s.set(48, 11, 'corn', 1);
+  s.rect(76, 82, 14, 16, 'cream', 2); s.hline(76, 89, 86, 'wood', 2); // 우유 통
+  s.outline();
+  return s;
+}
+
 /** 벌통 (나무 상자 3단 + 지붕, 앞 입구) */
 export function beehive() {
   const s = new Spr(30, 40);

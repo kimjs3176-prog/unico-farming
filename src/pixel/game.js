@@ -13,6 +13,7 @@ import { ITEMS } from '../game/sim/items.js';
 import { MW, MH, G, PLOTS, RANCH, SPAWN, NPCS, ANIMAL_START, PADDIES, FIELD, TRACTOR_HOME, paddyAt, buildMap } from './map.js';
 import { nightness } from './render.js';
 import { initRegions, regionSave, regionLoad, RegionMethods } from './regions.js';
+import { initCraft, craftSave, craftLoad, CraftMethods } from './craft.js';
 
 const T = 32;
 export const DAY_LENGTH = 360; // 3D 버전과 같은 하루 6분
@@ -22,7 +23,7 @@ const dirOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 
 const nameOf = (k) => (CROPS[k] || PRODUCTS[k] || ITEMS[k])?.name || k;
 const iconOf = (k) => (k === 'rice_seed' || k === 'paddy' || k.startsWith('rice_') ? 'rice' : CROPS[k] ? k : PRODUCTS[k] ? k : k === 'feed' ? 'feed' : k === 'pet_treat' ? 'treat' : k.startsWith('fish_') ? 'fish' : k === 'compost' ? 'compost' : k.startsWith('fruit_') ? 'tomato' : k.endsWith('_gold') ? 'star' : 'gift');
 // 도트 버전에서 할 수 있는 퀘스트만 보여 줌
-const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built', 'swim', 'dive', 'honey']);
+const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built', 'swim', 'dive', 'honey', 'process', 'rprocess', 'fert']);
 const THRESH_TIME = 6, THRESH_BAND = [0.55, 0.9]; // 3D 판과 같은 탈곡 규칙
 const M = 16; // 트랙터 시뮬레이션 1m = 16px (밭 한 칸 2m = 32px)
 
@@ -90,6 +91,7 @@ export class Game {
     this.dogBubble = null;
     this.saveT = 10;
     initRegions(this);
+    initCraft(this);
     this.load();
     this.refreshDayWeather(false);
     this.econ.newDay(this.day);
@@ -101,7 +103,7 @@ export class Game {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         v: 1, day: this.day, time: this.time, seed: this.seed, raining: this.raining,
         farm: this.farm.toJSON(), econ: this.econ.toJSON(), ranch: this.ranch.toJSON(), villagers: this.villagers.toJSON(), quests: this.quests.toJSON(), rice: { ...this.rice.toJSON(), batches: this.riceBatches }, plowBest: this.tr.best, pet: this.pet.toJSON(), book: { entries: this.book.entries, rewarded: this.book.rewarded },
-        region: regionSave(this), player: { x: this.player.x, y: this.player.y, dir: this.player.dir }, trees: this.fruitTrees.map((t) => t.lastShake || 0),
+        region: regionSave(this), craft: craftSave(this), player: { x: this.player.x, y: this.player.y, dir: this.player.dir }, trees: this.fruitTrees.map((t) => t.lastShake || 0),
       }));
     } catch { /* 저장 불가 (사생활 보호 모드 등) */ }
   }
@@ -110,7 +112,7 @@ export class Game {
     try { d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch { d = null; }
     if (!d) return;
     this.day = d.day || 1; this.time = d.time ?? 0.27; this.seed = d.seed || 'carrot'; this.raining = !!d.raining;
-    this.farm.load(d.farm); this.econ.load(d.econ); this.ranch.load(d.ranch); this.villagers.load(d.villagers); this.quests.load(d.quests); this.pet.load(d.pet); regionLoad(this, d.region); this.rice.load(d.rice); this.riceBatches = d.rice?.batches || []; this.tr.best = d.plowBest || 0;
+    this.farm.load(d.farm); this.econ.load(d.econ); this.ranch.load(d.ranch); this.villagers.load(d.villagers); this.quests.load(d.quests); this.pet.load(d.pet); regionLoad(this, d.region); craftLoad(this, d.craft); this.rice.load(d.rice); this.riceBatches = d.rice?.batches || []; this.tr.best = d.plowBest || 0;
     if (d.book) { this.book.entries = d.book.entries || {}; this.book.rewarded = d.book.rewarded || {}; }
     if (d.player && !this.blocked(d.player.x, d.player.y)) { this.player.place(d.player.x, d.player.y); this.player.dir = d.player.dir || 'down'; this.dog.place(d.player.x, d.player.y); }
     (d.trees || []).forEach((v, i) => { if (this.fruitTrees[i]) { this.fruitTrees[i].lastShake = v; this.fruitTrees[i].shaken = v === this.day; } });
@@ -194,6 +196,7 @@ export class Game {
       this.simTick(dt);
     }
     this.regionTick(dt, busy);
+    if (!busy) this.craftTick(dt);
     const frozen = busy || !!this.smartRun || !!this.fight || !!this.pano;
     if (this.tr.driving) this.drive(dt, busy); else this.movePlayer(dt, frozen);
     if (this.threshing && !busy) this.threshTick(dt);
@@ -223,6 +226,12 @@ export class Game {
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (this.blocked(x, y) && !this.swimOK(x, y)) return true;
     return false;
   }
+  /** 두 점 사이를 몸 상자가 막힘 없이 지나갈 수 있나 (6px 간격으로 확인) */
+  lineClear(x0, y0, x1, y1) {
+    const d = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(d / 6);
+    for (let i = 1; i <= n; i++) { const t = i / n; if (this.boxBlocked(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return false; }
+    return true;
+  }
   /** 칸 (x,y) 위에 주인공 몸이 걸쳐 있나 (주민·가축이 그 칸으로 못 들어오게) */
   playerOn(x, y) {
     const p = this.player;
@@ -238,6 +247,11 @@ export class Game {
       if (!ax && !ay && this.path) {
         // 누른 곳으로 걸어가기: 칸 중심을 차례로 따라감
         if (this.path.length) {
+          // 길 펴기: 앞쪽 칸 중심까지 곧장 갈 수 있으면 중간 칸은 건너뜀 (계단처럼 꺾이지 않고 대각선으로)
+          for (let j = Math.min(this.path.length - 1, 6); j > 0; j--) {
+            const [jx, jy] = this.path[j];
+            if (this.lineClear(p.px, p.py, jx * T + T / 2, jy * T + T - 6)) { this.path.splice(0, j); break; }
+          }
           const [nx, ny] = this.path[0];
           const tx = nx * T + T / 2, ty = ny * T + T - 6;
           const dx = tx - p.px, dy = ty - p.py, d = Math.hypot(dx, dy);
@@ -400,6 +414,8 @@ export class Game {
     if (o) {
       const rt = this.regionTarget(o);
       if (rt !== undefined) return rt;
+      const ct = this.craftTarget(o);
+      if (ct !== undefined) return ct;
       if (o.type === 'house') return { label: x === 25 && y === 13 ? '집에 들어가 쉬기' : '우리 집', run: () => this.house() };
       if (o.type === 'mailbox') return { label: '우편함 보기', run: () => this.mailbox() };
       if (o.type === 'sign') return { label: '팻말 읽기', run: () => this.ui.say('', o.text === '유니코 밭' ? '유니코 밭 — 갈고, 심고, 물 주고, 거두기! (Q 로 씨앗 바꾸기)' : '유니코 목장 — 사료를 주면 생산물이 나와요. 여물통에 사료를 채워 두면 알아서 먹어요.') };
@@ -433,13 +449,13 @@ export class Game {
       case 'plant': {
         if (!this.econ.useSeed(this.seed)) return;
         this.farm.plant(i, this.seed);
-        if (this.econ.useItem('compost')) this.farm.fertilize(i);
+        if (this.econ.useItem('compost')) { this.farm.fertilize(i); this.report('fert'); }
         this.audio.play('plant'); this.report('plant'); break;
       }
       case 'need_seed': this.ui.toast(`${CROPS[this.seed].name} 씨앗이 없어요. Q 로 바꾸거나 장터에서 사요`, 'seed'); this.audio.play('bump', 0.3); break;
       case 'water': this.farm.water(i); this.audio.play('water'); for (let k = 0; k < 10; k++) this.parts.push({ kind: 'drop', x: cx + (Math.random() - 0.5) * 22, y: cy - 10, vx: 0, vy: 40 + Math.random() * 30, life: 0.5, decay: 1.6 }); this.report('water'); break;
       case 'weed': this.farm.weed(i); this.econ.addItem('weed'); this.audio.play('dig'); this.report('weed'); break;
-      case 'fert': this.econ.useItem('compost'); this.farm.fertilize(i); this.audio.play('plant'); break;
+      case 'fert': this.econ.useItem('compost'); this.farm.fertilize(i); this.audio.play('plant'); this.report('fert'); break;
       case 'harvest': {
         const out = this.farm.harvest(i);
         if (!out) return;
@@ -890,10 +906,17 @@ export class Game {
   /* ─────────── 렌더러에 넘기는 것 ─────────── */
   cameraFocus(dt = 1 / 60) {
     const p = this.player;
-    let tx = p.wx + p.vx * 0.28, ty = p.wy - 16 + p.vy * 0.22;
+    // 가는 쪽 미리 보기: 속도를 그대로 쓰지 않고 천천히 따라가는 벡터로 (방향이 바뀌어도 카메라가 휘청이지 않게)
+    // 누른 곳으로 걸어갈 때는 조금 덜 앞서 봄
+    this.look ||= { x: 0, y: 0 };
+    const auto = !!this.path;
+    const la = 1 - Math.exp(-2.4 * dt);
+    this.look.x += (p.vx * (auto ? 0.16 : 0.26) - this.look.x) * la;
+    this.look.y += (p.vy * (auto ? 0.12 : 0.2) - this.look.y) * la;
+    let tx = p.wx + this.look.x, ty = p.wy - 16 + this.look.y;
     if (this.pano) { const f = this.panoFocus(); tx = f.x; ty = f.y; }
-    if (!this.cam || Math.hypot(tx - this.cam.x, ty - this.cam.y) > 400) this.cam = { x: tx, y: ty };
-    const a = 1 - Math.exp(-6 * dt);
+    if (!this.cam || Math.hypot(tx - this.cam.x, ty - this.cam.y) > 400) { this.cam = { x: tx, y: ty }; this.look.x = this.look.y = 0; }
+    const a = 1 - Math.exp(-5 * dt);
     this.cam.x += (tx - this.cam.x) * a; this.cam.y += (ty - this.cam.y) * a;
     return this.cam;
   }
@@ -1006,3 +1029,4 @@ const TIPS = [
 ];
 
 Object.assign(Game.prototype, RegionMethods);
+Object.assign(Game.prototype, CraftMethods);
