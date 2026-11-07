@@ -1,0 +1,171 @@
+// 모바일 화면 CSS 점검: style.css → theme.css 순서로 읽었을 때 화면 크기별로 실제로 이기는 값
+// (브라우저 없이 같은 선택자끼리만 단순 계산 — 테마가 모바일 압축 값을 덮는 회귀, 데스크톱 회귀를 막음)
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, existsSync } from 'node:fs';
+
+const root = new URL('../', import.meta.url);
+const read = (p) => readFileSync(new URL(p, root), 'utf8');
+
+/** CSS → [{ sel, decls: [[prop, value]], media: ['@media ...'] }] (주석 제거, 중첩 @media 지원) */
+function parse(css) {
+  css = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const out = [];
+  const stack = [];
+  let buf = '';
+  for (const ch of css) {
+    if (ch === '{') { stack.push(buf.trim()); buf = ''; }
+    else if (ch === '}') {
+      const sel = stack.pop();
+      if (!sel.startsWith('@')) {
+        const decls = buf.split(';').map((d) => d.trim()).filter(Boolean).map((d) => {
+          const i = d.indexOf(':');
+          return [d.slice(0, i).trim(), d.slice(i + 1).trim()];
+        });
+        out.push({ sel: sel.replace(/\s+/g, ' '), decls, media: stack.filter((s) => s.startsWith('@')) });
+      }
+      buf = '';
+    } else buf += ch;
+  }
+  return out;
+}
+
+/** 이 파일에서 쓰는 미디어 조건만: (max/min-width|height: Npx) (pointer: coarse) (hover: none) */
+function mediaMatches(q, env) {
+  if (!q.startsWith('@media')) return false; // @keyframes 등
+  return q.slice(6).split(',').some((part) => [...part.matchAll(/\(([^)]+)\)/g)].every(([, f]) => {
+    const [k, v] = f.split(':').map((x) => x.trim());
+    const n = parseFloat(v);
+    if (k === 'max-width') return env.w <= n;
+    if (k === 'min-width') return env.w >= n;
+    if (k === 'max-height') return env.h <= n;
+    if (k === 'min-height') return env.h >= n;
+    if (k === 'pointer') return v === (env.coarse ? 'coarse' : 'fine');
+    if (k === 'hover') return v === (env.coarse ? 'none' : 'hover');
+    if (k === 'prefers-reduced-motion') return false;
+    throw new Error(`모르는 미디어 조건: ${f}`);
+  }));
+}
+
+const RULES = [...parse(read('src/ui/style.css')), ...parse(read('src/ui/theme.css'))];
+const PHONE = { w: 390, h: 844, coarse: true };
+const LAND = { w: 844, h: 390, coarse: true };
+const TABLET = { w: 820, h: 1180, coarse: true };
+const DESK = { w: 1280, h: 800, coarse: false };
+const DESK2 = { w: 1100, h: 740, coarse: false };
+
+/** 선택자 목록에 sel 이 그대로 들어 있는 규칙 중 env 에서 마지막으로 이기는 prop 값 (border 묶음은 두께로도 셈) */
+function value(env, sel, prop) {
+  let v;
+  for (const r of RULES) {
+    if (!r.sel.split(',').map((s) => s.trim()).includes(sel)) continue;
+    if (!r.media.every((m) => mediaMatches(m, env))) continue;
+    for (const [p, val] of r.decls) {
+      if (p === prop) v = val;
+      else if (prop === 'border-width' && p === 'border') v = val.split(' ')[0];
+    }
+  }
+  return v;
+}
+
+test('테마(theme.css)가 모바일 압축 값을 다시 덮지 않음', () => {
+  for (const env of [PHONE, LAND]) {
+    assert.equal(value(env, '.chip .xpbar', 'width'), '28px');
+    assert.equal(value(env, '.actionbar', 'padding'), '3px');
+    assert.equal(value(env, '.minimap', 'border-width'), '2px');
+  }
+  // 꾸미기 막대: 세로 폰은 이름 한 줄 + 단추 한 줄, 가로 폰은 세로 막대 (단추가 줄바꿈되지 않음)
+  assert.equal(value(PHONE, '.decor-bar', 'flex-wrap'), 'wrap');
+  assert.equal(value(PHONE, '.decor-what', 'flex'), '1 0 100%');
+  assert.equal(value(LAND, '.decor-bar', 'flex-wrap'), 'nowrap');
+  assert.equal(value(LAND, '.decor-what', 'flex'), '0 0 auto');
+});
+
+test('데스크톱 값은 그대로 (모바일 규칙이 새지 않음)', () => {
+  for (const env of [DESK, DESK2]) {
+    assert.equal(value(env, '.touch-btn', 'display'), 'none');
+    assert.equal(value(env, '.bar-toggle', 'display'), 'none');
+    assert.equal(value(env, '.dlg', 'bottom'), '96px');
+    assert.equal(value(env, '.prompt', 'white-space'), 'nowrap');
+    assert.equal(value(env, '.prompt', 'bottom'), '120px');
+    assert.equal(value(env, '.chat', 'bottom'), '12px');
+    assert.equal(value(env, '.actionbar button', 'font-size'), '11px');
+    assert.equal(value(env, '.chip .xpbar', 'width'), '76px');
+    assert.equal(value(env, '.decor-bar', 'bottom'), '174px');
+    assert.equal(value(env, '.soc-reqs', 'bottom'), '178px');
+    assert.equal(value(env, '.map-panel', 'display'), undefined);
+  }
+});
+
+test('가로 폰: 대화창은 바닥으로, 꾸미기 막대·요청 카드는 화면 가운데를 비움', () => {
+  assert.match(value(LAND, '.dlg', 'bottom'), /^calc\(6px/);
+  assert.equal(value(LAND, '.dlg-choices', 'display'), 'grid');
+  assert.equal(value(LAND, '.decor-bar', 'flex-direction'), 'column');
+  assert.equal(value(LAND, '.decor-bar', 'left'), 'auto');
+  assert.equal(value(LAND, '.soc-reqs', 'bottom'), 'auto');
+  assert.equal(value(LAND, '.map-panel', 'display'), 'grid');
+  assert.equal(value(LAND, '.panel.market', 'max-height'), 'none');
+  // 세로 폰은 가로 폰 전용 규칙을 받지 않음
+  assert.equal(value(PHONE, '.dlg-choices', 'display'), 'flex');
+  assert.equal(value(PHONE, '.decor-bar', 'flex-direction'), undefined);
+});
+
+test('터치 태블릿: 채팅·E 버튼이 가운데 행동 막대 위로', () => {
+  assert.equal(value(TABLET, '.chat', 'bottom'), '100px');
+  assert.equal(value(TABLET, '.touch-btn', 'bottom'), '104px');
+  assert.equal(value(LAND, '.chat', 'bottom') === '100px', false); // 가로 폰은 모바일 블록 값
+});
+
+test('조이스틱은 글자·버튼 크기 확대(zoom)에서 빠짐 (JS 가 손가락 화면 좌표로 놓음)', () => {
+  const z = RULES.find((r) => r.media.length === 0 && r.decls.some(([p, v]) => p === 'zoom' && v.includes('--ui-zoom')));
+  assert.ok(z, 'zoom 규칙이 있어야 함');
+  assert.match(z.sel, /:not\([^)]*\.joystick[^)]*\)/);
+  assert.match(z.sel, /:not\([^)]*\.fly[^)]*\)/);
+});
+
+test('트랙터 운전 중(#ui.driving)에는 E·☰ 숨김 (미디어쿼리 밖)', () => {
+  const r = RULES.find((x) => x.media.length === 0 && x.sel.includes('#ui.driving .touch-btn') && x.sel.includes('#ui.driving .bar-toggle'));
+  assert.ok(r);
+  assert.deepEqual(r.decls, [['display', 'none']]);
+});
+
+test('dvh·svh 를 쓰는 곳에는 바로 앞에 vh 대체값이 있음', () => {
+  for (const r of RULES) {
+    r.decls.forEach(([p, v], i) => {
+      if (!/\d(dvh|svh)\b/.test(v)) return;
+      const prev = r.decls.slice(0, i).find(([q, w]) => q === p && /\dvh\b/.test(w) && !/\d(dvh|svh)\b/.test(w));
+      assert.ok(prev, `${r.sel} { ${p}: ${v} } 앞에 vh 대체 선언이 없음`);
+    });
+  }
+});
+
+test('게임 UI 길게 누르기 방지, 입력칸은 그대로 글자 입력', () => {
+  const ui = RULES.filter((r) => r.sel === '#ui' && r.media.length === 0).flatMap((r) => r.decls);
+  const has = (p, v) => ui.some(([q, w]) => q === p && w === v);
+  assert.ok(has('-webkit-user-select', 'none') && has('user-select', 'none') && has('-webkit-touch-callout', 'none'));
+  const inp = RULES.find((r) => r.media.length === 0 && r.sel.split(',').map((s) => s.trim()).includes('#ui input'));
+  assert.ok(inp && inp.decls.some(([p, v]) => p === '-webkit-user-select' && v === 'text'));
+});
+
+test('index.html: 노치 화면 채움 + 홈 화면 앱 설정, 매니페스트 아이콘이 실제로 있음', () => {
+  const html = read('index.html');
+  assert.match(html, /name="viewport"[^>]*viewport-fit=cover/);
+  assert.match(html, /name="theme-color"/);
+  assert.match(html, /rel="manifest" href="\/manifest\.webmanifest"/);
+  const m = JSON.parse(read('public/manifest.webmanifest'));
+  assert.equal(m.short_name, '유니코 팜');
+  assert.ok(['fullscreen', 'standalone'].includes(m.display));
+  assert.ok(m.icons.length > 0);
+  for (const ic of m.icons) assert.ok(existsSync(new URL(`public/${ic.src}`, root)), ic.src);
+});
+
+test('vercel.json: /models 는 버전(?v) 없을 때만 매번 확인, 있을 때만 오래 캐시', () => {
+  const v = JSON.parse(read('vercel.json'));
+  const models = v.headers.filter((h) => h.source === '/models/(.*)');
+  const cc = (h) => h.headers.find((x) => x.key === 'Cache-Control').value;
+  const plain = models.find((h) => h.missing?.some((c) => c.type === 'query' && c.key === 'v'));
+  const ver = models.find((h) => h.has?.some((c) => c.type === 'query' && c.key === 'v'));
+  assert.match(cc(plain), /must-revalidate/);
+  assert.match(cc(ver), /immutable/);
+  assert.equal(models.length, 2);
+});

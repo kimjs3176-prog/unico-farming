@@ -2,9 +2,16 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <!-- viewport-fit=cover: 노치 폰 가로 화면에서도 양옆까지 채움 (UI 는 CSS 의 안전 영역 값만큼 안쪽에) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>유니코 팜 - 농업 메타버스</title>
   <meta name="description" content="한국농업기술진흥원 마스코트 유니코와 함께하는 캐주얼 3D 농장 메타버스" />
+  <!-- 휴대폰: 주소창·상태 막대 색, 홈 화면에 추가하면 주소창 없이 전체 화면으로 -->
+  <meta name="theme-color" content="#8fd0ff" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="유니코 팜" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦄</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
