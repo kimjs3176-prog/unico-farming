@@ -269,7 +269,7 @@ export class LakeView {
   intro() {
     const g = this.game, K = LAYOUT.lake;
     const fisher = g.npcs.list.find((e) => e.id === 'fisher')?.u;
-    const F = { speaker: fisher, name: '🎣 낚시꾼 유니코', color: '#3a7bd5', emote: 'wave' };
+    const F = { speaker: fisher, name: '🎣 낚시꾼 유니코', color: '#3170c9', emote: 'wave' };
     const pe = K.pier[1];
     g.cinema.play([
       { cam: [[K.x + 9, 7.5, K.z - 9], [K.x, 0, K.z + 1], 2.4] },

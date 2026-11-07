@@ -87,7 +87,7 @@ export class Minimap {
     for (const [i, st] of L.town.sites.entries()) { const done = this.game.town?.sim.sites[i]?.state !== 'empty' && this.game.town; rect(st.x - 1.8, st.z - 1.8, st.x + 1.8, st.z + 1.8, done ? '#f2a33a' : 'rgba(160,120,70,0.45)'); }
     c.fillStyle = '#e0413a'; for (const o of L.orchard) { c.beginPath(); c.arc(X(o.x), Z(o.z), 2.2 * ui, 0, 7); c.fill(); }
     // 주민 (역할 색)
-    const npcCol = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a3a9b0', kid: '#f28bb0', fisher: '#3a7bd5' };
+    const npcCol = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a3a9b0', kid: '#f28bb0', fisher: '#3170c9' };
     for (const e of this.game.npcs.list) { const p = e.u.group.position; c.fillStyle = npcCol[e.id] || '#fff'; c.beginPath(); c.arc(X(p.x), Z(p.z), 2.6 * ui, 0, 7); c.fill(); }
     // 해로운 동물 (빨간 점)
     c.fillStyle = '#e8495a';
