@@ -85,10 +85,11 @@ export function resolveQuality(s, dpr = typeof devicePixelRatio === 'number' ? d
  * 단계별 덧붙임 (낮음만 가볍게, 보통·높음은 그대로)
  *  precip: 비·눈 입자 비율 / birds: 새 떼 / grassFar: 풀을 그리는 거리(m, 0 = 끝까지)
  *  grassLean: 풀 한 포기 잎 수 줄이기 / lowDetail: 재질 노이즈 옥타브 줄이기 (첫 렌더 전에만 반영)
+ *  shadowBoxMax: 그림자 상자 반폭 상한(m). 낮음은 26 (가로 폰에서 상자가 맵 대부분을 덮지 않게, 그 밖은 안개 속)
  */
 export function levelExtras(level) {
   const low = level === 'low';
-  return { precip: low ? 0.4 : 1, birds: !low, grassFar: low ? 40 : 0, grassLean: low, lowDetail: low };
+  return { precip: low ? 0.4 : 1, birds: !low, grassFar: low ? 40 : 0, grassLean: low, lowDetail: low, shadowBoxMax: low ? 26 : 36 };
 }
 
 /**

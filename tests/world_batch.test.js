@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { cellKey, planStaticGroups, shadowFit, snapToTexel } from '../src/game/world.js';
+import { cellKey, planStaticGroups, shadowFit, shadowBehind, snapToTexel } from '../src/game/world.js';
 import { groupByCell, countBelow } from '../src/game/scenery.js';
 import { activeCount } from '../src/game/precip.js';
 import { fbmCompensation } from '../src/game/surface.js';
@@ -57,11 +57,54 @@ test('그림자 상자: 세로 화면은 작게, 앞 34m·뒤 12m 를 늘 덮음
     // 앞쪽 끝(카메라 최대 16m 뒤)에서 화면 가로 반폭을 덮음 (최대치에 걸린 아주 넓은 화면 제외)
     const halfW = (34 + 16) * aspect * Math.tan(THREE.MathUtils.degToRad(22.5));
     if (r < 36) assert.ok(r >= halfW - 1e-9);
+    // 세로 화면에서 세로 시야를 넓혀도(가로 시야 tan22.5°×√비율) 가로 반폭을 덮음
+    if (aspect < 1) assert.ok(r >= (34 + 16) * Math.sqrt(aspect) * Math.tan(THREE.MathUtils.degToRad(22.5)) - 1e-9);
   }
   const phone = shadowFit(412 / 839), pc = shadowFit(1280 / 800);
   assert.ok(phone.r < 25, `세로 폰 ${phone.r}`);
   assert.ok(phone.a > 8, '상자를 앞으로 밀어 둠');
   assert.ok(Math.abs(pc.r - 34) < 1.5, `PC ${pc.r}`);
+});
+
+test('그림자 상자 상한(낮음 26m): 가로 폰은 작아지고 앞 34m·뒤 12m 는 그대로, 세로 폰·PC 높음은 그대로', () => {
+  for (const aspect of [915 / 412, 844 / 390, 839 / 412]) {
+    const { r, a } = shadowFit(aspect, { max: 26 });
+    assert.equal(r, 26, `가로 폰 ${aspect.toFixed(2)}`);
+    assert.equal(a, 8);
+    assert.ok(a + r >= 34 && r - a >= 12);
+    assert.ok(shadowFit(aspect).r > 34, '상한 36 이면 예전처럼 넓음');
+  }
+  for (const aspect of [412 / 839, 390 / 844, 412 / 915]) assert.deepEqual(shadowFit(aspect, { max: 26 }), shadowFit(aspect));
+  assert.deepEqual(shadowFit(1280 / 800, { max: 36 }), shadowFit(1280 / 800));
+  // 상한에 걸려 다 못 덮으면 뒤쪽(카메라 쪽)을 먼저 덮음
+  const tight = shadowFit(915 / 412, { max: 26, behind: 20 });
+  assert.equal(tight.r - tight.a, 20);
+  assert.ok(tight.r + tight.a >= 30);
+});
+
+test('그림자 상자 뒤쪽: 카메라까지 가로 거리+1m (12~20m, 1m 단위), 기본 시점은 그대로 12m', () => {
+  assert.equal(shadowBehind(0), 12);
+  assert.equal(shadowBehind(undefined), 12);
+  assert.equal(shadowBehind(9 * Math.cos(0.45)), 12, '기본 거리 9·높이 0.45');
+  assert.equal(shadowBehind(13.2), 15);
+  assert.equal(shadowBehind(17.8), 19);
+  assert.equal(shadowBehind(40), 20, '컷신 등 멀리 있어도 20m 까지만');
+  assert.deepEqual(shadowFit(412 / 839, { behind: shadowBehind(8.1) }), shadowFit(412 / 839));
+  // 카메라(거리 4~18, 높이각 0.15~1.2, 세로 시야 45~64°)가 화면 아래쪽에 보는 땅이 늘 상자 안
+  for (const aspect of [412 / 915, 412 / 839, 1280 / 800, 915 / 412]) {
+    for (const max of [26, 36]) {
+      for (const fov of [45, 64]) {
+        for (let dist = 4; dist <= 18; dist += 2) {
+          for (let p = 0.15; p <= 1.2 + 1e-9; p += 0.05) {
+            const D = dist * Math.cos(p), H = 1.1 + dist * Math.sin(p), th = p + THREE.MathUtils.degToRad(fov / 2);
+            const seen = th < Math.PI / 2 ? D - H / Math.tan(th) : D + H * Math.tan(th - Math.PI / 2); // 캐릭터 뒤 거리
+            const { r, a } = shadowFit(aspect, { behind: shadowBehind(D), max });
+            assert.ok(r - a >= seen, `비율 ${aspect.toFixed(2)} 상한 ${max} 시야 ${fov} 거리 ${dist} 높이각 ${p.toFixed(2)}: 뒤 ${(r - a).toFixed(1)} < ${seen.toFixed(1)}`);
+          }
+        }
+      }
+    }
+  }
 });
 
 test('그림자 중심 격자 맞춤: 빛 공간 좌표가 그림자 맵 한 칸의 정수배, 빛 방향으로는 움직이지 않음', () => {

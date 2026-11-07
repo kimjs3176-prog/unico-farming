@@ -131,9 +131,10 @@ const WEATHER_KEYS = ['cloud', 'precip', 'fog', 'wind'];
 const ORIGIN = { x: 0, z: 0 };
 // 정적 병합 칸: 삼각형이 많은 묶음만 20m 칸으로 나눠 화면(그림자 상자) 밖 칸은 그리지 않음
 const STATIC_CELL = 20, SPLIT_TRIS = 3000, MIN_CELL_TRIS = 400;
-// 그림자: 캐릭터 앞 34m·뒤 12m 를 덮는 상자를 카메라가 보는 쪽으로 밀어 둠 (화면 비율에 맞춰 크기)
-const SHADOW_AHEAD = 34, SHADOW_BEHIND = 12, SUN_DIST = 100;
-const TAN_HALF_FOV = Math.tan(THREE.MathUtils.degToRad(45 / 2)); // main.js 카메라 세로 시야 45°
+// 그림자: 캐릭터 앞 34m·뒤 12m(멀리 당기면 카메라 발밑까지)를 덮는 상자를 카메라가 보는 쪽으로 밀어 둠 (화면 비율에 맞춰 크기)
+const SHADOW_AHEAD = 34, SHADOW_BEHIND = 12, SHADOW_BEHIND_MAX = 20, SUN_DIST = 100;
+// 가로 화면 기준 세로 시야 45°의 tan. 세로 화면은 세로 시야를 넓혀도 가로 시야는 대략 tan×√비율 이하라 그 값으로 덮음
+const TAN_HALF_FOV = Math.tan(THREE.MathUtils.degToRad(45 / 2));
 const INDOOR_Y = -50; // 이보다 아래면 땅속 실내 방 (view/home_interior.js IO.y = -200)
 const _c = new THREE.Vector3(), _dir = new THREE.Vector3(), _size = new THREE.Vector2(), _sr = new THREE.Vector3(), _su = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
@@ -158,12 +159,19 @@ export function planStaticGroups(cellTris, { splitTris = SPLIT_TRIS, minCellTris
 
 /**
  * 그림자 상자 맞추기: 화면 가로세로비 → { r: 상자 반폭(m), a: 상자 중심을 캐릭터 앞으로 미는 거리(m) }.
- * 앞쪽 끝(ahead)에서 화면 가로 반폭(카메라가 최대 camBack 뒤에 있을 때)과 앞뒤 길이를 모두 덮는 가장 작은 상자
+ * 앞쪽 끝(ahead)에서 화면 가로 반폭(카메라가 최대 camBack 뒤에 있을 때)과 앞뒤 길이를 모두 덮는 가장 작은 상자.
+ * max(품질 단계별 상한)에 걸려 다 못 덮으면 화면에 크게 보이는 뒤쪽(카메라 쪽)을 먼저 덮음
  */
 export function shadowFit(aspect, { ahead = SHADOW_AHEAD, behind = SHADOW_BEHIND, camBack = 16, tanHalf = TAN_HALF_FOV, min = 16, max = 36 } = {}) {
-  const halfW = (ahead + camBack) * Math.max(0.1, aspect || 1) * tanHalf;
+  const asp = Math.max(0.1, aspect || 1);
+  const halfW = (ahead + camBack) * Math.max(asp, Math.sqrt(asp)) * tanHalf;
   const r = Math.min(max, Math.max(min, halfW, (ahead + behind) / 2));
-  return { r, a: Math.max(0, ahead - r) };
+  return { r, a: Math.max(0, Math.min(ahead - r, r - behind)) };
+}
+
+/** 상자 뒤쪽 길이: 카메라까지 가로 거리(dl)+1m 까지 덮음 (최소 12m, 최대 20m, 1m 단위로 끊어 줌 바꿀 때만 크기가 바뀜) */
+export function shadowBehind(dl) {
+  return Math.max(SHADOW_BEHIND, Math.min(Math.ceil((dl || 0) + 1), SHADOW_BEHIND_MAX));
 }
 
 /**
@@ -957,12 +965,13 @@ export class World {
    */
   _fitShadow(focus, sunRel, indoor) {
     const sh = this.sun.shadow, cam = sh.camera;
-    const sz = this.renderer?.getSize ? this.renderer.getSize(_size) : null;
-    const fit = shadowFit(sz && sz.y > 0 ? sz.x / sz.y : 1.6);
-    if (cam.right !== fit.r) { cam.left = cam.bottom = -fit.r; cam.right = cam.top = fit.r; cam.updateProjectionMatrix(); }
-    const c = _c.set(focus?.x || 0, focus?.y || 0, focus?.z || 0);
     const cp = SURF.seeCam.value, tp = SURF.seeTarget.value;
     const dx = tp.x - cp.x, dz = tp.z - cp.z, dl = Math.hypot(dx, dz);
+    const sz = this.renderer?.getSize ? this.renderer.getSize(_size) : null;
+    // 뒤쪽은 카메라 발밑까지 (멀리 당긴 세로 화면 아래쪽), 상한은 품질 단계별 (낮음은 작게 → 가로 폰 그림자 패스 가볍게)
+    const fit = shadowFit(sz && sz.y > 0 ? sz.x / sz.y : 1.6, { behind: shadowBehind(dl), max: this.quality?.shadowBoxMax ?? 36 });
+    if (cam.right !== fit.r) { cam.left = cam.bottom = -fit.r; cam.right = cam.top = fit.r; cam.updateProjectionMatrix(); }
+    const c = _c.set(focus?.x || 0, focus?.y || 0, focus?.z || 0);
     if (dl > 1e-3) { c.x += (dx / dl) * fit.a; c.z += (dz / dl) * fit.a; } else c.z -= fit.a; // 기본 카메라는 북쪽(-z)을 봄
     // 집 안(지붕 없는 단면 방): 해가 낮으면 옆벽 그림자가 방을 덮으므로 빛을 높게 세워 짧은 접지 그림자만
     const dir = _dir.copy(sunRel);

@@ -70,13 +70,14 @@ test('자동 조절기: 탭 전환 후 reset 하면 유예 시간부터 다시',
   assert.equal(down, false);
 });
 
-test('단계별 덧붙임: 낮음만 새 떼 끔·비눈 입자 줄임·풀 거리 제한·잎 수·노이즈 줄임, 보통·높음은 그대로', () => {
+test('단계별 덧붙임: 낮음만 새 떼 끔·비눈 입자 줄임·풀 거리 제한·잎 수·노이즈·그림자 상자 줄임, 보통·높음은 그대로', () => {
   const low = resolveQuality(applyPreset(base, 'low'), 1);
   assert.equal(low.birds, false);
   assert.ok(low.precip > 0 && low.precip < 1);
   assert.ok(low.grassFar > 30, '안개 시작(45m) 근처까지는 그림');
   assert.equal(low.grassLean, true);
   assert.equal(low.lowDetail, true);
+  assert.equal(low.shadowBoxMax, 26, '가로 폰 그림자 상자 작게');
   for (const p of ['medium', 'high']) {
     const q = resolveQuality(applyPreset(base, p), 1);
     assert.equal(q.birds, true);
@@ -84,6 +85,7 @@ test('단계별 덧붙임: 낮음만 새 떼 끔·비눈 입자 줄임·풀 거�
     assert.equal(q.grassFar, 0);
     assert.equal(q.grassLean, false);
     assert.equal(q.lowDetail, false);
+    assert.equal(q.shadowBoxMax, 36);
   }
   // 자동 모드(모바일 시작 단계 low)도 같은 값
   const autoLow = resolveQuality(applyPreset({ ...base, autoLevel: 'low' }, 'auto'), 1);

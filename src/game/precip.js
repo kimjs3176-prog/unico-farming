@@ -88,7 +88,7 @@ export class Precipitation {
   }
 }
 
-/** 살아 있는 입자 수: 최대 N × 세기(0~1) × 품질 비율 (순수 계산 → tests/precip.test.js) */
+/** 살아 있는 입자 수: 최대 N × 세기(0~1) × 품질 비율 (순수 계산 → tests/world_batch.test.js) */
 export function activeCount(N, intensity, density = 1) {
   if (!(intensity > 0) || !(density > 0)) return 0;
   return Math.min(N, Math.floor(N * Math.min(1, intensity) * Math.min(1, density)));
