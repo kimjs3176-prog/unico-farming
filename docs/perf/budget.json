@@ -1,0 +1,26 @@
+{
+  "updated": "2026-11-07",
+  "enforce": "warn",
+  "about": "성능 예산 (scripts/perf-budget.mjs 가 읽음). enforce: warn(초과=경고) | block(초과=종료 코드 1, 배포 전 점검에서 막음) | off(참고만). 값이 null 이면 그 항목은 '판단 불가 — 예산 없음'. 예산을 바꿀 때는 updated 와 아래 why 를 함께 고칠 것",
+  "budgets": {
+    "drawCalls": { "high": 1650, "low": 850 },
+    "triangles": { "high": 2350000, "low": 1050000 },
+    "logicMs": { "avg": 2.0, "p95": 4.0, "autoplayP95": 4.0 },
+    "heapMB": { "afterLoad": 120, "growthPerMinute": 5 },
+    "download": { "jsGzipKB": 500, "modelsGzMB": 3.2 },
+    "mobileFrameMs": 33.3
+  },
+  "why": {
+    "drawCalls": "2026-11-07 측정(스폰 화면, 10프레임 중 가장 무거운 한 프레임, 그림자·후처리 포함): 고사양 1,428 · 저사양 721 → 약 15% 여유. 저사양은 그림자를 3프레임마다 그려서 그 프레임이 최대. (일일 점검의 '한 번 그리기' 수치 약 1,000·500 과는 재는 방식이 다름)",
+    "triangles": "같은 측정: 고사양 203만 · 저사양 91만 → 약 15% 여유",
+    "logicMs": "그리기를 뺀 게임 로직, 헤드리스 PC CPU: 평균 1.1 · p95 2.0 · 오토플레이 p95 1.6ms. 폰 CPU 는 대략 3~4배 느리므로 PC 2ms ≈ 폰 6~8ms → 저사양 폰 목표(30fps=33ms)에서 그리기에 25ms 이상 남김",
+    "heapMB": "시작 후 GC 뒤 78MB, 게임 60초(오토플레이) 뒤 +0.9MB. 저가 폰 브라우저 탭 메모리를 고려해 120MB, 1분에 5MB 넘게 늘면 새는 것으로 봄",
+    "download": "첫 화면 JS·CSS gzip 438KB(three 포함), 모델 .gz 2.8MB → 약 15% 여유. 모바일 데이터 첫 접속 3.5MB 안쪽",
+    "mobileFrameMs": "저사양 프리셋, 실제 저가 안드로이드 폰에서 30fps(33.3ms). 스크립트로는 못 재므로 기기에서 환경설정 'FPS 표시'로 잰 값을 measured 에 적어야 판정됨"
+  },
+  "measured": {
+    "mobileFrameMs": null,
+    "mobileDevice": null,
+    "mobileMeasuredAt": null
+  }
+}

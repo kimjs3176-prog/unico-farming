@@ -235,7 +235,7 @@ export class TownView {
     const g = this.game, eco = g.economy, B = BUILDINGS[type];
     const cost = this.sim.build(i, type, eco.money, g.quests.level);
     if (!cost) return;
-    eco.money -= cost; eco.stats.spent += cost;
+    eco.spend(cost);
     g.ui.closePanel();
     this.sync(i);
     g.audio.play('coin');
@@ -254,7 +254,7 @@ export class TownView {
     const b = document.createElement('button');
     b.className = 'gold'; b.textContent = `⚡ 바로 완성 (${cost}🪙)`;
     b.disabled = eco.money < cost;
-    b.onclick = () => { if (eco.money < cost || !this.sim.rush(i)) return; eco.money -= cost; eco.stats.spent += cost; g.ui.closePanel(); this._finish(i); };
+    b.onclick = () => { if (eco.money < cost || !this.sim.rush(i)) return; eco.spend(cost); g.ui.closePanel(); this._finish(i); };
     const c = document.createElement('button'); c.className = 'ghost'; c.textContent = '기다릴게요'; c.onclick = () => g.ui.closePanel();
     const row = document.createElement('div'); row.className = 'mg-btns'; row.append(c, b);
     p.append(row);

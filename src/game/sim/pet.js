@@ -17,7 +17,9 @@ const HUNGER_PER_SEC = 100 / 360;
 const PET_COOLDOWN = 20;
 
 export class PetSim {
-  constructor() {
+  /** @param rng 무작위 (테스트에서 고정값 주입) */
+  constructor(rng = Math.random) {
+    this.rng = rng;
     this.name = '콩이';
     this.hunger = 80;
     this.affection = 10;
@@ -37,7 +39,7 @@ export class PetSim {
     if (this.hunger < 15) this.affection = Math.max(0, this.affection - dt * 0.02);
     if (this.hearts >= 3 && this.hunger >= 40 && !this.found) {
       this.digTimer -= dt;
-      if (this.digTimer <= 0) { this.digTimer = 90 + Math.random() * 60; return 'dig'; }
+      if (this.digTimer <= 0) { this.digTimer = 90 + this.rng() * 60; return 'dig'; }
     }
     return null;
   }
@@ -61,7 +63,7 @@ export class PetSim {
   }
 
   /** 땅 파기 결과 (rnd 주입 가능) */
-  dig(rnd = Math.random) {
+  dig(rnd = this.rng) {
     const r = rnd();
     this.found = r < 0.45 ? { type: 'coin', n: 30 + Math.floor(rnd() * 8) * 10 } : r < 0.8 ? { type: 'seed' } : { type: 'item' };
     return this.found;

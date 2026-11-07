@@ -378,7 +378,7 @@ export class RanchView {
     if (eco.inventory.feed <= 0) return g.ui.toast('사료가 없어요. 장터에서 사 오세요 🛒');
     const n = this.sim.fillTrough(eco.inventory.feed);
     if (!n) return g.ui.toast('여물통이 가득 찼어요');
-    eco.inventory.feed -= n;
+    eco.useFeed(n);
     g.player.unico.playAction('scatter', 1.2);
     g.audio.play('plant');
     g.fx.burst(LAYOUT.trough.x, 0.5, LAYOUT.trough.z, 0xe8c66a, 12);
@@ -428,7 +428,7 @@ export class RanchView {
           if (eco.money < price) return;
           const a = S.buy(type);
           if (!a) return;
-          eco.money -= price; eco.stats.spent += price;
+          eco.spend(price);
           this.sync();
           const e = this.ents.find((x) => x.a === a);
           g.fx.burst(e.m.position.x, 0.6, e.m.position.z, 0xfff3a0, 16);
@@ -445,11 +445,11 @@ export class RanchView {
       const fac = h('div', 'rows');
       const nb = BARN[S.barn + 1];
       const br = h('div', 'row', `<span>🏚️</span><span class="nm">축사 증축 <span class="qty">${S.barn + 1}/${BARN.length}단계</span><br><small>소·양 ${BARN[S.barn].big}마리, 닭 ${BARN[S.barn].small}마리까지${nb ? ` → ${nb.big} / ${nb.small}` : ''}</small></span><span class="pr">${nb ? `${nb.price}🪙` : '완료'}</span>`);
-      if (nb) { const b = h('button', 'gold', '증축'); b.disabled = eco.money < nb.price; b.onclick = () => { if (eco.money < nb.price || !S.upgradeBarn()) return; eco.money -= nb.price; eco.stats.spent += nb.price; g.audio.play('levelup'); g.ui.toast('🏚️ 축사를 넓혔어요! 가축을 더 들일 수 있어요'); render(); }; br.append(b); }
+      if (nb) { const b = h('button', 'gold', '증축'); b.disabled = eco.money < nb.price; b.onclick = () => { if (eco.money < nb.price || !S.upgradeBarn()) return; eco.spend(nb.price); g.audio.play('levelup'); g.ui.toast('🏚️ 축사를 넓혔어요! 가축을 더 들일 수 있어요'); render(); }; br.append(b); }
       fac.append(br);
       const wp = this.work.nextJarPrice;
       const wr = h('div', 'row', `<span>🧀</span><span class="nm">가공소 숙성 칸 <span class="qty">${this.work.jars}/4</span></span><span class="pr">${wp ? `${wp}🪙` : '완료'}</span>`);
-      if (wp) { const b = h('button', 'gold', '추가'); b.disabled = eco.money < wp; b.onclick = () => { if (eco.money < wp || !this.work.buyJar()) return; eco.money -= wp; eco.stats.spent += wp; g.audio.play('levelup'); render(); }; wr.append(b); }
+      if (wp) { const b = h('button', 'gold', '추가'); b.disabled = eco.money < wp; b.onclick = () => { if (eco.money < wp || !this.work.buyJar()) return; eco.spend(wp); g.audio.play('levelup'); render(); }; wr.append(b); }
       fac.append(wr);
       body.append(fac);
       p.append(body);

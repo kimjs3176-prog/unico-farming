@@ -43,6 +43,9 @@ export class UI {
     this.btnQuest = h('button', 'ghost', '📜<span class="lbl"> 퀘스트</span> <span class="hint-kbd">(Q)</span>');
     this.btnHelp = h('button', 'ghost', '❔');
     this.btnSettings = h('button', 'ghost', '⚙️');
+    // 아이콘만 보이는 버튼(폰에서는 글자를 숨김)에도 읽을 이름 (WCAG SC 4.1.2)
+    for (const [b, n] of [[this.btnBag, '가방 (I)'], [this.btnQuest, '퀘스트 (Q)'], [this.btnHelp, '도움말'], [this.btnSettings, '환경설정']]) b.setAttribute('aria-label', n);
+    this.weatherChip.setAttribute('aria-label', '날씨');
     this.btnSettings.title = '환경설정 (그래픽 품질)';
     this.btnSettings.onclick = () => this.openSettings();
     this.btnBag.onclick = () => this.openInventory();
@@ -112,6 +115,7 @@ export class UI {
     // 모바일: 행동 막대는 ☰ 버튼 하나로 접어 두고, 누르면 펼침 (버튼을 고르면 다시 접힘)
     this.barToggle = h('button', 'bar-toggle', '☰');
     this.barToggle.title = '메뉴';
+    this.barToggle.setAttribute('aria-label', '메뉴 열기');
     this.barToggle.onclick = () => this.setBarOpen(!this.root.classList.contains('bar-open'));
     root.append(this.barToggle);
     this.bar.addEventListener('click', (e) => { if (e.target.closest('button')) this.setBarOpen(false); });
@@ -122,6 +126,7 @@ export class UI {
     this.weatherInfo = { w, svc };
     const place = svc.loc?.name ? ` <small>${esc(svc.loc.name)}</small>` : '';
     this.weatherChip.innerHTML = `${w.emoji} <span>${w.temperature != null ? Math.round(w.temperature) + '°' : ''} ${w.label}</span>${place}`;
+    this.weatherChip.setAttribute('aria-label', `날씨: ${w.temperature != null ? Math.round(w.temperature) + '도 ' : ''}${w.label}${svc.loc?.name ? ` (${svc.loc.name})` : ''}`);
     if (this.panel?.dataset.kind === 'weather') this.openWeather();
   }
 
@@ -431,6 +436,7 @@ export class UI {
   setBarOpen(open) {
     this.root.classList.toggle('bar-open', open);
     this.barToggle.textContent = open ? '✕' : '☰';
+    this.barToggle.setAttribute('aria-label', open ? '메뉴 닫기' : '메뉴 열기');
   }
 
   /** 오토플레이 상태 표시: text=null 이면 숨김 */
@@ -480,7 +486,7 @@ export class UI {
     this.game.input.enabled = false;
     this.game.player.frozen = true;
     const p = h('div', 'panel');
-    const head = h('h2', '', `${title} <button class="ghost close">✕</button>`);
+    const head = h('h2', '', `${title} <button class="ghost close" aria-label="닫기">✕</button>`);
     head.querySelector('.close').onclick = () => this.closePanel();
     p.append(head);
     this.root.append(p);
@@ -612,7 +618,7 @@ export class UI {
             b.onclick = () => {
               const cost = cs.buy(c.id, { money: eco.money, level: g.quests.level, festival: !!eco.festival });
               if (!cost) return;
-              eco.money -= cost; eco.stats.spent += cost;
+              eco.spend(cost);
               cs.wear(c.id); g.applyLook();
               g.audio.play('levelup'); g.player.unico.playAction('cheer', 1.2);
               this.toast(`${c.icon} ${c.name}${josa(c.name, '을/를')} 샀어요! 바로 입었어요 · ${c.perkText}`);
@@ -632,12 +638,12 @@ export class UI {
         const SPR = [400, 800, 1300];
         const sr = sim.sprinklerRows;
         const spr = h('div', 'row mk-row', `<span class="ic">💦</span><span class="nm">스프링클러 <span class="qty">${sr}/3줄</span><br><small>설치한 줄은 물이 마르면 자동으로 물을 줘요</small></span><span class="pr">${sr < 3 ? `${SPR[sr]}🪙` : '완료'}</span>`);
-        if (sr < 3) { const bt = h('button', 'gold', `${sr + 1}번째 줄 설치`); bt.disabled = eco.money < SPR[sr]; bt.onclick = () => { if (eco.money < SPR[sim.sprinklerRows]) return; eco.money -= SPR[sim.sprinklerRows]; eco.stats.spent += SPR[sim.sprinklerRows]; sim.sprinklerRows++; g.audio.play('levelup'); this.toast(`💦 밭 ${sim.sprinklerRows}번째 줄에 스프링클러를 설치했어요!`); g.onEvent('sprinkler', sim.sprinklerRows); render(); }; spr.append(bt); }
+        if (sr < 3) { const bt = h('button', 'gold', `${sr + 1}번째 줄 설치`); bt.disabled = eco.money < SPR[sr]; bt.onclick = () => { if (eco.money < SPR[sim.sprinklerRows]) return; eco.spend(SPR[sim.sprinklerRows]); sim.sprinklerRows++; g.audio.play('levelup'); this.toast(`💦 밭 ${sim.sprinklerRows}번째 줄에 스프링클러를 설치했어요!`); g.onEvent('sprinkler', sim.sprinklerRows); render(); }; spr.append(bt); }
         fac.append(spr);
         if (fc) {
           const jp = fc.proc.nextJarPrice;
           const jr = h('div', 'row mk-row', `<span class="ic">🏺</span><span class="nm">장독 추가 <span class="qty">${fc.proc.jars}/4개</span><br><small>밭 서쪽 장독대에서 김치·잼·주스를 동시에 더 담가요</small></span><span class="pr">${jp ? `${jp}🪙` : '완료'}</span>`);
-          if (jp) { const bt = h('button', 'gold', '장독 사기'); bt.disabled = eco.money < jp; bt.onclick = () => { if (eco.money < jp || !fc.proc.buyJar()) return; eco.money -= jp; eco.stats.spent += jp; g.audio.play('levelup'); this.toast('🏺 장독대에 장독을 하나 더 놓았어요!'); render(); }; jr.append(bt); }
+          if (jp) { const bt = h('button', 'gold', '장독 사기'); bt.disabled = eco.money < jp; bt.onclick = () => { if (eco.money < jp || !fc.proc.buyJar()) return; eco.spend(jp); g.audio.play('levelup'); this.toast('🏺 장독대에 장독을 하나 더 놓았어요!'); render(); }; jr.append(bt); }
           fac.append(jr);
         }
         body.append(fac);

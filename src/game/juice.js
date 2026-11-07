@@ -14,7 +14,11 @@ export class Juice {
   }
 
   /** 0..1 트라우마 추가 (여러 충격이 겹치면 누적, 최대 1) */
-  shake(amount) { this.trauma = Math.min(1, this.trauma + amount); }
+  shake(amount) {
+    // 기기 설정에서 '동작 줄이기'를 켠 사람에게는 화면을 흔들지 않음 (WCAG SC 2.3.3)
+    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    this.trauma = Math.min(1, this.trauma + amount);
+  }
 
   /** 오브젝트를 순간 키웠다가(스트레치) 원래 크기로 복귀 */
   pop(obj, amount = 0.25, duration = 0.35) {

@@ -7,7 +7,7 @@ import { CROPS } from '../sim/crops.js';
 
 const ROLE_ICON = { merchant: '🛒', researcher: '🔬', guide: '📣', granny: '🌾', kid: '🦋', fisher: '🎣' };
 /** 대화창 이름표 색 (역할별) */
-const NPC_COLOR = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a07e5c', kid: '#f28bb0', fisher: '#3a7bd5' };
+const NPC_COLOR = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a07e5c', kid: '#f28bb0', fisher: '#3170c9' };
 const BYE = { merchant: '좋은 거래였어! 또 와~', researcher: '데이터가 쌓이면 또 알려 줄게!', guide: '궁금한 거 있으면 언제든 불러 줘!', granny: '조심히 가거라, 아가.', kid: '다음에 또 같이 놀자!', fisher: '물 조심하고, 손맛 좋은 하루 되렴 🎣' };
 
 const OUTFITS = {
@@ -170,7 +170,7 @@ export class NPCs {
     const g = this.game;
     for (const rw of r?.rewards || []) {
       if (rw.money) g.economy.earn(rw.money);
-      if (rw.seeds) for (const [k, n] of Object.entries(rw.seeds)) g.economy.inventory.seeds[k] = (g.economy.inventory.seeds[k] || 0) + n;
+      if (rw.seeds) for (const [k, n] of Object.entries(rw.seeds)) g.economy.addSeeds(k, n);
       if (rw.item) for (const [k, n] of Object.entries(rw.item)) g.economy.addItem(k, n);
       g.ui.toast(`🎁 ${e.n.name}: "${rw.text}"`);
       g.audio.play('levelup');

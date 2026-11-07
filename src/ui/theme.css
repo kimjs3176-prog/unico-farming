@@ -147,3 +147,29 @@ button:disabled { opacity: 1; filter: grayscale(0.85) brightness(1.08); box-shad
 .decor-what { color: #fff8ea; font-family: var(--display); font-size: 15px; padding: 0 6px; text-shadow: 0 1px 0 rgba(0,0,0,0.45); white-space: nowrap; }
 .decor-bar button { padding: 8px 12px; font-size: 14px; min-height: 40px; }
 @media (max-width: 600px) { .decor-bar { bottom: 196px; } .decor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------------- 접근성: 글자 명암 대비 (WCAG 2.1 SC 1.4.3, scripts/a11y-check.mjs) ----------------
+   흰 글자가 올라가는 청록(버튼·창 제목·고른 탭)은 그라데이션의 가장 밝은 곳에서도 4.5:1 이상이 되게 한 단계 진하게.
+   장식용 청록(진행 막대·테두리)은 그대로 */
+:root { --teal-t-hi: #1d847a; --teal-t: #17736b; --teal-t-d: #12625b; --teal-t-dd: #0e4f49; }
+button { background: linear-gradient(180deg, var(--teal-t-hi) 0%, var(--teal-t) 55%, var(--teal-t-d) 100%);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.25), inset 0 -2px 0 rgba(0,0,0,0.08), 0 4px 0 var(--teal-t-dd), 0 6px 10px rgba(20,14,10,0.15); }
+button:active:not(:disabled) { box-shadow: inset 0 2px 4px rgba(0,0,0,0.18), 0 1px 0 var(--teal-t-dd); }
+.panel h2 { background: linear-gradient(180deg, var(--teal-t-hi) 0%, var(--teal-t) 60%, var(--teal-t-d) 100%); }
+.mk-tabs button.on { background: linear-gradient(180deg, var(--teal-t-hi), var(--teal-t) 60%, var(--teal-t-d)); box-shadow: 0 3px 0 var(--teal-t-dd); }
+.chip .money { color: #8a5208; }            /* 4.05 → 5.6:1 */
+.chip small { color: #74583e; }              /* 4.32 → 5.7:1 */
+.objective .tt small { color: #6f604f; }     /* 3.63 → 5.3:1 */
+.actionbar { background: linear-gradient(180deg, var(--wood) 0%, #8a5832 45%, var(--wood-d) 100%); } /* 글자 아래 밝은 나무색 4.1 → 4.7:1 */
+/* 흐린 설명 글자(장터 등) 4.3 → 6.0:1, 청록 가격 4.5 → 5.7:1 */
+.row .pr { color: var(--teal-t); }
+/* 잠긴 버튼('Lv.2 해금'): WCAG 는 비활성 버튼을 대비 기준에서 빼지만, 해금 레벨은 읽혀야 하니 밝은 판 + 진한 글자 (5.8:1) */
+button:disabled { background: linear-gradient(180deg, #efe9df, #e6dfd3); color: #5e5145; filter: none;
+  box-shadow: inset 0 0 0 2px rgba(94,81,69,0.18); text-shadow: none; cursor: not-allowed; }
+/* 환경설정 밀대: 손가락으로 잡기 쉬운 높이 (SC 2.5.8) */
+.gfx-row input[type=range] { min-height: 30px; }
+/* 폰: 위쪽 아이콘 버튼·날씨도 누르기 쉬운 크기 (WCAG 2.2 SC 2.5.8 최소 24px) */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  .hud-right button, .weather-chip { min-height: 30px; min-width: 32px; }
+  .actionbar button { font-size: 10px; }
+}

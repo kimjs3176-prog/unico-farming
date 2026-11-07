@@ -168,7 +168,7 @@ export class Pet {
     if (f.type === 'coin') { eco.earn(f.n); text = `🪙 ${f.n} 코인`; }
     else if (f.type === 'seed') {
       const ks = Object.keys(CROPS).filter((k) => CROPS[k].unlockLevel <= g.quests.level), k = ks[Math.floor(Math.random() * ks.length)];
-      eco.inventory.seeds[k] = (eco.inventory.seeds[k] || 0) + 2; text = `${CROPS[k].emoji} ${CROPS[k].name} 씨앗 2개`;
+      eco.addSeeds(k, 2); text = `${CROPS[k].emoji} ${CROPS[k].name} 씨앗 2개`;
     } else { eco.addItem('fruit_apple', 1); eco.addItem('pet_treat', 1); text = `${ITEMS.fruit_apple.emoji} 사과와 🦴 간식`; }
     g.audio.play('coin');
     g.player.unico.playAction('heart', 1);
