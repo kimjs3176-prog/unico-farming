@@ -110,10 +110,62 @@ test('가로 폰: 대화창은 바닥으로, 꾸미기 막대·요청 카드는 
   assert.equal(value(PHONE, '.decor-bar', 'flex-direction'), undefined);
 });
 
-test('터치 태블릿: 채팅·E 버튼이 가운데 행동 막대 위로', () => {
-  assert.equal(value(TABLET, '.chat', 'bottom'), '100px');
-  assert.equal(value(TABLET, '.touch-btn', 'bottom'), '104px');
-  assert.equal(value(LAND, '.chat', 'bottom') === '100px', false); // 가로 폰은 모바일 블록 값
+test('터치 태블릿: 채팅·E 버튼이 가운데 행동 막대(약 102px) 위로, \'크게\' 설정에서도', () => {
+  assert.equal(value(TABLET, '.chat', 'bottom'), '110px');
+  assert.equal(value(TABLET, 'body.ui-big .chat', 'bottom'), '110px'); // max-width:1500px 의 92px 보다 뒤에서 이김
+  assert.equal(value(TABLET, '.touch-btn', 'bottom'), '110px');
+  assert.equal(value(LAND, '.chat', 'bottom') === '110px', false); // 가로 폰은 모바일 블록 값
+  assert.equal(value(DESK, 'body.ui-big .chat', 'bottom'), '92px'); // 데스크톱은 그대로
+});
+
+test('누르는 메뉴가 안내 말풍선·자동 칩보다 위 (탭이 말풍선으로 새지 않음)', () => {
+  for (const env of [PHONE, LAND]) {
+    const p = Number(value(env, '.prompt', 'z-index'));
+    assert.ok(p >= 1);
+    assert.equal(Number(value(env, '.auto-chip', 'z-index')), p);
+    for (const sel of ['#ui.bar-open > .actionbar', '.emote-menu', '.chat:focus-within', '.drive-pad']) {
+      assert.ok(Number(value(env, sel, 'z-index')) > p, `${sel} 가 .prompt 보다 위여야 함`);
+      assert.ok(Number(value(env, sel, 'z-index')) < 5, `${sel} 는 꾸미기 막대(5)·창(10)보다 아래`);
+    }
+  }
+  // 채팅 기록은 터치를 받음 (밀어서 지난 대화 보기) — 말풍선은 z-index 로 위에
+  for (const env of [PHONE, LAND]) assert.equal(value(env, '.chat:not(:focus-within)', 'pointer-events'), undefined);
+  for (const env of [DESK, DESK2]) {
+    assert.equal(value(env, '.prompt', 'z-index'), undefined);
+    assert.equal(value(env, '.emote-menu', 'z-index'), undefined);
+  }
+});
+
+test('세로 폰: ☰ 를 펼치면 안내 말풍선·자동 칩이 두 줄 막대 위로, 올라간 E 버튼을 비킴', () => {
+  assert.match(value(PHONE, '#ui.bar-open > .prompt', 'bottom'), /^calc\(124px/);
+  assert.match(value(PHONE, '#ui.bar-open > .auto-chip', 'bottom'), /^calc\(180px/);
+  assert.match(value(PHONE, '#ui.bar-open .touch-btn', 'bottom'), /^calc\(116px/);
+  for (const sel of ['#ui.bar-open > .prompt', '#ui.bar-open > .auto-chip']) assert.match(value(PHONE, sel, 'max-width'), /- 152px\)$/);
+  // 가로 폰은 막대가 한 줄이라 그대로
+  assert.equal(value(LAND, '#ui.bar-open > .prompt', 'bottom'), undefined);
+  // 트랙터 운전 중 안내는 운전 버튼 위 (막대 펼침 규칙보다 뒤에서 이김)
+  const order = RULES.filter((r) => r.media.some((m) => mediaMatches(m, PHONE)) && /#ui\.(bar-open|driving) > \.prompt/.test(r.sel)).map((r) => r.sel);
+  assert.deepEqual(order, ['#ui.bar-open > .prompt', '#ui.driving > .prompt']);
+});
+
+test('가로 폰: 대화창 폭은 확대 단위로 ☰·E 자리(150px)를 뺌', () => {
+  assert.match(value(LAND, '.dlg', 'width'), /^min\(calc\(100vw \/ var\(--ui-zoom, 1\) - 150px/);
+});
+
+test('가로 폰: 스마트팜·논 패널이 떠도 알림·배너가 가려지지 않음', () => {
+  assert.equal(value(LAND, '.toasts', 'z-index'), '7');
+  assert.equal(value(LAND, '.event-banner', 'z-index'), '7');
+  assert.equal(value(LAND, '#ui:has(> .smart-panel) > .toasts', 'transform'), 'none');
+  assert.equal(value(LAND, '#ui:has(> .smart-panel) > .event-banner', 'transform'), 'none');
+  assert.match(value(LAND, '#ui:has(> .smart-panel) .toast', 'max-width'), /452px/);
+  // 패널 왼쪽 끝(오른쪽 88px + 폭 340px)보다 알림 오른쪽 끝이 왼쪽에: 8 + (W - 452) <= W - 428
+  assert.match(value(LAND, '.smart-panel', 'right'), /^calc\(88px/);
+  assert.match(value(LAND, '.smart-panel', 'width'), /^min\(340px/);
+  // 세로 폰·데스크톱은 그대로
+  for (const env of [PHONE, DESK]) {
+    assert.equal(value(env, '.toasts', 'z-index'), undefined);
+    assert.equal(value(env, '#ui:has(> .smart-panel) > .toasts', 'left'), undefined);
+  }
 });
 
 test('조이스틱은 글자·버튼 크기 확대(zoom)에서 빠짐 (JS 가 손가락 화면 좌표로 놓음)', () => {
