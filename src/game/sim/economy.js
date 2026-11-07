@@ -65,20 +65,25 @@ export class Economy {
     return this.event;
   }
 
-  buySeed(crop, n = 1) {
-    const cost = this.seedPrice(crop) * n;
-    if (this.money < cost) return false;
+  /** 돈 쓰기 (모든 지출은 여기로: 잔액 확인 + 지출 통계). 모자라면 false 이고 아무것도 바꾸지 않음 */
+  spend(cost) {
+    if (!(cost >= 0) || this.money < cost) return false;
     this.money -= cost;
     this.stats.spent += cost;
-    this.inventory.seeds[crop] = (this.inventory.seeds[crop] || 0) + n;
+    return true;
+  }
+
+  /** 씨앗 받기 (보상·선물 등, 돈은 안 씀) */
+  addSeeds(crop, n = 1) { this.inventory.seeds[crop] = (this.inventory.seeds[crop] || 0) + n; }
+
+  buySeed(crop, n = 1) {
+    if (!this.spend(this.seedPrice(crop) * n)) return false;
+    this.addSeeds(crop, n);
     return true;
   }
 
   buyFeed(n = 1) {
-    const cost = FEED_PRICE * n;
-    if (this.money < cost) return false;
-    this.money -= cost;
-    this.stats.spent += cost;
+    if (!this.spend(FEED_PRICE * n)) return false;
     this.inventory.feed += n;
     return true;
   }
@@ -91,10 +96,7 @@ export class Economy {
 
   /** 볍씨 등 ITEMS 구매 */
   buyItem(id, n = 1) {
-    const cost = ITEMS[id].price * n;
-    if (this.money < cost) return false;
-    this.money -= cost;
-    this.stats.spent += cost;
+    if (!this.spend(ITEMS[id].price * n)) return false;
     this.addItem(id, n);
     return true;
   }
@@ -113,9 +115,10 @@ export class Economy {
     return true;
   }
 
-  useFeed() {
-    if (this.inventory.feed <= 0) return false;
-    this.inventory.feed--;
+  /** 사료 n 개 쓰기 (모자라면 false, 바꾸지 않음) */
+  useFeed(n = 1) {
+    if (!(n > 0) || this.inventory.feed < n) return false;
+    this.inventory.feed -= n;
     return true;
   }
 

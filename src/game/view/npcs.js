@@ -170,7 +170,7 @@ export class NPCs {
     const g = this.game;
     for (const rw of r?.rewards || []) {
       if (rw.money) g.economy.earn(rw.money);
-      if (rw.seeds) for (const [k, n] of Object.entries(rw.seeds)) g.economy.inventory.seeds[k] = (g.economy.inventory.seeds[k] || 0) + n;
+      if (rw.seeds) for (const [k, n] of Object.entries(rw.seeds)) g.economy.addSeeds(k, n);
       if (rw.item) for (const [k, n] of Object.entries(rw.item)) g.economy.addItem(k, n);
       g.ui.toast(`🎁 ${e.n.name}: "${rw.text}"`);
       g.audio.play('levelup');

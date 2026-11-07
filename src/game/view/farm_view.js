@@ -209,7 +209,7 @@ export class FarmView {
   plantCrop(i, crop, fert = false) {
     const g = this.game, t = this.tiles[i];
     if (!g.economy.useSeed(crop)) return false;
-    if (!this.sim.plant(i, crop)) { g.economy.inventory.seeds[crop]++; return false; }
+    if (!this.sim.plant(i, crop)) { g.economy.addSeeds(crop, 1); return false; } // 못 심었으면 씨앗 되돌려 줌
     let extra = '';
     if (fert && !this.sim.plots[i].fert && g.economy.useItem('compost', 1)) { this.sim.fertilize(i); extra = ' + 🟫 퇴비'; g.onEvent('fert'); }
     g.onEvent('plant'); g.audio.play('plant'); g.ui.toast(`${CROPS[crop].emoji} ${CROPS[crop].name} 씨앗을 심었어요${extra}${CROPS[crop].regrow ? ` (수확 후 ${CROPS[crop].regrow}번 더 열려요)` : ''}`);

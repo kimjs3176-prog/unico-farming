@@ -307,7 +307,7 @@ export class LakeView {
           b.disabled = !c.ok;
           b.onclick = () => {
             if (!A.canUpgrade(eco.money, g.quests.level).ok) return;
-            eco.money -= r.price; eco.stats.spent += r.price;
+            eco.spend(r.price);
             A.upgrade();
             g.audio.play('levelup');
             g.player.unico.playAction('cheer', 1.4);
@@ -326,7 +326,7 @@ export class LakeView {
         const cost = n === 10 ? bt.price * 9 : bt.price * n; // 10개 묶음은 1개 덤
         const b = h('button', '', n === 10 ? `10개 (${cost}🪙)` : `${n}개`);
         b.disabled = eco.money < cost;
-        b.onclick = () => { if (eco.money < cost) return; eco.money -= cost; eco.stats.spent += cost; eco.addItem('bait', n); g.audio.play('coin'); render(); };
+        b.onclick = () => { if (eco.money < cost) return; eco.spend(cost); eco.addItem('bait', n); g.audio.play('coin'); render(); };
         br.append(b);
       }
       const brRows = h('div', 'rows'); brRows.append(br); body.append(brRows);

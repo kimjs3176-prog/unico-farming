@@ -154,7 +154,7 @@ export class DecorView {
       if (why) { g.audio.play('bump', 0.4); return g.ui.toast(`🚫 ${why}`); }
       const cost = this.sim.place(m.id, s.x, s.z, m.rot, { money: g.economy.money, level: g.quests.level });
       if (cost < 0) return;
-      if (cost > 0) { g.economy.money -= cost; g.economy.stats.spent += cost; }
+      if (cost > 0) { g.economy.spend(cost); }
       this.build();
       g.audio.play('pop'); g.fx?.burst(s.x, 0.4, s.z, 0xfff1c4, 6);
       g.player.unico.playAction('cheer', 0.8);

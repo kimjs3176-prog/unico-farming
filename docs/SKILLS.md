@@ -38,8 +38,24 @@ Anthropic 이 공개한 **Agent Skills(SKILL.md) 포맷**의 커뮤니티 스킬
 | [HermeticOrmus/claude-code-game-development](https://github.com/HermeticOrmus/claude-code-game-development), [cream67/gamedev-claude-skills](https://github.com/cream67/gamedev-claude-skills) | Godot/Unity/Roblox/Blender 플러그인 모음 | 엔진이 다름 |
 | [anthropics/skills](https://github.com/anthropics/skills) | Anthropic 공식 스킬 저장소(문서·PPTX·PDF 등) | 게임 전용 스킬은 없음. 이 세션에서는 내장 `artifact`/`docx` 류 스킬만 참고 |
 
-## 이 저장소 전용 스킬
+## 이 저장소 전용 스킬·규칙
 - `.claude/skills/unico-farm-assets/SKILL.md` — Blender 에셋 재생성·포즈 추가·검증 절차
+- `.claude/skills/unico-a11y-check/SKILL.md` — 접근성 점검 (WCAG 2.1 AA): `npm run a11y` 자동 점검 + 수동 점검표, 기록 `docs/a11y/`
+- `.claude/skills/unico-perf-budget/SKILL.md` — 성능 예산: `docs/perf/budget.json` + `npm run perf`, 실제 폰 측정법, three.js 병목 점검표, 기록 `docs/perf/`
+- `.claude/rules/` — 파일 경로에 따라 자동으로 적용되는 코드 규칙: `sim-code.md`(`src/game/sim/**` 순수 규칙·rng 주입·dt), `ui-code.md`(`src/ui/**`·`src/game/view/**` 상태는 sim 메서드로만·접근성·DOM 갱신), `test-standards.md`(`tests/**` 한국어 이름·결정적·버그 수정은 먼저 실패 확인)
+
+### Claude-Code-Game-Studios 에서 옮긴 것 (2026-11-07 다시 조사)
+엔진(Godot·Unity·Unreal)·프로젝트 설정 파일·자동 실행 스크립트(hooks)에 묶여 있어 통째로 설치하지 않고, **내용(기준·점검표·결과 형식)** 만 이 프로젝트 경로·도구에 맞게 다시 씀 (MIT).
+
+| 원본 | 옮긴 곳 | 바꾼 점 |
+|---|---|---|
+| `agents/accessibility-specialist.md` | `unico-a11y-check` | 게임패드·리매핑 대신 터치·한국어·DOM UI, 자동 점검 스크립트 추가 |
+| `skills/perf-profile`, `agents/performance-analyst.md` | `unico-perf-budget` | `project.yaml` 대신 `docs/perf/budget.json`, `Update/Tick` 대신 `renderer.info`·`loop()` 시간 |
+| `rules/gameplay-code.md` | `.claude/rules/sim-code.md` | 외부 설정 파일 대신 데이터 모듈·이름 붙은 상수, 엔진 이벤트 대신 sim 메서드, rng 주입 |
+| `rules/ui-code.md` | `.claude/rules/ui-code.md` | 번역 시스템·게임패드 빼고 한국어 조사(`josa`)·터치·글자 크기 설정 |
+| `rules/test-standards.md` | `.claude/rules/test-standards.md` | gdUnit4/NUnit 대신 `node --test`, 한국어 테스트 이름 |
+
+조사 결과 다음 후보(아직 안 옮김): `agents/economy-designer.md`(화폐 유입·유출 모델), `skills/tech-debt`(긴 파일·TODO 목록), `skills/patch-notes`(플레이어용 업데이트 소식).
 
 ## 설치 방법 (다른 프로젝트에서)
 ```bash
