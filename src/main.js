@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { Assets } from './game/assets.js';
 import { World, LAYOUT } from './game/world.js';
 import { Input } from './game/input.js';
-import { FollowCamera, BASE_FOV, fovFor } from './game/camera.js';
+import { FollowCamera, BASE_FOV, fovFor, releaseInput } from './game/camera.js';
 import { Player } from './game/player.js';
 import { FarmView } from './game/view/farm_view.js';
 import { RanchView } from './game/view/ranch_view.js';
@@ -30,7 +30,7 @@ import { saveGame, loadSave, clearSave } from './game/save.js';
 import { Minimap } from './ui/minimap.js';
 import { randomName } from './game/names.js';
 import { Juice } from './game/juice.js';
-import { PostFX } from './game/postfx.js';
+import { PostFX, FrameCap } from './game/postfx.js';
 import { loadSettings, saveSettings, resolveQuality, applyPreset, FpsGovernor, LEVELS, PRESET_INFO, uiScaleOf, isMobileDevice } from './game/quality.js';
 import { SURF } from './game/surface.js';
 import { Music } from './game/music.js';
@@ -172,7 +172,7 @@ class Game {
     // 렌더 루프: setAnimationLoop + Timer (탭 복귀 시 dt 폭주 방지 위해 클램프). 시작은 셰이더 준비 뒤 startLoop()
     this.timer = new THREE.Timer();
     this.timer.connect?.(document);
-    this.frameCap = isMobileDevice(); // 고주사율 폰은 약 60fps 로 제한
+    this.frameCap = isMobileDevice() ? new FrameCap() : null; // 고주사율 폰은 화면 갱신 정수 배로 건너뛰어 약 60fps
     this.armBackGuard();
   }
 
@@ -188,6 +188,7 @@ class Game {
   /** 지금 상태 저장 (초기화 중이면 save.js 가 막음) */
   save() {
     this.saveTimer = 0;
+    if (this._introPending) return; // 첫 접속: 인트로 시작 전에는 저장하지 않음 (저장이 생기면 다음 접속에 인트로가 안 나옴)
     saveGame(this);
   }
 
@@ -195,10 +196,10 @@ class Game {
   watchLifecycle() {
     document.addEventListener('visibilitychange', () => {
       this.governor.reset();
-      this._rafPrev = undefined; this._capAcc = 0;
+      this.frameCap?.reset();
       if (document.hidden) {
         this.save();
-        this.input.reset?.(); // 손을 뗀 이벤트를 못 받아 눌린 채 남은 조이스틱·키
+        releaseInput(this.input); // 손을 뗀 이벤트를 못 받아 눌린 채 남은 조이스틱·시점 터치·키
         if (this.nature) this.nature.holdBtn = false;
         if (isMobileDevice()) { this.audio.sleep(); this.music.pause(); } // 데스크톱은 지금처럼 배경에서도 재생
       } else if (this.audio.hold) {
@@ -266,7 +267,7 @@ class Game {
     saveSettings(settings);
     const prev = this.quality;
     const q = resolveQuality(settings);
-    const rebuildPost = prev.post !== q.post || prev.ao !== q.ao || prev.tiltShift !== q.tiltShift;
+    const rebuildPost = prev.post !== q.post || prev.ao !== q.ao || prev.tiltShift !== q.tiltShift || prev.env !== q.env; // env: 환경맵(IBL) 켜고 끄기
     this.applyQuality(q, { rebuildPost });
   }
 
@@ -335,7 +336,7 @@ class Game {
 
   restore() {
     const s = loadSave();
-    if (!s) { this.whenShown(() => setTimeout(() => this.introCutscene(), 700)); return; }
+    if (!s) { this._introPending = true; this.whenShown(() => setTimeout(() => this.introCutscene(), 700)); return; }
     this.flags = s.flags || {};
     this.farm.sim.load(s.farm);
     this.farm.refreshAll();
@@ -400,6 +401,7 @@ class Game {
     const G = { speaker: guide, name: '안내 유니코', color: '#6dbb4f', emote: 'megaphone' };
     const pp = this.player.position;
     this.flags.intro = true;
+    this._introPending = false; // 이제부터 저장 (다음 접속은 인트로 없이 이어 하기)
     return this.cinema.play([
       // 첫 장면: 비스듬한 마을 전경 (정면 높은 전경보다 그리기 25% 가벼움 — 인트로 첫 몇 초 끊김 완화)
       { cam: [[10, 22, 30], [0, 0, 0], 0.01], hold: 0 },
@@ -503,17 +505,8 @@ class Game {
   }
 
   loop(now = performance.now()) {
-    // 고주사율(90Hz 이상) 모바일 화면은 약 60fps 로: 건너뛴 시간은 다음 프레임 dt 에 그대로 들어가고 입력도 남음
-    if (this.frameCap) {
-      const d = now - (this._rafPrev ?? now);
-      this._rafPrev = now;
-      if (d > 0 && d < 50) this._rafIv = this._rafIv ? this._rafIv + (d - this._rafIv) * 0.05 : d;
-      if (this._rafIv < 13) {
-        this._capAcc = Math.min((this._capAcc || 0) + d, 100);
-        if (this._capAcc < 1000 / 60 - 1.5) return;
-        this._capAcc = Math.max(0, this._capAcc - 1000 / 60);
-      }
-    }
+    // 고주사율(100Hz 이상) 모바일 화면: 건너뛴 시간은 다음 프레임 dt 에 그대로 들어가고 입력도 남음
+    if (this.frameCap && !this.frameCap.tick(now)) return;
     this.timer.update();
     const rawDt = Math.max(0, this.timer.getDelta());
     const dt = Math.min(0.05, rawDt);

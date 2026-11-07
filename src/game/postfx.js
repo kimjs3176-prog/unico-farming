@@ -15,6 +15,26 @@ import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftS
 const ENV = new WeakMap(); // 장면 → 환경맵 렌더 타깃
 
 /**
+ * 고주사율(100Hz 이상) 모바일 화면 프레임 제한: 화면 갱신(vsync)의 정수 배로만 건너뛰어 고르게 그림
+ * 120Hz → 60, 144Hz → 72, 90Hz·60Hz 는 그대로. 그리기가 무거워 갱신 간격이 벌어지면 저절로 꺼짐
+ */
+export class FrameCap {
+  constructor() { this.iv = 0; this.reset(); }
+  /** 탭 숨김·복귀: 간격 측정과 마지막 그린 시각만 초기화 (화면 주사율 추정은 유지) */
+  reset() { this.prev = undefined; this.last = -1e9; }
+  /** rAF 시각(ms)을 받아 이번 갱신에 그릴지 */
+  tick(now) {
+    const d = now - (this.prev ?? now);
+    this.prev = now;
+    if (d > 0 && d < 50) this.iv = this.iv ? this.iv + (d - this.iv) * 0.05 : d;
+    const k = this.iv && this.iv < 10 ? Math.round(1000 / 60 / this.iv) : 1; // 몇 번에 한 번 그릴지
+    if (k > 1 && now - this.last < (k - 0.5) * this.iv) return false; // 시각 기준: 한 번 늦어져도 박자가 밀리지 않음
+    this.last = now;
+    return true;
+  }
+}
+
+/**
  * 후처리 파이프라인: 렌더 → 주변광 차폐(GTAO, 고사양) → 약한 블룸 → 톤매핑/sRGB 출력 → 색 보정
  *   → SMAA 안티앨리어싱 → 틸트시프트(화면 위·아래를 살짝 흐려 미니어처 디오라마 느낌) → 비네팅
  * + 환경맵(RoomEnvironment PMREM) 으로 은은한 반사/간접광

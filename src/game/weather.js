@@ -81,13 +81,17 @@ export class WeatherService {
     this.onChange?.(this.state, this);
   }
 
-  /** 날씨 창 '📡 실시간 날씨' 버튼 (사용자 동작 안에서 바로 위치를 물음) */
+  /** 날씨 창 '📡 실시간 날씨' 버튼 (사용자 동작 안에서 바로 위치를 물음). 현재 위치를 받았으면 true */
   async useLive() {
     this.override = null;
     this.loc = await this.locate();
     await this.refresh();
     this.timer ||= setInterval(() => this.refresh(), REFRESH_MS);
+    return !this.usingDefault;
   }
+
+  /** 아직 기본 위치(익산) 날씨인지: 권한을 묻지 않았거나 위치를 못 받음 → 날씨 창에서 '내 위치 날씨'를 권함 */
+  get usingDefault() { return !this.loc || this.loc.name === DEFAULT_LOC.name; }
 
   get label() {
     const s = this.state;

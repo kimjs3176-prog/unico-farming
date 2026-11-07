@@ -10,6 +10,25 @@ export function fovFor(aspect) {
   return THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(t)), BASE_FOV, 64);
 }
 
+/**
+ * 앱 전환 등으로 손 뗀 이벤트를 놓쳤을 때 눌린 채 남은 입력 정리
+ * (조이스틱이 계속 걷게 하거나, 남은 시점 터치가 카메라·트랙터 시점 복귀를 막지 않게)
+ */
+export function releaseInput(I) {
+  if (!I) return;
+  if (typeof I.reset === 'function') return I.reset();
+  I.keys?.clear(); I.pressed?.clear();
+  if (I.clicks) I.clicks.length = 0;
+  if (I.drag) { I.drag.active = false; I.drag.dx = I.drag.dy = 0; }
+  I.down = null; I.wheel = 0; I.interactTap = false;
+  I.touches?.clear(); I.tapStart?.clear(); I.pinch = null;
+  if (I.virtual) I.virtual.x = I.virtual.y = 0;
+  if (I.joy?.active || I.joy?.id != null) {
+    if (typeof I._joyOff === 'function') I._joyOff();
+    else { I.joy.active = false; I.joy.id = null; I.joy.x = I.joy.y = 0; I.onJoystick?.(false); }
+  }
+}
+
 /** 3인칭 추적 카메라 (드래그 회전 / 휠 줌) */
 export class FollowCamera {
   constructor(camera) {
