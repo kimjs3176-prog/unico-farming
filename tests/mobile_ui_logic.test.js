@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { dismountSpot } from '../src/game/view/tractor_view.js';
 import { beltLaneY, beltSpeedScale, BELT_REF } from '../src/ui/koat_ui.js';
 import { LAYOUT } from '../src/game/world.js';
+import { isIOS } from '../src/ui/ui.js';
 
 const Y = LAYOUT.tractorYard, PAD = 0.8;
 const inside = (p) => p.x > Y.x0 + PAD && p.x < Y.x1 - PAD && p.z > Y.z0 + PAD && p.z < Y.z1 - PAD;
@@ -49,4 +50,15 @@ test('종자 정선 벨트: 좁은 벨트에서도 종자가 머무는 시간은
   assert.equal(beltSpeedScale(BELT_REF), 1);
   assert.equal(beltSpeedScale(900), 1);
   assert.ok(Math.abs(dwell(300) - dwell(BELT_REF)) < 1e-9);
+});
+
+test('스크린샷 공유 시트는 iPhone·iPad 만 (iPadOS 의 Macintosh 표기 포함), 안드로이드·PC 는 내려받기', () => {
+  const nav = (userAgent, maxTouchPoints = 0) => ({ userAgent, maxTouchPoints });
+  assert.equal(isIOS(nav('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1', 5)), true);
+  assert.equal(isIOS(nav('Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148', 5)), true);
+  assert.equal(isIOS(nav('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15', 5)), true, 'iPadOS 사파리');
+  assert.equal(isIOS(nav('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15', 0)), false, 'Mac');
+  assert.equal(isIOS(nav('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36', 5)), false, '안드로이드');
+  assert.equal(isIOS(nav('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36')), false);
+  assert.equal(isIOS(null), false);
 });

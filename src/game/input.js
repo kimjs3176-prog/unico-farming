@@ -13,9 +13,13 @@ export const touchUI = () => typeof matchMedia !== 'undefined' && (coarseMq ||= 
  * a: 먼저 닿은 손가락 {x, y, t, moved}, b: 지금 닿은 손가락 {x, y, t}
  * 거의 함께 닿았고, 먼저 닿은 손가락이 아직 안 움직였고, 두 손가락이 너무 멀지 않을 때
  * (양손 엄지로 걷기 + 시점 돌리기는 보통 멀리 떨어져 있고, 먼저 닿은 엄지가 이미 움직이는 중)
+ * 화면 가운데를 사이에 둔 두 손가락은 더 가까워야 핀치: 세로 폰(390px)에서 양손 엄지는 왼쪽·오른쪽 반 가운데쯤이라
+ * 200px 남짓 떨어져 있음 → 그 거리는 조이스틱 + 시점 돌리기로 둠
  */
 export function isPinchStart(a, b, viewW) {
-  return b.t - a.t < PINCH_MS && a.moved < TAP_MOVE && Math.hypot(a.x - b.x, a.y - b.y) < Math.max(220, viewW * 0.5);
+  const split = (a.x < viewW / 2) !== (b.x < viewW / 2);
+  const lim = split ? Math.min(Math.max(viewW * 0.35, 120), 260) : Math.max(220, viewW * 0.5);
+  return b.t - a.t < PINCH_MS && a.moved < TAP_MOVE && Math.hypot(a.x - b.x, a.y - b.y) < lim;
 }
 
 const viewW = () => (typeof window !== 'undefined' ? window.innerWidth : 0);

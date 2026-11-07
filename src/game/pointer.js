@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { heightAt } from './terrain.js';
 import { LAYOUT } from './world.js';
 import { IO } from './view/home_interior.js';
+import { SURF } from './surface.js';
 
 export const TOUCH_PICK_PX = 32; // 터치 탭: 작은 대상(곤충)은 화면에서 이만큼(CSS px) 빗나가도 잡음
 
@@ -45,13 +46,23 @@ function pairedAt(pairs, x, z) {
   return best;
 }
 
+/** 짝 상자를 그 자리까지 늘린 상자 중 (x, z) 를 담은 것의 자리 (책상 앞 의자처럼 상자 밖, 자리 앞에 놓인 딸린 가구) */
+function stretchedAt(pairs, x, z) {
+  for (const [sp, b] of pairs) {
+    const ext = { x0: Math.min(b.x0, sp.x), x1: Math.max(b.x1, sp.x), z0: Math.min(b.z0, sp.z), z1: Math.max(b.z1, sp.z) };
+    if (inBox(ext, x, z, 0.05)) return sp;
+  }
+  return null;
+}
+
 /**
  * 집 안에서 누른 곳(방 기준 lx, lz)이 어느 가구 자리인가 → spot 또는 null(그냥 걸어감)
  * mid: 맞힌 메시의 가운데 {x, z} (있으면 먼저 봄: 가구 앞면을 눌러도 맞힌 점은 상자 가장자리라 옆 가구와 헷갈림)
  *  1) 가구 상자(침대·책상·옷장·책장)를 누르면 그 가구
  *  2) 짝 없는 꾸밈 가구(탁자·조명·부엌 등)는 아무것도 안 함
- *  3) 벽에 붙은 것(달력·문)은 그 근처 벽을 눌렀을 때
- *  4) 바닥은 자리 바로 위를 눌렀을 때만
+ *  3) 가구와 그 자리 사이에 놓인 것(책상 의자)은 그 가구
+ *  4) 벽에 붙은 것(달력·문)은 그 근처 벽을 눌렀을 때만
+ *  5) 바닥은 자리 바로 위를 눌렀을 때만
  */
 export function roomSpotAt(room, lx, lz, onFloor, pairs = roomSpotSolids(room), mid = null) {
   const own = (mid && pairedAt(pairs, mid.x, mid.z)) || pairedAt(pairs, lx, lz);
@@ -60,6 +71,10 @@ export function roomSpotAt(room, lx, lz, onFloor, pairs = roomSpotSolids(room), 
     const paired = new Set(pairs.values());
     const deco = (x, z) => room.solids.some((b) => !paired.has(b) && inBox(b, x, z, 0.12));
     if ((mid && deco(mid.x, mid.z)) || deco(lx, lz)) return null;
+    const near = stretchedAt(pairs, mid?.x ?? lx, mid?.z ?? lz);
+    if (near) return near;
+    // 벽(뒤 벽·옆 벽) 가까이를 맞혔을 때만 벽에 붙은 달력·문
+    if (!(lz < -room.D / 2 + 0.3 || Math.abs(lx) > room.W / 2 - 0.3)) return null;
   }
   let best = null, bd = onFloor ? 0.6 : 1.2;
   for (const sp of room.spots) {
@@ -72,6 +87,29 @@ export function roomSpotAt(room, lx, lz, onFloor, pairs = roomSpotSolids(room), 
 
 /** 화면에 보이는 물체인가 (광선은 숨긴 물체도 맞히므로 조상까지 확인) */
 const shown = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+
+/**
+ * 시야 구멍 안의 점인가 (surface.js 셰이더와 같은 식: 카메라→캐릭터 선분 둘레, 거의 다 비쳐 보이는 안쪽 0.82)
+ * 광선은 셰이더가 버린 조각도 맞히므로, 구멍으로 비쳐 보이는 곳을 누르면 그 뒤의 땅·대상을 고르게 함
+ */
+export function inSeeHole(p, cam = SURF.seeCam.value, tgt = SURF.seeTarget.value, on = SURF.seeOn.value) {
+  if (on < 0.5 || p.y <= 0.35) return false;
+  const sx = tgt.x - cam.x, sy = tgt.y - cam.y, sz = tgt.z - cam.z, L = Math.hypot(sx, sy, sz);
+  if (L < 1e-3) return false;
+  const rx = p.x - cam.x, ry = p.y - cam.y, rz = p.z - cam.z;
+  const st = (rx * sx + ry * sy + rz * sz) / L;
+  if (st <= 0 || st >= L - 0.5) return false;
+  const k = st / L;
+  return Math.hypot(rx - sx * k, ry - sy * k, rz - sz * k) < (1.3 + 1.5 * k) * 0.82;
+}
+
+/** 시야 구멍 셰이더가 붙은 재질인가 (enhanceMaterial 의 캐시 키 'surf-종류-…'. 털 재질은 구멍 없음, 복제한 재질은 셰이더가 빠짐) */
+const holeMat = (m) => { const k = m?.customProgramCacheKey?.(); return typeof k === 'string' && k.startsWith('surf-') && !k.startsWith('surf-fur-'); };
+/** 광선이 맞힌 곳이 시야 구멍으로 비쳐 보여 실제로는 안 보이는 면인가 */
+const seenThrough = (h) => {
+  const m = Array.isArray(h.object.material) ? h.object.material[h.face?.materialIndex ?? 0] : h.object.material;
+  return holeMat(m) && inSeeHole(h.point);
+};
 
 /**
  * 마우스 클릭 / 터치 탭 이동·상호작용
@@ -100,7 +138,7 @@ export class PointerNav {
     this.markerT = 0;
   }
 
-  /** 상호작용 대상 목록 { objs, pos(): Vector3, stop, key?, big? } — key 는 도착했을 때 실행할 안내(prompt.key) */
+  /** 상호작용 대상 목록 { objs, pos(): Vector3, stop, key?, big? } — key 는 대상의 안내 종류(prompt.key). goTo 에 넘기지만 아직 쓰지 않음 (도착하면 가장 가까운 안내가 실행됨) */
   targets() {
     const g = this.game, out = [], L = LAYOUT;
     const at = (x, z) => { const v = new THREE.Vector3(x, 0, z); return () => v; };
@@ -162,11 +200,15 @@ export class PointerNav {
     if (g.home?.inside && g.home.room) return this.pickInside(g.home.room);
     const list = this.targets();
     const objs = list.flatMap((t) => t.objs);
-    const hit = this.ray.intersectObjects(objs, true).find((h) => shown(h.object));
-    // 상자 대상이 메시 대상보다 가까우면 그쪽
+    // 숨은 물체, 시야 구멍으로 비쳐 보이는 면(유니코를 가린 집 등)은 건너뜀
+    const hit = this.ray.intersectObjects(objs, true).find((h) => shown(h.object) && !seenThrough(h));
+    // 상자 대상이 메시 대상보다 가까우면 그쪽. 카메라가 상자 안에 있으면(건물 뒤에 선 유니코) 그 상자는 뺌:
+    // 안에서 쏜 광선은 나가는 점을 돌려주므로 어디를 눌러도 그 건물이 됨
+    const R = this.ray.ray;
     let boxT = null, bd = hit ? hit.distance : Infinity;
     for (const t of this.boxTargets()) for (const b of t.boxes) {
-      if (this.ray.ray.intersectBox(b, this._v)) { const d = this._v.distanceTo(this.ray.ray.origin); if (d < bd) { bd = d; boxT = t; } }
+      if (b.containsPoint(R.origin)) continue;
+      if (R.intersectBox(b, this._v) && !inSeeHole(this._v)) { const d = this._v.distanceTo(R.origin); if (d < bd) { bd = d; boxT = t; } }
     }
     if (boxT) return { target: boxT };
     if (hit) {

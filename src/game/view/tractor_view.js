@@ -87,7 +87,7 @@ export class TractorView {
     mgIntro(this.game, {
       id: 'tractor', icon: '🚜', title: '트랙터 밭갈이', unit: '칸', th: [15, 30, 45], countdown: false,
       rules: [['🟫', `${TRACTOR_TIME}초 안에 쟁기로 밭 칸을 최대한 많이 갈아요`], ['🔥', '쉬지 않고 이어서 갈면 연속 보너스 (끊기지 않게!)'], ['🪨', '바위에 부딪히면 시간 -3초']],
-      controls: ['W/S 전진·후진', 'A/D 회전', 'SPACE 쟁기', '화면 버튼'],
+      controls: touchUI() ? ['◀ ▶ 회전', '▲ 전진 · ▼ 후진', '🪓 쟁기 올리기·내리기', '🚪 내리기'] : ['W/S 전진·후진', 'A/D 회전', 'SPACE 쟁기', '화면 버튼'],
       onStart: () => this.mount(),
     });
   }

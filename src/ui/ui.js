@@ -10,8 +10,14 @@ import { RICE_STAGES, WATER_MAX } from '../game/sim/rice.js';
 const anyItem = (k) => CROPS[k] || PRODUCTS[k] || ITEMS[k];
 import { recordsHtml } from './minigame_frame.js';
 import { installKoatUI } from './koat_ui.js';
-import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf, isMobileDevice } from '../game/quality.js';
-import { blurTextInput } from '../game/input.js';
+import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf } from '../game/quality.js';
+import { blurTextInput, touchUI } from '../game/input.js';
+
+/** iPhone·iPad 인가 (iPadOS 사파리는 'Macintosh' 로 알려서 터치 점 수로 가림) */
+export function isIOS(nav = typeof navigator !== 'undefined' ? navigator : null) {
+  const ua = nav?.userAgent || '';
+  return /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && (nav.maxTouchPoints || 0) > 1);
+}
 
 /** 세부 항목이 어느 프리셋과 똑같은지 (아니면 사용자 지정) */
 function matchPreset(s) {
@@ -98,6 +104,28 @@ export class UI {
     });
     // iOS: 키보드가 닫힌 뒤 화면이 위로 밀린 채 남지 않게
     this.chatInput.addEventListener('focusout', () => setTimeout(() => { if (document.activeElement !== this.chatInput && (scrollX || scrollY)) scrollTo(0, 0); }, 60));
+    // 터치 기기: 키보드가 열려도 위쪽 HUD(돈·레벨·목표)가 화면 밖으로 밀리지 않게
+    //  - 키보드가 올라오기 전에 채팅을 위쪽 HUD·목표 칩 바로 아래로 옮김 → 입력칸이 가려지지 않아 브라우저가 화면을 밀 일이 없음
+    //  - 그래도 밀리면(보이는 영역이 아래로 내려감) UI 층을 그만큼 내려 보이는 영역 위에 붙임
+    this.chatInput.addEventListener('focus', () => {
+      if (!touchUI()) return;
+      const ob = !this.objective || this.objective.style.display === 'none' ? 0 : this.objective.getBoundingClientRect().bottom;
+      const z = +getComputedStyle(this.chat).zoom || 1; // 채팅도 --ui-zoom 으로 커지므로 CSS px 로 되돌림
+      this.chat.style.top = `${Math.round(Math.max(this.top.getBoundingClientRect().bottom, ob) / z) + 6}px`;
+      this.chat.style.bottom = 'auto';
+    });
+    this.chatInput.addEventListener('blur', () => {
+      this.chat.style.top = this.chat.style.bottom = '';
+      this.root.style.translate = '';
+    });
+    const vv = typeof visualViewport !== 'undefined' ? visualViewport : null;
+    const followVV = () => {
+      if (document.activeElement !== this.chatInput || !touchUI()) return;
+      const y = Math.max(0, Math.round(vv.offsetTop));
+      this.root.style.translate = y ? `0 ${y}px` : '';
+    };
+    vv?.addEventListener('resize', followVV);
+    vv?.addEventListener('scroll', followVV);
     this.chat.append(this.online, this.chatLog, this.chatInput);
     root.append(this.chat);
     this.miniHud = null;
@@ -397,9 +425,9 @@ export class UI {
     g.postfx.render(); // 그린 직후 같은 태스크 안에서 읽어야 함 (preserveDrawingBuffer 없음)
     g.audio.play('click');
     const name = `unico-farm-${Date.now()}.png`, url = cv.toDataURL('image/png');
-    // 휴대폰: 공유 시트로 (iOS 는 내려받기로는 사진 앱에 저장되지 않음). 누른 그 순간에 불러야 막히지 않으므로 동기로 파일을 만듦
-    // (휴대폰 화면 캔버스는 작아서 동기 인코딩이 짧음)
-    if (isMobileDevice() && navigator.canShare) {
+    // iPhone·iPad: 공유 시트로 (내려받기로는 사진 앱에 저장되지 않음). 누른 그 순간에 불러야 막히지 않으므로 동기로 파일을 만듦
+    // (휴대폰 화면 캔버스는 작아서 동기 인코딩이 짧음). 안드로이드·PC 는 내려받기가 갤러리·다운로드에 바로 저장되므로 그대로
+    if (isIOS() && navigator.canShare) {
       let file = null;
       try {
         const bin = atob(url.split(',')[1]), u8 = new Uint8Array(bin.length);
@@ -419,7 +447,7 @@ export class UI {
     const a = document.createElement('a');
     a.href = url; a.download = name; a.click();
     // iOS 사파리는 사진 앱이 아니라 파일 앱에 내려받음 → 결과에 맞게 안내
-    this.toast(/iP(hone|ad|od)/.test(navigator.userAgent) ? '📸 찰칵! 파일 앱 > 다운로드에 저장돼요' : '📸 찰칵! 스크린샷을 저장했어요');
+    this.toast(isIOS() ? '📸 찰칵! 파일 앱 > 다운로드에 저장돼요' : '📸 찰칵! 스크린샷을 저장했어요');
   }
 
   // ---------------------------------------------------------------- HUD

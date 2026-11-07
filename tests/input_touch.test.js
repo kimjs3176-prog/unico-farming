@@ -109,4 +109,28 @@ test('isPinchStart: 시간 안·안 움직임·가까움일 때만', () => {
   assert.equal(isPinchStart(a, { x: 220, y: 420, t: PINCH_MS + 1 }, 390), false);
   assert.equal(isPinchStart({ ...a, moved: 20 }, { x: 220, y: 420, t: 80 }, 390), false);
   assert.equal(isPinchStart(a, { x: 760, y: 400, t: 40 }, 844), false, '가로 폰 양손 엄지는 멀리 떨어짐');
+  // 세로 폰: 왼쪽·오른쪽 반 가운데쯤에 함께 닿은 양손 엄지는 핀치가 아님, 가운데를 걸친 가까운 두 손가락은 핀치
+  assert.equal(isPinchStart({ x: 97, y: 700, t: 0, moved: 0 }, { x: 292, y: 700, t: 100 }, 390), false);
+  assert.equal(isPinchStart({ x: 95, y: 700, t: 0, moved: 0 }, { x: 300, y: 690, t: 80 }, 390), false);
+  assert.equal(isPinchStart({ x: 160, y: 400, t: 0, moved: 0 }, { x: 250, y: 420, t: 60 }, 390), true);
+  // 같은 반에 함께 닿은 두 손가락은 예전처럼 넉넉히
+  assert.equal(isPinchStart({ x: 40, y: 300, t: 0, moved: 0 }, { x: 170, y: 460, t: 60 }, 390), true);
+});
+
+test('세로 폰(390px): 양손 엄지가 거의 함께 닿아도 조이스틱 + 시점 돌리기', () => {
+  const keepW = globalThis.window.innerWidth;
+  globalThis.window.innerWidth = 390;
+  try {
+    const r = rig();
+    r.start(0, T(1, 95, 700));                  // 왼손 엄지 → 조이스틱
+    r.start(80, T(2, 302, 690));                // 80ms 뒤 오른손 엄지 (약 210px 떨어짐)
+    assert.equal(r.inp.joy.active, true, '조이스틱이 그대로');
+    assert.equal(r.inp.touches.size, 1, '오른손은 시점 손가락 하나');
+    r.move(T(1, 95, 660), T(2, 330, 690));      // 앞으로 걸으며 오른쪽으로 시점 돌리기
+    assert.ok(r.inp.axis().y < -0.5, '걷기');
+    assert.equal(r.inp.drag.dx, 28, '시점 돌리기');
+    assert.equal(r.inp.wheel, 0, '줌 아님');
+  } finally {
+    globalThis.window.innerWidth = keepW;
+  }
 });
