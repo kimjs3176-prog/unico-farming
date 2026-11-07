@@ -29,6 +29,13 @@ export function sanitizeAct(m) {
   if (!/^[a-z0-9_]{1,24}$/.test(item) || !Number.isInteger(n) || n < 1 || n > 5) return null;
   return { to, k, item, n };
 }
+/** 선물 번호 (보낸 사람이 붙임): 전하지 못하면 이 번호로 알려 줘서 돌려받게. 없거나 이상하면 0 (옛 클라이언트) */
+export function sanitizeGid(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 1e9 ? n : 0;
+}
+/** 옷 갈아입기 간격: 이 안에 또 오면 버리지 않고 마지막 것을 간격이 지난 뒤 전함 */
+export const LOOK_MS = 1000;
 
 export function sanitizeChat(text) {
   return String(text ?? '').replace(/[<>]/g, '').trim().slice(0, 80);
@@ -42,7 +49,7 @@ export class Player {
     this.ws = ws;
     this.name = name;
     this.room = room;
-    this.x = 0; this.z = 9; this.f = 0; this.a = ''; this.l = ''; this.lookAt = -1e9;
+    this.x = 0; this.z = 9; this.f = 0; this.a = ''; this.l = ''; this.lookAt = -1e9; this.lookNext = null;
     this.dirty = true;
     this.chatTimes = [];
     this.actTimes = [];
@@ -122,23 +129,27 @@ export class Rooms {
         if (text) p.room.broadcast({ t: 'chat', id: p.id, name: p.name, text });
         return;
       }
-      case 'look': { // 옷 갈아입기: 1초에 한 번까지
+      case 'look': { // 옷 갈아입기: 1초에 한 번까지, 그 안에 또 오면 마지막 것만 남겨 두었다가 tick 에서 전함
+        const l = sanitizeLook(m.l);
         const t = this.now();
-        if (t - p.lookAt < 1000) return;
-        p.lookAt = t;
-        p.l = sanitizeLook(m.l);
-        p.dirty = true;
+        p.lookNext = null;
+        if (l === p.l) return; // 같은 옷이면 보낼 것 없음 (미뤄 둔 것도 취소)
+        if (t - p.lookAt < LOOK_MS) p.lookNext = l;
+        else wear(p, l, t);
         return;
       }
       case 'act': {
         const a = sanitizeAct(m);
         if (!a) return;
+        // 선물을 전하지 못하면(한도 초과·상대 없음) 보낸 사람에게 알려 가방에 돌려받게 (번호를 붙여 보낸 클라이언트에게만)
+        const gid = a.k === 'gift' ? sanitizeGid(m.gid) : 0;
+        const fail = (why) => { if (gid) p.send({ t: 'act_fail', k: 'gift', gid, why }); };
         const t = this.now();
         p.actTimes = p.actTimes.filter((x) => t - x < 10000);
-        if (p.actTimes.length >= ACT_LIMIT) return;
+        if (p.actTimes.length >= ACT_LIMIT) return fail('busy');
         p.actTimes.push(t);
         const target = p.room.players.get(a.to); // 같은 방 사람에게만
-        if (!target || target === p) return;
+        if (!target || target === p) return fail('gone');
         target.send({ t: 'act', from: p.id, name: p.name, ...a, to: undefined });
         return;
       }
@@ -148,7 +159,9 @@ export class Rooms {
 
   /** 변경된 플레이어만 묶어 방마다 전송 */
   tick() {
+    const t = this.now();
     for (const r of this.rooms.values()) {
+      for (const p of r.players.values()) if (p.lookNext !== null && t - p.lookAt >= LOOK_MS) wear(p, p.lookNext, t); // 미뤄 둔 옷: 1초가 지나면 전함
       const changed = [...r.players.values()].filter((p) => p.dirty);
       if (!changed.length) continue;
       const msg = { t: 'state', players: changed.map((p) => p.public()) };
@@ -160,4 +173,5 @@ export class Rooms {
   summary() { return [...this.rooms.values()].map((r) => ({ name: r.name, count: r.size, max: r.maxPlayers })); }
 }
 
+function wear(p, l, t) { p.l = l; p.lookAt = t; p.lookNext = null; p.dirty = true; }
 function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }

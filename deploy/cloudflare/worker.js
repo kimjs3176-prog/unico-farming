@@ -2,7 +2,7 @@
  * Cloudflare Workers + Durable Objects 버전 릴레이 서버 (무료 플랜에서 WebSocket 가능)
  * - 방 하나 = Durable Object 하나 (WebSocket Hibernation API: 조용할 때는 잠들어 요금이 거의 안 나옴)
  * - 클라이언트 빌드: VITE_WS_URL=wss://<worker>.workers.dev/ws
- * - 프로토콜은 Node 서버(server/index.js)와 같음: join → welcome / joined / state / chat / left / full
+ * - 프로토콜은 Node 서버(server/index.js)와 같음: join → welcome / joined / state / chat / left / full / ping → pong / 선물 못 전함 → act_fail
  * 배포: cd deploy/cloudflare && npx wrangler deploy  (docs/DEPLOY.md 참고)
  * 무료 플랜 한도 지키기 (budget.js): 방마다 쓴 양을 1분마다 장부 객체(__ledger__)에 모으고,
  *   하루 안전선(무료 한도의 85%)을 넘으면 그날은 새 접속을 받지 않고 접속 중인 사람도 오프라인으로 (UTC 0시 = 한국 오전 9시에 다시 열림)
@@ -10,7 +10,7 @@
  */
 import { Meter, addToLedger, limits, nextReset } from './budget.js';
 import { MAX_PLAYERS, MAX_ROOMS } from './limits.js';
-import { sanitizeAct, ACT_LIMIT } from '../../server/rooms.js';
+import { sanitizeAct, sanitizeGid, ACT_LIMIT, LOOK_MS } from '../../server/rooms.js';
 
 const LEDGER = '__ledger__';
 const MAX_MSG = 4096;           // 메시지 최대 길이(바이트)
@@ -91,6 +91,10 @@ export class FarmRoom {
     this.meter = new Meter();
     // 잠들었다 깨어나면 생성자가 다시 불리므로, 남아 있는 접속의 id 다음 번호부터 (id 중복 방지)
     this.nextId = 1 + Math.max(0, ...state.getWebSockets().map((ws) => ws.deserializeAttachment()?.id || 0));
+    // 살아 있는지 확인(ping)에는 잠든 객체를 깨우지 않고 바로 답함 (못 쓰는 환경이면 webSocketMessage 에서 답함)
+    try { if (typeof WebSocketRequestResponsePair === 'function') state.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"t":"ping"}', '{"t":"pong"}')); } catch { /* 지원 안 함 */ }
+    this.later = (fn, ms) => setTimeout(fn, ms); // 미뤄 둔 옷 전하기 타이머 (테스트에서 바꿔 끼움)
+    this.lookTimer = 0;
   }
 
   players() {
@@ -190,28 +194,38 @@ export class FarmRoom {
       return;
     }
     if (!p.name) return; // 입장 전 메시지 무시
-    if (m.t === 'pos') {
+    if (m.t === 'ping') {
+      try { ws.send('{"t":"pong"}'); } catch { /* 끊김 */ }
+    } else if (m.t === 'pos') {
       const now = Date.now(); if (now - (p.lp || 0) < 100) return; p.lp = now; // 위치는 초당 10번까지 (방 전체로 퍼지므로)
       const num = (v, lim) => (Number.isFinite(+v) ? Math.max(-lim, Math.min(lim, +v)) : 0);
       Object.assign(p, { x: num(m.x, BOUND), z: num(m.z, BOUND), f: num(m.f, 20), a: String(m.a || '').replace(/[^a-z_]/gi, '').slice(0, 12) });
+      if (p.ln !== undefined && now - (p.ll || 0) >= LOOK_MS) { p.l = p.ln; p.ll = now; delete p.ln; } // 미뤄 둔 옷이 남아 있으면(타이머를 놓쳤을 때) 위치와 함께
       ws.serializeAttachment(p);
       this.broadcast({ t: 'state', players: [this.pub(p)] }, p.id);
     } else if (m.t === 'look') {
-      const now = Date.now(); if (now - (p.ll || 0) < 1000) return; p.ll = now; // 옷 갈아입기는 1초에 한 번까지
-      p.l = String(m.l || '').replace(/[^a-z0-9.-]/g, '').slice(0, 48);
-      ws.serializeAttachment(p);
-      this.broadcast({ t: 'state', players: [this.pub(p)] }, p.id);
+      // 옷 갈아입기는 1초에 한 번까지: 그 안에 또 오면 버리지 않고 마지막 것을 1초가 지난 뒤 전함
+      const l = String(m.l || '').replace(/[^a-z0-9.-]/g, '').slice(0, 48);
+      const now = Date.now(), had = p.ln !== undefined;
+      delete p.ln;
+      if (l === (p.l || '')) { if (had) ws.serializeAttachment(p); } // 같은 옷이면 보낼 것 없음 (미뤄 둔 것도 취소)
+      else if (now - (p.ll || 0) >= LOOK_MS) this.wear(ws, p, l, now);
+      else { p.ln = l; ws.serializeAttachment(p); this.lookLater((p.ll || 0) + LOOK_MS - now); }
     } else if (m.t === 'act') {
       // 플레이어끼리 상호작용: 같은 방의 받는 사람에게만 전달, 10초에 8번까지
       const a = sanitizeAct(m);
       if (!a) return;
+      // 선물을 전하지 못하면(한도 초과·상대 없음) 보낸 사람에게 알려 가방에 돌려받게 (번호를 붙여 보낸 클라이언트에게만)
+      const gid = a.k === 'gift' ? sanitizeGid(m.gid) : 0;
+      const fail = (why) => { if (gid) { try { ws.send(JSON.stringify({ t: 'act_fail', k: 'gift', gid, why })); } catch { /* 끊김 */ } } };
       const now = Date.now();
       p.acts = (p.acts || []).filter((t) => now - t < 10000);
-      if (p.acts.length >= ACT_LIMIT) return;
+      if (p.acts.length >= ACT_LIMIT) return fail('busy');
       p.acts.push(now);
       ws.serializeAttachment(p);
       const target = this.state.getWebSockets().find((w) => { const q = w.deserializeAttachment(); return q?.name && q.id === a.to && q.id !== p.id; });
-      if (target) { try { target.send(JSON.stringify({ t: 'act', from: p.id, name: p.name, k: a.k, item: a.item, n: a.n })); } catch { /* 끊김 */ } }
+      if (!target) return fail('gone');
+      try { target.send(JSON.stringify({ t: 'act', from: p.id, name: p.name, k: a.k, item: a.item, n: a.n })); } catch { fail('gone'); }
     } else if (m.t === 'chat') {
       const text = String(m.text || '').replace(/[<>]/g, '').trim().slice(0, 80);
       if (!text) return;
@@ -222,6 +236,37 @@ export class FarmRoom {
       ws.serializeAttachment(p);
       this.broadcast({ t: 'chat', id: p.id, name: p.name, text });
     }
+  }
+
+  /** 옷차림을 바꾸고 방에 알림 */
+  wear(ws, p, l, now) {
+    p.l = l; p.ll = now; delete p.ln;
+    ws.serializeAttachment(p);
+    this.broadcast({ t: 'state', players: [this.pub(p)] }, p.id);
+  }
+
+  /** 1초 안에 또 바꿔서 미뤄 둔 옷: 1초가 지났으면 마지막 것을 전하고, 아직이면 다시 기다림 */
+  flushLooks() {
+    this.lookTimer = 0;
+    const now = Date.now();
+    let wait = Infinity;
+    for (const ws of this.state.getWebSockets()) {
+      const p = ws.deserializeAttachment();
+      if (!p?.name || p.ln === undefined) continue;
+      const left = (p.ll || 0) + LOOK_MS - now;
+      if (left > 0) wait = Math.min(wait, left);
+      else this.wear(ws, p, p.ln, now);
+    }
+    if (wait < Infinity) this.lookLater(wait);
+  }
+
+  /** ms 뒤에 flushLooks (더 이른 타이머가 이미 있으면 그대로) */
+  lookLater(ms) {
+    const due = Date.now() + ms;
+    if (this.lookTimer && this.lookDue <= due) return;
+    clearTimeout(this.lookTimer);
+    this.lookDue = due;
+    this.lookTimer = this.later(() => this.flushLooks(), Math.max(0, ms) + 10);
   }
 
   async webSocketClose(ws) {

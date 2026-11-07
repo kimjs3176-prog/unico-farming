@@ -56,3 +56,35 @@ test('서버: 같은 기계의 리버스 프록시 뒤에서는 X-Forwarded-For(
   assert.equal(same[6], 1013);
   for (const w of [...many, ...same]) if (typeof w === 'object') w.close();
 });
+
+test('서버: 1초 안에 연달아 바꾼 옷도 마지막 것이 전해지고, 못 전한 선물은 알려 주고, ping 에 pong', async (t) => {
+  const port = PORT + 2;
+  const srv = spawn(process.execPath, ['server/index.js'], { env: { ...process.env, PORT: String(port) }, stdio: 'ignore' });
+  t.after(() => srv.kill());
+  const getP = (p) => new Promise((res) => { http.get({ host: '127.0.0.1', port, path: p }, (r) => { r.resume(); r.on('end', () => res(r.statusCode)); }).on('error', () => res(0)); });
+  for (let i = 0; i < 50 && (await getP('/health')) !== 200; i++) await sleep(100);
+  // 받은 메시지를 모아 두고, 조건에 맞는 것이 올 때까지 기다림
+  const join = async (name, l) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    ws.got = [];
+    ws.on('message', (d) => ws.got.push(JSON.parse(d)));
+    await new Promise((r, j) => { ws.on('open', r); ws.on('error', j); });
+    ws.send(JSON.stringify({ t: 'join', name, l }));
+    for (let i = 0; i < 50 && !ws.got.some((m) => m.t === 'welcome'); i++) await sleep(20);
+    ws.id = ws.got.find((m) => m.t === 'welcome').id;
+    return ws;
+  };
+  const waitFor = async (ws, fn, ms = 3000) => { for (let i = 0; i < ms / 20; i++) { const m = ws.got.find(fn); if (m) return m; await sleep(20); } return null; };
+  const a = await join('가', 'base'), b = await join('나', '');
+  t.after(() => { a.close(); b.close(); });
+  a.send(JSON.stringify({ t: 'look', l: 'hat1' }));
+  a.send(JSON.stringify({ t: 'look', l: 'hat2' })); // 1초 안 → 예전에는 버려져 b 에게 hat1 이 계속 보였음
+  const lookOf = (want) => (m) => m.t === 'state' && m.players.some((p) => p.id === a.id && p.l === want);
+  assert.ok(await waitFor(b, lookOf('hat1')), '첫 옷은 바로');
+  assert.ok(await waitFor(b, lookOf('hat2')), '1초 안에 바꾼 마지막 옷도 1초 뒤 전해짐');
+  // 나간 사람에게 보낸 선물 → 번호로 알림
+  a.send(JSON.stringify({ t: 'act', k: 'gift', to: 987654, item: 'carrot', n: 1, gid: 5 }));
+  assert.deepEqual(await waitFor(a, (m) => m.t === 'act_fail'), { t: 'act_fail', k: 'gift', gid: 5, why: 'gone' });
+  a.send(JSON.stringify({ t: 'ping' }));
+  assert.ok(await waitFor(a, (m) => m.t === 'pong'), 'ping 에 pong (반쯤 끊긴 소켓 확인용)');
+});

@@ -7,6 +7,7 @@ import { saveGame } from '../save.js';
  * 다른 플레이어와 상호작용 화면 (규칙은 sim/social.js, 전달은 net.sendAct → 서버가 받는 사람에게만)
  *  - 가까이 가서 E → 👋 인사 · 🙌 하이파이브 · 🎁 선물 · ⭐ 친구
  *  - 하이파이브·친구는 상대 화면에 12초짜리 요청 카드가 뜨고, 받으면 둘 다 축하 동작
+ *  - 선물을 서버가 전하지 못하면(한도 초과·상대가 나감) act_fail 이 와서 가방에 돌려받음
  */
 const CATALOG = { ...CROPS, ...PRODUCTS, ...ITEMS };
 const el = (tag, cls, html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; e.innerHTML = html; return e; };
@@ -17,6 +18,9 @@ export class SocialView {
     this.game = game;
     this.box = el('div', 'soc-reqs');
     document.getElementById('ui').append(this.box);
+    this.sent = new Map();   // 보낸 선물 (서버가 못 전했다고 알려 오면 돌려받음): 번호 → { item, n, name, at }
+    this.gid = 0;
+    this.autoOk = new Map(); // 이미 친구인 사람의 친구 신청에 자동으로 답한 시각
   }
 
   get now() { return performance.now() / 1000; }
@@ -100,17 +104,39 @@ export class SocialView {
   sendGift(id, item, n) {
     const g = this.game, eco = g.economy, so = g.social, r = this.remote(id);
     if (!r) return g.ui.toast('그 플레이어가 방을 떠났어요');
+    if (!g.net.connected) return g.ui.toast('🎁 서버와 연결이 끊겨서 지금은 보낼 수 없어요');
     const why = so.whyNotGift(eco.count(item), n);
     if (why) return g.ui.toast(`🎁 ${why}`);
     if (!eco.take(item, n)) return;
+    const gid = ++this.gid;
+    if (!g.net.sendAct(id, 'gift', { item, n, gid })) { this.refund(item, n); return g.ui.toast('🎁 서버와 연결이 끊겨서 보내지 못했어요'); }
     so.noteGift();
-    g.net.sendAct(id, 'gift', { item, n });
+    for (const [k, v] of this.sent) if (this.now - v.at > 60) this.sent.delete(k);
+    this.sent.set(gid, { item, n, name: r.name, at: this.now });
     this.face(r);
     g.player.unico.playAction('present', 1.4);
     g.audio.play('pop');
     g.ui.closePanel();
     g.ui.toast(`🎁 ${r.name} 님에게 ${CATALOG[item].emoji} ${CATALOG[item].name} ${n}개를 보냈어요`);
     g.onEvent('giftp');
+    saveGame(g);
+  }
+
+  /** 꺼낸 물건을 가방에 다시 넣음 (eco.take 의 반대) */
+  refund(item, n) { const bag = this.game.economy.bagOf(item); bag[item] = (bag[item] || 0) + n; }
+
+  /** 서버가 선물을 전하지 못했다고 알려 옴 (한도 초과·상대가 나감): 내가 보낸 기록이 있을 때만 한 번 돌려받음 */
+  onActFail(m) {
+    const s = this.sent.get(m.gid);
+    if (!s) return;
+    this.sent.delete(m.gid);
+    const g = this.game, so = g.social, it = CATALOG[s.item];
+    this.refund(s.item, s.n);
+    so.gifts = Math.max(0, so.gifts - 1); // 오늘 보낸 횟수도 되돌림
+    so.stats.giftsSent = Math.max(0, so.stats.giftsSent - 1);
+    g.ui.toast(m.why === 'busy'
+      ? `🎁 너무 빨리 보내서 전하지 못했어요. ${it.emoji} ${it.name} ${s.n}개를 가방에 돌려놨어요`
+      : `🎁 ${s.name} 님에게 전하지 못해 ${it.emoji} ${it.name} ${s.n}개를 가방에 돌려놨어요`);
     saveGame(g);
   }
 
@@ -133,7 +159,10 @@ export class SocialView {
         if (so.accepted('five', m.from, this.now)) this.celebrate(m.from, name);
         break;
       case 'friend':
-        if (so.isFriend(name)) { g.net.sendAct(m.from, 'friend_ok'); break; }
+        if (so.isFriend(name)) { // 이미 친구면 바로 수락 (같은 사람에게는 10초에 한 번: 연타로 내 상호작용 한도를 다 쓰지 않게)
+          if (!(this.now - (this.autoOk.get(m.from) ?? -1e9) < 10)) { this.autoOk.set(m.from, this.now); g.net.sendAct(m.from, 'friend_ok'); }
+          break;
+        }
         this.card(`⭐ ${name} 님이 친구 신청을 했어요`, '⭐ 친구 하기', () => {
           g.net.sendAct(m.from, 'friend_ok');
           this.befriend(m.from, name);

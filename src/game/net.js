@@ -2,6 +2,8 @@ import { decodeLook } from './sim/costume.js';
 import { Unico } from './unico.js';
 
 const SEND_HZ = 5;
+const PROBE_AFTER = 15000; // 이보다 오래 숨겨졌다 돌아오면 소켓이 살아 있는지 확인
+const PROBE_WAIT = 4000;   // 확인(ping) 뒤 이 안에 아무것도 안 오면 끊긴 것으로 봄
 
 /** 멀티플레이 클라이언트: 위치/포즈/채팅 릴레이 (서버 없으면 오프라인) */
 export class Net {
@@ -15,22 +17,87 @@ export class Net {
     this.last = '';
     this.count = 0;
     this.connected = false;
+    this.fails = 0;
+    this.reconnect = 0;
+    this.probeTimer = 0;
+    this.hiddenAt = 0;
   }
 
   connect(room = '') {
+    this.listen();
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const base = import.meta.env?.VITE_WS_URL || `${proto}://${location.host}/ws`;
     const url = room ? `${base}?room=${encodeURIComponent(room)}` : base;
     this.wantRoom = room;
-    try { this.ws = new WebSocket(url); } catch { return; }
-    this.ws.onopen = () => { this.connected = true; this.send({ t: 'join', name: this.game.playerName, l: this.game.look?.() || '' }); };
-    this.ws.onmessage = (e) => { try { this.handle(JSON.parse(e.data)); } catch {} };
-    this.ws.onclose = () => {
-      this.connected = false; this.clearRemote(); this.game.ui.setOnline(0, '');
-      if (!this.switching) this.reconnect = setTimeout(() => this.connect(this.wantRoom), this.retryDelay());
-      this.switching = false;
+    this.detach(); // 옛 소켓은 버림: 늦게 오는 이벤트가 새 소켓 상태를 건드리지 않게
+    let ws;
+    try { ws = this.ws = new WebSocket(url); } catch { return; }
+    this.welcomeAt = 0;
+    ws.onopen = () => {
+      if (ws !== this.ws) return;
+      this.connected = true;
+      this.last = ''; // 다시 들어가면 서 있어도 첫 위치는 꼭 보냄
+      this.lookSent = this.game.look?.() || '';
+      this.send({ t: 'join', name: this.game.playerName, l: this.lookSent });
     };
-    this.ws.onerror = () => {};
+    ws.onmessage = (e) => {
+      if (ws !== this.ws) return;
+      clearTimeout(this.probeTimer); this.probeTimer = 0; // 무엇이든 오면 살아 있음
+      try { this.handle(JSON.parse(e.data)); } catch {}
+    };
+    ws.onclose = () => { if (ws === this.ws) this.lost(); };
+    ws.onerror = () => {};
+  }
+
+  /** 지금 소켓을 놓음: 이벤트를 떼고 닫음 (방 이동·다시 접속·응답 없음) */
+  detach() {
+    const ws = this.ws;
+    this.ws = null;
+    clearTimeout(this.reconnect); this.reconnect = 0;
+    clearTimeout(this.probeTimer); this.probeTimer = 0;
+    if (ws) { ws.onopen = ws.onmessage = ws.onclose = null; try { ws.close(); } catch {} }
+    if (this.connected || this.remote.size) { this.connected = false; this.clearRemote(); this.game.ui.setOnline(0, ''); }
+  }
+
+  /** 끊김 → 다시 접속 예약. 잘 붙어 있다가 끊겼으면(앱 전환·망 바뀜) 바로, 숨김 중이면 화면으로 돌아올 때(wake) */
+  lost() {
+    const stable = this.welcomeAt > 0 && Date.now() - this.welcomeAt > 10000;
+    this.detach();
+    if (document.hidden) return; // 숨김 중에는 다시 접속하지 않음 (서버 요청 수 절약)
+    this.retryIn(stable && !(this.blockedUntil > Date.now()) ? 300 + Math.random() * 700 : this.retryDelay());
+  }
+
+  retryIn(ms) {
+    clearTimeout(this.reconnect);
+    this.reconnect = setTimeout(() => { this.reconnect = 0; if (!document.hidden) this.connect(this.wantRoom); }, ms); // 숨김 중이면 돌아올 때(wake)
+  }
+
+  /** 화면 복귀·망 복구: 끊겨 있으면 기다리지 않고 바로 다시 접속, 붙어 있으면 살아 있는지 확인 */
+  wake(online = false) {
+    if (document.hidden) return;
+    if (online) this.fails = 0;
+    const rs = this.ws?.readyState;
+    if (rs === 0) return; // 접속 중
+    if (rs === 1) { if (this.connected && (online || Date.now() - this.hiddenAt > PROBE_AFTER)) this.probe(); return; }
+    if (this.blockedUntil > Date.now()) { if (!this.reconnect) this.retryIn(this.retryDelay()); return; } // 오늘 사용량이 다 참 → 초기화 뒤에
+    this.connect(this.wantRoom);
+  }
+
+  /** 반쯤 끊긴 소켓 찾기: ping 을 보내고 PROBE_WAIT 안에 아무것도 안 오면 끊긴 것으로 보고 다시 접속 (pong 을 아는 서버에만) */
+  probe() {
+    if (!this.pongOk || this.probeTimer) return;
+    const ws = this.ws;
+    this.send({ t: 'ping' });
+    this.probeTimer = setTimeout(() => { this.probeTimer = 0; if (ws === this.ws) this.lost(); }, PROBE_WAIT);
+  }
+
+  /** 화면 복귀·망 복구 때 바로 다시 접속 (모바일: 앱 전환·지하철 뒤 최대 5분씩 기다리지 않게) */
+  listen() {
+    if (this.listening) return;
+    this.listening = true;
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.hiddenAt = Date.now(); else this.wake(); });
+    window.addEventListener('online', () => this.wake(true));
+    window.addEventListener('pageshow', (e) => { if (e.persisted) this.wake(); });
   }
 
   /** 다시 접속할 때까지 기다릴 시간: 실패할수록 길게(5초→5분), 오늘 무료 사용량이 다 찼으면 초기화(한국 오전 9시) 뒤로 — 서버 요청 수 절약 */
@@ -41,8 +108,12 @@ export class Net {
     return Math.min(300000, 5000 * 2 ** Math.min(6, this.fails - 1)) * (0.8 + Math.random() * 0.4);
   }
 
-  /** 다른 플레이어에게 상호작용 보내기 (인사·하이파이브·선물·친구) */
-  sendAct(to, k, extra = {}) { if (this.connected) this.send({ t: 'act', to, k, ...extra }); }
+  /** 다른 플레이어에게 상호작용 보내기 (인사·하이파이브·선물·친구): 보냈으면 true */
+  sendAct(to, k, extra = {}) {
+    if (!this.connected || this.ws?.readyState !== 1) return false;
+    this.send({ t: 'act', to, k, ...extra });
+    return true;
+  }
 
   /** 가까운 다른 플레이어 안내 (E: 상호작용 창) */
   prompt(pp) {
@@ -63,18 +134,27 @@ export class Net {
   }
 
   switchRoom(name) {
-    if (name === this.room) return;
-    this.switching = true;
-    clearTimeout(this.reconnect);
-    try { this.ws?.close(); } catch {}
-    this.clearRemote();
+    if (name === this.room && this.connected) return;
+    if (name === this.wantRoom && this.ws?.readyState === 0) return; // 이미 그 방으로 접속 중
+    if (this.blockedUntil > Date.now()) { // 오늘 사용량이 다 참: 지금은 접속하지 않고, 다시 열리면 그 방으로
+      this.wantRoom = name;
+      if (!this.reconnect) this.retryIn(this.retryDelay());
+      this.game.ui.toast(`🌙 오늘 멀티플레이 서버 사용량이 다 찼어요. 오전 9시에 다시 열리면 ${name}으로 들어가요`);
+      return;
+    }
     this.connect(name);
     this.game.ui.toast(`🏡 ${name}으로 이동 중…`);
   }
 
   send(o) { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(o)); }
-  /** 옷을 갈아입으면 다른 접속자에게 알림 */
-  sendLook() { if (this.connected) this.send({ t: 'look', l: this.game.look() }); }
+  /** 옷을 갈아입으면 다른 접속자에게 알림 (같은 옷은 다시 보내지 않음: 세트 입기처럼 한 번에 두 번 불려도 한 번만) */
+  sendLook() {
+    if (!this.connected) return; // 다시 접속하면 join 에 지금 옷이 실려 감
+    const l = this.game.look();
+    if (l === this.lookSent) return;
+    this.lookSent = l;
+    this.send({ t: 'look', l });
+  }
 
   sendChat(text) {
     if (!this.connected) { this.game.ui.chatLine(this.game.playerName, text, true); this.game.player.unico.say(text); return; }
@@ -84,7 +164,10 @@ export class Net {
   handle(m) {
     const g = this.game;
     switch (m.t) {
-      case 'welcome': this.fails = 0; this.id = m.id; this.room = m.room; this.count = m.count; g.ui.setOnline(m.count, m.room); for (const p of m.players) this.upsert(p); break;
+      case 'welcome':
+        this.fails = 0; this.welcomeAt = Date.now();
+        if (!this.pongOk) this.send({ t: 'ping' }); // 이 서버가 ping 에 답하는지 한 번 확인 (옛 서버면 probe 를 쓰지 않음)
+        this.id = m.id; this.room = m.room; this.count = m.count; g.ui.setOnline(m.count, m.room); for (const p of m.players) this.upsert(p); break;
       case 'joined': this.upsert(m.p); this.count = m.count; g.ui.setOnline(m.count, this.room); g.ui.toast(g.social?.isFriend(m.p.name) ? `⭐ 친구 ${m.p.name} 님이 들어왔어요!` : `🦄 ${m.p.name} 님이 입장했어요`); break;
       case 'left': this.removeRemote(m.id); this.count = m.count; g.ui.setOnline(m.count, this.room); break;
       case 'state': for (const p of m.players) this.upsert(p); break;
@@ -95,6 +178,8 @@ export class Net {
         if (!this.quotaShown) { this.quotaShown = true; g.ui.toast('🌙 오늘 멀티플레이 서버 사용량이 다 찼어요. 내일 오전 9시에 다시 열려요 (농장은 계속 혼자 플레이할 수 있어요)'); }
         break;
       case 'act': g.socialView?.onAct(m); break;
+      case 'act_fail': g.socialView?.onActFail?.(m); break; // 선물을 전하지 못함 → 돌려받기
+      case 'pong': this.pongOk = true; break;
     }
   }
 
