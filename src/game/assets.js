@@ -27,8 +27,12 @@ export const ENV_MODELS = [
  * q_nature: tree_1~5, pine_1~3, birch_1~3, willow_1~2, autumn_1~3, bush_1~2, rock_1~4, mossrock_1~4, stump, log ...
  */
 export const PACK_MODELS = ['q_farm', 'q_nature', 'k_props']; // k_props: KayKit 소품 (CC0, 건설 비계·자재·통·상자)
+/** 묶음 안에 있지만 게임에서 쓰지 않는 노드: 받은 뒤 바로 버림 (좌표 풀기·재질 손질·메모리 절약) */
+const UNUSED_PACK_NODE = /^(snowpine_\d|snowtree_\d|corn_\d|wheat|grass_short)$/;
 /** 뼈대 애니메이션이 있는 CC0 동물 (walk/idle/eat/look/run/jump) */
-export const ANIMATED_MODELS = ['q_cow', 'q_sheep', 'q_wolf', 'q_fox', 'q_horse', 'q_donkey', 'q_alpaca', 'q_shiba'];
+export const ANIMATED_MODELS = ['q_cow', 'q_sheep', 'q_horse', 'q_donkey', 'q_alpaca', 'q_shiba'];
+/** 첫 화면에 필요 없는 동물: 입장 뒤 뒤에서 받음 (밤에만 나오는 늑대·여우, pests.js 가 assets.has() 로 확인) */
+export const DEFERRED_MODELS = ['q_wolf', 'q_fox'];
 
 const BASE = (import.meta.env?.BASE_URL || '/') + 'models/';
 
@@ -59,6 +63,7 @@ export class Assets {
         try {
           const gltf = await this.loadGlb(n);
           for (const node of [...gltf.scene.children]) {
+            if (UNUSED_PACK_NODE.test(node.name)) continue;
             const g = new THREE.Group();
             g.name = node.name;
             node.position.set(0, 0, 0);
@@ -72,16 +77,7 @@ export class Assets {
         tick();
       }),
       ...ANIMATED_MODELS.map(async (n) => {
-        try {
-          const gltf = await this.loadGlb(n);
-          prepare(gltf.scene, { fur: true, spots: n === 'q_cow' ? 'Main' : null }); // 젖소: 얼룩무늬 (양은 털 질감)
-          this.scenes.set(n, gltf.scene);
-          this.anims.set(n, gltf.animations);
-        } catch (e) {
-          console.warn('동물 모델 로드 실패:', n, e?.message || e);
-          this.scenes.set(n, fallbackBox(n));
-          this.anims.set(n, []);
-        }
+        await this._loadAnimated(n, true);
         tick();
       }),
       ...ENV_MODELS.map(async (n) => {
@@ -98,6 +94,25 @@ export class Assets {
         tick();
       }),
     ]);
+  }
+
+  /** 첫 화면에 필요 없는 모델을 뒤에서 받기 (실패하면 has() 가 false 로 남아 쓰는 쪽이 건너뜀) */
+  loadDeferred() {
+    return (this._deferred ||= Promise.all(DEFERRED_MODELS.map((n) => this._loadAnimated(n, false))));
+  }
+
+  async _loadAnimated(n, fallback) {
+    try {
+      const gltf = await this.loadGlb(n);
+      prepare(gltf.scene, { fur: true, spots: n === 'q_cow' ? 'Main' : null }); // 젖소: 얼룩무늬 (양은 털 질감)
+      this.anims.set(n, gltf.animations);
+      this.scenes.set(n, gltf.scene);
+    } catch (e) {
+      console.warn('동물 모델 로드 실패:', n, e?.message || e);
+      if (!fallback) return;
+      this.anims.set(n, []);
+      this.scenes.set(n, fallbackBox(n));
+    }
   }
 
   has(name) { return this.scenes.has(name); }

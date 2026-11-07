@@ -1,6 +1,8 @@
 const KEY = 'unico-farm-save-v1';
+let blocked = false; // 초기화(clearSave) 뒤 새로 불러오기 전까지 저장 막음: 떠날 때 저장(숨김·pagehide)이 지운 농장을 되살리지 않게
 
 export function saveGame(game) {
+  if (blocked) return false;
   try {
     const data = {
       v: SAVE_VERSION, at: Date.now(), name: game.playerName,
@@ -42,4 +44,4 @@ export function loadSave() {
   try { return migrate(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch { return null; }
 }
 
-export function clearSave() { try { localStorage.removeItem(KEY); } catch {} }
+export function clearSave() { blocked = true; try { localStorage.removeItem(KEY); } catch {} }

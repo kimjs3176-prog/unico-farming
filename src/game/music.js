@@ -41,11 +41,25 @@ export class Music {
     this.timer = setInterval(() => this.schedule(), 25);
   }
 
+  /** 화면을 벗어날 때: 25ms 예약 타이머 멈춤 */
+  pause() {
+    clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  /** 돌아올 때: 밀린 박자를 한꺼번에 몰아 치지 않도록 지금 시각부터 이어서 */
+  resume() {
+    if (!this.on || this.timer) return;
+    const c = this.audio.ctx;
+    if (c) this.nextTime = Math.max(this.nextTime, c.currentTime + 0.05);
+    this.timer = setInterval(() => this.schedule(), 25);
+  }
+
   setScene(s) { this.scene = s; this.mood = s.daylight < 0.35 ? 'night' : 'day'; }
 
   schedule() {
     const a = this.audio, c = a.ctx;
-    if (!c || !a.enabled) return;
+    if (!c || !a.enabled || c.state !== 'running') return; // 멈춘 동안은 헛돌지 않음
     const night = this.mood === 'night';
     const bpm = night ? 66 : 84, eighth = 60 / bpm / 2;
     while (this.nextTime < c.currentTime + 0.25) {

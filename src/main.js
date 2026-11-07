@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { Assets } from './game/assets.js';
 import { World, LAYOUT } from './game/world.js';
 import { Input } from './game/input.js';
-import { FollowCamera } from './game/camera.js';
+import { FollowCamera, BASE_FOV, fovFor } from './game/camera.js';
 import { Player } from './game/player.js';
 import { FarmView } from './game/view/farm_view.js';
 import { RanchView } from './game/view/ranch_view.js';
@@ -31,7 +31,7 @@ import { Minimap } from './ui/minimap.js';
 import { randomName } from './game/names.js';
 import { Juice } from './game/juice.js';
 import { PostFX } from './game/postfx.js';
-import { loadSettings, saveSettings, resolveQuality, applyPreset, FpsGovernor, LEVELS, PRESET_INFO, uiScaleOf } from './game/quality.js';
+import { loadSettings, saveSettings, resolveQuality, applyPreset, FpsGovernor, LEVELS, PRESET_INFO, uiScaleOf, isMobileDevice } from './game/quality.js';
 import { SURF } from './game/surface.js';
 import { Music } from './game/music.js';
 import { Guide } from './game/guide.js';
@@ -53,12 +53,25 @@ import { SocialView } from './game/view/social_view.js';
 import { SeasonView } from './game/view/season_view.js';
 import { DecorView } from './game/view/decor_view.js';
 import { DIVISIONS } from './game/sim/koat.js';
+import { HILLS } from './game/terrain.js';
+
+/** 뒤로 가기용 기록 하나 끼워 두기 (주소·쿼리는 그대로) */
+function pushBackGuard() {
+  try { if (!history.state?.unicoBack) history.pushState({ unicoBack: 1 }, ''); } catch { /* 무시 */ }
+}
+/** 캔버스로 굽는 이름표·표지판 글자: Jua 한글 조각을 미리 받아 대체 글꼴로 굳지 않게 */
+const LABEL_TEXT = [
+  ...Object.values(LAYOUT.npcs).map((n) => n.name), ...HILLS.map((h) => h.name),
+  '유니코 팜 스마트팜 목장 밭갈이 트랙터 체험 양 몰이 우리에 넣어요 전망대 올라와 보세요 오늘의 주문서 로컬푸드 직매장 납품',
+  '낚시터 기록판 의뢰 최대어 새 마을 부지 코인으로 건물을 지어요 KOAT 체험관 콩이 명예 연구원',
+].join(' ');
 
 class Game {
-  constructor(canvas, assets, name) {
+  constructor(canvas, assets, name, audio) {
     this.playerName = name;
     this.assets = assets;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    this.watchContext(canvas);
     // 배포판: 셰이더마다 오류 확인을 기다리지 않음 → 드라이버가 여러 셰이더를 한꺼번에(병렬) 준비 (개발 중에는 오류를 보려고 켜 둠)
     if (import.meta.env.PROD) this.renderer.debug.checkShaderErrors = false;
     this.gfx = loadSettings();
@@ -66,13 +79,15 @@ class Game {
     this.governor = new FpsGovernor();
     this.renderer.setPixelRatio(this.quality.pixelRatio);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // three r182 는 PCFSoftShadowMap 을 실제로 1탭(Basic) 그림자로 그림 → 같은 결과·비용을 그대로 명시 (버전을 올려도 몰래 비싸지지 않게)
+    this.renderer.shadowMap.type = THREE.BasicShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.95;
-    this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
+    this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 600);
     this.input = new Input(canvas);
-    this.audio = new Audio();
+    this.audio = audio || new Audio(); // 입장 탭 안에서 미리 만든 것 (iOS: 탭 처리 안에서 만들어야 소리가 남)
+    this.audio.wakeOnGesture();
     this.music = new Music(this.audio);
     this.world = new World(assets, this.renderer, this.quality);
     this.postfx = new PostFX(this.renderer, this.world.scene, this.camera, this.quality);
@@ -136,7 +151,7 @@ class Game {
     this.resize();
     this.applyQuality(this.quality, { rebuildPost: false });
     window.addEventListener('resize', () => this.resize());
-    document.addEventListener('visibilitychange', () => this.governor.reset());
+    this.watchLifecycle();
     this.restore();
     this.net.connect();
     // 현재 위치 실시간 날씨
@@ -154,14 +169,99 @@ class Game {
       }
     });
     this.weather.start();
-    // 렌더 루프: setAnimationLoop + Timer (탭 복귀 시 dt 폭주 방지 위해 클램프)
+    // 렌더 루프: setAnimationLoop + Timer (탭 복귀 시 dt 폭주 방지 위해 클램프). 시작은 셰이더 준비 뒤 startLoop()
     this.timer = new THREE.Timer();
     this.timer.connect?.(document);
-    this.renderer.setAnimationLoop(() => this.loop());
+    this.frameCap = isMobileDevice(); // 고주사율 폰은 약 60fps 로 제한
+    this.armBackGuard();
+  }
+
+  /** 셰이더 미리 준비가 끝난 뒤 boot() 에서 시작: 로딩 화면 뒤에서 첫 렌더가 셰이더를 동기로 컴파일하거나 로직이 먼저 돌지 않게 */
+  startLoop() {
+    if (this._looping) return;
+    this._looping = true;
+    this.timer.update(); // 첫 프레임 dt 에 로딩 시간이 들어가지 않게
+    this.governor.reset();
+    this.renderer.setAnimationLoop((t) => this.loop(t));
+  }
+
+  /** 지금 상태 저장 (초기화 중이면 save.js 가 막음) */
+  save() {
+    this.saveTimer = 0;
+    saveGame(this);
+  }
+
+  /** 앱 전환·탭 닫기: 바로 저장, 눌린 입력 정리, (모바일) 소리 멈춤 → 돌아오면 다시 켬 */
+  watchLifecycle() {
+    document.addEventListener('visibilitychange', () => {
+      this.governor.reset();
+      this._rafPrev = undefined; this._capAcc = 0;
+      if (document.hidden) {
+        this.save();
+        this.input.reset?.(); // 손을 뗀 이벤트를 못 받아 눌린 채 남은 조이스틱·키
+        if (this.nature) this.nature.holdBtn = false;
+        if (isMobileDevice()) { this.audio.sleep(); this.music.pause(); } // 데스크톱은 지금처럼 배경에서도 재생
+      } else if (this.audio.hold) {
+        this.audio.wake();
+        this.music.resume();
+      }
+    });
+    window.addEventListener('pagehide', () => this.save());
+  }
+
+  /**
+   * 모바일 뒤로 가기: 열린 창·꾸미기를 먼저 닫음. 기록은 하나만 끼워 두고 닫을 때마다 다시 끼움
+   * 닫을 것이 없으면 저장하고 '한 번 더 누르면 나가요' (화면을 다시 만지면 다시 끼움)
+   */
+  armBackGuard() {
+    if (!isMobileDevice() || this._backGuard) return;
+    this._backGuard = true;
+    pushBackGuard();
+    window.addEventListener('popstate', () => {
+      if (history.state?.unicoBack) return;
+      let closed = false;
+      if (this.ui.panel) { this.ui.closePanel(); closed = true; } else if (this.decor.mode) { this.decor.stop(); closed = true; }
+      if (closed || this.cinema.locked || this.dialogue.active) { pushBackGuard(); return; }
+      this.save();
+      this.ui.toast('↩️ 한 번 더 누르면 게임에서 나가요');
+      this._exitArmed = true;
+    });
+    window.addEventListener('pointerup', () => { if (this._exitArmed) { this._exitArmed = false; pushBackGuard(); } }, { capture: true, passive: true });
+  }
+
+  /** WebGL 컨텍스트 손실: 복구되면 환경맵·그림자를 다시 만들고, 5초 안에 안 되면 다시 불러오기 안내 */
+  watchContext(canvas) {
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault(); // 복구를 기다림
+      this.save();
+      this.ui?.toast('🖥️ 화면을 다시 준비하는 중이에요…');
+      clearTimeout(this._ctxTimer);
+      this._ctxTimer = setTimeout(() => {
+        if (!this.renderer.getContext().isContextLost()) return;
+        const p = this.ui?.openPanel('🖥️ 화면을 다시 불러와야 해요');
+        if (!p) return;
+        p.dataset.kind = 'ctxlost';
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.textContent = '기기 메모리가 부족해 그래픽이 멈췄어요. 농장은 저장해 두었어요.';
+        const btn = document.createElement('button');
+        btn.textContent = '🔄 다시 불러오기';
+        btn.onclick = () => { this.save(); location.reload(); };
+        p.append(row, btn);
+      }, 5000);
+    });
+    // three 의 복구 처리(렌더러 생성자에서 먼저 등록) 다음에 실행됨
+    canvas.addEventListener('webglcontextrestored', () => {
+      clearTimeout(this._ctxTimer);
+      if (this.ui?.panel?.dataset.kind === 'ctxlost') this.ui.closePanel();
+      this.postfx?.rebuildEnvironment();
+      this.renderer.shadowMap.needsUpdate = true;
+    });
   }
 
   /** 환경설정에서 그래픽 설정을 바꿨을 때 (저장 + 즉시 적용) */
   setGraphics(settings) {
+    this.saver = 0; // 설정을 바꾸면 절전 단계 풀림
     this.gfx = settings;
     saveSettings(settings);
     const prev = this.quality;
@@ -196,6 +296,26 @@ class Game {
     this.applyUiScale();
   }
 
+  /** 자동 품질이 이미 가장 낮은데도 끊길 때: 저장하지 않는 절전 단계 (새로 고치거나 설정을 바꾸면 원래대로) */
+  lighten() {
+    if ((this.saver || 0) >= 2) return;
+    this.saver = (this.saver || 0) + 1;
+    this.applyQuality(this.withSaver(resolveQuality(this.gfx)));
+    if (this.saver === 1) this.ui.toast('⚙️ 화면이 끊겨서 풀과 그림자 갱신을 줄여 더 가볍게 했어요');
+  }
+
+  /** 절전 단계: 1) 풀 절반 + 그림자 갱신 덜 자주 2) 해상도 80% (셰이더를 다시 만들지 않는 항목만) */
+  withSaver(q) {
+    const s = this.saver || 0;
+    if (!s) return q;
+    return {
+      ...q,
+      grass: q.grass * 0.5,
+      shadowEvery: q.shadowEvery > 0 ? Math.max(q.shadowEvery, 6) : q.shadowEvery,
+      pixelRatio: s >= 2 ? Math.max(0.5, q.pixelRatio * 0.8) : q.pixelRatio,
+    };
+  }
+
   /** 글자·버튼 크기: 화면 UI 요소마다 배율 (환경설정) */
   applyUiScale() {
     const v = uiScaleOf(this.gfx);
@@ -208,6 +328,7 @@ class Game {
     const w = innerWidth, h = innerHeight;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
+    this.camera.fov = fovFor(w / h); // 세로 폰: 주변이 보이도록 시야를 넓힘
     this.camera.updateProjectionMatrix();
     this.postfx?.setSize(w, h);
   }
@@ -262,7 +383,7 @@ class Game {
   whenShown(fn) { if (this._shown) fn(); else (this._onShown ||= []).push(fn); }
   shown() { this._shown = true; for (const fn of this._onShown || []) fn(); this._onShown = null; }
 
-  resetSave() { clearSave(); location.reload(); }
+  resetSave() { clearSave(); location.reload(); } // clearSave 뒤에는 떠날 때 저장이 막힘 (지운 농장이 되살아나지 않게)
 
   /** KOAT 체험관 입구로 이동 */
   goKoat() {
@@ -378,11 +499,23 @@ class Game {
     this.ui.toast(`🎁 +${r.reward.money} 코인, +${r.reward.xp} XP`);
     if (r.levelUp) { this.ui.toast(`⬆️ 레벨 ${r.level} 달성! 새 씨앗이 해금됐는지 장터를 확인하세요`); this.player.unico.playAction('cheer', 2); }
     this.onEvent('money', this.economy.money);
+    this.saveTimer = Math.max(this.saveTimer, 9); // 보상은 1초 안에 저장 (연속으로 받아도 한 번만 직렬화)
   }
 
-  loop() {
+  loop(now = performance.now()) {
+    // 고주사율(90Hz 이상) 모바일 화면은 약 60fps 로: 건너뛴 시간은 다음 프레임 dt 에 그대로 들어가고 입력도 남음
+    if (this.frameCap) {
+      const d = now - (this._rafPrev ?? now);
+      this._rafPrev = now;
+      if (d > 0 && d < 50) this._rafIv = this._rafIv ? this._rafIv + (d - this._rafIv) * 0.05 : d;
+      if (this._rafIv < 13) {
+        this._capAcc = Math.min((this._capAcc || 0) + d, 100);
+        if (this._capAcc < 1000 / 60 - 1.5) return;
+        this._capAcc = Math.max(0, this._capAcc - 1000 / 60);
+      }
+    }
     this.timer.update();
-    const rawDt = this.timer.getDelta();
+    const rawDt = Math.max(0, this.timer.getDelta());
     const dt = Math.min(0.05, rawDt);
     this.fpsDt = rawDt;
     // 자동 품질: 화면이 계속 끊기면 한 단계 낮춤 (탭을 숨겼다 돌아온 공백은 visibilitychange 에서 측정 초기화)
@@ -394,7 +527,7 @@ class Game {
         if (i > 0) {
           this.setGraphics(applyPreset({ ...this.gfx, autoLevel: LEVELS[i - 1] }, 'auto'));
           this.ui.toast(`⚙️ 화면이 끊겨서 그래픽 품질을 '${PRESET_INFO[LEVELS[i - 1]].name}'${josa(PRESET_INFO[LEVELS[i - 1]].name, '으로/로')} 낮췄어요 (환경설정에서 바꿀 수 있어요)`);
-        }
+        } else if (i === 0) this.lighten(); // 이미 '낮음' (모바일 시작 단계): 저장하지 않는 절전 단계
       }
     } else if (this.governor.frames === 0) this.ui.updateFps?.(this.governor.fps);
     const input = this.input;
@@ -439,7 +572,8 @@ class Game {
       this.player.arrivedInteract = false;
       const talking = this.dialogue.active || this.cinema.locked || this.dialogue.justClosed();
       if (talking) prompt = null;
-      if (prompt?.onInteract && (input.interact() || arrived) && !this.ui.panel) prompt.onInteract();
+      // 탭해 걸어가 도착하면 자동 상호작용. 꾸미기 안내는 제외 (도착하자마자 소품이 놓이거나 치워지지 않게, E·놓기 버튼으로만)
+      if (prompt?.onInteract && (input.interact() || (arrived && prompt.key !== 'decor')) && !this.ui.panel) prompt.onInteract();
       this.player.update(dt, input, this.followCam);
       this.followCam.update(dt, this.ui.panel || this.cinema.locked ? null : input, pp);
     } else {
@@ -458,10 +592,11 @@ class Game {
       this.farmcraft.update(dt, pp);
       this.town.update(dt, pp);
       this.home.update(dt, pp);
-      // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스로 돌려도 천천히 복귀)
+      // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스·터치로 돌리는 동안은 멈췄다가 놓으면 천천히 복귀)
       const behind = this.tractor.vehicle.heading + Math.PI;
       const dy = ((behind - this.followCam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-      if (!input.drag.active) this.followCam.yaw += dy * Math.min(1, dt * 3);
+      const looking = input.drag.active || input.touches.size > 0; // 터치 시점 드래그는 drag.active 를 켜지 않음
+      if (!looking) this.followCam.yaw += dy * Math.min(1, dt * 3);
       this.followCam.update(dt, input, this.tractor.riderGroup.position);
     }
     this.cinema.update(dt); // 대화·컷신 연출 카메라 (따라가기 카메라 위에 섞음)
@@ -507,7 +642,7 @@ class Game {
       if (this.rainAcc > 3) { this.rainAcc = 0; this.farm.sim.rain(); }
     }
     this.saveTimer += dt;
-    if (this.saveTimer > 10) { this.saveTimer = 0; saveGame(this); }
+    if (this.saveTimer > 10) this.save();
     // 그림자 맵 갱신 주기 (낮음: 3프레임, 보통: 2프레임마다 — 정적 장면이 대부분이라 체감 차이 작음)
     const shEvery = this.cinema.locked ? Math.max(3, this.quality.shadowEvery) : this.quality.shadowEvery;
     this.renderer.shadowMap.autoUpdate = shEvery <= 1;
@@ -529,8 +664,10 @@ async function boot() {
   const saved = loadSave();
   nick.value = saved?.name || randomName();
   const assets = new Assets();
-  const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua'), document.fonts?.load?.("20px 'Unico Coin'", '🪙')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
+  // 글자를 넘겨야 그 글자가 든 한글 조각을 받음 (글자 없이 부르면 라틴 조각만 받아 이름표가 대체 글꼴로 구워짐)
+  const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua', `${LABEL_TEXT} ${nick.value}`), document.fonts?.load?.("20px 'Unico Coin'", '🪙')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
   await Promise.all([assets.loadAll((p) => (bar.style.width = Math.round(p * 100) + '%')), fontReady]);
+  assets.loadDeferred().catch(() => {}); // 첫 화면에 필요 없는 모델(밤에만 나오는 늑대·여우)은 닉네임을 고르는 동안 뒤에서
   const lt = document.getElementById('loading-text');
   if (lt) lt.textContent = '준비 완료! 닉네임을 정하고 입장하세요';
   // 로그인 화면 접속 QR (휴대폰으로 같은 게임에 바로 들어오기, 좁은 화면·터치 기기에서는 숨김)
@@ -541,13 +678,18 @@ async function boot() {
   const start = async () => {
     if (started) return;
     started = true;
+    // iOS: 소리 장치는 탭 처리 안에서(첫 await 전에) 만들고 켜야 함
+    const audio = new Audio();
+    audio.unlock();
+    if (isMobileDevice()) pushBackGuard(); // 뒤로 가기 기록도 탭 처리 안에서 (사용자 동작 없이 넣은 기록은 브라우저가 건너뜀)
     const name = (nick.value.trim() || randomName()).slice(0, 12);
     const ld = document.getElementById('loading');
     btn.disabled = true;
     if (lt) lt.textContent = '농장을 만드는 중…';
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); // 문구가 먼저 그려지게 (월드 만들기는 한 번에 실행돼 화면이 잠시 멈춤)
-    window.game = new Game(canvas, assets, name);
-    window.game.audio.play('click'); // 사용자 동작 안에서 오디오 시작
+    await Promise.race([Promise.resolve(document.fonts?.load?.('40px Jua', name)).catch(() => {}), new Promise((r) => setTimeout(r, 800))]); // 바꾼 닉네임 글자
+    window.game = new Game(canvas, assets, name, audio);
+    window.game.audio.play('click'); // 입장 소리 (소리 장치는 위에서 탭 처리 안에 이미 켬)
     window.game.music.start();
     // 첫 화면 끊김 방지: 로딩 화면 뒤에서 셰이더를 미리 컴파일(가능하면 병렬)하고 두 프레임 그린 뒤 보여 줌
     if (lt) lt.textContent = '화면 준비 중…';
@@ -555,9 +697,11 @@ async function boot() {
     // 셰이더 미리 준비: 지원 브라우저(KHR_parallel_shader_compile)는 병렬로, 화면을 멈추지 않고 기다림.
     // 일부 환경에서 compileAsync 가 끝나지 않는 일이 있어 최대 5초만 기다림 (남은 것은 첫 프레임에)
     const R = window.game.renderer, sc = window.game.world.scene, cm = window.game.camera;
-    try { await Promise.race([R.compileAsync(sc, cm), new Promise((r) => setTimeout(r, 5000))]); }
-    catch { try { R.compile(sc, cm); } catch { /* 첫 프레임에 컴파일 */ } }
-    window.game.warmUp?.();
+    try {
+      try { await Promise.race([R.compileAsync(sc, cm), new Promise((r) => setTimeout(r, 5000))]); }
+      catch { try { R.compile(sc, cm); } catch { /* 첫 프레임에 컴파일 */ } }
+      window.game.warmUp?.();
+    } finally { window.game.startLoop(); } // 이제부터 루프: 아래 두 프레임은 로딩 화면 뒤에서 실제로 그려짐
     await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), new Promise((r) => setTimeout(r, 1500))]);
     ld.classList.add('out');
     setTimeout(() => ld.remove(), 650);
