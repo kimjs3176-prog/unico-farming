@@ -64,16 +64,12 @@ export class SeasonView {
     // 들꽃 양
     if (sc) { sc.seasonFlowers = L.flowers; sc.setDensity(sc.density ?? 1); }
     // 나무 잎: 잎 재질(foliage)마다 원래 색에서 계절 색으로 (두 가지 색을 번갈아 → 숲이 알록달록)
-    if (!this.leafMats) {
-      const set = new Set();
-      w.scene.traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) if (m?.userData?.enhanced === 'foliage') set.add(m); });
-      this.leafMats = [...set];
-      for (const m of this.leafMats) m.userData.baseColor = m.color.clone();
+    if (!this.leafMats) this.leafMats = this._collectLeaves();
+    const tint = new THREE.Color();
+    for (const [m, alt] of this.leafMats) {
+      const [hex, amt] = (alt && L.leafAlt) ? L.leafAlt : L.leaf;
+      m.color.copy(m.userData.baseColor).lerp(tint.set(hex), amt);
     }
-    this.leafMats.forEach((m, i) => {
-      const [hex, amt] = (i % 2 && L.leafAlt) ? L.leafAlt : L.leaf;
-      m.color.copy(m.userData.baseColor).lerp(new THREE.Color(hex), amt);
-    });
     // 땅 색·눈 덮임
     const gm = w.groundMat;
     if (gm) { gm.userData.baseColor ||= gm.color.clone(); gm.color.copy(gm.userData.baseColor).multiply(new THREE.Color(...L.ground)); }
@@ -93,6 +89,26 @@ export class SeasonView {
       g.audio.play('levelup', 0.6);
       g.onEvent('season', s.index);
     }
+  }
+
+  /**
+   * 계절 색을 입힐 잎 재질 → [[재질, 다른 색(leafAlt) 쓰기], ...]
+   *  - 에셋 원본 재질도 함께 모음: 게임 중에 놓는 꾸미기 나무·덤불, 나중에 심는 작물은 원본 재질을 같이 쓰므로
+   *    언제 놓아도 지금 계절 색으로 보임
+   *  - 두 색 번갈이: 원본은 모델 이름순, 나머지(합쳐 그린 숲 등)는 장면 순서 → 저장 내용(작물·꾸미기)과 상관없이 늘 같은 색
+   */
+  _collectLeaves() {
+    const g = this.game;
+    const each = (root, fn) => root.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (m?.userData?.enhanced === 'foliage') fn(m); });
+    const orig = new Map();
+    const sc = g.assets?.scenes;
+    for (const k of sc ? [...sc.keys()].sort() : []) each(sc.get(k), (m) => { if (!orig.has(m)) orig.set(m, orig.size % 2 === 1); }); // 받는 순서와 상관없이 이름순
+    const out = new Map();
+    let i = 0;
+    each(g.world.scene, (m) => { if (!orig.has(m) && !out.has(m)) out.set(m, i++ % 2 === 1); });
+    for (const [m, alt] of orig) out.set(m, alt);
+    for (const m of out.keys()) if (!m.userData.baseColor?.isColor) m.userData.baseColor = m.color.clone();
+    return [...out];
   }
 
   updateFall(dt) {

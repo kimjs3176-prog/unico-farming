@@ -124,7 +124,8 @@ export class HomeView {
     this.obstacle = { x: H.x, z: H.z + HOUSE_BACK, r: 2.8 };
     game.world.obstacles.push(this.obstacle);
     this.smokeT = 0;
-    // 실내 (맵 밖 IO 에 지어 둠). 불빛은 처음부터 장면에 넣어 두고(셰이더 다시 만들기 방지) 밖에서는 꺼 둠
+    // 실내 (맵 밖 IO 에 지어 둠). 불빛은 밖에서는 장면 계산에서 빼 둠(visible=false → 바깥 조각마다 빛 계산 하나 덜 함)
+    // 실내용 셰이더는 처음 들어갈 때 페이드 뒤에서 한 번 준비 (_warmRoom), 그 뒤로는 드나들어도 다시 만들지 않음
     this.inside = false;
     this.outPos = { x: LAYOUT.home.door.x, z: LAYOUT.home.door.z - 0.8 };
     this.outVec = new THREE.Vector3(this.outPos.x, 0, this.outPos.z);
@@ -132,6 +133,7 @@ export class HomeView {
     this.roomLampMat = new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffc46b, emissiveIntensity: 0.2 });
     this.roomLight = new THREE.PointLight(0xffd6a0, 0, 16, 1.4);
     this.roomLight.position.set(IO.x, IO.y + 2.7, IO.z);
+    this.roomLight.visible = false;
     game.world.scene.add(this.roomLight);
     this.build();
   }
@@ -180,25 +182,55 @@ export class HomeView {
   /** 비·눈 오는 날 코스튬 혜택 (노란 비옷: 걷기 +10%) */
   _wetMult() { return ['rain', 'storm', 'snow'].includes(this.game.world.weatherKind) ? (this.game.costume?.mult('speed_wet') ?? 1) : 1; }
 
-  /** 화면을 잠깐 어둡게 했다가 fn 실행 후 밝게 */
+  /** 화면을 잠깐 어둡게 했다가 fn 실행 후 밝게. 이미 페이드 중이면 무시 (false) */
   _fade(text, fn, ms = 450) {
+    if (this._fadeT) return false;
     const fade = document.createElement('div');
     fade.className = 'sleep-fade quick';
     fade.innerHTML = `<span>${text}</span>`;
     document.getElementById('ui').append(fade);
     requestAnimationFrame(() => fade.classList.add('on'));
-    setTimeout(() => { fn(); fade.classList.remove('on'); setTimeout(() => fade.remove(), 700); }, ms);
+    this._fadeEl = fade;
+    this._fadeT = setTimeout(() => {
+      this._fadeT = null; this._fadeEl = null;
+      try { fn(); } finally { fade.classList.remove('on'); setTimeout(() => fade.remove(), 700); }
+    }, ms);
+    return true;
+  }
+
+  /** 남은 페이드 취소 (지도 이동처럼 바로 처리해야 할 때) */
+  _cancelFade() {
+    if (!this._fadeT) return;
+    clearTimeout(this._fadeT);
+    this._fadeT = null;
+    const el = this._fadeEl;
+    this._fadeEl = null;
+    if (el) { el.classList.remove('on'); setTimeout(() => el.remove(), 700); }
+  }
+
+  /** 처음 들어갈 때 한 번: 방 불빛을 켠 상태의 셰이더를 페이드 동안 미리 준비 (가능하면 병렬, 화면을 멈추지 않음)
+   *  화면 효과(후처리)를 쓰는 품질은 그리는 대상이 달라 미리 준비해도 쓰이지 않으므로 건너뜀 */
+  _warmRoom() {
+    const g = this.game, r = g.renderer;
+    if (this._warmed || !r?.compileAsync || g.postfx?.enabled) return;
+    this._warmed = true;
+    this.roomLight.visible = true;
+    try { for (const o of [this.room.group, g.player.unico.group]) r.compileAsync(o, g.camera, g.world.scene).catch(() => {}); } catch { /* 첫 프레임에 준비 */ }
+    this.roomLight.visible = this.inside;
   }
 
   /** 들어가기: 방으로 옮기고, 카메라를 위·앞에서 내려다보게, 바깥(하늘·비·안개)은 가림 */
   enter() {
     const g = this.game, cam = g.followCam;
-    if (this.inside || g.tractor.driving) return;
+    if (this.inside || this._fadeT || this._sleeping || g.tractor.driving) return; // 페이드 중 E 를 또 눌러도 한 번만
     g.ui.closePanel();
     g.audio.play('click');
+    this._warmRoom();
     this._fade('🏠', () => {
+      if (this.inside) return;
       this.inside = true;
       this.room.group.visible = true;
+      this.roomLight.visible = true;
       this._cam = { yaw: cam.yaw, pitch: cam.pitch, distance: cam.distance };
       const e = this.room.entry;
       g.player.position.set(IO.x + e.x, IO.y, IO.z + e.z);
@@ -212,15 +244,18 @@ export class HomeView {
     });
   }
 
-  /** 나가기: 문 앞으로, 카메라·바깥 원래대로 */
+  /** 나가기: 문 앞으로, 카메라·바깥 원래대로. quick: 지도 이동 (남은 들어가기·나가기 페이드는 취소하고 바로) */
   leave(quick = false) {
     const g = this.game, cam = g.followCam;
+    if (quick) this._cancelFade();
     if (!this.inside) return;
+    if (!quick && (this._fadeT || this._sleeping)) return;
     const go = () => {
+      if (!this.inside) return;
       this.inside = false;
       this.room.group.visible = false;
       g.world.playerCollision = null;
-      this.roomLight.intensity = 0;
+      this.roomLight.visible = false;
       g.player.unico.floorY = null;
       SURF.floor.value = 0;
       g.player.position.set(this.outPos.x, 0, this.outPos.z);
@@ -270,6 +305,8 @@ export class HomeView {
     cam.pitch = THREE.MathUtils.clamp(cam.pitch, 0.62, 1.2);
     cam.distance = THREE.MathUtils.clamp(cam.distance, 6, 15);
     g.player.speedMult = this.sim.speedMult(w.day) * this._wetMult();
+    // 잠드는 중(화면이 어두운 동안)에는 가구를 쓰지 않음 (상호작용 없는 안내로 다른 안내도 막음)
+    if (this._sleeping) return { d: 99, label: '💤 쿨쿨…', key: 'inside' };
     // 가장 가까운 가구
     let best = null, bd = 1.35;
     for (const sp of this.room.spots) { const d = Math.hypot(IO.x + sp.x - pp.x, IO.z + sp.z - pp.z); if (d < bd) { bd = d; best = sp; } }
@@ -279,6 +316,7 @@ export class HomeView {
 
   _use(key) {
     const g = this.game, ui = g.ui;
+    if (this._fadeT || this._sleeping) return;
     if (key === 'door') return this.leave();
     if (key === 'bed') { if (this.sim.canSleep(g.world.time)) return this.sleep(); return ui.toast(`🛏️ 아직 일러요 · 저녁 6시부터 잘 수 있어요 (지금 ${g.world.clockText().split(' ')[1]})`); }
     if (key === 'books') return ui.openBook();
@@ -431,11 +469,13 @@ export class HomeView {
     saveGame(g);
   }
 
-  /** 잠자기: 화면이 어두워졌다가 아침으로 */
+  /** 잠자기: 화면이 어두워졌다가 아침으로. 잠드는 1.3초 동안 다시 불러도 한 번만 (하루가 두 번 넘어가지 않게) */
   sleep() {
     const g = this.game, w = g.world;
+    if (this._sleeping || this._fadeT) return;
     const r = this.sim.sleep(w.time, w.day);
     if (!r) return;
+    this._sleeping = true;
     g.ui.closePanel();
     g.player.frozen = true;
     const fade = document.createElement('div');
@@ -445,16 +485,21 @@ export class HomeView {
     g.audio.play('pop', 0.4);
     requestAnimationFrame(() => fade.classList.add('on'));
     setTimeout(() => {
-      w.time = r.time;
-      if (r.newDay) { w.day = r.day; w.onNewDay?.(r.day); }
-      if (this.inside) { const b = this.room.spots.find((x) => x.key === 'bed'); if (b) g.player.position.set(IO.x + b.x, IO.y, IO.z + b.z); }
-      g.player.unico.playAction('cheer', 1.2);
-      fade.classList.remove('on');
-      setTimeout(() => fade.remove(), 900);
-      g.player.frozen = false;
-      g.ui.toast(`☀️ ${w.day}일차 아침! 푹 자서 개운해요 · 오늘 하루 걷는 속도 +15%`);
-      g.onEvent('sleep');
-      saveGame(g);
+      this._sleeping = false;
+      try {
+        w.time = r.time;
+        // 어두운 사이 자정이 지나 world 가 이미 날을 넘겼으면 다시 넘기지 않음 (우편함·임대 수입·시세가 두 번 처리되지 않게)
+        if (r.newDay && w.day < r.day) { w.day = r.day; w.onNewDay?.(r.day); }
+        if (this.inside) { const b = this.room.spots.find((x) => x.key === 'bed'); if (b) g.player.position.set(IO.x + b.x, IO.y, IO.z + b.z); }
+        g.player.unico.playAction('cheer', 1.2);
+        g.ui.toast(`☀️ ${w.day}일차 아침! 푹 자서 개운해요 · 오늘 하루 걷는 속도 +15%`);
+        g.onEvent('sleep');
+        saveGame(g);
+      } finally {
+        fade.classList.remove('on');
+        setTimeout(() => fade.remove(), 900);
+        g.player.frozen = false;
+      }
     }, 1300);
   }
 

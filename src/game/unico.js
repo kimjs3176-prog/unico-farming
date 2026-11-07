@@ -4,7 +4,7 @@ import { heightAt } from './terrain.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeLabel } from './label.js';
 import { enhanceMaterial } from './surface.js';
-import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, RIGS, bonePos } from './unico_mesh.js';
+import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, RIGS, bonePos, SLOTS } from './unico_mesh.js';
 import { costumeShape } from './unico_costume.js';
 
 /**
@@ -113,13 +113,39 @@ export async function loadUnicoMesh(url, key = 'quad') {
 
 function skinGeometry(rig, paletteId) {
   const S = SKINS[rig];
-  if (!S.byPalette.has(paletteId)) {
-    const g = S.geometry.clone(); // 속성 배열은 복사되지만 1회/팔레트
-    g.setAttribute('color', colorAttribute(S.slotWeights, PALETTES[paletteId] || OFFICIAL));
-    g.boundingSphere = S.geometry.boundingSphere.clone();
-    S.byPalette.set(paletteId, g);
+  const pal = PALETTES[paletteId] || OFFICIAL;
+  const key = SLOTS.map((s) => pal[s]).join('|'); // 색이 같은 팔레트(안내데스크 = 기본 등)는 같은 지오메트리
+  if (!S.byPalette.has(key)) {
+    // 위치·법선·뼈 가중치·인덱스는 원본 속성을 그대로 공유(GPU 버퍼도 한 벌), 색만 팔레트마다 따로
+    // → 이 지오메트리는 여러 캐릭터가 함께 쓰므로 dispose() 하지 말 것
+    const src = S.geometry, g = new THREE.BufferGeometry();
+    for (const [name, attr] of Object.entries(src.attributes)) if (name !== 'color') g.setAttribute(name, attr);
+    g.setIndex(src.index);
+    g.setAttribute('color', colorAttribute(S.slotWeights, pal));
+    g.boundingSphere = src.boundingSphere.clone();
+    S.byPalette.set(key, g);
   }
-  return S.byPalette.get(paletteId);
+  return S.byPalette.get(key);
+}
+
+/** 스킨 메시의 화면 밖 판정 구: 기본 자세 구에 애니메이션 여유(×1.45)를 둔 값을 직접 넣음
+ *  (그냥 두면 처음 그릴 때의 자세로 한 번만 계산돼 여유가 없고, 정점마다 뼈 계산도 해야 함) */
+function presetBounds(skin) {
+  skin.boundingSphere = skin.geometry.boundingSphere.clone();
+}
+
+// 그래픽 품질: 낮음이면 NPC·다른 접속자는 가까이서도 저해상도 몸으로, 실제 그림자는 내 캐릭터만 (Unico.setQuality)
+let CHAR_Q = 'high';
+// 프레임 번호: 내 캐릭터(labelAlways)가 매 프레임 한 번 올림 → 다른 캐릭터가 최근에 화면에 그려졌는지 판단
+let TICK = 0;
+/** 화면 밖 캐릭터의 자세 계산 간격(초), 낮음에서 아주 먼(40m 넘는) 캐릭터의 간격 */
+const HIDDEN_STEP = 0.1, FAR_STEP = 1 / 15;
+// 코스튬 병합 지오메트리: 뼈 기준 좌표라 모든 두 발 유니코가 함께 씀 (`${코스튬}:${부위}`, 해제하지 않음)
+const COSTUME_GEO = {};
+
+/** 꼬리·갈기 스프링 한 축 (반동 있는 감쇠 스프링, 작은 단계로 나눠 적분) */
+function spring(st, key, vkey, target, k, c, steps, h) {
+  for (let i = 0; i < steps; i++) { st[vkey] += (k * (target - st[key]) - c * st[vkey]) * h; st[key] += st[vkey] * h; }
 }
 
 // ------------------------------------------------------------------ 템플릿 (한 번만 생성해 공유)
@@ -348,6 +374,9 @@ function makeProp(kind) {
 const EMOTE_ICON = { startle: '❗', cheer: '🎉', heart: '❤️', wave: '👋', think: '❓', water: '💧', tablet: '📱', present: '📊', megaphone: '📣', lab: '🧪' };
 
 export class Unico {
+  /** 그래픽 품질 단계 알려 주기 ('low' | 'medium' | 'high') — 낮음이면 NPC·다른 접속자를 가볍게 그림 */
+  static setQuality(level) { CHAR_Q = level || 'high'; }
+
   /**
    * @param assets (사용 안 함, 호환용)
    * @param opts.name 이름표, opts.outfit { hat: 'straw'|'helmet'|null, goggles, scarf: 'red'|'green'|'blue'|null, sprout }
@@ -391,6 +420,11 @@ export class Unico {
     this.skin.receiveShadow = false; // 팔·귀가 몸에 드리운 자기 그림자가 얼룩처럼 보여 끔 (만화풍 깔끔한 음영)
     this.root.add(this.skin);
     this.skin.bind(this.skeleton);
+    presetBounds(this.skin);
+    // 화면에 그려진 프레임 기록 (화면 밖이면 자세 계산을 몰아서 함)
+    this._seen = TICK;
+    const seen = () => { this._seen = TICK; };
+    this.skin.onBeforeRender = seen;
     // 거리 LOD: 멀리 있으면 같은 뼈대를 쓰는 저해상도 메시로 (삼각형 약 1/4), 그림자는 가까울 때만
     if (SKINS[rig + '_lod']) {
       this.skinLod = new THREE.SkinnedMesh(skinGeometry(rig + '_lod', palette), SKIN_MAT);
@@ -399,6 +433,8 @@ export class Unico {
       this.skinLod.visible = false;
       this.root.add(this.skinLod);
       this.skinLod.bind(this.skeleton);
+      presetBounds(this.skinLod);
+      this.skinLod.onBeforeRender = seen;
     }
     this.bodyMesh = new THREE.Object3D(); // (호환) 숨쉬기는 몸통 뼈 미세 이동으로 대체
     // 얼굴 부품 (머리 뼈에 붙음)
@@ -472,7 +508,7 @@ export class Unico {
       for (const [part, pieces] of Object.entries(shape.parts)) {
         const parent = part === 'head' ? this.headAcc : part === 'body' ? this.bodyG : this.boneMap[part];
         if (!parent || !pieces.length) continue;
-        const m = meshOf(bundle(pieces.map(([g, mt]) => [g.clone(), mt])));
+        const m = meshOf(COSTUME_GEO[`${f.costume}:${part}`] ||= bundle(pieces.map(([g, mt]) => [g.clone(), mt])));
         parent.add(m); list.push(m);
       }
       this.costumeMeshes[f.costume] = list;
@@ -566,7 +602,7 @@ export class Unico {
    * 꼬리는 뿌리 → 중간 → 끝으로 갈수록 한 박자씩 늦게 휘어 채찍처럼 물결치고,
    * 갈기는 출발·정지·점프 때 뒤로 쏠렸다 돌아오며 방향을 틀면 바깥으로 휘날림.
    */
-  _secondary(dt, { speed, w, ph, bodyY, bodyRoll, tailBase }) {
+  _secondary(dt, speed, w, ph, bodyY, bodyRoll, tailBase) {
     if (!this.tailChain.length || dt <= 0) return;
     const clamp = THREE.MathUtils.clamp;
     // 몸의 움직임 측정 (프레임 사이 변화)
@@ -576,57 +612,56 @@ export class Unico {
     this._accS = (this._accS ?? 0) + (clamp(acc, -40, 40) - (this._accS ?? 0)) * (1 - Math.exp(-dt * 12)); // 튀는 값 완화
     const turn = clamp(-yawRate * 0.11, -0.7, 0.7), lag = clamp(-this._accS * 0.035, -0.45, 0.45), bounce = clamp(-vy * 0.35, -0.5, 0.5);
     const sp = (this._springs ||= { tail: this.tailChain.map(() => ({ x: 0, vx: 0, y: 0, vy: 0 })), mane: this.maneBones.map(() => ({ x: 0, vx: 0, z: 0, vz: 0 })) });
-    // 반동 있는 스프링 (감쇠비 약 0.35~0.45), 큰 dt 는 나눠서 적분해 안정
-    const steps = Math.min(4, Math.ceil(dt / (1 / 60))), h = dt / steps;
-    const spring = (st, key, target, k, c) => { const v = 'v' + key; for (let i = 0; i < steps; i++) { st[v] += (k * (target - st[key]) - c * st[v]) * h; st[key] += st[v] * h; } };
+    // 반동 있는 스프링 (감쇠비 약 0.35~0.45), 큰 dt(멀리 있어 몰아서 계산할 때 포함)는 나눠서 적분해 안정
+    const steps = Math.min(8, Math.ceil(dt / (1 / 60))), h = dt / steps;
     // 꼬리: 걸을 때 엉덩이 따라 좌우로 살랑, 가만히 있으면 느긋하게 흔들
     const swish = Math.sin(ph) * 0.22 * w + Math.sin(this.t * 1.7) * 0.12 * (1 - w);
     let parentY = 0, parentX = 0;
-    this.tailChain.forEach((b, i) => {
+    const tail = this.tailChain;
+    for (let i = 0; i < tail.length; i++) {
       const st = sp.tail[i];
       const tx = (i === 0 ? tailBase - 0.06 * w + lag + bounce + Math.sin(this.t * 1.3) * 0.04 : 0) + parentX * 0.55;
       const ty = (i === 0 ? turn + swish : 0) + parentY * 0.6;
-      spring(st, 'x', tx, 95 - i * 15, 7.5 - i);
-      spring(st, 'y', ty, 85 - i * 15, 7 - i);
+      spring(st, 'x', 'vx', tx, 95 - i * 15, 7.5 - i, steps, h);
+      spring(st, 'y', 'vy', ty, 85 - i * 15, 7 - i, steps, h);
       st.x = clamp(st.x, -1.1, 1.1); st.y = clamp(st.y, -1.1, 1.1);
-      b.rotation.set(st.x, st.y, 0);
+      tail[i].rotation.set(st.x, st.y, 0);
       parentX = st.x; parentY = st.y;
-    });
+    }
     // 갈기: 뒤통수·목덜미가 살짝 늦게 출렁
-    this.maneBones.forEach((b, i) => {
+    const mane = this.maneBones;
+    for (let i = 0; i < mane.length; i++) {
       const st = sp.mane[i];
       const tx = clamp(lag * 0.6 + bounce * 0.5 + Math.sin(ph * 2) * 0.05 * w, -0.35, 0.35);
       const tz = clamp(-turn * 0.35 - bodyRoll * 0.8 + Math.sin(this.t * 1.1 + i) * 0.03, -0.35, 0.35);
-      spring(st, 'x', tx, 140, 9);
-      spring(st, 'z', tz, 130, 9);
-      b.rotation.set(st.x, 0, st.z);
-    });
+      spring(st, 'x', 'vx', tx, 140, 9, steps, h);
+      spring(st, 'z', 'vz', tz, 130, 9, steps, h);
+      mane[i].rotation.set(st.x, 0, st.z);
+    }
   }
 
   update(dt, camera) {
-    this.t += dt;
+    if (this.labelAlways) TICK++;
     // 언덕: 장면에 바로 놓인 캐릭터는 지면 높이를 따라감 (트랙터 탑승 등 다른 물체에 붙으면 제외)
-    // 수영: 몸이 물에 잠김 (잠수 중에는 더 깊이)
+    // 수영: 몸이 물에 잠김 (잠수 중에는 더 깊이). 자세를 몰아서 계산하는 동안에도 매 프레임
     const sinkT = this.swimming ? (this.action === 'dive' ? -0.68 - Math.sin(Math.min(1, this.actionT / 1.3) * Math.PI) * 1.3 : -0.68) : 0;
     this.sink += (sinkT - this.sink) * (1 - Math.exp(-dt * (this.swimming ? 5 : 8)));
     // floorY: 실내 등 지형 대신 정해진 바닥 높이
     if (this.group.parent?.isScene) this.group.position.y = (this.floorY ?? heightAt(this.group.position.x, this.group.position.z)) + this.sink;
-    // 직전 프레임 자세 저장 (전환 보간용)
-    const bones = this._poseBones();
-    const prev = (this._prevPose ||= bones.map(() => [0, 0, 0, 1]));
-    bones.forEach((b, i) => { const q = prev[i]; q[0] = b.rotation.x; q[1] = b.rotation.y; q[2] = b.rotation.z; q[3] = b.scale.y; });
-    const prevBodyY = this.bodyG.position.y;
     // 이름표: 가까울 때만 또렷하게 (멀면 흐려져 화면이 복잡하지 않게). 내 캐릭터는 항상 표시
+    let d = Infinity;
     if (camera) {
-      const d = camera.position.distanceTo(this.group.position);
+      d = camera.position.distanceTo(this.group.position);
+      const low = CHAR_Q === 'low', hero = !!this.labelAlways;
       // 거리별 표현: 15m 넘으면 저해상도 몸, 24m 넘으면 그림자 끔, 40m 넘으면 얼굴 부품 생략 (경계에서 깜빡이지 않게 여유)
+      // 낮음: 내 캐릭터가 아니면 9m 넘으면 저해상도 몸 (대화 구도 7m 안팎은 원본), 실제 그림자 대신 바닥 그림자만
       if (this.skinLod) {
-        const far = d > (this.isLod ? 14 : 16);
+        const far = low && !hero ? d > (this.isLod ? 8 : 9) : d > (this.isLod ? 14 : 16);
         if (far !== this.isLod) { this.isLod = far; this.skin.visible = !far; this.skinLod.visible = far; }
       }
-      this.skin.castShadow = d < 24;
+      this.skin.castShadow = d < 24 && (hero || !low);
       const faceOn = d < (this.faceOff ? 36 : 40);
-      if (faceOn === !!this.faceOff) { this.faceOff = !faceOn; this.headG.children.forEach((c) => { if (c.isMesh) c.visible = faceOn; }); }
+      if (faceOn === !!this.faceOff) { this.faceOff = !faceOn; for (const c of this.headG.children) if (c.isMesh) c.visible = faceOn; }
       // 카메라 바로 앞(3m 안)에서는 이름표·감정 아이콘이 화면을 가리지 않게 흐리게
       const near = THREE.MathUtils.clamp((d - 1.8) / 1.6, 0, 1);
       if (this.emote) this.emote.visible = near > 0.3;
@@ -636,6 +671,23 @@ export class Unico {
       this.label.visible = a > 0.02;
       }
     }
+    // 화면 밖(최근 두 프레임 동안 안 그려짐)이면 자세 계산을 몰아서 (흩어진 시점에 한 번씩), 낮음에서는 40m 넘게 먼 캐릭터도
+    // 내 캐릭터는 늘 매 프레임, 몸 그림자가 화면에 비칠 수 있는 동안도 매 프레임
+    if (!this.labelAlways) {
+      const hidden = TICK - this._seen > 2 && !(this.skin.castShadow && this.skin.visible);
+      const step = hidden ? HIDDEN_STEP : d > 40 && CHAR_Q === 'low' ? FAR_STEP : 0;
+      if (step) {
+        this._lazyDt = (this._lazyDt ?? Math.random() * step) + dt;
+        if (this._lazyDt < step) return;
+        dt = Math.min(this._lazyDt, 0.5); this._lazyDt = 0;
+      } else if (this._lazyDt !== undefined) { dt += this._lazyDt; this._lazyDt = undefined; } // 다시 보이면 밀린 시간까지 한 번에 (속도가 튀지 않게)
+    }
+    this.t += dt;
+    // 직전 프레임 자세 저장 (전환 보간용)
+    const bones = this._poseBones();
+    const prev = (this._prevPose ||= bones.map(() => [0, 0, 0, 1]));
+    for (let i = 0; i < bones.length; i++) { const b = bones[i], q = prev[i]; q[0] = b.rotation.x; q[1] = b.rotation.y; q[2] = b.rotation.z; q[3] = b.scale.y; }
+    const prevBodyY = this.bodyG.position.y;
     if (this.action && this.t > this.actionUntil) this.action = null;
     if (this.bubble && this.t > this.bubbleUntil) { this.group.remove(this.bubble); this.bubble.userData.dispose(); this.bubble = null; }
     if (this.emote) {
@@ -917,19 +969,21 @@ export class Unico {
     this.bodyG.position.y = bodyY;
     this.bodyG.rotation.set(bodyPitch, 0, bodyRoll);
     this.headG.rotation.set(headPitch, headYaw, headRoll);
-    this._secondary(dt, { speed, w, ph, bodyY, bodyRoll, tailBase });
+    this._secondary(dt, speed, w, ph, bodyY, bodyRoll, tailBase);
     // ---- 자세 전환 보간: 감정표현·탑승 상태가 바뀌면 0.3초 동안 이전 자세에서 새 자세로 이어 줌 ----
     // (걷기 주기 자체에는 걸지 않아 발 디딤 타이밍은 그대로)
-    const poseKey = `${this.action || ''}|${this.riding ? 1 : 0}|${this.swimming ? 1 : 0}`;
-    if (poseKey !== this._poseKey) { if (this._poseKey !== undefined) this._transT = 0.3; this._poseKey = poseKey; }
+    const pk = (this._pk ||= { a: this.action || '', r: !!this.riding, s: !!this.swimming });
+    if (pk.a !== (this.action || '') || pk.r !== !!this.riding || pk.s !== !!this.swimming) {
+      this._transT = 0.3; pk.a = this.action || ''; pk.r = !!this.riding; pk.s = !!this.swimming;
+    }
     if (this._transT > 0) {
       this._transT = Math.max(0, this._transT - dt);
       const k = Math.max(1 - Math.exp(-dt * 10), 1 - this._transT / 0.3); // 끝날 때는 정확히 새 자세에 도달
-      bones.forEach((b, i) => {
-        const q = prev[i];
+      for (let i = 0; i < bones.length; i++) {
+        const b = bones[i], q = prev[i];
         b.rotation.set(q[0] + wrap(b.rotation.x - q[0]) * k, q[1] + wrap(b.rotation.y - q[1]) * k, q[2] + wrap(b.rotation.z - q[2]) * k);
         b.scale.y = q[3] + (b.scale.y - q[3]) * k;
-      });
+      }
       this.bodyG.position.y = prevBodyY + (bodyY - prevBodyY) * k;
     }
     // 눈 깜빡임
@@ -945,8 +999,8 @@ export class Unico {
     else this.shadow.scale.set(0.95 * shs, 1.45 * shs, 1);
     this.shadow.material.opacity = 0.42 * shs;
     this.shadow.visible = !this.riding && !this.swimming;
-    this.legs.forEach((leg, i) => {
-      const f = this.footShadows[i];
+    for (let i = 0; i < legs.length; i++) {
+      const leg = legs[i], f = this.footShadows[i];
       const a = leg.rotation.x;
       f.position.z = leg.position.z - Math.sin(a) * this.legLen; // 발굽의 수평 위치 (x축 회전 시 발끝은 -z 로)
       const footY = bodyY + leg.position.y - Math.cos(a) * this.legLen * leg.scale.y; // 발굽 높이
@@ -954,14 +1008,21 @@ export class Unico {
       f.material.opacity = 0.55 * k;
       f.scale.setScalar(0.2 * (0.7 + 0.3 * k));
       f.visible = !this.riding && !this.swimming;
-    });
+    }
   }
 
+  /** 이 캐릭터만 쓰는 자원 해제 (원격 플레이어가 나갈 때).
+   *  함께 쓰는 것은 그대로 둠: 바닥 그림자 원판·텍스처, 몸 재질과 팔레트별 몸 지오메트리, 얼굴·소품 템플릿, 코스튬 지오메트리·재질 */
   dispose() {
     this.label?.userData.dispose();
     this.bubble?.userData.dispose();
     this.emote?.userData.dispose();
-    this.shadow.geometry.dispose();
     this.shadow.material.dispose();
+    for (const f of this.footShadows) f.material.dispose();
+    // 손 도구는 캐릭터마다 새로 만든 것 (makeProp)
+    const own = new Set();
+    for (const p of Object.values(this.props)) p.traverse((o) => { if (o.isMesh) own.add(o.geometry).add(o.material); });
+    for (const r of own) r.dispose();
+    this.skeleton.dispose(); // 뼈 텍스처 (몸·저해상도 몸이 함께 씀)
   }
 }
