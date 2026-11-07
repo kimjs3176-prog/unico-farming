@@ -1,11 +1,83 @@
 import * as THREE from 'three';
 import { heightAt } from './terrain.js';
 import { LAYOUT } from './world.js';
+import { IO } from './view/home_interior.js';
+
+export const TOUCH_PICK_PX = 32; // 터치 탭: 작은 대상(곤충)은 화면에서 이만큼(CSS px) 빗나가도 잡음
+
+/** 화면 좌표 후보 [{ x, y, t }] 중 (sx, sy) 에서 radius 안의 가장 가까운 것의 t (없으면 null) */
+export function nearestOnScreen(cands, sx, sy, radius = TOUCH_PICK_PX) {
+  let best = null, bd = radius;
+  for (const c of cands) { const d = Math.hypot(c.x - sx, c.y - sy); if (d < bd) { bd = d; best = c.t; } }
+  return best;
+}
+
+const inBox = (b, x, z, m = 0) => x > b.x0 - m && x < b.x1 + m && z > b.z0 - m && z < b.z1 + m;
+
+/**
+ * 집 안 가구 자리마다 그 가구 상자(solid)를 짝지음: 자리 바로 앞(1.3m 안)에 있고 한 축이 겹치는 상자
+ * (문은 벽에 붙어 상자가 없음. 옆 스탠드 조명과 짝지으면 조명을 눌러도 밖으로 나가 버림)
+ */
+export function roomSpotSolids(room) {
+  const pairs = new Map();
+  for (const sp of room.spots) {
+    if (sp.key === 'door') continue;
+    let best = null, bd = 1.3;
+    for (const b of room.solids) {
+      const inX = sp.x > b.x0 - 0.1 && sp.x < b.x1 + 0.1, inZ = sp.z > b.z0 - 0.1 && sp.z < b.z1 + 0.1;
+      if (!inX && !inZ) continue;
+      const d = inX ? Math.max(b.z0 - sp.z, sp.z - b.z1, 0) : Math.max(b.x0 - sp.x, sp.x - b.x1, 0);
+      if (d < bd) { bd = d; best = b; }
+    }
+    if (best) pairs.set(sp, best);
+  }
+  return pairs;
+}
+
+/** (x, z) 를 담은 짝 상자의 자리. 가구가 겹쳐 놓인 곳이면 상자 가운데가 가까운 쪽 */
+function pairedAt(pairs, x, z) {
+  let best = null, bd = Infinity;
+  for (const [sp, b] of pairs) {
+    if (!inBox(b, x, z, 0.05)) continue;
+    const d = Math.hypot((b.x0 + b.x1) / 2 - x, (b.z0 + b.z1) / 2 - z);
+    if (d < bd) { bd = d; best = sp; }
+  }
+  return best;
+}
+
+/**
+ * 집 안에서 누른 곳(방 기준 lx, lz)이 어느 가구 자리인가 → spot 또는 null(그냥 걸어감)
+ * mid: 맞힌 메시의 가운데 {x, z} (있으면 먼저 봄: 가구 앞면을 눌러도 맞힌 점은 상자 가장자리라 옆 가구와 헷갈림)
+ *  1) 가구 상자(침대·책상·옷장·책장)를 누르면 그 가구
+ *  2) 짝 없는 꾸밈 가구(탁자·조명·부엌 등)는 아무것도 안 함
+ *  3) 벽에 붙은 것(달력·문)은 그 근처 벽을 눌렀을 때
+ *  4) 바닥은 자리 바로 위를 눌렀을 때만
+ */
+export function roomSpotAt(room, lx, lz, onFloor, pairs = roomSpotSolids(room), mid = null) {
+  const own = (mid && pairedAt(pairs, mid.x, mid.z)) || pairedAt(pairs, lx, lz);
+  if (own) return own;
+  if (!onFloor) {
+    const paired = new Set(pairs.values());
+    const deco = (x, z) => room.solids.some((b) => !paired.has(b) && inBox(b, x, z, 0.12));
+    if ((mid && deco(mid.x, mid.z)) || deco(lx, lz)) return null;
+  }
+  let best = null, bd = onFloor ? 0.6 : 1.2;
+  for (const sp of room.spots) {
+    if (!onFloor && pairs.has(sp)) continue;
+    const d = Math.hypot(sp.x - lx, sp.z - lz);
+    if (d < bd) { bd = d; best = sp; }
+  }
+  return best;
+}
+
+/** 화면에 보이는 물체인가 (광선은 숨긴 물체도 맞히므로 조상까지 확인) */
+const shown = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
 
 /**
  * 마우스 클릭 / 터치 탭 이동·상호작용
  * - 땅을 클릭하면 그 자리로 걸어감
- * - 밭·동물·NPC·트랙터·스마트팜 센서를 클릭하면 걸어가서 도착하면 자동으로 상호작용
+ * - 밭·동물·NPC·트랙터·스마트팜 센서·시설을 클릭하면 걸어가서 도착하면 자동으로 상호작용
+ * - 집 안에서는 방바닥을 걷고, 가구를 누르면 그 가구 앞으로
  * - 마우스를 올리면 상호작용 가능한 대상 위에서 손가락 커서
  */
 export class PointerNav {
@@ -14,6 +86,8 @@ export class PointerNav {
     this.ray = new THREE.Raycaster();
     this.ndc = new THREE.Vector2();
     this.ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    this.floorIn = new THREE.Plane(new THREE.Vector3(0, 1, 0), -IO.y); // 집 안 방바닥 (y = IO.y)
+    this._v = new THREE.Vector3();
     this.hoverAcc = 0;
     // 목적지 표시 링
     this.marker = new THREE.Mesh(
@@ -26,32 +100,91 @@ export class PointerNav {
     this.markerT = 0;
   }
 
-  /** 상호작용 대상 목록 { objs, pos(): Vector3, stop, pick } */
+  /** 상호작용 대상 목록 { objs, pos(): Vector3, stop, key?, big? } — key 는 도착했을 때 실행할 안내(prompt.key) */
   targets() {
-    const g = this.game, out = [];
+    const g = this.game, out = [], L = LAYOUT;
+    const at = (x, z) => { const v = new THREE.Vector3(x, 0, z); return () => v; };
     for (const e of g.ranch.ents) out.push({ objs: [e.m], pos: () => e.m.position, stop: 1.7 });
-    for (const e of g.npcs.list) out.push({ objs: [e.u.group], pos: () => e.u.group.position, stop: 1.9 });
-    if (!g.tractor.driving) out.push({ objs: [g.tractor.model], pos: () => new THREE.Vector3(g.tractor.vehicle.x, 0, g.tractor.vehicle.z), stop: 2.7 });
+    for (const e of g.ranch.visitors || []) out.push({ objs: [e.m], pos: () => e.m.position, stop: 1.7, key: 'pet' });
+    for (const e of g.npcs.list) out.push({ objs: [e.u.group], pos: () => e.u.group.position, stop: 1.9, key: 'npc' });
+    if (!g.tractor.driving) out.push({ objs: [g.tractor.model], pos: () => new THREE.Vector3(g.tractor.vehicle.x, 0, g.tractor.vehicle.z), stop: 2.7, key: 'tractor' });
     for (const tr of g.nature.trees) out.push({ objs: [tr.m], pos: () => new THREE.Vector3(tr.x, 0, tr.z), stop: 1.6 });
-    for (const b of g.nature.bugs) if (b.g.visible) out.push({ objs: [b.g], pos: () => b.g.position.clone().setY(0), stop: 1.2, big: true });
-    for (const b of g.koat.booths) out.push({ objs: [b.model, b.npc.group], pos: () => b.front, stop: 0.6 });
-    out.push({ objs: [g.koat.desk.group], pos: () => g.koat.desk.group.position, stop: 1.8 });
-    out.push({ objs: [g.rice.thresher], pos: () => new THREE.Vector3(LAYOUT.thresher.x, 0, LAYOUT.thresher.z), stop: 1.8 });
+    for (const b of g.nature.bugs) if (b.g.visible) out.push({ objs: [b.g], pos: () => b.g.position.clone().setY(0), stop: 1.2, big: true, key: 'bug' });
+    for (const b of g.koat.booths) out.push({ objs: [b.model, b.npc.group], pos: () => b.front, stop: 0.6, key: 'koat' });
+    out.push({ objs: [g.koat.desk.group], pos: () => g.koat.desk.group.position, stop: 1.8, key: 'koat' });
+    out.push({ objs: [g.rice.thresher], pos: at(L.thresher.x, L.thresher.z), stop: 1.8, key: 'thresh' });
     const sensor = g.world.smartfarmModel?.getObjectByName('SensorPole');
-    if (sensor) out.push({ objs: [sensor], pos: () => new THREE.Vector3(LAYOUT.sensor.x, 0, LAYOUT.sensor.z), stop: 1.8 });
+    if (sensor) out.push({ objs: [sensor], pos: at(L.sensor.x, L.sensor.z), stop: 1.8, key: 'smart' });
+    // 반려견 · 다른 플레이어 (움직임)
+    const pet = g.pet;
+    if (pet?.ok && pet.e?.m) out.push({ objs: [pet.e.m], pos: () => pet.e.m.position, stop: 0.9, key: pet.sim?.found ? 'petfind' : 'pet' });
+    for (const r of g.net?.remote?.values() || []) if (r.unico?.group) out.push({ objs: [r.unico.group], pos: () => r.unico.group.position, stop: 1.6, key: 'player' });
+    // 시설: 걸어가 안내 자리(각 안내의 기준점)에서 실행
+    const H = g.home;
+    if (H?.house && L.home?.door) out.push({ objs: [H.house], pos: at(L.home.door.x, L.home.door.z), stop: 1.0, key: 'home' });
+    const fc = g.farmcraft, C = L.craft;
+    if (fc && C) {
+      if (fc.heap?.parent) out.push({ objs: [fc.heap.parent], pos: at(C.compost.x, C.compost.z), stop: 1.3, key: 'compost' });
+      if (fc.board) out.push({ objs: [fc.board], pos: at(C.board.x, C.board.z), stop: 1.1, key: 'orders' });
+      if (fc.jars?.length) out.push({ objs: fc.jars.map((j) => j.m), pos: at(C.jars.x, C.jars.z), stop: 1.5, key: 'jars' });
+    }
+    const lk = g.lake, K = L.lake;
+    if (lk && K) {
+      if (lk.shop) out.push({ objs: [lk.shop], pos: at(K.shop.x, K.shop.z), stop: 1.8, key: 'lakeshop' });
+      if (lk.board) out.push({ objs: [lk.board], pos: at(K.board.x, K.board.z), stop: 1.1, key: 'lakeboard' });
+    }
+    for (const s of g.town?.sites || []) out.push({ objs: [s.root], pos: at(s.p.x, s.p.z), stop: 2.7, key: ['build', 'rush', 'building'] });
+    if (g.world.herdSign && L.herd?.sign && !g.herding?.active) out.push({ objs: [g.world.herdSign], pos: at(L.herd.sign.x, L.herd.sign.z), stop: 1.2, key: 'herd' });
+    const rv = g.ranch, WS = L.ranchWork;
+    if (rv.booth && WS) out.push({ objs: [rv.booth], pos: at(WS.x - 1.9, WS.z), stop: 1.2, key: 'workshop' });
+    if (rv.hay && L.trough) out.push({ objs: [rv.hay], pos: at(L.trough.x, L.trough.z), stop: 1.0, key: 'trough' });
     return out;
   }
 
-  pick(sx, sy) {
+  /** 정적 병합으로 메시가 없는 건물(축사·닭장·벌통)은 배치 기록의 상자로 광선 판정 */
+  boxTargets() {
+    if (this._boxT) return this._boxT;
+    const g = this.game, L = LAYOUT, placed = g.world.placed || [], out = [];
+    const boxOf = (p) => new THREE.Box3(new THREE.Vector3(p.x - p.hx, 0, p.z - p.hz), new THREE.Vector3(p.x + p.hx, p.h, p.z + p.hz));
+    const near = (name, x, z, r) => placed.filter((p) => p.name === name && Math.hypot(p.x - x, p.z - z) < r).map(boxOf);
+    const add = (boxes, x, z, stop, key) => { if (boxes.length) out.push({ boxes, pos: () => new THREE.Vector3(x, 0, z), stop, key }); };
+    if (L.coop) add(near('coop', L.coop.x, L.coop.z, 3), L.coop.x - 1.6, L.coop.z, 1.0, 'eggcatch');
+    if (L.barn && L.ranchWork?.barn) add(near('barn', L.barn.x, L.barn.z, 4), L.ranchWork.barn.x, L.ranchWork.barn.z, 1.2, 'barn');
+    for (const h of L.hives || []) add(near('beehive', h.x, h.z, 1), h.x, h.z, 1.1, ['honey', 'hive']);
+    if (g.world.placed) this._boxT = out; // 배치가 끝난 뒤에만 고정
+    return out;
+  }
+
+  pick(sx, sy, touch = false) {
     const g = this.game;
     this.ndc.set((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1);
     this.ray.setFromCamera(this.ndc, g.camera);
+    if (g.home?.inside && g.home.room) return this.pickInside(g.home.room);
     const list = this.targets();
     const objs = list.flatMap((t) => t.objs);
-    const hit = this.ray.intersectObjects(objs, true)[0];
+    const hit = this.ray.intersectObjects(objs, true).find((h) => shown(h.object));
+    // 상자 대상이 메시 대상보다 가까우면 그쪽
+    let boxT = null, bd = hit ? hit.distance : Infinity;
+    for (const t of this.boxTargets()) for (const b of t.boxes) {
+      if (this.ray.ray.intersectBox(b, this._v)) { const d = this._v.distanceTo(this.ray.ray.origin); if (d < bd) { bd = d; boxT = t; } }
+    }
+    if (boxT) return { target: boxT };
     if (hit) {
       let o = hit.object;
       while (o) { const t = list.find((x) => x.objs.includes(o)); if (t) return { target: t }; o = o.parent; }
+    }
+    // 터치: 곤충처럼 작은 대상은 손가락으로 정확히 맞히기 어려우니 화면에서 가까우면 잡음 (마우스·호버는 그대로 정밀하게)
+    if (touch) {
+      const cands = [];
+      for (const t of list) {
+        const o = t.objs[0];
+        if (!t.big || !o || !shown(o)) continue;
+        const v = o.getWorldPosition(this._v).project(g.camera); // pos() 는 땅 높이라 실제로 보이는 위치로
+        if (v.z < -1 || v.z > 1) continue;
+        cands.push({ x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight, t });
+      }
+      const t = nearestOnScreen(cands, sx, sy);
+      if (t) return { target: t };
     }
     // 언덕을 누르면 실제 지면 위치 (지면 메시와 교차), 없으면 평면
     const gh = g.world.groundMesh ? this.ray.intersectObject(g.world.groundMesh, false)[0] : null;
@@ -68,28 +201,50 @@ export class PointerNav {
     if (dc < P.r + 0.3) {
       const pl = g.player.position, dir = new THREE.Vector3(pl.x - P.x, 0, pl.z - P.z).normalize();
       const rimPt = new THREE.Vector3(P.x + dir.x * (P.r + 0.6), 0, P.z + dir.z * (P.r + 0.6));
-      return { target: { pos: () => rimPt, stop: 0.4 } };
+      return { target: { pos: () => rimPt, stop: 0.4, key: 'fish' } };
     }
     return { point: p };
   }
 
-  click(sx, sy) {
+  /** 집 안: 방 메시(가구·벽·바닥)를 먼저 맞히고, 가구면 그 앞자리로, 아니면 방 안 그 자리로 */
+  pickInside(room) {
+    const o = room.group.position;
+    const hit = this.ray.intersectObject(room.group, true).find((h) => shown(h.object));
+    const p = hit ? hit.point.clone() : new THREE.Vector3();
+    if (!hit && !this.ray.ray.intersectPlane(this.floorIn, p)) return null;
+    const lx = p.x - o.x, lz = p.z - o.z;
+    const onFloor = !hit || hit.point.y - o.y < 0.06;
+    if (room !== this._room) { this._room = room; this._pairs = roomSpotSolids(room); } // 집을 넓히면 방이 바뀜
+    const tag = hit && (() => { for (let m = hit.object; m && m !== room.group; m = m.parent) if (m.userData.spot) return m.userData.spot; return null; })();
+    let mid = null;
+    if (hit && !onFloor) { const c = hit.object.getWorldPosition(this._v); mid = { x: c.x - o.x, z: c.z - o.z }; }
+    const sp = (tag && room.spots.find((s) => s.key === tag)) || roomSpotAt(room, lx, lz, onFloor, this._pairs, mid);
+    if (sp) { const v = new THREE.Vector3(o.x + sp.x, o.y, o.z + sp.z); return { target: { pos: () => v, stop: 0.3, key: 'home_' + sp.key } }; }
+    const { W, D } = room;
+    p.set(o.x + THREE.MathUtils.clamp(lx, -W / 2 + 0.5, W / 2 - 0.5), o.y, o.z + THREE.MathUtils.clamp(lz, -D / 2 + 0.5, D / 2 - 0.3));
+    return { point: p };
+  }
+
+  click(sx, sy, touch = false) {
     const g = this.game;
     if (g.nature.fishing || g.rice.threshing) { g.input.interactTap = true; return; } // 낚시 중 클릭 = 당기기, 탈곡 중 = 연타
+    if (g.dialogue?.active) { g.dialogue.advance(); return; } // 대화 중 화면을 누르면 다음 줄 (E 키와 같게)
+    if (g.cinema?.locked || g.dialogue?.justClosed?.()) return;
     if (g.ui.panel || g.tractor.driving || g.smartfarm.active) return;
-    const r = this.pick(sx, sy);
+    const r = this.pick(sx, sy, touch);
     if (!r) return;
-    if (r.target) g.player.goTo(r.target.pos, r.target.stop, true);
+    if (r.target) g.player.goTo(r.target.pos, r.target.stop, true, r.target.key);
     else g.player.goTo(() => r.point, 0.15, false);
     const p = r.target ? r.target.pos() : r.point;
-    this.marker.position.set(p.x, heightAt(p.x, p.z) + 0.05, p.z);
+    const fy = g.home?.inside ? g.home.room.group.position.y : heightAt(p.x, p.z);
+    this.marker.position.set(p.x, fy + 0.05, p.z);
     this.marker.visible = true;
     this.markerT = 0;
     g.audio.play('click', 0.4);
   }
 
   update(dt, input) {
-    for (const c of input.clicks) this.click(c.x, c.y);
+    for (const c of input.clicks) this.click(c.x, c.y, !!c.touch);
     // 목적지 링: 맥동 후 사라짐
     if (this.marker.visible) {
       this.markerT += dt;

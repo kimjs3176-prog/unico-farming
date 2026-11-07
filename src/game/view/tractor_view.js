@@ -3,7 +3,27 @@ import { FieldSim, Vehicle, TRACTOR_TIME } from '../sim/tractor.js';
 import { mgIntro, mgCountdown, mgResult, mgTick, starsFor } from '../../ui/minigame_frame.js';
 import { LAYOUT } from '../world.js';
 import { josa } from '../sim/josa.js';
+import { touchUI } from '../input.js';
 
+/**
+ * 트랙터에서 내릴 자리: 옆(지금과 같은 쪽) → 반대 옆 → 뒤 → 앞 → 마당 가운데 쪽 순서로,
+ * 마당 울타리 안쪽이고 막히지 않은 첫 자리. 다 막혔으면 마당 가운데 쪽 자리를 마당 안으로 당김
+ * (트랙터는 울타리에서 1.55m 안쪽까지만 가므로 옆 2.2m 는 울타리 밖일 수 있음)
+ */
+export function dismountSpot(v, yard, isBlocked = () => false, D = 2.4, pad = 0.8) {
+  const sx = Math.cos(v.heading), sz = -Math.sin(v.heading), fx = Math.sin(v.heading), fz = Math.cos(v.heading);
+  const cands = [[-sx, -sz], [sx, sz], [-fx, -fz], [fx, fz]].map(([dx, dz]) => ({ x: v.x + dx * D, z: v.z + dz * D }));
+  if (yard) {
+    const cx = (yard.x0 + yard.x1) / 2 - v.x, cz = (yard.z0 + yard.z1) / 2 - v.z, l = Math.hypot(cx, cz) || 1;
+    cands.push({ x: v.x + (cx / l) * D, z: v.z + (cz / l) * D });
+  }
+  const inYard = (p) => !yard || (p.x > yard.x0 + pad && p.x < yard.x1 - pad && p.z > yard.z0 + pad && p.z < yard.z1 - pad);
+  const ok = cands.find((p) => inYard(p) && !isBlocked(p.x, p.z));
+  if (ok) return ok;
+  const p = { ...cands[cands.length - 1] };
+  if (yard) { p.x = THREE.MathUtils.clamp(p.x, yard.x0 + pad, yard.x1 - pad); p.z = THREE.MathUtils.clamp(p.z, yard.z0 + pad, yard.z1 - pad); }
+  return p;
+}
 
 /** 트랙터: 탑승/운전 + 밭갈이 미니게임 */
 export class TractorView {
@@ -103,8 +123,9 @@ export class TractorView {
     g.player.unico.clearAction();
     g.world.scene.remove(this.riderGroup);
     g.world.scene.add(this.rider.group);
-    const v = this.vehicle;
-    this.rider.group.position.set(v.x - Math.cos(v.heading) * 2.2, 0, v.z + Math.sin(v.heading) * 2.2);
+    // 내릴 자리는 트랙터 충돌원을 다시 켜기 전에 고름 (켠 뒤면 트랙터 자신에 막힘)
+    const p = dismountSpot(this.vehicle, LAYOUT.tractorYard, (x, z) => g.world.isBlocked(x, z, 0.45));
+    this.rider.group.position.set(p.x, 0, p.z);
     this.obstacle.r = 1.8;
     g.ui.hideMinigame();
     if (finished) {
@@ -198,7 +219,9 @@ export class TractorView {
     if (TT - this.lastPlow > 1.2 && this.streak) this.streak = 0;
     this.game.ui.updateMinigame({ time: this.field.time, score: this.field.score, streak: this.streak, warn: !this.counting && mgTick(this.game, this.field.time, this.tickRef) });
     if (done) { this.dismount(true); return null; }
-    if (input.justPressed('KeyE') || input.interactTap) { this.dismount(false); return null; }
-    return { label: `쟁기 ${this.plowDown ? '내림 🟢' : '올림 ⚪'} · SPACE 전환 · E 내리기`, key: 'driving' };
+    // 터치 E 버튼(interactTap)으로는 내리지 않음: 운전 중엔 E 버튼이 숨고 화면의 🚪 내리기 버튼만 씀 (▼후진 옆이라 잘못 눌러 판을 잃지 않게)
+    if (input.justPressed('KeyE')) { this.dismount(false); return null; }
+    const how = touchUI() ? '🪓 버튼 전환 · 🚪 버튼 내리기' : 'SPACE 전환 · E 내리기';
+    return { label: `쟁기 ${this.plowDown ? '내림 🟢' : '올림 ⚪'} · ${how}`, key: 'driving' };
   }
 }

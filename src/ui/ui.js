@@ -10,7 +10,8 @@ import { RICE_STAGES, WATER_MAX } from '../game/sim/rice.js';
 const anyItem = (k) => CROPS[k] || PRODUCTS[k] || ITEMS[k];
 import { recordsHtml } from './minigame_frame.js';
 import { installKoatUI } from './koat_ui.js';
-import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf } from '../game/quality.js';
+import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf, isMobileDevice } from '../game/quality.js';
+import { blurTextInput } from '../game/input.js';
 
 /** 세부 항목이 어느 프리셋과 똑같은지 (아니면 사용자 지정) */
 function matchPreset(s) {
@@ -65,8 +66,15 @@ export class UI {
     this.joy = h('div', 'joystick', '<i></i>');
     root.append(this.joy);
     this.touchBtn = h('button', 'touch-btn', 'E');
-    this.touchBtn.addEventListener('touchstart', (e) => { e.preventDefault(); game.input.interactTap = true; });
-    this.touchBtn.addEventListener('click', () => (game.input.interactTap = true));
+    // 대화 중이면 대화를 넘김 (키보드 E 와 같게). 터치는 touchstart 에서 preventDefault 하므로 click 이 또 오지 않음
+    const tapE = (e) => {
+      e?.preventDefault?.();
+      blurTextInput(); // 채팅 키보드가 열려 있으면 닫기
+      if (game.dialogue?.active) { game.dialogue.advance(); return; }
+      game.input.interactTap = true;
+    };
+    this.touchBtn.addEventListener('touchstart', tapE, { passive: false });
+    this.touchBtn.addEventListener('click', tapE);
     root.append(this.touchBtn);
     game.input.onJoystick = (active, cx, cy, dx, dy) => {
       this.joy.style.display = active ? 'block' : 'none';
@@ -79,11 +87,17 @@ export class UI {
     this.chatInput = h('input');
     this.chatInput.placeholder = '채팅 (Enter)';
     this.chatInput.maxLength = 80;
+    this.chatInput.enterKeyHint = 'send'; // 휴대폰 키보드의 Enter 키가 '보내기'로
+    this.chatInput.autocomplete = 'off';
     this.chatInput.addEventListener('keydown', (e) => {
+      e.stopPropagation(); // 게임 키 입력으로 새지 않게
+      // 한글 조합 중 Enter 는 글자 확정용 → 건너뜀. 확정된 뒤 다시 오는 Enter 에서 보냄 (keyCode 229 로 막으면 일부 키보드에서 전송이 안 됨)
+      if (e.isComposing) return;
       if (e.key === 'Enter') { const t = this.chatInput.value.trim(); if (t) game.net.sendChat(t); this.chatInput.value = ''; this.chatInput.blur(); }
       if (e.key === 'Escape') this.chatInput.blur();
-      e.stopPropagation();
     });
+    // iOS: 키보드가 닫힌 뒤 화면이 위로 밀린 채 남지 않게
+    this.chatInput.addEventListener('focusout', () => setTimeout(() => { if (document.activeElement !== this.chatInput && (scrollX || scrollY)) scrollTo(0, 0); }, 60));
     this.chat.append(this.online, this.chatLog, this.chatInput);
     root.append(this.chat);
     this.miniHud = null;
@@ -163,15 +177,21 @@ export class UI {
     if (!q) { this.objective.style.display = 'none'; return; }
     this.objective.style.display = '';
     this.objective.classList.toggle('done', q.complete);
-    const key = `${q.id}|${q.complete}|${q.count}|${dist === null ? '' : Math.round(dist)}`;
+    // 구조는 퀘스트·진행이 바뀔 때만 다시 그리고, 걸을 때 바뀌는 거리는 글자 하나만 바꿈
+    const hasDist = dist !== null && !q.complete;
+    const key = `${q.id}|${q.complete}|${q.count}|${hasDist}`;
     if (key !== this.objKey) {
       this.objKey = key;
       this._objDeg = null; // 새로 그린 화살표에 방향 다시 적용
-      this.objective.innerHTML = `<span class="ic">${q.complete ? '🎁' : '🎯'}</span><div class="tt">${q.complete ? '보상 받기: ' : ''}${q.title}<small>${q.complete ? '눌러서 퀘스트 창 열기 (Q)' : q.desc}${!q.complete && dist !== null ? ` · ${Math.round(dist)}m` : ''}</small><div class="bar"><i style="width:${Math.round((q.count / q.goal) * 100)}%"></i></div></div>${dist !== null && !q.complete ? '<span class="dir">▲</span>' : q.complete ? '<span class="dir">✓</span>' : ''}`;
+      this._objM = null;
+      this.objective.innerHTML = `<span class="ic">${q.complete ? '🎁' : '🎯'}</span><div class="tt">${q.complete ? '보상 받기: ' : ''}${q.title}<small>${q.complete ? '눌러서 퀘스트 창 열기 (Q)' : q.desc}<span class="dist"></span></small><div class="bar"><i style="width:${Math.round((q.count / q.goal) * 100)}%"></i></div></div>${hasDist ? '<span class="dir">▲</span>' : q.complete ? '<span class="dir">✓</span>' : ''}`;
+      this._objDist = this.objective.querySelector('.dist');
+      this._objDir = this.objective.querySelector('.dir');
     }
-    const dir = this.objective.querySelector('.dir');
+    const m = hasDist ? Math.round(dist) : null;
+    if (m !== this._objM) { this._objM = m; this._objDist.textContent = m === null ? '' : ` · ${m}m`; }
     const deg = Math.round(ang / 3) * 3; // 3도 단위로만 갱신
-    if (dir && !q.complete && deg !== this._objDeg) { this._objDeg = deg; dir.style.transform = `rotate(${deg}deg)`; }
+    if (this._objDir && !q.complete && deg !== this._objDeg) { this._objDeg = deg; this._objDir.style.transform = `rotate(${deg}deg)`; }
   }
 
   /** 월드 위치에서 가방 버튼으로 아이콘이 날아감 */
@@ -346,8 +366,10 @@ export class UI {
   showThresh(onMash, band = [0.55, 0.9]) {
     this.hideThresh();
     const p = h('div', 'thresh-panel');
-    p.innerHTML = `<h3><span class="drum">⚙️</span> 탈곡 <small class="msg"></small></h3><div class="track big"><div class="band" style="left:${band[0] * 100}%;width:${(band[1] - band[0]) * 100}%"></div><div class="fill"></div></div><div class="t"></div>`;
+    p.innerHTML = `<h3><span class="drum">⚙️</span> 탈곡 <small class="msg"></small></h3><div class="track big"><div class="band" style="left:${band[0] * 100}%;width:${(band[1] - band[0]) * 100}%"></div><div class="fill"></div></div><div class="t">남은 시간 <b class="sec"></b>초 · 효율 <span class="eff"></span>%</div>`;
     this._drumA = 0;
+    // 매 프레임 찾지 않게 한 번만, 쓸 때는 바뀐 값만 (last)
+    this._th = { fill: p.querySelector('.fill'), drum: p.querySelector('.drum'), msg: p.querySelector('.msg'), sec: p.querySelector('.sec'), eff: p.querySelector('.eff'), last: {} };
     const b = h('button', 'gold mash', '👊 연타!');
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); onMash(); });
     p.append(b);
@@ -355,29 +377,49 @@ export class UI {
     this.threshPanel = p;
   }
   updateThresh(gauge, left, s = {}) {
-    const P = this.threshPanel;
-    if (!P) return;
-    const f = P.querySelector('.fill');
-    f.style.width = `${Math.round(gauge * 100)}%`;
-    f.className = `fill ${s.jam ? 'jam' : s.ok ? 'ok' : gauge > 0.9 ? 'hot' : ''}`;
+    const P = this.threshPanel, T = this._th;
+    if (!P || !T) return;
+    const L = T.last, set = (k, v, fn) => { if (L[k] !== v) { L[k] = v; fn(v); } };
+    set('w', `${Math.round(gauge * 100)}%`, (v) => (T.fill.style.width = v));
+    set('cls', `fill ${s.jam ? 'jam' : s.ok ? 'ok' : gauge > 0.9 ? 'hot' : ''}`, (v) => (T.fill.className = v));
     this._drumA = (this._drumA + gauge * 40) % 360;
-    P.querySelector('.drum').style.transform = `rotate(${this._drumA}deg)`;
-    const msg = s.jam ? '🔥 과열!' : s.ok ? '좋아요!' : '';
-    const m = P.querySelector('.msg'); if (m.textContent !== msg) m.textContent = msg;
-    P.querySelector('.t').innerHTML = `남은 시간 <b>${Math.max(0, left).toFixed(1)}</b>초 · 효율 ${Math.round(Math.min(1, (s.eff || 0) / 0.75) * 100)}%`;
-    P.classList.toggle('warn', !!s.warn);
-    P.classList.toggle('jam', !!s.jam);
+    T.drum.style.transform = `rotate(${this._drumA}deg)`; // 계속 돌아가는 연출 (transform 은 합성만)
+    set('msg', s.jam ? '🔥 과열!' : s.ok ? '좋아요!' : '', (v) => (T.msg.textContent = v));
+    set('sec', Math.max(0, left).toFixed(1), (v) => (T.sec.textContent = v));
+    set('eff', String(Math.round(Math.min(1, (s.eff || 0) / 0.75) * 100)), (v) => (T.eff.textContent = v));
+    set('warn', !!s.warn, (v) => P.classList.toggle('warn', v));
+    set('jam', !!s.jam, (v) => P.classList.toggle('jam', v));
   }
-  hideThresh() { this.threshPanel?.remove(); this.threshPanel = null; }
+  hideThresh() { this.threshPanel?.remove(); this.threshPanel = null; this._th = null; }
 
   snapshot() {
-    const g = this.game;
-    g.postfx.render();
-    const url = g.renderer.domElement.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url; a.download = `unico-farm-${Date.now()}.png`; a.click();
+    const g = this.game, cv = g.renderer.domElement;
+    g.postfx.render(); // 그린 직후 같은 태스크 안에서 읽어야 함 (preserveDrawingBuffer 없음)
     g.audio.play('click');
-    this.toast('📸 찰칵! 스크린샷을 저장했어요');
+    const name = `unico-farm-${Date.now()}.png`, url = cv.toDataURL('image/png');
+    // 휴대폰: 공유 시트로 (iOS 는 내려받기로는 사진 앱에 저장되지 않음). 누른 그 순간에 불러야 막히지 않으므로 동기로 파일을 만듦
+    // (휴대폰 화면 캔버스는 작아서 동기 인코딩이 짧음)
+    if (isMobileDevice() && navigator.canShare) {
+      let file = null;
+      try {
+        const bin = atob(url.split(',')[1]), u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        file = new File([u8], name, { type: 'image/png' });
+      } catch { file = null; }
+      if (file && navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: '유니코 팜' })
+          .then(() => this.toast('📸 찰칵! 사진을 저장·공유했어요'))
+          .catch((e) => { if (e?.name !== 'AbortError') this._download(url, name); });
+        return;
+      }
+    }
+    this._download(url, name);
+  }
+  _download(url, name) {
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.click();
+    // iOS 사파리는 사진 앱이 아니라 파일 앱에 내려받음 → 결과에 맞게 안내
+    this.toast(/iP(hone|ad|od)/.test(navigator.userAgent) ? '📸 찰칵! 파일 앱 > 다운로드에 저장돼요' : '📸 찰칵! 스크린샷을 저장했어요');
   }
 
   // ---------------------------------------------------------------- HUD
@@ -409,7 +451,8 @@ export class UI {
       bar: this.levelChip.querySelector('.xpbar i'), xp: this.levelChip.querySelector('.xp'), boost: this.boostChip.querySelector('span'),
     });
     const put = (key, node, prop, v) => { if (this._hv?.[key] !== v) { (this._hv ||= {})[key] = v; if (prop === 'text') node.textContent = v; else if (prop === 'html') node.innerHTML = v; else node.style[prop] = v; } };
-    put('money', el.money, 'text', Math.round(this.shownMoney).toLocaleString());
+    const mv = Math.round(this.shownMoney);
+    if (mv !== this._mv) { this._mv = mv; put('money', el.money, 'text', mv.toLocaleString()); }
     put('clock', el.clock, 'text', g.world.clockText());
     const q = g.quests;
     put('lv', el.lv, 'text', String(q.level));
@@ -424,8 +467,10 @@ export class UI {
     put('banShow', this.banner, 'display', ev || fest ? '' : 'none');
     if (ev || fest) put('ban', this.banner, 'text', [fest?.name, ev && '📈 ' + ev.name].filter(Boolean).join('  ·  '));
     if (this._fest !== !!fest) { this._fest = !!fest; this.banner.classList.toggle('fest', !!fest); }
-    const n = q.active().filter((x) => x.complete).length;
-    put('quest', this.btnQuest, 'html', `📜<span class="lbl"> 퀘스트</span>${n ? ` <b style="color:#d9534f">(${n})</b>` : ''} <span class="hint-kbd">(Q)</span>`);
+    // 받지 않은 완료 퀘스트 수: 매 프레임이라 목록을 복사·정렬하지 않고 세기만, 글자는 수가 바뀔 때만
+    let n = 0;
+    for (const x of QUESTS) if (!q.claimed[x.id] && q.isComplete(x)) n++;
+    if (n !== this._qn) { this._qn = n; this.btnQuest.innerHTML = `📜<span class="lbl"> 퀘스트</span>${n ? ` <b style="color:#d9534f">(${n})</b>` : ''} <span class="hint-kbd">(Q)</span>`; }
   }
 
   setBarOpen(open) {
@@ -838,6 +883,9 @@ export class UI {
     this.root.append(pad);
     this.drivePad = pad;
     this.bar.style.display = 'none';
+    // 운전 중: 메뉴를 접고, E·☰ 버튼은 숨김 (CSS #ui.driving). ▼후진 바로 밑 E 를 잘못 눌러 내리지 않게
+    this.setBarOpen(false);
+    this.root.classList.add('driving');
   }
   updateMinigame(s) {
     const H = this.miniHud;
@@ -853,6 +901,7 @@ export class UI {
     this.drivePad?.remove(); this.drivePad = null;
     this.game.input.virtual.x = this.game.input.virtual.y = 0;
     this.bar.style.display = '';
+    this.root.classList.remove('driving');
   }
 
   showSmartfarm(sim, onAct) {
@@ -863,7 +912,7 @@ export class UI {
     for (const [k, v] of Object.entries(sim.vars)) {
       const g = h('div', 'gauge', `<div class="lbl"><span>${v.name}</span><span class="val"></span></div><div class="track"><div class="band" style="left:${pct(v.min, v)}%;width:${pct(v.max, v) - pct(v.min, v)}%"></div><div class="pin"></div></div>`);
       p.append(g);
-      this.gauges[k] = g;
+      this.gauges[k] = { el: g, val: g.querySelector('.val'), pin: g.querySelector('.pin'), last: {} }; // 매 프레임 찾지 않게
     }
     const acts = h('div', 'smart-actions');
     for (const [k, a] of Object.entries(sim.actions)) { const b = h('button', '', a.name); b.onclick = () => onAct(k); acts.append(b); }
@@ -884,22 +933,25 @@ export class UI {
   }
   updateSmartfarm(sim, warn = false) {
     if (!this.smart) return;
-    this.smartTimer.classList.toggle('warn', warn);
+    if (this._smWarn !== warn) { this._smWarn = warn; this.smartTimer.classList.toggle('warn', warn); }
     if (this.smartEv && !sim.event && this.smartEv.classList.contains('show')) this.smartEv.classList.remove('show');
+    // 값이 바뀔 때만 DOM 에 씀 (게이지 숫자·핀은 정수 % 라 1초에 몇 번뿐)
     for (const [k, v] of Object.entries(sim.vars)) {
-      const g = this.gauges[k];
-      g.classList.toggle('bad', !sim.inRange(v));
-      g.querySelector('.val').textContent = `${Math.round(v.value)}${v.unit} (목표 ${v.min}~${v.max})`;
-      g.querySelector('.pin').style.left = `calc(${pct(v.value, v)}% - 3px)`;
+      const g = this.gauges[k], L = g.last;
+      const bad = !sim.inRange(v), txt = `${Math.round(v.value)}${v.unit} (목표 ${v.min}~${v.max})`, pp = pct(v.value, v);
+      if (L.bad !== bad) { L.bad = bad; g.el.classList.toggle('bad', bad); }
+      if (L.txt !== txt) { L.txt = txt; g.val.textContent = txt; }
+      if (L.pct !== pp) { L.pct = pp; g.pin.style.left = `calc(${pp}% - 3px)`; }
     }
-    this.smartTimer.textContent = `⏱ ${Math.ceil(sim.time)}초 · 적정 유지 ${sim.good.toFixed(1)}초`;
+    const tt = `⏱ ${Math.ceil(sim.time)}초 · 적정 유지 ${sim.good.toFixed(1)}초`;
+    if (this._smT !== tt) { this._smT = tt; this.smartTimer.textContent = tt; }
   }
-  hideSmartfarm() { this.smart?.remove(); this.smart = null; }
+  hideSmartfarm() { this.smart?.remove(); this.smart = null; this._smWarn = this._smT = undefined; }
 }
 
 function pct(x, v) { return Math.round(((x - v.lo) / (v.hi - v.lo)) * 100); }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-import { LEVELS } from '../game/sim/quests.js';
+import { LEVELS, QUESTS } from '../game/sim/quests.js';
 function LEVEL_PREV(q) { return LEVELS[q.level - 1] || 0; }
 
 installKoatUI(UI);
