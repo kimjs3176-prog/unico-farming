@@ -4,6 +4,12 @@ import { heightAt } from './terrain.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries as mergeGeo } from 'three/addons/utils/BufferGeometryUtils.js';
 
+/** 하늘 그라데이션 색 (읽기 전용) */
+const SKY = {
+  dayTop: new THREE.Color(0x4f9ff0), dayHz: new THREE.Color(0xd6eeff), duskTop: new THREE.Color(0x4a3f8a), duskHz: new THREE.Color(0xf7b27a),
+  nightTop: new THREE.Color(0x0a1230), nightHz: new THREE.Color(0x1f2c52), moteDusk: new THREE.Color(0xffb35a),
+};
+
 const RIPPLES = 16; // 동시에 퍼지는 파문 수
 
 /** 하늘 돔(그라데이션), 구름, 지평선 언덕, 잔디 인스턴싱, 연못 물결 — 분위기 레이어 */
@@ -438,12 +444,10 @@ export class Scenery {
       if (c.position.x > 130) c.position.x = -130;
     });
     const u = this.skyUniforms;
-    const dayTop = new THREE.Color(0x4f9ff0), dayHz = new THREE.Color(0xd6eeff);
-    const duskTop = new THREE.Color(0x4a3f8a), duskHz = new THREE.Color(0xf7b27a);
-    const nightTop = new THREE.Color(0x0a1230), nightHz = new THREE.Color(0x1f2c52);
+    const { dayTop, dayHz, duskTop, duskHz, nightTop, nightHz } = SKY; // 매 프레임 새로 만들지 않음 (docs/perf)
     if (daylight > 0.6) { const k = (daylight - 0.6) / 0.4; u.top.value.copy(duskTop).lerp(dayTop, k); u.horizon.value.copy(duskHz).lerp(dayHz, k); }
     else { const k = daylight / 0.6; u.top.value.copy(nightTop).lerp(duskTop, k); u.horizon.value.copy(nightHz).lerp(duskHz, k); }
-    const grey = new THREE.Color(0x8d98a3).multiplyScalar(0.4 + daylight * 0.6);
+    const grey = (this._grey ||= new THREE.Color()).setHex(0x8d98a3).multiplyScalar(0.4 + daylight * 0.6);
     u.top.value.lerp(grey, weather.cloud * 0.75);
     u.horizon.value.lerp(grey, weather.cloud * 0.6);
     u.bottom.value.copy(u.horizon.value).multiplyScalar(0.9);
@@ -459,7 +463,7 @@ export class Scenery {
     if (this.moteU) {
       this.moteU.uTime.value = this.t;
       const f = this.world.focusPos; if (f) this.moteU.uCenter.value.set(f.x, 0, f.z);
-      this.moteU.uColor.value.setHex(0xfff2c0).lerp(new THREE.Color(0xffb35a), u.dusk.value);
+      this.moteU.uColor.value.setHex(0xfff2c0).lerp(SKY.moteDusk, u.dusk.value);
       this.moteU.uAlpha.value = (0.28 + u.dusk.value * 0.5) * (1 - u.night.value) * (1 - weather.precip) * (1 - weather.cloud * 0.6);
     }
     if (this.waterShared) this.waterShared.skyCol.value.copy(u.horizon.value).lerp(u.top.value, 0.4);

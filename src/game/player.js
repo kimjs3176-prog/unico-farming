@@ -56,7 +56,7 @@ export class Player {
     if (dir.lengthSq() > 0.0001 || this.frozen) this.moveTarget = null; // 키보드/조이스틱 입력이 우선
     else if (this.moveTarget) {
       const t = this.moveTarget, goal = t.pos();
-      const d = new THREE.Vector3(goal.x - this.position.x, 0, goal.z - this.position.z);
+      const d = (this._d ||= new THREE.Vector3()).set(goal.x - this.position.x, 0, goal.z - this.position.z);
       const dist = d.length();
       if (dist <= t.stop) {
         this.arrivedInteract = t.interact;

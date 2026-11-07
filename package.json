@@ -13,7 +13,8 @@
     "models": "python3 blender/build_all.py",
     "test": "node --test",
     "models:compress": "node scripts/compress-models.mjs",
-    "a11y": "node scripts/a11y-check.mjs http://localhost:5173/"
+    "a11y": "node scripts/a11y-check.mjs http://localhost:5173/",
+    "perf": "node scripts/perf-budget.mjs http://localhost:5173/"
   },
   "dependencies": {
     "galmuri": "^2.40.3",

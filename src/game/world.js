@@ -125,6 +125,7 @@ export const LAYOUT = {
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
 // 애니메이션·상호작용이 있어 병합하면 안 되는 모델
 const DYNAMIC = new Set(['windmill', 'tower_windmill', 'drone', 'smartfarm', 'fruit_tree', 'thresher', 'tractor', 'hen', 'cloud']);
+const SKY_COL = { dayCol: new THREE.Color(0xbfe4ff), duskCol: new THREE.Color(0xf4b183), nightCol: new THREE.Color(0x1d2a4a) }; // 하늘(안개) 색, 읽기 전용
 const GREY = new THREE.Color(0x9aa4ae);
 
 export class World {
@@ -849,8 +850,8 @@ export class World {
     const tod = this.tod = timeOfDay(t); // 시간대 빛 색 (부드럽게 이어짐)
     this.sun.color.setRGB(tod.sun[0], tod.sun[1], tod.sun[2]);
     this.hemi.color.setHex(0xd8eeff).lerp(this.sun.color, 0.16).lerp(GREY, overcast * 0.6);
-    const dayCol = new THREE.Color(0xbfe4ff), duskCol = new THREE.Color(0xf4b183), nightCol = new THREE.Color(0x1d2a4a);
-    const sky = new THREE.Color();
+    const { dayCol, duskCol, nightCol } = SKY_COL; // 매 프레임 새로 만들지 않음 (docs/perf)
+    const sky = (this._sky ||= new THREE.Color());
     if (elev > 0.25) sky.copy(dayCol);
     else if (elev > -0.1) sky.copy(duskCol).lerp(dayCol, (elev + 0.1) / 0.35);
     else sky.copy(nightCol).lerp(duskCol, Math.max(0, (elev + 0.35) / 0.25));
@@ -870,7 +871,8 @@ export class World {
     this.rim.target.position.set(fx, 0, fz);
     this.rim.intensity = 0.25 + daylight * 0.45;
     this.ambient.intensity = 0.03 + daylight * 0.12;
-    this.scenery?.update(dt, daylight, this.sun.position.clone().sub(new THREE.Vector3(fx, 0, fz)), W);
+    const sunDir = (this._sunDir ||= new THREE.Vector3()).set(this.sun.position.x - fx, this.sun.position.y, this.sun.position.z - fz); // = sun.position - (fx, 0, fz), 매 프레임 재사용
+    this.scenery?.update(dt, daylight, sunDir, W);
     // 하늘을 가로지르는 새 떼 (낮·맑을 때)
     (this.birds ||= new Birds(this.scene)).update(dt, focus, W.precip > 0.3 ? 0 : daylight);
   }
