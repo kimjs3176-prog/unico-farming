@@ -95,6 +95,14 @@ test('단계별 덧붙임: 낮음만 새 떼 끔·비눈 입자 줄임·풀 거�
   assert.equal(resolveQuality({ ...base, preset: 'custom', post: false }, 1).birds, false);
 });
 
+test('환경맵(IBL): 낮음만 끄고 보통·높음·후처리 켠 사용자 지정은 켬', () => {
+  assert.equal(resolveQuality(applyPreset(base, 'low'), 1).env, false);
+  assert.equal(resolveQuality(applyPreset({ ...base, autoLevel: 'low' }, 'auto'), 1).env, false);
+  for (const p of ['medium', 'high']) assert.equal(resolveQuality(applyPreset(base, p), 1).env, true);
+  assert.equal(resolveQuality({ ...base, preset: 'custom', post: true, ao: false }, 1).env, true);
+  assert.equal(resolveQuality({ ...base, preset: 'custom', post: false }, 1).env, false);
+});
+
 test('UI text size: three steps, invalid or missing values fall back to normal', async () => {
   const { UI_SCALES, uiScaleOf } = await import('../src/game/quality.js');
   assert.deepEqual(UI_SCALES.map((u) => u.v), [1, 1.15, 1.3]);

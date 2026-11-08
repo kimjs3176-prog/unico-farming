@@ -27,3 +27,18 @@ test('시간대 색: 범위 밖 값도 안전 (음수·1 이상)', () => {
   assert.deepEqual(timeOfDay(-0.5), timeOfDay(0.5));
   assert.deepEqual(timeOfDay(1.25), timeOfDay(0.25));
 });
+
+test('시간대 색: 넘긴 객체를 다시 채워도 새로 만든 값과 같음 (매 프레임 할당 없이)', () => {
+  const out = { sun: [0, 0, 0], tint: [0, 0, 0], warmth: 0, sat: 0 };
+  const { sun, tint } = out;
+  for (const h of [0, 3, 5.9, 7.3, 12, 17.5, 18.4, 19.9, 23.99, 6, 1]) {
+    const r = timeOfDay(h / 24, out);
+    assert.equal(r, out, '같은 객체를 돌려줌');
+    assert.equal(r.sun, sun);
+    assert.equal(r.tint, tint);
+    assert.deepEqual(r, at(h), `${h}시 값이 새로 만든 것과 같아야 함`);
+  }
+  const a = at(12), b = at(12);
+  assert.notEqual(a, b, '넘기지 않으면 호출마다 새 객체');
+  assert.notEqual(a.sun, b.sun);
+});

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
 import { heightAt } from '../terrain.js';
 import { playClip } from './ranch_view.js';
+import { releaseRig } from './pests.js';
 import { mgIntro, mgCountdown, mgResult, mgTick } from '../../ui/minigame_frame.js';
 
 const DUR = 70, N = 6;
@@ -155,7 +156,7 @@ export class Herding {
 
   cleanup() {
     const g = this.game;
-    for (const s of this.sheep || []) g.world.scene.remove(s.m);
+    for (const s of this.sheep || []) { g.world.scene.remove(s.m); releaseRig(s); }
     this.sheep = [];
     this.active = false;
     this.hud.classList.add('hidden');

@@ -1,15 +1,19 @@
 // CC0 외부 에셋(Quaternius) 후처리: 재질 이름·색을 게임 팔레트로 맞추고, 애니메이션 정리, meshopt 압축
 // 사용: node scripts/optimize-cc0.mjs <blender/import_cc0.py 출력 폴더> <애니메이션 glTF 폴더>
+//       node scripts/optimize-cc0.mjs --prune-nature   (원본 없이 public/models/q_nature.glb 에서 안 쓰는 노드만 빼기)
 // 결과: public/models/q_*.glb  (라이선스: docs/ASSETS_CC0.md)
 import fs from 'node:fs';
 import path from 'node:path';
-import { NodeIO } from '@gltf-transform/core';
+import { NodeIO, getBounds } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { dedup, prune, resample, meshopt, weld, joinPrimitives } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer';
 
-const [RAW, ANIM] = process.argv.slice(2);
+const PRUNE_NATURE = process.argv[2] === '--prune-nature';
+const [RAW, ANIM] = PRUNE_NATURE ? [] : process.argv.slice(2);
 const OUT = path.resolve('public/models');
+// q_nature 안에서 게임이 쓰지 않는 노드 (겨울 나무·옥수수·밀·짧은 풀): 받는 용량만 늘리므로 뺌 (src/game/assets.js UNUSED_PACK_NODE 와 같게)
+const DROP = /^(snowpine_\d|snowtree_\d|corn_\d|wheat|grass_short)$/;
 
 // 원본 재질 이름 → [게임 재질 이름(표면 질감 종류를 결정, src/game/surface.js kindOf), sRGB 색]
 const BUILDING = {
@@ -125,10 +129,41 @@ async function finish(doc, out, { anim = false } = {}) {
   console.log(path.basename(out), (fs.statSync(out).size / 1024).toFixed(0) + 'KB');
 }
 
+/** 최상위 노드 중 DROP 에 맞는 것을 하위까지 지움 → 지운 이름 목록 (메시·재질·버퍼는 뒤의 prune 이 정리) */
+function dropUnused(doc) {
+  const gone = [];
+  for (const top of doc.getRoot().getDefaultScene().listChildren()) {
+    if (!DROP.test(top.getName())) continue;
+    const all = [];
+    top.traverse((n) => all.push(n));
+    for (const n of all.reverse()) n.dispose();
+    gone.push(top.getName());
+  }
+  return gone;
+}
+
 if (RAW) for (const f of ['q_farm.glb', 'q_nature.glb']) {
   const doc = await io.read(path.join(RAW, f));
   remapStatic(doc, f === 'q_farm.glb' ? BUILDING : NATURE);
+  if (f === 'q_nature.glb') console.log('  안 쓰는 노드 제거:', dropUnused(doc).length);
   await finish(doc, path.join(OUT, f));
+}
+
+// 원본 없이 이미 만든 q_nature.glb 에서 안 쓰는 노드만 빼기: 다시 양자화하지 않고(meshopt 버퍼 압축만 다시) 남은 노드 모양은 그대로
+if (PRUNE_NATURE) {
+  const file = path.join(OUT, 'q_nature.glb');
+  const before = fs.statSync(file).size;
+  const doc = await io.read(file);
+  const box = (d) => new Map(d.getRoot().getDefaultScene().listChildren().map((n) => [n.getName(), JSON.stringify(getBounds(n))]));
+  const prev = box(doc);
+  const gone = dropUnused(doc);
+  await doc.transform(dedup(), prune());
+  await io.write(file, doc);
+  const after = await io.read(file), kept = box(after);
+  const moved = [...kept].filter(([k, v]) => prev.get(k) !== v).map(([k]) => k);
+  console.log(`q_nature.glb: 노드 ${gone.length}개 제거 (${gone.join(', ')}), 남은 노드 ${kept.size}개, 경계 상자 바뀐 노드 ${moved.length}개${moved.length ? ` (${moved.join(', ')})` : ''}`);
+  console.log(`  ${(before / 1024).toFixed(0)}KB → ${(fs.statSync(file).size / 1024).toFixed(0)}KB`);
+  if (moved.length) process.exitCode = 1;
 }
 
 const qmul = (a, b) => [

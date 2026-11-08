@@ -25,6 +25,8 @@ const HEIGHT = { q_cow: 1.45, q_sheep: 1.15, q_horse: 1.75, q_donkey: 1.3, q_alp
 const RADIUS = { q_cow: 0.75, q_sheep: 0.5, hen: 0.25, chicken: 0.25, q_horse: 0.7, q_donkey: 0.55, q_alpaca: 0.5 };
 /** 걷기 동작 재생 속도 배율 (발이 미끄러지지 않게) */
 const WALK_RATE = { q_sheep: 1.7 };
+/** 이보다 먼(m) 동물은 뼈대 동작을 4프레임에 한 번 계산 */
+const FAR_ANIM = 30;
 /** 목장 구경 동물(생산 없음, 쓰다듬기만) */
 const VISITORS = [
   { model: 'q_horse', name: '말', emoji: '🐴', speed: 1.1 },
@@ -57,7 +59,8 @@ export class RanchView {
     this.taken = [];
     this.ents = [];
     this.sync();
-    this.visitors = VISITORS.filter((v) => game.assets.has(v.model)).map((v) => Object.assign(this._spawn(v.model, v.speed), { v, petT: 0 }));
+    this.visitors = [];
+    this.addVisitors(); // 구경 동물 모델은 입장 뒤 뒤에서 받음 (assets.loadDeferred) → 도착하면 update 가 마저 풀어 놓음
     this.near = null;
     this.t = 0;
     // ---- 목장 가공소 (치즈 공방): 노란 지붕 부스 + 치즈 바퀴 ----
@@ -79,6 +82,14 @@ export class RanchView {
     this.hay = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.42), new THREE.MeshStandardMaterial({ color: 0xd9b45a, roughness: 1 }));
     this.hay.position.set(T.x, 0.3, T.z);
     W.scene.add(this.hay);
+  }
+
+  /** 모델이 도착한 구경 동물(말·당나귀·알파카)을 풀어 놓음. 여러 번 불러도 종마다 한 마리 → 새로 넣은 수 */
+  addVisitors() {
+    const add = VISITORS.filter((v) => this.game.assets.has(v.model) && !this.visitors.some((e) => e.v === v));
+    for (const v of add) this.visitors.push(Object.assign(this._spawn(v.model, v.speed), { v, petT: 0 }));
+    if (add.length) this._all = null;
+    return add.length;
   }
 
   /** 동물 하나 만들기 (장애물·다른 동물과 겹치지 않는 자리) */
@@ -178,7 +189,7 @@ export class RanchView {
     const ease = 1 - Math.exp(-dt * 3);
     if (this.sleeping && !(e.petT > 0)) { // 밤: 제자리에서 꾸벅꾸벅 (숨 쉬듯 천천히)
       e.vel = 0;
-      if (e.mixer) { playClip(e, 'idle', 0.8); e.mixer.update(dt * 0.3); }
+      if (e.mixer) { playClip(e, 'idle', 0.8); this._anim(e, dt * 0.3); }
       else { const k = Math.exp(-dt * 6); for (const l of e.legs) l.rotation.x *= k; if (e.head) e.head.rotation.x += (0.35 - e.head.rotation.x) * ease; if (e.a?.type === 'chicken') p.y *= k; }
       return;
     }
@@ -234,7 +245,16 @@ export class RanchView {
       }
     }
     // 걷기 동작 재생 속도 = 실제 이동 속도에 맞춤 (발 미끄러짐 방지)
-    if (e.mixer) e.mixer.update(dt * (e.cur === 'walk' ? Math.max(0.35, (e.vel || 0) / 0.9) * (e.walkRate || 1) : 1));
+    if (e.mixer) this._anim(e, dt * (e.cur === 'walk' ? Math.max(0.35, (e.vel || 0) / 0.9) * (e.walkRate || 1) : 1));
+  }
+
+  /** 뼈대 동작 진행. 카메라에서 30m 넘게 떨어지면 시간을 모아 4프레임에 한 번만 계산 (화면에서 작아 티가 안 남) */
+  _anim(e, d) {
+    e.animAcc = (e.animAcc || 0) + d;
+    const c = this.game.camera?.position, p = e.m.position;
+    if (c && (c.x - p.x) ** 2 + (c.z - p.z) ** 2 > FAR_ANIM * FAR_ANIM && (e.animN = ((e.animN || 0) + 1) % 4)) return;
+    e.mixer.update(e.animAcc);
+    e.animAcc = 0;
   }
 
   async eggCatch() {
@@ -266,6 +286,12 @@ export class RanchView {
   update(dt, playerPos) {
     const g = this.game, day = g.world.day, S = this.sim;
     this.t += dt;
+    // 뒤에서 받는 구경 동물: 1초마다 도착했는지 보고 풀어 놓음 (다 받으면 멈춤)
+    if (!this._visDone && (this._visT = (this._visT || 0) - dt) <= 0) {
+      this._visT = 1;
+      this.addVisitors();
+      this._visDone = this.visitors.length >= VISITORS.length || !!g.assets.deferredDone;
+    }
     // 밤에는 동물들이 잠듦 (생산은 계속)
     this.sleeping = g.world.daylight < 0.22;
     // 여우·늑대가 울타리에 붙어 있으면 동물들이 겁먹어 생산이 멈추고 그쪽을 바라봄

@@ -6,6 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { enhanceMaterial, SURF, setSurfaceDetail } from './surface.js';
 import { timeOfDay } from './sim/tod.js';
 import { Birds } from './birds.js';
+import { whenFontReady } from './label.js';
 
 /** 월드 레이아웃 상수 (m). +X 동쪽, +Z 남쪽, 스폰 (0,0,9) */
 export const LAYOUT = {
@@ -128,6 +129,9 @@ const DYNAMIC = new Set(['windmill', 'tower_windmill', 'drone', 'smartfarm', 'fr
 const GREY = new THREE.Color(0x9aa4ae);
 const DAY_SKY = new THREE.Color(0xbfe4ff), DUSK_SKY = new THREE.Color(0xf4b183), NIGHT_SKY = new THREE.Color(0x1d2a4a);
 const WEATHER_KEYS = ['cloud', 'precip', 'fog', 'wind'];
+// 환경맵을 끈 저사양(quality.env === false): 주변광에 더할 값 = 이 배율 × 환경광 세기.
+// 같은 장면을 환경맵 켬/끔으로 찍어 화면 밝기를 맞춤: 켬 190.5·125.0·63.7 ↔ 끔(배율 5) 190.2·124.4·63.3 (낮·저녁·밤)
+export const ENV_OFF_AMBIENT = 5;
 const ORIGIN = { x: 0, z: 0 };
 // 정적 병합 칸: 삼각형이 많은 묶음만 20m 칸으로 나눠 화면(그림자 상자) 밖 칸은 그리지 않음
 const STATIC_CELL = 20, SPLIT_TRIS = 3000, MIN_CELL_TRIS = 400;
@@ -727,12 +731,17 @@ export class World {
   signText(m, title, sub) {
     const tex = (text, w, h, size, bg) => {
       const c = document.createElement('canvas'); c.width = w; c.height = h;
-      const g = c.getContext('2d');
-      g.fillStyle = bg; g.fillRect(0, 0, w, h);
-      g.fillStyle = '#4a2f1b'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.font = `900 ${size}px 'Unico Coin', Jua, "Noto Sans KR", sans-serif`;
-      g.fillText(text, w / 2, h / 2 + 2);
-      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+      const g = c.getContext('2d'), font = `900 ${size}px 'Unico Coin', Jua, "Noto Sans KR", sans-serif`;
+      const paint = () => {
+        g.fillStyle = bg; g.fillRect(0, 0, w, h);
+        g.fillStyle = '#4a2f1b'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.font = font;
+        g.fillText(text, w / 2, h / 2 + 2);
+      };
+      paint();
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+      whenFontReady(font, text, () => { paint(); t.needsUpdate = true; }); // 한글 조각이 늦게 오면 다시 칠함 (캔버스 크기는 그대로)
+      return t;
     };
     const mk = (text, w, h, y, rz, bg, size) => {
       const pl = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex(text, 512, Math.round(512 * h / w), size, bg), roughness: 0.9 }));
@@ -928,7 +937,7 @@ export class World {
     const snowCover = Math.max(W.kind === 'snow' ? Math.min(1, W.precip * 1.2) : 0, this.seasonSnow || 0); // 겨울엔 눈이 안 와도 소복이
     this.snowCover = (this.snowCover || 0) + (snowCover - (this.snowCover || 0)) * Math.min(1, dt * 0.15);
     this.groundMat.emissive.setRGB(0.94, 0.97, 1).multiplyScalar(this.snowCover * 0.62 * (0.3 + daylight * 0.7)); // 눈 덮인 땅 (겨울·눈 오는 날)
-    const tod = this.tod = timeOfDay(t); // 시간대 빛 색 (부드럽게 이어짐)
+    const tod = this.tod = timeOfDay(t, this._tod ||= { sun: [0, 0, 0], tint: [0, 0, 0], warmth: 0, sat: 0 }); // 시간대 빛 색 (같은 객체를 다시 채움)
     this.sun.color.setRGB(tod.sun[0], tod.sun[1], tod.sun[2]);
     this.hemi.color.setHex(0xd8eeff).lerp(this.sun.color, 0.16).lerp(GREY, overcast * 0.6);
     const sky = (this._sky ||= new THREE.Color());
@@ -952,7 +961,8 @@ export class World {
     this.rim.position.set(fx - Math.cos(sunA) * 50, 25, fz - 35);
     this.rim.target.position.set(fx, 0, fz);
     this.rim.intensity = 0.25 + daylight * 0.45;
-    this.ambient.intensity = 0.03 + daylight * 0.12;
+    // 환경맵(IBL)을 끈 저사양: 환경광이 주던 밝기를 흰 주변광으로 채움 (낮·저녁·밤 모두 예전 밝기와 맞춤)
+    this.ambient.intensity = 0.03 + daylight * 0.12 + (this.scene.environment ? 0 : ENV_OFF_AMBIENT * this.scene.environmentIntensity);
     this.scenery?.update(dt, daylight, sunRel, W);
     // 하늘을 가로지르는 새 떼 (낮·맑을 때). 품질 낮음·집 안에서는 새 무리를 만들지 않음 (날던 무리는 그대로 지나감)
     const birdsOn = (q.birds ?? true) && !indoor;
