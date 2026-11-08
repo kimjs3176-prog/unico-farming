@@ -106,6 +106,49 @@ test('첫 화면 모델 줄이기: 목장 구경 동물·늑대·여우는 입�
   assert.deepEqual(fake.visitors.map((e) => e.model), ['q_horse', 'q_donkey', 'q_alpaca']);
 });
 
+test('늦게 온 구경 동물: 플레이어 옆·카메라 화면 안에는 나타나지 않고, 숨을 자리가 없으면 다음에', () => {
+  const cam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 600);
+  const added = [];
+  const game = {
+    world: { isBlocked: () => false, scene: { add: (m) => added.push(m) } },
+    assets: { has: () => true, anims: new Map(), clone: () => new THREE.Group() },
+    camera: cam,
+  };
+  const rv = Object.assign(Object.create(RanchView.prototype), { game, taken: [], visitors: [], _all: [] });
+  const look = (px, pz, cx, cy, cz) => { cam.position.set(cx, cy, cz); cam.lookAt(px, 0, pz); cam.updateMatrixWorld(); };
+  const fr = () => new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+  // 목장 가운데에서 동쪽을 바라봄 (따라가는 카메라처럼 뒤·위에서)
+  const pp = new THREE.Vector3(22, 0, 2);
+  look(30, 2, 16, 6, 2);
+  let placed = 0;
+  for (let i = 0; i < 30; i++) {
+    rv.taken.length = 0;
+    const e = rv._spawn('q_horse', 1, pp, true);
+    if (!e) continue;
+    placed++;
+    const { x, z } = e.m.position;
+    assert.ok(Math.hypot(x - pp.x, z - pp.z) >= 8, `플레이어에게서 8m 밖 (${x.toFixed(1)}, ${z.toFixed(1)})`);
+    assert.ok(!fr().intersectsSphere(new THREE.Sphere(new THREE.Vector3(x, 0.875, z), 1.75)), '화면 밖');
+  }
+  assert.ok(placed >= 15, `등 뒤 빈자리는 찾음 (${placed}/30)`);
+  // 위에서 목장 전체를 내려다보면 숨을 자리가 없음 → strict 는 null, 아니면 플레이어에게서 가장 먼 자리
+  look(22, 2, 22, 120, 2.1);
+  rv.taken.length = 0;
+  assert.equal(rv._spawn('q_horse', 1, pp, true), null);
+  const far = rv._spawn('q_horse', 1, pp, false);
+  assert.ok(Math.hypot(far.m.position.x - pp.x, far.m.position.z - pp.z) > 8);
+  // 입장 전(생성자)에는 어디든
+  assert.ok(rv._spawn('q_horse', 1));
+  // addVisitors: 숨을 자리가 없으면 기다렸다가, 오래 못 찾으면 가장 먼 자리에 풀어 놓음
+  Object.assign(rv, { taken: [], visitors: [], _visWait: 0 });
+  let n = 0, polls = 0;
+  while (!n && polls < 30) { n = rv.addVisitors(pp); polls++; }
+  assert.equal(n, 3);
+  assert.ok(polls > 5, `바로 나타나지 않음 (${polls}번째 확인)`);
+  assert.equal(rv._visWait, 0);
+  assert.equal(rv._all, null);
+});
+
 test('모델 캐시 버전: 파일 내용 해시를 주소에 붙이고, 미리 받기 주소가 실제 요청 주소와 같음', () => {
   const v = modelVersions(new URL('public/models', root).pathname);
   const files = fs.readdirSync(new URL('public/models', root)).filter((f) => /\.(glb|bin)$/.test(f));
@@ -119,13 +162,42 @@ test('모델 캐시 버전: 파일 내용 해시를 주소에 붙이고, 미리 
   assert.deepEqual(viteConfig({ command: 'serve' }).define, {}, '개발 서버는 버전 없이');
   const plug = cfg.plugins.find((p) => p.name === 'unico-model-preload');
   plug.configResolved({ base: '/' });
+  // 빌드 때 미리 받기 스크립트를 따로 된 파일로 내보냄 (CSP 가 인라인 스크립트를 막음)
+  const emitted = [];
+  plug.buildStart.call({ emitFile: (f) => emitted.push(f) });
+  assert.equal(emitted.length, 1);
+  const file = emitted[0];
+  assert.equal(file.type, 'asset');
+  assert.match(file.fileName, /^assets\/model-preload-[0-9a-f]{8}\.js$/, '/assets 아래 내용 해시 이름 → 오래 캐시');
   const tags = plug.transformIndexHtml('', { filename: '/x/index.html' });
-  assert.ok(tags.length >= 3);
-  for (const t of tags) {
-    const f = t.attrs.href.match(/^\/models\/(.+)\.gz\?v=/)[1];
-    assert.equal(t.attrs.href, `/models/${f}.gz${modelQuery(`/models/${f}`, v)}`, 'fetchModel 이 만드는 주소와 같아야 재사용');
-    assert.equal(t.attrs.as, 'fetch');
-    assert.ok('crossorigin' in t.attrs, 'fetch() 기본 자격 증명 모드와 맞춤');
+  assert.equal(tags.length, 1);
+  assert.equal(tags[0].tag, 'script');
+  assert.equal(tags[0].attrs.src, `/${file.fileName}`);
+  assert.ok(!tags[0].attrs.type && !tags[0].attrs.async && !tags[0].attrs.defer, '일반 스크립트 → 게임 모듈보다 먼저 실행');
+  assert.equal(tags[0].injectTo, 'head-prepend');
+  // 스크립트 실행: DecompressionStream 이 있을 때만 링크를 붙임
+  const run = (self) => {
+    const links = [];
+    const document = { createElement: (tag) => ({ tag }), head: { append: (el) => links.push(el) } };
+    new Function('self', 'document', file.source)(self, document);
+    return links;
+  };
+  assert.deepEqual(run({}), [], 'DecompressionStream 이 없으면(iOS 16.3 이하) 미리 받지 않음 → 원본만 한 번 받음');
+  const links = run({ DecompressionStream: function () {} });
+  assert.ok(links.length >= 3);
+  for (const l of links) {
+    const f = l.href.match(/^\/models\/(.+)\.gz\?v=/)[1];
+    assert.equal(l.href, `/models/${f}.gz${modelQuery(`/models/${f}`, v)}`, 'fetchModel 이 만드는 주소와 같아야 재사용');
+    assert.equal(l.tag, 'link');
+    assert.equal(l.rel, 'preload');
+    assert.equal(l.as, 'fetch');
+    assert.equal(l.crossOrigin, 'anonymous', 'fetch() 기본 자격 증명 모드와 맞춤');
   }
   assert.equal(plug.transformIndexHtml('<html></html>', { filename: '/x/pixel.html' }), '<html></html>', '도트 판은 그대로');
+  // 다른 base 에서도 fetchModel 주소(BASE_URL + models/)와 같음
+  plug.configResolved({ base: '/farm/' });
+  const e2 = [];
+  plug.buildStart.call({ emitFile: (f) => e2.push(f) });
+  assert.ok(e2[0].source.includes(`"/farm/models/q_nature.glb.gz?v=${v['q_nature.glb']}"`));
+  assert.equal(plug.transformIndexHtml('', { filename: '/x/index.html' })[0].attrs.src, `/farm/${e2[0].fileName}`);
 });

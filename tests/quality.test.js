@@ -103,6 +103,18 @@ test('환경맵(IBL): 낮음만 끄고 보통·높음·후처리 켠 사용자 �
   assert.equal(resolveQuality({ ...base, preset: 'custom', post: false }, 1).env, false);
 });
 
+test('환경맵(IBL)은 언제나 후처리와 함께 바뀜 (자동 내림에서 재질 셰이더 다시 컴파일이 따로 더 생기지 않음)', () => {
+  const states = [
+    ...['low', 'medium', 'high'].map((p) => applyPreset(base, p)),
+    ...['low', 'medium', 'high'].map((l) => applyPreset({ ...base, autoLevel: l }, 'auto')),
+    ...[true, false].flatMap((post) => [true, false].map((ao) => ({ ...base, preset: 'custom', post, ao }))),
+  ];
+  for (const s of states) {
+    const q = resolveQuality(s, 1);
+    assert.equal(q.env, q.post, `${s.preset}/${s.autoLevel}/post=${s.post}`);
+  }
+});
+
 test('UI text size: three steps, invalid or missing values fall back to normal', async () => {
   const { UI_SCALES, uiScaleOf } = await import('../src/game/quality.js');
   assert.deepEqual(UI_SCALES.map((u) => u.v), [1, 1.15, 1.3]);

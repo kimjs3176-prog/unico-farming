@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { defineConfig } from 'vite';
 
 const MODELS = 'public/models';
-// 첫 화면에 꼭 필요한 큰 모델: 게임 코드가 실행되기 전부터 받기 시작 (index.html 만, 도트 판 제외)
+// 첫 화면에 꼭 필요한 큰 모델: 게임 코드가 실행되기 전부터 받기 시작 (index.html 만, 도트 판 제외, .gz 를 쓰는 브라우저만)
 const PRELOAD = ['q_nature.glb', 'unico_biped.bin', 'unico_body.bin', 'q_farm.glb'];
 
 /** 모델 파일별 내용 해시 앞 10자 → 바뀐 파일만 새 주소(?v=)로 받고, 그대로인 파일은 브라우저 캐시를 계속 씀 */
@@ -17,20 +17,32 @@ export function modelVersions(dir = MODELS) {
   return out;
 }
 
-/** 빌드한 index.html 에 큰 모델 .gz 미리 받기 링크 (주소는 src/game/fetch_gz.js 가 만드는 것과 글자 하나까지 같아야 재사용됨) */
+/**
+ * 큰 모델 .gz 미리 받기 스크립트 본문 (주소는 src/game/fetch_gz.js 가 만드는 것과 글자 하나까지 같아야 재사용됨)
+ *  - DecompressionStream 이 있을 때만 (없으면 fetchModel 이 원본을 받으므로 .gz 를 미리 받으면 두 번 받게 됨, 예: iOS 16.3 이하)
+ *  - CSP(script-src 'self') 로 인라인 스크립트가 막혀 따로 된 파일로 둠
+ */
+export function preloadSource(hrefs) {
+  return `if('DecompressionStream'in self)for(const h of ${JSON.stringify(hrefs)})document.head.append(Object.assign(document.createElement('link'),{rel:'preload',as:'fetch',crossOrigin:'anonymous',href:h}));\n`;
+}
+
+/** 빌드한 index.html 에 미리 받기 스크립트 (도트 판 제외). 파일 이름에 내용 해시 → /assets 오래 캐시 */
 function modelPreload(versions) {
   let base = '/';
+  const files = PRELOAD.filter((f) => versions[f]);
+  const src = () => preloadSource(files.map((f) => `${base}models/${f}.gz?v=${versions[f]}`));
+  const name = () => `assets/model-preload-${crypto.createHash('sha1').update(src()).digest('hex').slice(0, 8)}.js`;
   return {
     name: 'unico-model-preload',
     apply: 'build',
     configResolved(c) { base = c.base || '/'; },
+    buildStart() {
+      if (files.length) this.emitFile({ type: 'asset', fileName: name(), source: src() });
+    },
     transformIndexHtml(html, ctx) {
-      if (path.basename(ctx.filename) !== 'index.html') return html;
-      return PRELOAD.filter((f) => versions[f]).map((f) => ({
-        tag: 'link',
-        attrs: { rel: 'preload', as: 'fetch', crossorigin: 'anonymous', href: `${base}models/${f}.gz?v=${versions[f]}` },
-        injectTo: 'head',
-      }));
+      if (path.basename(ctx.filename) !== 'index.html' || !files.length) return html;
+      // head 맨 앞의 일반(동기) 스크립트: 우선순위 높게 받고, 게임 모듈보다 반드시 먼저 실행 (화면은 어차피 CSS 를 기다림)
+      return [{ tag: 'script', attrs: { src: `${base}${name()}` }, injectTo: 'head-prepend' }];
     },
   };
 }

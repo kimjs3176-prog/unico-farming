@@ -87,6 +87,8 @@ export function resolveQuality(s, dpr = typeof devicePixelRatio === 'number' ? d
  *  grassLean: 풀 한 포기 잎 수 줄이기 / lowDetail: 재질 노이즈 옥타브 줄이기 (첫 렌더 전에만 반영)
  *  shadowBoxMax: 그림자 상자 반폭 상한(m). 낮음은 26 (가로 폰에서 상자가 맵 대부분을 덮지 않게, 그 밖은 안개 속)
  *  env: 환경맵(IBL) 반사·간접광. 낮음은 끔 (밝기는 world.js 가 주변광으로 채움, PostFX 를 다시 만들 때만 바뀜)
+ *       언제나 후처리(post)와 함께 바뀜: 후처리를 끄면 화면에 바로 그려 톤 매핑·색 공간 때문에 재질 셰이더를 어차피 다시 만듦
+ *       → 환경맵을 같이 꺼도 다시 컴파일이 더 생기지 않음 (tests/quality.test.js)
  */
 export function levelExtras(level) {
   const low = level === 'low';
