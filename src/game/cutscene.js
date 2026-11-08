@@ -11,9 +11,9 @@ export function talkDistance(d, fov, aspect = 1) {
   return Math.max(4.6 + d * 0.9, Math.min((d / 2 + 0.8) / Math.max(0.15, tanH), 10));
 }
 
-/** 세로 화면: 아래쪽 대화창이 두 인물을 가리지 않게 시선을 낮춰 인물을 화면 위쪽에 둠 (가로 화면은 0) */
+/** 아래쪽 대화창이 두 인물의 얼굴을 가리지 않게 시선을 낮춰 인물을 화면 위쪽에 둠 (가로 화면도 0.7 — 선택지까지 펼친 대화창이 화면 아래 약 58%) */
 export function talkLookDrop(aspect = 1) {
-  return aspect < 1 ? Math.min(1.7, (1 - aspect) * 3.2) : 0;
+  return aspect < 1 ? Math.min(1.7, Math.max(0.7, (1 - aspect) * 3.2)) : 0.7;
 }
 
 /** 두 인물을 담는 대화 구도 { pos, look }: 지금 카메라가 있는 쪽에서 어깨 너머 살짝 비스듬히 */

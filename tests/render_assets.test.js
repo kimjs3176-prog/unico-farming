@@ -91,6 +91,7 @@ test('첫 화면 모델 줄이기: 목장 구경 동물·늑대·여우는 입�
   // loadDeferred: 여러 번 불러도 한 번만, 묶음 순서대로, 실패해도 끝남
   const a = new Assets(), order = [];
   a._loadAnimated = async (n) => { order.push(n); if (n !== 'q_fox') a.scenes.set(n, new THREE.Group()); };
+  a._loadDeferredSkins = async () => {}; // 캐릭터 원본 몸은 tests/species_load.test.js 에서
   await Promise.all([a.loadDeferred(), a.loadDeferred()]);
   assert.deepEqual(order, later);
   assert.equal(a.deferredDone, true);

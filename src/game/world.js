@@ -45,12 +45,12 @@ export const LAYOUT = {
     shop: { x: -2.9, z: 28.6, rot: -Math.PI / 2 }, board: { x: -2.8, z: 24.2 }, entry: { x: -12.5, z: 23.2 },
   },
   npcs: {
-    merchant: { x: 3.2, z: -8.4, pose: 'present', name: '장터 유니코' },
-    researcher: { x: -14.5, z: -3.5, pose: 'lab', name: '연구원 유니코' },
-    guide: { x: 4.5, z: 6.5, pose: 'megaphone', name: '안내 유니코' },
-    granny: { x: -9.6, z: -19.4, pose: 'think', name: '할머니 유니코' },
-    kid: { x: -6, z: 5, pose: 'cheer', name: '꼬마 유니코', wander: { x0: -12, z0: 3.5, x1: -3, z1: 8 } },
-    fisher: { x: -5.2, z: 27.4, pose: 'wave', name: '낚시꾼 유니코' },
+    merchant: { x: 3.2, z: -8.4, pose: 'present', species: 'fox', name: '장터 여우' },
+    researcher: { x: -14.5, z: -3.5, pose: 'lab', species: 'raccoon', name: '연구원 너구리' },
+    guide: { x: 4.5, z: 6.5, pose: 'megaphone', species: 'puppy', name: '안내 강아지' },
+    granny: { x: -9.6, z: -19.4, pose: 'think', species: 'bear', name: '곰 할머니' },
+    kid: { x: -6, z: 5, pose: 'cheer', species: 'rabbit', name: '꼬마 토끼', wander: { x0: -12, z0: 3.5, x1: -3, z1: 8 } },
+    fisher: { x: -5.2, z: 27.4, pose: 'wave', species: 'cat', name: '낚시꾼 고양이' },
   },
   // 흙길 (부드러운 곡선으로 지면에 칠함): [[x,z]...], 폭
   paths: [

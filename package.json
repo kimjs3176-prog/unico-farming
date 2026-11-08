@@ -12,7 +12,8 @@
     "start": "NODE_ENV=production node server/index.js",
     "models": "python3 blender/build_all.py",
     "test": "node --test",
-    "models:compress": "node scripts/compress-models.mjs"
+    "models:compress": "node scripts/compress-models.mjs",
+    "models:unico": "node scripts/build-unico-mesh.mjs"
   },
   "dependencies": {
     "galmuri": "^2.40.3",

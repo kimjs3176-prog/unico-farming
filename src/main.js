@@ -432,10 +432,10 @@ class Game {
     else this.ui.toast('🏢 KOAT 체험관에 도착! 본부별 부스에서 체험하고 안내데스크에서 스탬프를 확인하세요');
   }
 
-  /** 처음 접속: 마을을 한 바퀴 둘러보며 안내 유니코가 소개 */
+  /** 처음 접속: 마을을 한 바퀴 둘러보며 안내 강아지가 소개 */
   introCutscene() {
-    const guide = this.npcs.list.find((e) => e.id === 'guide')?.u;
-    const G = { speaker: guide, name: '안내 유니코', color: '#6dbb4f', emote: 'megaphone' };
+    const ge = this.npcs.list.find((e) => e.id === 'guide'), guide = ge?.u;
+    const G = { speaker: guide, name: ge?.name ?? LAYOUT.npcs.guide.name, color: '#6dbb4f', emote: 'megaphone' };
     const pp = this.player.position;
     this.flags.intro = true;
     this._introPending = false; // 이제부터 저장 (다음 접속은 인트로 없이 이어 하기)
@@ -443,7 +443,7 @@ class Game {
       // 첫 장면: 비스듬한 마을 전경 (정면 높은 전경보다 그리기 25% 가벼움 — 인트로 첫 몇 초 끊김 완화)
       { cam: [[10, 22, 30], [0, 0, 0], 0.01], hold: 0 },
       { cam: [[16, 16, 26], [0, 0, 0], 3.2] },
-      { say: [{ ...G, text: `안녕, ${this.playerName}! 유니코 팜에 온 걸 환영해 🦄` }] },
+      { say: [{ ...G, text: `안녕, ${this.playerName}! 유니코 팜에 온 걸 환영해 🦄${guide?.species ? ' 나는 마을 안내를 맡은 강아지야!' : ''}` }] },
       { cam: [[6, 6, -2], [0, 1, -10], 2.0] },
       { say: [{ ...G, text: '북쪽 장터에서는 씨앗과 사료를 사고, 키운 작물을 팔 수 있어. 시세는 매일 바뀌니까 잘 보고 팔아!' }] },
       { cam: [[10, 9, 14], [22, 0, 0], 2.2] },
@@ -707,7 +707,7 @@ async function boot() {
   // 글자를 넘겨야 그 글자가 든 한글 조각을 받음 (글자 없이 부르면 라틴 조각만 받아 이름표가 대체 글꼴로 구워짐)
   const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua', `${LABEL_TEXT} ${nick.value}`), document.fonts?.load?.("20px 'Unico Coin'", '🪙')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
   await Promise.all([assets.loadAll((p) => (bar.style.width = Math.round(p * 100) + '%')), fontReady]);
-  assets.loadDeferred().catch(() => {}); // 첫 화면에 필요 없는 모델(밤에만 나오는 늑대·여우)은 닉네임을 고르는 동안 뒤에서
+  assets.loadDeferred(saved?.player).catch(() => {}); // 첫 화면에 필요 없는 모델(늑대·산여우·주민 원본 몸·KOAT 네 발 원본)은 닉네임을 고르는 동안 뒤에서, 원본 몸은 저장 위치에서 가까운 주민부터
   const lt = document.getElementById('loading-text');
   if (lt) lt.textContent = '준비 완료! 닉네임을 정하고 입장하세요';
   // 로그인 화면 접속 QR (휴대폰으로 같은 게임에 바로 들어오기, 좁은 화면·터치 기기에서는 숨김)

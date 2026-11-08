@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>캐릭터 미리보기</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #cfe3c4; overflow: hidden; font-family: sans-serif; }
+    canvas { display: block; }
+    #info { position: fixed; left: 8px; top: 6px; font-size: 12px; color: #35422f; }
+    body.sheet { overflow: auto; background: #2b2b2b; }
+    .grid { display: grid; grid-template-columns: 110px repeat(7, 132px); gap: 10px; padding: 34px 14px 14px; color: #eee; font-size: 12px; align-items: center; }
+    .grid svg { width: 132px; height: 132px; border-radius: 18px; display: block; }
+    .grid .small svg { width: 64px; height: 64px; border-radius: 12px; }
+    .grid .hd { text-align: center; }
+    .grid .p2 .p2-mo { opacity: 0; } /* 말하는 입은 대화창에서만 (style.css 와 같게) */
+  </style>
+</head>
+<body>
+  <div id="info">?species=fox,cat · view=front|side|back|three|top · expr=happy|talk|startle · pose=walk|&lt;동작&gt; · unicorn=1 · lod=1 · dist=9 · skin=lod|full · mask=1 · nolabel · portraits=1</div>
+  <script type="module">
+    // 개발 서버(npm run dev)에서 /unico_preview.html 로 열기 — 주민 동물·유니코를 한 줄로 세워 보기 (배포 빌드에는 포함 안 됨)
+    // ?portraits=1 이면 2D 초상화 표 (종 × 감정, 대화창 크기 112px·64px)
+    import * as THREE from 'three';
+    import { Unico, loadUnicoMesh } from './src/game/unico.js';
+    import { SPECIES, SPECIES_IDS, VILLAGER_SPECIES, villagerName } from './src/game/species.js';
+    import { speciesSVG } from './src/ui/portrait_species.js';
+
+    const q = new URLSearchParams(location.search);
+    const list = (q.get('species') || SPECIES_IDS.join(',')).split(',').filter((s) => SPECIES[s]);
+
+    /** 2D 초상화 표 */
+    function portraitSheet() {
+      document.body.classList.add('sheet');
+      const ACCENT = { fox: '#f28c28', raccoon: '#8e7cc3', puppy: '#6dbb4f', bear: '#a07e5c', cat: '#3a7bd5', rabbit: '#f28bb0' };
+      const EMOTES = [undefined, 'talk', 'heart', 'think', 'startle', 'wave', 'cheer'];
+      const byId = Object.fromEntries(Object.entries(VILLAGER_SPECIES).map(([id, sp]) => [sp, id]));
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      grid.innerHTML = '<div></div>' + EMOTES.map((e) => `<div class="hd">${e ?? '기본'}</div>`).join('');
+      let n = 0;
+      for (const sp of list) {
+        grid.insertAdjacentHTML('beforeend', `<div>${SPECIES[sp].emoji} ${villagerName(byId[sp])}<div class="small"><svg viewBox="0 0 200 200" class="p2">${speciesSVG(sp, ACCENT[sp], undefined, `s${n++}_`)}</svg></div></div>`);
+        for (const e of EMOTES) grid.insertAdjacentHTML('beforeend', `<div><svg viewBox="0 0 200 200" class="p2">${speciesSVG(sp, ACCENT[sp], e, `s${n++}_`)}</svg></div>`);
+      }
+      document.body.append(grid);
+      window.__ready = true;
+    }
+
+    /** 3D 줄 세우기 */
+    async function lineup() {
+      const view = q.get('view') || 'front', expr = q.get('expr'), pose = q.get('pose');
+      const withUnicorn = q.has('unicorn'), useLod = q.has('lod'), dist = Number(q.get('dist')) || 0;
+      // skin=lod|full: 거리와 상관없이 그 몸만 (원본·LOD 같은 거리 비교), mask=1: 검은 실루엣 (윤곽 차이 재기), nolabel: 이름표 없이
+      const forceSkin = q.get('skin'), mask = q.has('mask'), nolabel = q.has('nolabel') || mask;
+      if (mask) document.getElementById('info').remove();
+      const M = '/models/';
+      await Promise.all([
+        loadUnicoMesh(M + 'unico_biped.bin', 'biped'), loadUnicoMesh(M + 'unico_biped_lod.bin', 'biped_lod'),
+        loadUnicoMesh(M + 'unico_body.bin', 'quad'), loadUnicoMesh(M + 'unico_body_lod.bin', 'quad_lod'),
+        ...list.flatMap((sp) => [loadUnicoMesh(`${M}villager_${sp}_lod.bin`, `v_${sp}_lod`), useLod ? null : loadUnicoMesh(`${M}villager_${sp}.bin`, `v_${sp}`)].filter(Boolean)),
+      ]);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      document.body.append(renderer.domElement);
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(mask ? 0xffffff : 0xcfe3c4);
+      if (mask) scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x8aa070, 1.6));
+      const sun = new THREE.DirectionalLight(0xfff3e0, 2.2);
+      sun.position.set(4, 9, 6); sun.castShadow = true;
+      sun.shadow.camera.left = -8; sun.shadow.camera.right = 8; sun.shadow.camera.top = 6; sun.shadow.camera.bottom = -2;
+      scene.add(sun);
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ color: 0xa8c98a, roughness: 1 }));
+      ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+      if (!mask) scene.add(ground);
+
+      Unico.setQuality(useLod ? 'low' : 'high');
+      const chars = list.map((sp) => new Unico(null, { species: sp, name: nolabel ? '' : SPECIES[sp].koName }));
+      if (withUnicorn) chars.push(new Unico(null, { rig: 'biped', name: nolabel ? '' : '유니코' }), new Unico(null, { name: nolabel ? '' : 'KOAT' }));
+      const gap = 1.7, x0 = -((chars.length - 1) * gap) / 2;
+      const facing = { front: 0, side: Math.PI / 2, back: Math.PI, three: 0.6, top: 0 }[view] ?? 0;
+      chars.forEach((u, i) => {
+        u.group.position.set(x0 + i * gap, 0, 0);
+        u.facing = u.yaw = facing;
+        u.labelAlways = i === 0; // 한 명이 프레임 번호를 올림 (나머지는 그려지는 동안 매 프레임)
+        scene.add(u.group);
+        if (expr === 'happy') u.happyUntil = Infinity;
+        if (expr === 'talk') u.speak(1e6);
+        if (expr === 'startle') u.playAction('startle', 0);
+        if (pose && pose !== 'walk') u.playAction(pose, 0);
+        if (pose === 'walk') u.moving = true;
+        u.attention = 1;
+      });
+      const span = Math.max(4, chars.length * gap);
+      const camera = new THREE.PerspectiveCamera(dist ? 45 : 32, innerWidth / innerHeight, 0.1, 200);
+      const d = dist || span * 1.25 + 2;
+      if (view === 'top') camera.position.set(0, d * 0.9, d * 0.45);
+      else camera.position.set(0, dist ? d * Math.sin(0.45) : 1.4, dist ? d * Math.cos(0.45) : d);
+      camera.lookAt(0, 1.0, 0);
+      let last = performance.now(), frames = 0;
+      renderer.setAnimationLoop((now) => {
+        const dt = Math.min(0.05, (now - last) / 1000); last = now;
+        for (const u of chars) {
+          u.update(dt, camera);
+          if (forceSkin && u.skinLod) { u.skin.visible = forceSkin === 'full'; u.skinLod.visible = forceSkin === 'lod'; }
+          if (mask) { u.shadow.visible = false; for (const f of u.footShadows) f.visible = false; }
+        }
+        renderer.render(scene, camera);
+        if (++frames === 30) window.__ready = true;
+      });
+      window.__chars = chars;
+    }
+
+    if (q.has('portraits')) portraitSheet();
+    else await lineup();
+  </script>
+</body>
+</html>

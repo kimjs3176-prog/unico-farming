@@ -318,7 +318,7 @@ export class UI {
   // ---------------------------------------------------------------- 주민 대화
   openVillager(e, line) {
     const g = this.game, v = g.villagers, id = e.id, info = VILLAGERS[id];
-    const p = this.openPanel(`🦄 ${e.n.name}`);
+    const p = this.openPanel(`${e.u.species?.emoji ?? '🦄'} ${e.name ?? e.n.name}`);
     const render = () => {
       p.querySelectorAll('.body').forEach((x) => x.remove());
       const body = h('div', 'body');
@@ -336,7 +336,7 @@ export class UI {
           const r = v.fulfill(id);
           g.economy.earn(r.reward);
           g.audio.play('coin');
-          this.toast(`🙏 ${e.n.name}: 고마워! +${r.reward}🪙, 우정 +${r.gained}`);
+          this.toast(`🙏 ${e.name ?? e.n.name}: 고마워! +${r.reward}🪙, 우정 +${r.gained}`);
           g.npcs.applyRewards(e, r);
           render();
         };
@@ -356,7 +356,7 @@ export class UI {
 
   openGiftPicker(e) {
     const g = this.game, eco = g.economy;
-    const p = this.openPanel(`🎁 ${e.n.name}에게 무엇을 줄까요?`);
+    const p = this.openPanel(`🎁 ${e.name ?? e.n.name}에게 무엇을 줄까요?`);
     const grid = h('div', 'seed-grid');
     const all = { ...eco.inventory.crops, ...eco.inventory.products, ...eco.inventory.items };
     let any = false;
@@ -370,6 +370,7 @@ export class UI {
         if (!eco.take(k, 1)) return;
         const r = g.villagers.gift(e.id, k, g.world.day, g.costume?.mult('friend') ?? 1);
         e.u.playAction(r.liked ? 'cheer' : 'heart', 1.8);
+        e.u.happyUntil = e.u.t + 3; // 동작이 끝나도 잠깐 더 웃는 얼굴 (주민 동물)
         e.u.say(r.liked ? '와아! 이거 정말 좋아해! 💕' : '고마워, 잘 쓸게!', 3);
         g.audio.play(r.liked ? 'win' : 'coin');
         this.toast(`🎁 ${it.name} 선물! 우정 +${r.gained}${r.liked ? ' (아주 좋아해요!)' : ''}`);
@@ -891,7 +892,7 @@ export class UI {
       '⚙️ <b>환경설정</b> 오른쪽 위 ⚙️ 버튼 → 그래픽 품질(자동·낮음·보통·높음)과 해상도·그림자·풀 양 조절. 화면이 끊기면 \'낮음\'을 골라 보세요',
       '🗺️ <b>지도</b> 오른쪽 위 미니맵을 누르거나 M 키 → 큰 지도에서 원하는 곳이나 장소 버튼을 누르면 바로 이동',
       '🌱 <b>농사</b> 밭 근처에서 E: 갈기 → 씨앗 심기 → 물 주기 → 수확. 물을 주면 3배 빨리 자라요',
-      '🛒 <b>장터</b> 북쪽 장터 유니코에게 씨앗·사료를 사고 작물을 팔아요. 시세는 매일 바뀌고 수요 이벤트가 생겨요',
+      '🛒 <b>장터</b> 북쪽 장터 여우에게 씨앗·사료를 사고 작물을 팔아요. 시세는 매일 바뀌고 수요 이벤트가 생겨요',
       '🚜 <b>트랙터</b> 60초 밭갈이 미니게임. 키보드 W/S/A/D·SPACE 또는 화면의 ◀ ▶ ▲ ▼·쟁기 버튼 (바위 주의)',
       '📱 <b>스마트팜</b> 서쪽 비닐하우스 센서에서 환경제어 미니게임 → 성공하면 작물 성장 부스트',
       '🐄 <b>목장</b> 동쪽 울타리 안 동물에게 사료를 주면 달걀·우유·양털이 생겨요. 말·당나귀·알파카와 반려견 콩이는 쓰다듬을 수 있어요',

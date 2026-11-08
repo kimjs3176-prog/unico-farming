@@ -174,7 +174,7 @@ export class TractorView {
       if (Math.hypot(p.x - v.x, p.z - v.z) < 2.2 && this.game.npcs.startle(e, v) && Math.abs(v.speed) > 0.4) {
         v.speed *= -0.25; v.pedal = 0; v.x = prevX; v.z = prevZ;
         this.game.juice?.shake(0.35);
-        this.game.ui.toast(`😲 ${e.n.name}${josa(e.n.name, '이/가')} 깜짝 놀랐어요! 천천히 운전해요`);
+        this.game.ui.toast(`😲 ${e.name ?? e.n.name}${josa(e.name ?? e.n.name, '이/가')} 깜짝 놀랐어요! 천천히 운전해요`);
       }
     }
     // 다른 플레이어(접속자)에게 부딪혀도 마찬가지로 튕기고, 그 유니코가 깜짝 놀람 (내 화면에서)

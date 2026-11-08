@@ -72,11 +72,11 @@ export class Pests {
     const start = new THREE.Vector3(Math.cos(a) * 38, 0, Math.sin(a) * 38);
     rig.root.position.copy(start);
     g.world.scene.add(rig.root);
-    const p = { kind: wolf ? 'wolf' : 'fox', name: wolf ? '늑대' : '여우', root: rig.root, mixer: rig.mixer, clips: rig.clips, state: 'approach', t: 0, target, home: start };
+    const p = { kind: wolf ? 'wolf' : 'fox', name: wolf ? '늑대' : '산여우', root: rig.root, mixer: rig.mixer, clips: rig.clips, state: 'approach', t: 0, target, home: start };
     playClip(p, 'walk', 0);
     this.list.push(p);
     g.audio.play(wolf ? 'howl' : 'caw', wolf ? 1 : 0.5);
-    this._warn(p, wolf ? '🐺 늑대가 목장 쪽으로 다가와요! 쫓아내세요' : '🦊 여우가 닭장을 노리고 있어요! 쫓아내세요');
+    this._warn(p, wolf ? '🐺 늑대가 목장 쪽으로 다가와요! 쫓아내세요' : '🦊 산여우가 닭장을 노리고 있어요! 쫓아내세요');
   }
 
   update(dt, pp) {

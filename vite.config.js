@@ -5,7 +5,7 @@ import { defineConfig } from 'vite';
 
 const MODELS = 'public/models';
 // 첫 화면에 꼭 필요한 큰 모델: 게임 코드가 실행되기 전부터 받기 시작 (index.html 만, 도트 판 제외, .gz 를 쓰는 브라우저만)
-const PRELOAD = ['q_nature.glb', 'unico_biped.bin', 'unico_body.bin', 'q_farm.glb'];
+const PRELOAD = ['q_nature.glb', 'unico_biped.bin', 'q_farm.glb', 'villager_puppy.bin'];
 
 /** 모델 파일별 내용 해시 앞 10자 → 바뀐 파일만 새 주소(?v=)로 받고, 그대로인 파일은 브라우저 캐시를 계속 씀 */
 export function modelVersions(dir = MODELS) {

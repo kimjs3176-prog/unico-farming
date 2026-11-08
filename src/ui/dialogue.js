@@ -71,6 +71,7 @@ export class Dialogue {
       this.$('.dlg-choices').innerHTML = '';
       this.el.classList.toggle('has-choices', !!ln.choices);
       ln.speaker?.playAction?.(ln.emote || 'talk', Math.min(2.5, ln.text.length * 0.05));
+      ln.speaker?.speak?.(Math.min(6, [...ln.text].length / 38 + 0.2)); // 글자 나오는 동안 입 움직임 (초당 38자)
       result = await this._type(ln);
     }
     this.el.classList.add('hidden');
@@ -99,6 +100,7 @@ export class Dialogue {
         if (i < chars.length) return requestAnimationFrame(step);
         this.typing = false;
         this.el.classList.add('done');
+        ln.speaker?.speak?.(0); // 글자가 다 나오면 입 다묾
         if (ln.choices) this._showChoices(ln.choices, resolve);
         else this._next = () => { this._next = null; this.game.audio.play('click', 0.6); resolve(null); };
       };
