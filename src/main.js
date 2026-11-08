@@ -3,9 +3,9 @@ import { HomeView } from './game/view/home_view.js';
 import { TownView } from './game/view/town_view.js';
 import { AutoPlay } from './game/autoplay.js';
 import * as THREE from 'three';
-import { Assets } from './game/assets.js';
+import { Assets, DEFERRED_MODELS } from './game/assets.js';
 import { World, LAYOUT } from './game/world.js';
-import { Input } from './game/input.js';
+import { Input, lookHold, isSubmitEnter } from './game/input.js';
 import { FollowCamera, BASE_FOV, fovFor, releaseInput } from './game/camera.js';
 import { Player } from './game/player.js';
 import { Unico } from './game/unico.js';
@@ -81,6 +81,7 @@ class Game {
     this.renderer.setPixelRatio(this.quality.pixelRatio);
     this.renderer.shadowMap.enabled = true;
     // three r182 는 PCFSoftShadowMap 을 실제로 1탭(Basic) 그림자로 그림 → 같은 결과·비용을 그대로 명시 (버전을 올려도 몰래 비싸지지 않게)
+    // three 버전을 올릴 때는 모바일 그림자 비용(프레임 시간)을 다시 잴 것. type 은 부팅 때만 정함 (바꾸면 모든 재질을 다시 컴파일)
     this.renderer.shadowMap.type = THREE.BasicShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -104,7 +105,7 @@ class Game {
     this.cinema = new Cinematics(this, document.getElementById('ui'));
     this.dialogue = new Dialogue(this, document.getElementById('ui'));
     this.flags = {};
-    this.fx = new FX(this.world.scene);
+    this.fx = new FX(this.world.scene, this.quality);
     this.waterfx = new WaterFX(this.world.scene, this.world.scenery, this.quality);
     this.player.unico.onStep = (x, z) => this.fx.dust(x, z);
     this.farm = new FarmView(this);
@@ -289,6 +290,7 @@ class Game {
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.needsUpdate = true;
     this.world.scenery?.setDensity(q.grass);
+    this.fx?.setQuality(q); // 입자 상한
     if (rebuildPost) {
       this.world.scenery?._water(); // 반사 연못은 화면 효과가 켜진 품질에서만
       this.postfx.dispose();
@@ -389,8 +391,27 @@ class Game {
     this._shown = true;
     for (const fn of this._onShown || []) fn();
     this._onShown = null;
-    // 첫 화면에 필요 없는 모델은 뒤에서 받고, 다 받으면 목장 손님 동물을 들임
-    this.assets.loadDeferred?.().then(() => this.ranch?.addVisitors?.()).catch(() => {});
+    // 첫 화면에 필요 없는 모델(boot 에서 이미 받는 중)을 다 받으면 셰이더만 미리 준비.
+    // 목장 손님 동물은 ranch.update 가 1초마다 플레이어 위치를 보고 화면 밖 먼 자리에 풀어 놓음 (여기서 바로 넣으면 눈앞에 나타날 수 있음)
+    this.assets.loadDeferred?.().then(() => this.warmDeferred()).catch(() => {});
+  }
+
+  /** 뒤에서 받은 동물(말·당나귀·알파카·늑대·여우)의 셰이더를 미리 준비 → 처음 화면에 나올 때 끊기지 않게 (가능하면 병렬) */
+  warmDeferred() {
+    const r = this.renderer, A = this.assets;
+    if (this._warmedDeferred || !r?.compileAsync) return;
+    this._warmedDeferred = true;
+    const batch = new THREE.Object3D();
+    for (const n of DEFERRED_MODELS.flat()) {
+      if (A.has(n)) batch.add(A.anims.get(n)?.length ? A.cloneAnimated(n).root : A.clone(n)); // 실제로 놓을 때와 같은 복제 (재질 공유)
+    }
+    if (!batch.children.length) return;
+    const prevRT = r.getRenderTarget?.() ?? null;
+    try {
+      // 화면 효과가 켜져 있으면 그 버퍼에 그리므로(톤매핑·색 공간이 다름) 그 대상으로 준비, 불빛·안개는 실제 장면 것
+      r.setRenderTarget?.(this.postfx?.enabled ? this.postfx.composer.readBuffer : null);
+      r.compileAsync(batch, this.camera, this.world.scene).catch(() => {});
+    } catch { /* 처음 나올 때 준비 */ } finally { r.setRenderTarget?.(prevRT); }
   }
 
   resetSave() { clearSave(); location.reload(); } // clearSave 뒤에는 떠날 때 저장이 막힘 (지운 농장이 되살아나지 않게)
@@ -603,11 +624,11 @@ class Game {
       this.farmcraft.update(dt, pp);
       this.town.update(dt, pp);
       this.home.update(dt, pp);
-      // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스·터치로 돌리는 동안은 멈췄다가 놓으면 천천히 복귀)
+      // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스·터치로 돌리는 동안은 멈추고, 손을 뗀 뒤 0.5초 지나면 천천히 복귀)
       const behind = this.tractor.vehicle.heading + Math.PI;
       const dy = ((behind - this.followCam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-      const looking = input.drag.active || input.touches.size > 0; // 터치 시점 드래그는 drag.active 를 켜지 않음
-      if (!looking) this.followCam.yaw += dy * Math.min(1, dt * 3);
+      this._lookHold = lookHold(this._lookHold, input.looking, dt);
+      if (!this._lookHold) this.followCam.yaw += dy * Math.min(1, dt * 3);
       this.followCam.update(dt, input, this.tractor.riderGroup.position);
     }
     this.cinema.update(dt); // 대화·컷신 연출 카메라 (따라가기 카메라 위에 섞음)
@@ -719,7 +740,7 @@ async function boot() {
     window.game.shown();
   };
   btn.onclick = start;
-  nick.addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });
+  nick.addEventListener('keydown', (e) => { if (isSubmitEnter(e)) start(); }); // 한글 조합 중 Enter 로 이름 끝 글자가 빠진 채 입장하지 않게
   if (new URLSearchParams(location.search).has('autostart')) start();
 }
 

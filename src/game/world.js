@@ -248,7 +248,7 @@ export class World {
     this.sun.shadow.mapSize.set(this.quality.shadowMap, this.quality.shadowMap);
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.05;
-    this.sun.shadow.radius = 3;
+    this.sun.shadow.radius = 3; // BasicShadowMap 에서는 쓰이지 않음 (PCF 로 바꿀 때만 의미 있음)
     this.scene.add(this.sun, this.sun.target);
     this.ambient = new THREE.AmbientLight(0xffffff, 0.15);
     this.scene.add(this.ambient);

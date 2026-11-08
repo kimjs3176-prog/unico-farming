@@ -115,6 +115,25 @@ export function roomSpotAt(room, lx, lz, onFloor, pairs = roomSpotSolids(room), 
   return best;
 }
 
+/** 움직이지 않는 대상의 세계 상자를 이만큼(ms)마다 다시 잼 (짓는 중인 건물처럼 모양이 바뀌어도 따라감) */
+const BOX_TTL = 2000;
+const _bb = new THREE.Box3();
+/**
+ * 묶음 o 의 세계 상자 (메시 지오메트리 상자만 합침, 흔들림 여유 pad).
+ * 뼈대·인스턴스 메시·스프라이트 등이 섞여 있으면 null (상자로 거르지 않음 — 상자 계산이 비싸거나 맞지 않음)
+ */
+export function staticBox(o, out = new THREE.Box3(), pad = 0.3) {
+  out.makeEmpty();
+  let ok = true;
+  o.traverse((m) => {
+    if (!ok || !m.geometry) return;
+    if (!m.isMesh || m.isSkinnedMesh || m.isInstancedMesh) { ok = false; return; }
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    out.union(_bb.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld));
+  });
+  return ok ? (out.isEmpty() ? out : out.expandByScalar(pad)) : null;
+}
+
 /** 화면에 보이는 물체인가 (광선은 숨긴 물체도 맞히므로 조상까지 확인) */
 const shown = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
 
@@ -157,6 +176,7 @@ export class PointerNav {
     this.floorIn = new THREE.Plane(new THREE.Vector3(0, 1, 0), -IO.y); // 집 안 방바닥 (y = IO.y)
     this._v = new THREE.Vector3();
     this.hoverAcc = 0;
+    this._bbox = new WeakMap(); // 움직이지 않는 대상 → { b: 세계 상자 또는 null, t }
     // 목적지 표시 링
     this.marker = new THREE.Mesh(
       new THREE.RingGeometry(0.32, 0.46, 32),
@@ -177,36 +197,40 @@ export class PointerNav {
     for (const e of g.ranch.visitors || []) out.push({ objs: [e.m], pos: () => e.m.position, stop: 1.7, key: 'pet' });
     for (const e of g.npcs.list) out.push({ objs: [e.u.group], pos: () => e.u.group.position, stop: 1.9, key: 'npc' });
     if (!g.tractor.driving) out.push({ objs: [g.tractor.model], pos: () => new THREE.Vector3(g.tractor.vehicle.x, 0, g.tractor.vehicle.z), stop: 2.7, key: 'tractor' });
-    for (const tr of g.nature.trees) out.push({ objs: [tr.m], pos: () => new THREE.Vector3(tr.x, 0, tr.z), stop: 1.6 });
+    for (const tr of g.nature.trees) out.push({ objs: [tr.m], pos: () => new THREE.Vector3(tr.x, 0, tr.z), stop: 1.6, fixed: true });
     for (const b of g.nature.bugs) if (b.g.visible) out.push({ objs: [b.g], pos: () => b.g.position.clone().setY(0), stop: 1.2, big: true, key: 'bug' });
-    for (const b of g.koat.booths) out.push({ objs: [b.model, b.npc.group], pos: () => b.front, stop: 0.6, key: 'koat' });
+    // fixed: 움직이지 않는 대상 → 마우스 올림 판정에서 상자로 먼저 거름 (부스 주민은 움직이므로 따로)
+    for (const b of g.koat.booths) {
+      out.push({ objs: [b.model], pos: () => b.front, stop: 0.6, key: 'koat', fixed: true });
+      out.push({ objs: [b.npc.group], pos: () => b.front, stop: 0.6, key: 'koat' });
+    }
     out.push({ objs: [g.koat.desk.group], pos: () => g.koat.desk.group.position, stop: 1.8, key: 'koat' });
-    out.push({ objs: [g.rice.thresher], pos: at(L.thresher.x, L.thresher.z), stop: 1.8, key: 'thresh' });
+    out.push({ objs: [g.rice.thresher], pos: at(L.thresher.x, L.thresher.z), stop: 1.8, key: 'thresh', fixed: true });
     const sensor = g.world.smartfarmModel?.getObjectByName('SensorPole');
-    if (sensor) out.push({ objs: [sensor], pos: at(L.sensor.x, L.sensor.z), stop: 1.8, key: 'smart' });
+    if (sensor) out.push({ objs: [sensor], pos: at(L.sensor.x, L.sensor.z), stop: 1.8, key: 'smart', fixed: true });
     // 반려견 · 다른 플레이어 (움직임)
     const pet = g.pet;
     if (pet?.ok && pet.e?.m) out.push({ objs: [pet.e.m], pos: () => pet.e.m.position, stop: 0.9, key: pet.sim?.found ? 'petfind' : 'pet' });
     for (const r of g.net?.remote?.values() || []) if (r.unico?.group) out.push({ objs: [r.unico.group], pos: () => r.unico.group.position, stop: 1.6, key: 'player' });
     // 시설: 걸어가 안내 자리(각 안내의 기준점)에서 실행
     const H = g.home;
-    if (H?.house && L.home?.door) out.push({ objs: [H.house], pos: at(L.home.door.x, L.home.door.z), stop: 1.0, key: 'home' });
+    if (H?.house && L.home?.door) out.push({ objs: [H.house], pos: at(L.home.door.x, L.home.door.z), stop: 1.0, key: 'home', fixed: true });
     const fc = g.farmcraft, C = L.craft;
     if (fc && C) {
-      if (fc.heap?.parent) out.push({ objs: [fc.heap.parent], pos: at(C.compost.x, C.compost.z), stop: 1.3, key: 'compost' });
-      if (fc.board) out.push({ objs: [fc.board], pos: at(C.board.x, C.board.z), stop: 1.1, key: 'orders' });
-      if (fc.jars?.length) out.push({ objs: fc.jars.map((j) => j.m), pos: at(C.jars.x, C.jars.z), stop: 1.5, key: 'jars' });
+      if (fc.heap?.parent) out.push({ objs: [fc.heap.parent], pos: at(C.compost.x, C.compost.z), stop: 1.3, key: 'compost', fixed: true });
+      if (fc.board) out.push({ objs: [fc.board], pos: at(C.board.x, C.board.z), stop: 1.1, key: 'orders', fixed: true });
+      if (fc.jars?.length) out.push({ objs: fc.jars.map((j) => j.m), pos: at(C.jars.x, C.jars.z), stop: 1.5, key: 'jars', fixed: true });
     }
     const lk = g.lake, K = L.lake;
     if (lk && K) {
-      if (lk.shop) out.push({ objs: [lk.shop], pos: at(K.shop.x, K.shop.z), stop: 1.8, key: 'lakeshop' });
-      if (lk.board) out.push({ objs: [lk.board], pos: at(K.board.x, K.board.z), stop: 1.1, key: 'lakeboard' });
+      if (lk.shop) out.push({ objs: [lk.shop], pos: at(K.shop.x, K.shop.z), stop: 1.8, key: 'lakeshop', fixed: true });
+      if (lk.board) out.push({ objs: [lk.board], pos: at(K.board.x, K.board.z), stop: 1.1, key: 'lakeboard', fixed: true });
     }
-    for (const s of g.town?.sites || []) out.push({ objs: [s.root], pos: at(s.p.x, s.p.z), stop: 2.7, key: ['build', 'rush', 'building'] });
-    if (g.world.herdSign && L.herd?.sign && !g.herding?.active) out.push({ objs: [g.world.herdSign], pos: at(L.herd.sign.x, L.herd.sign.z), stop: 1.2, key: 'herd' });
+    for (const s of g.town?.sites || []) out.push({ objs: [s.root], pos: at(s.p.x, s.p.z), stop: 2.7, key: ['build', 'rush', 'building'], fixed: true });
+    if (g.world.herdSign && L.herd?.sign && !g.herding?.active) out.push({ objs: [g.world.herdSign], pos: at(L.herd.sign.x, L.herd.sign.z), stop: 1.2, key: 'herd', fixed: true });
     const rv = g.ranch, WS = L.ranchWork;
-    if (rv.booth && WS) out.push({ objs: [rv.booth], pos: at(WS.x - 1.9, WS.z), stop: 1.2, key: 'workshop' });
-    if (rv.hay && L.trough) out.push({ objs: [rv.hay], pos: at(L.trough.x, L.trough.z), stop: 1.0, key: 'trough' });
+    if (rv.booth && WS) out.push({ objs: [rv.booth], pos: at(WS.x - 1.9, WS.z), stop: 1.2, key: 'workshop', fixed: true });
+    if (rv.hay && L.trough) out.push({ objs: [rv.hay], pos: at(L.trough.x, L.trough.z), stop: 1.0, key: 'trough', fixed: true });
     return out;
   }
 
@@ -224,18 +248,32 @@ export class PointerNav {
     return out;
   }
 
-  pick(sx, sy, touch = false) {
+  /** 움직이지 않는 대상의 세계 상자 (BOX_TTL 동안 저장, 거를 수 없는 묶음은 null) */
+  _boxOf(o, now) {
+    let e = this._bbox.get(o);
+    if (!e) this._bbox.set(o, (e = { b: new THREE.Box3(), t: -Infinity, ok: false }));
+    if (now - e.t > BOX_TTL) { e.ok = !!staticBox(o, e.b); e.t = now; }
+    return e.ok ? e.b : null;
+  }
+
+  /** hover: 마우스 올림(0.12초마다) — 움직이지 않는 큰 대상(집·부스·나무 등)은 광선이 상자를 비켜 가면 안쪽 메시를 검사하지 않음 */
+  pick(sx, sy, touch = false, hover = false) {
     const g = this.game;
     this.ndc.set((sx / innerWidth) * 2 - 1, -(sy / innerHeight) * 2 + 1);
     this.ray.setFromCamera(this.ndc, g.camera);
     if (g.home?.inside && g.home.room) return this.pickInside(g.home.room);
-    const list = this.targets();
-    const objs = list.flatMap((t) => t.objs);
+    const list = this.targets(), R = this.ray.ray, now = performance.now();
+    const objs = [];
+    for (const t of list) {
+      for (const o of t.objs) {
+        const b = hover && t.fixed ? this._boxOf(o, now) : null;
+        if (!b || R.intersectsBox(b)) objs.push(o);
+      }
+    }
     // 숨은 물체, 시야 구멍으로 비쳐 보이는 면(유니코를 가린 집 등)은 건너뜀
     const hit = this.ray.intersectObjects(objs, true).find((h) => shown(h.object) && !seenThrough(h));
     // 상자 대상이 메시 대상보다 가까우면 그쪽. 카메라가 상자 안에 있으면(건물 뒤에 선 유니코) 그 상자는 뺌:
     // 안에서 쏜 광선은 나가는 점을 돌려주므로 어디를 눌러도 그 건물이 됨
-    const R = this.ray.ray;
     let boxT = null, bd = hit ? hit.distance : Infinity;
     for (const t of this.boxTargets()) for (const b of t.boxes) {
       if (b.containsPoint(R.origin)) continue;
@@ -335,7 +373,7 @@ export class PointerNav {
     this.hoverAcc += dt;
     if (input.hover && this.hoverAcc > 0.12) {
       this.hoverAcc = 0;
-      const r = this.pick(input.hover.x, input.hover.y);
+      const r = this.pick(input.hover.x, input.hover.y, false, true);
       this.game.renderer.domElement.style.cursor = r?.target ? 'pointer' : input.drag.active ? 'grabbing' : 'default';
     }
   }

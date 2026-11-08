@@ -455,24 +455,35 @@ export class UI {
     const g = this.game, cv = g.renderer.domElement;
     g.postfx.render(); // 그린 직후 같은 태스크 안에서 읽어야 함 (preserveDrawingBuffer 없음)
     g.audio.play('click');
-    const name = `unico-farm-${Date.now()}.png`, url = cv.toDataURL('image/png');
+    const name = `unico-farm-${Date.now()}.png`;
     // iPhone·iPad: 공유 시트로 (내려받기로는 사진 앱에 저장되지 않음). 누른 그 순간에 불러야 막히지 않으므로 동기로 파일을 만듦
-    // (휴대폰 화면 캔버스는 작아서 동기 인코딩이 짧음). 안드로이드·PC 는 내려받기가 갤러리·다운로드에 바로 저장되므로 그대로
-    if (isIOS() && navigator.canShare) {
-      let file = null;
-      try {
-        const bin = atob(url.split(',')[1]), u8 = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-        file = new File([u8], name, { type: 'image/png' });
-      } catch { file = null; }
-      if (file && navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: '유니코 팜' })
-          .then(() => this.toast('📸 찰칵! 사진을 저장·공유했어요'))
-          .catch((e) => { if (e?.name !== 'AbortError') this._download(url, name); });
-        return;
+    // (휴대폰 화면 캔버스는 작아서 동기 인코딩이 짧음)
+    if (isIOS()) {
+      const url = cv.toDataURL('image/png');
+      if (navigator.canShare) {
+        let file = null;
+        try {
+          const bin = atob(url.split(',')[1]), u8 = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+          file = new File([u8], name, { type: 'image/png' });
+        } catch { file = null; }
+        if (file && navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: '유니코 팜' })
+            .then(() => this.toast('📸 찰칵! 사진을 저장·공유했어요'))
+            .catch((e) => { if (e?.name !== 'AbortError') this._download(url, name); });
+          return;
+        }
       }
+      return this._download(url, name);
     }
-    this._download(url, name);
+    // PC·안드로이드: 내려받기가 다운로드·갤러리에 바로 저장됨. 인코딩은 비동기로 (큰 화면에서도 멈추지 않게, 그림은 부른 순간의 것)
+    if (!cv.toBlob) return this._download(cv.toDataURL('image/png'), name);
+    cv.toBlob((blob) => {
+      if (!blob) return this.toast('📸 스크린샷을 만들지 못했어요');
+      const url = URL.createObjectURL(blob);
+      this._download(url, name);
+      setTimeout(() => URL.revokeObjectURL(url), 10000); // 내려받기가 시작될 시간을 두고 해제
+    }, 'image/png');
   }
   _download(url, name) {
     const a = document.createElement('a');

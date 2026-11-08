@@ -24,6 +24,14 @@ export function isPinchStart(a, b, viewW) {
 
 const viewW = () => (typeof window !== 'undefined' ? window.innerWidth : 0);
 
+/** 시점을 끄는 동안과 손을 뗀 뒤 hold 초 동안 남은 시간 (0 이면 자동 복귀해도 됨) */
+export function lookHold(prev, looking, dt, hold = 0.5) {
+  return looking ? hold : Math.max(0, (prev || 0) - dt);
+}
+
+/** 입력칸에서 보내기로 칠 Enter 인가: 한글 조합을 확정하는 Enter 는 빼고 (확정된 뒤 다시 오는 Enter 에서 보냄) */
+export const isSubmitEnter = (e) => e.key === 'Enter' && !e.isComposing;
+
 /** 채팅 입력칸에 포커스가 있으면 뺌 (터치는 preventDefault 라 화면을 눌러도 키보드가 안 닫힘) */
 export function blurTextInput() {
   const ae = typeof document !== 'undefined' ? document.activeElement : null;
@@ -182,6 +190,9 @@ export class Input {
     for (const t of e.touches || []) { const p = this.touches.get(t.identifier); if (p) { p.x = t.clientX; p.y = t.clientY; } }
     if (this.touches.size < 2) this.pinch = null;
   }
+
+  /** 시점을 끄는 중인가 (마우스 드래그 또는 시점 영역 터치. 조이스틱·화면 버튼 터치는 빼고) */
+  get looking() { return this.drag.active || this.touches.size > 0; }
 
   isDown(code) { return this.enabled && this.keys.has(code); }
   justPressed(code) { return this.enabled && this.pressed.has(code); }

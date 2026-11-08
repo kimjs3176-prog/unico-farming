@@ -62,6 +62,8 @@ export class Music {
     if (!c || !a.enabled || c.state !== 'running') return; // 멈춘 동안은 헛돌지 않음
     const night = this.mood === 'night';
     const bpm = night ? 66 : 84, eighth = 60 / bpm / 2;
+    // 타이머가 늦게 불렸으면(배경 탭 등) 지난 박자는 건너뜀 → 밀린 음을 한꺼번에 몰아 내지 않게
+    if (this.nextTime < c.currentTime) this.nextTime = c.currentTime + 0.05;
     while (this.nextTime < c.currentTime + 0.25) {
       const at = this.nextTime - c.currentTime;
       if (a.musicOn) this.playStep(this.step, at, night, eighth);

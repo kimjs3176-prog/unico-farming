@@ -85,6 +85,7 @@ export class DecorView {
     if (g.tractor?.driving) return;
     this.stop(true);
     g.ui.closePanel();
+    g.player.moveTarget = null; // 시작 전에 탭해 걷던 목표는 지움 (도착해서 그 대상이 실행되지 않게)
     this.mode = { id, rot: 0, ghost: id ? this._ghost(id) : null, sel: -1 };
     this._bar();
     const T = touchUI();

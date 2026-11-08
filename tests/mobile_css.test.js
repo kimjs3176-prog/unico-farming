@@ -30,7 +30,7 @@ function parse(css) {
   return out;
 }
 
-/** 이 파일에서 쓰는 미디어 조건만: (max/min-width|height: Npx) (pointer: coarse) (hover: none) */
+/** 이 파일에서 쓰는 미디어 조건만: (max/min-width|height: Npx) (min-aspect-ratio: a/b) (pointer: coarse) (hover: none) */
 function mediaMatches(q, env) {
   if (!q.startsWith('@media')) return false; // @keyframes 등
   return q.slice(6).split(',').some((part) => [...part.matchAll(/\(([^)]+)\)/g)].every(([, f]) => {
@@ -40,6 +40,7 @@ function mediaMatches(q, env) {
     if (k === 'min-width') return env.w >= n;
     if (k === 'max-height') return env.h <= n;
     if (k === 'min-height') return env.h >= n;
+    if (k === 'min-aspect-ratio') { const [a, b] = v.split('/').map(Number); return env.w * b >= env.h * a; }
     if (k === 'pointer') return v === (env.coarse ? 'coarse' : 'fine');
     if (k === 'hover') return v === (env.coarse ? 'none' : 'hover');
     if (k === 'prefers-reduced-motion') return false;
@@ -53,6 +54,8 @@ const LAND = { w: 844, h: 390, coarse: true };
 const TABLET = { w: 820, h: 1180, coarse: true };
 const DESK = { w: 1280, h: 800, coarse: false };
 const DESK2 = { w: 1100, h: 740, coarse: false };
+const WIDE = { w: 1440, h: 900, coarse: false };
+const SHORT = { w: 1280, h: 480, coarse: false }; // 낮은 데스크톱 창
 
 /** 선택자 목록에 sel 이 그대로 들어 있는 규칙 중 env 에서 마지막으로 이기는 prop 값 (border 묶음은 두께로도 셈) */
 function value(env, sel, prop) {
@@ -82,13 +85,13 @@ test('테마(theme.css)가 모바일 압축 값을 다시 덮지 않음', () => 
 });
 
 test('데스크톱 값은 그대로 (모바일 규칙이 새지 않음)', () => {
+  assert.equal(value(WIDE, '.chat', 'bottom'), '12px'); // 넓은 창은 채팅이 바닥 그대로 (좁은 창은 아래 시험)
   for (const env of [DESK, DESK2]) {
     assert.equal(value(env, '.touch-btn', 'display'), 'none');
     assert.equal(value(env, '.bar-toggle', 'display'), 'none');
     assert.equal(value(env, '.dlg', 'bottom'), '96px');
     assert.equal(value(env, '.prompt', 'white-space'), 'nowrap');
     assert.equal(value(env, '.prompt', 'bottom'), '120px');
-    assert.equal(value(env, '.chat', 'bottom'), '12px');
     assert.equal(value(env, '.actionbar button', 'font-size'), '11px');
     assert.equal(value(env, '.chip .xpbar', 'width'), '76px');
     assert.equal(value(env, '.decor-bar', 'bottom'), '174px');
@@ -115,7 +118,48 @@ test('터치 태블릿: 채팅·E 버튼이 가운데 행동 막대(약 102px) �
   assert.equal(value(TABLET, 'body.ui-big .chat', 'bottom'), '110px'); // max-width:1500px 의 92px 보다 뒤에서 이김
   assert.equal(value(TABLET, '.touch-btn', 'bottom'), '110px');
   assert.equal(value(LAND, '.chat', 'bottom') === '110px', false); // 가로 폰은 모바일 블록 값
-  assert.equal(value(DESK, 'body.ui-big .chat', 'bottom'), '92px'); // 데스크톱은 그대로
+  assert.equal(value(WIDE, 'body.ui-big .chat', 'bottom'), '92px'); // 넓은 데스크톱은 그대로
+});
+
+test('좁은 데스크톱 창(601~1340px): 채팅이 가운데 행동 막대 위로, 폰·넓은 창은 그대로', () => {
+  for (const env of [DESK, DESK2]) {
+    assert.equal(value(env, '.chat', 'bottom'), '112px');
+    assert.equal(value(env, 'body.ui-big .chat', 'bottom'), '128px');
+  }
+  assert.equal(value(WIDE, '.chat', 'bottom'), '12px');
+  for (const env of [PHONE, LAND]) assert.match(value(env, '.chat', 'bottom'), /^calc\(60px/);
+});
+
+test('낮은 창(가로 폰·낮은 데스크톱 창): 장터 압축, 큰 지도는 옆으로 나란히', () => {
+  for (const env of [LAND, SHORT]) {
+    assert.equal(value(env, '.panel.market', 'max-height'), 'none');
+    assert.equal(value(env, '.mk-body', 'min-height'), '64px');
+    assert.equal(value(env, '.mk-top', 'flex-flow'), 'row wrap');
+    assert.equal(value(env, '.panel.market h2', 'font-size'), '19px');
+    assert.equal(value(env, '.map-panel', 'display'), 'grid');
+  }
+  // 높은 창은 그대로, 목록 최소 높이는 보이는 높이에 맞춰 줄어듦
+  for (const env of [DESK, WIDE, PHONE]) {
+    assert.equal(value(env, '.panel.market', 'max-height'), undefined);
+    assert.equal(value(env, '.map-panel', 'display'), undefined);
+    assert.equal(value(env, '.mk-body', 'min-height'), 'min(120px, 16dvh)');
+  }
+  // 큰 지도: 창 높이에 맞춘 상한 (넓고 높은 창에서는 100% 그대로)
+  assert.match(value(WIDE, '.bigmap', 'width'), /^min\(100%, max\(200px, calc\(86dvh/);
+});
+
+test('미니게임 창은 투명도만 나타남 (화면 전체가 미끄러지면 바구니 끌기가 어긋남)', () => {
+  const anim = value(WIDE, '.mg-wrap', 'animation');
+  assert.ok(anim && !anim.includes('panelin'), anim);
+  const name = anim.split(' ')[0];
+  const css = read('src/ui/style.css');
+  const kf = css.match(new RegExp(`@keyframes ${name} \\{([^}]*\\{[^}]*\\})*[^}]*\\}`))?.[0] || '';
+  assert.ok(kf, `@keyframes ${name}`);
+  assert.ok(!/transform/.test(kf), kf);
+});
+
+test('꾸미기 막대가 떠 있으면 자동 진행 칩을 숨김', () => {
+  assert.equal(value(WIDE, '#ui:has(> .decor-bar) > .auto-chip', 'display'), 'none');
 });
 
 test('누르는 메뉴가 안내 말풍선·자동 칩보다 위 (탭이 말풍선으로 새지 않음)', () => {

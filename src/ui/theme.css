@@ -149,6 +149,8 @@ button:disabled { opacity: 1; filter: grayscale(0.85) brightness(1.08); box-shad
 .decor-bar { position: absolute; left: 50%; bottom: 174px; /* 아래 'E 놓기' 안내(bottom 120px) 위로 */ transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: linear-gradient(180deg, #a56c3e 0%, var(--wood) 45%, var(--wood-d) 100%); border-radius: 16px; box-shadow: inset 0 2px 0 rgba(255,220,170,0.45), 0 0 0 2px #4a2c18, 0 8px 18px rgba(20,14,10,0.35); max-width: calc(100vw / var(--ui-zoom, 1) - 24px); flex-wrap: wrap; justify-content: center; z-index: 5; }
 /* 창이 열려 있는 동안에는 꾸미기 막대를 숨김 (창 가장자리로 막대 단추가 눌리지 않게) */
 #ui:has(> .panel) > .decor-bar { visibility: hidden; }
+/* 꾸미기 중에는 자동 진행 칩을 숨김 (자동 진행은 이미 쉬고 있고, 막대·안내와 겹침) */
+#ui:has(> .decor-bar) > .auto-chip { display: none; }
 .decor-what { color: #fff8ea; font-family: var(--display); font-size: 15px; padding: 0 6px; text-shadow: 0 1px 0 rgba(0,0,0,0.45); white-space: nowrap; }
 .decor-bar button { padding: 8px 12px; font-size: 14px; min-height: 40px; }
 @media (max-width: 600px) { .decor-bar { bottom: 196px; } .decor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -185,6 +187,8 @@ button:disabled { opacity: 1; filter: grayscale(0.85) brightness(1.08); box-shad
   .soc-reqs { left: calc(6px + var(--sal, 0px)); right: auto; transform: none; top: calc(var(--hud-b, 40px) + 64px); bottom: auto; align-items: flex-start; }
   .soc-req { max-width: min(calc(40vw / var(--ui-zoom, 1)), 340px); font-size: 12px; }
 }
+/* 낮은 데스크톱 창: 장터 제목 리본도 낮게 (가로 폰은 위 규칙이 모든 창에) */
+@media (max-height: 500px) { .panel.market h2 { font-size: 19px; padding-top: 8px; padding-bottom: 8px; } }
 /* 터치 화면: 눌렀다 뗀 뒤 :hover 가 남아 버튼이 커진 채로 있지 않게 (누르는 동안 효과는 그대로) */
 @media (hover: none) {
   button:hover:not(:disabled):not(:active):not(.on) { transform: none; filter: none; }

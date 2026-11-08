@@ -97,6 +97,7 @@ export class TractorView {
     this.driving = true;
     this.plowDown = true; // 모바일(스페이스 없음) 배려: 쟁기 내린 채 출발
     g.followCam.yaw = this.vehicle.heading + Math.PI; // 카메라를 트랙터 뒤로
+    g._lookHold = 0; // 지난 운전에서 남은 시점 멈춤 시간
     g.player.frozen = true;
     g.player.hidden = true;
     g.player.unico.playAction('safety', 0);

@@ -328,7 +328,7 @@ export class NatureView {
 
   _updateFight(dt, tip) {
     const g = this.game, f = this.fishing, u = g.player.unico, F = this.fight, input = g.input;
-    const reeling = !!(input.isDown('KeyE') || input.isDown('Space') || this.holdBtn || input.drag.active || input.touches.size > 0 || input.joy.active);
+    const reeling = !!(input.isDown('KeyE') || input.isDown('Space') || this.holdBtn || input.looking || input.joy.active);
     const ev = F.tick(dt, reeling);
     f.fightT += dt;
     u.reelTension = reeling ? F.tension : F.tension * 0.4;

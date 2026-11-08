@@ -7,12 +7,16 @@ import { SURF } from './surface.js';
 const FAR = 40;
 /** 다 쓴 입자를 종류별로 이만큼까지 모아 두었다가 다시 씀 (재질·메시를 매번 새로 만들지 않게) */
 const KEEP = 96;
+/** 동시에 떠 있는 입자(별·먼지·물방울) 상한: 낮음 품질은 적게 (넘치면 더 만들지 않음) */
+export const fxCap = (q) => (q?.level === 'low' ? 48 : 128);
 
 /** 간단 이펙트: 떠오르는 이모지, 물방울 */
 export class FX {
-  constructor(scene) {
+  constructor(scene, quality = null) {
     this.scene = scene;
     this.items = [];
+    this.live = 0; // 지금 떠 있는 입자 수
+    this.setQuality(quality);
     // 입자는 이 묶음 안에서 보이기만 껐다 켬 (장면에 넣고 빼기를 반복하지 않음)
     this.group = new THREE.Group();
     this.group.name = 'fx';
@@ -28,11 +32,16 @@ export class FX {
     return dx * dx + dy * dy + dz * dz > FAR * FAR;
   }
 
-  /** 풀에서 꺼내거나 새로 만들기 */
+  /** 품질을 바꿀 때 (입자 상한) */
+  setQuality(q) { this.cap = fxCap(q); }
+
+  /** 풀에서 꺼내거나 새로 만들기. 상한을 넘으면 null */
   _take(kind, make) {
+    if (this.live >= this.cap) return null;
     const m = this.pool[kind].pop() || make();
     if (m.parent !== this.group) this.group.add(m);
     m.visible = true;
+    this.live++;
     return m;
   }
 
@@ -47,6 +56,7 @@ export class FX {
     };
     for (let i = 0; i < n; i++) {
       const m = this._take('star', make);
+      if (!m) break;
       m.material.color.set(color);
       m.material.opacity = 1;
       m.scale.setScalar(1);
@@ -71,6 +81,7 @@ export class FX {
     const make = () => new THREE.Mesh(this.dropGeo, this.dropMat);
     for (let i = 0; i < 14; i++) {
       const m = this._take('drop', make);
+      if (!m) break;
       m.position.set(x + (Math.random() - 0.5) * 1.6, 1.4 + Math.random() * 0.5, z + (Math.random() - 0.5) * 1.6);
       this.items.push({ obj: m, life: 0.6 + Math.random() * 0.4, vy: -2 - Math.random() * 2, kind: 'drop' });
     }
@@ -87,6 +98,7 @@ export class FX {
     const make = () => new THREE.Mesh(this.dustGeo, this.dustMat.clone()); // 알마다 따로 옅어지므로 재질은 하나씩 (다시 씀)
     for (let i = 0; i < 3; i++) {
       const m = this._take('dust', make);
+      if (!m) break;
       m.material.opacity = 0.7;
       m.scale.setScalar(1);
       m.position.set(x + (Math.random() - 0.5) * 0.5, y, z + (Math.random() - 0.5) * 0.5);
@@ -98,6 +110,7 @@ export class FX {
   _free(it) {
     const o = it.obj;
     if (!it.kind) { this.scene.remove(o); it.dispose?.(); return; }
+    this.live--;
     const pool = this.pool[it.kind];
     if (pool.length < KEEP) { o.visible = false; pool.push(o); return; }
     this.group.remove(o);
