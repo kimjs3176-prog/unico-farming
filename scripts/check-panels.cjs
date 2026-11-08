@@ -34,6 +34,8 @@ srv.listen(0, async () => {
   const audit = () => p.evaluate(() => {
     const panel = game.ui.panel || document.querySelector('.panel');
     if (!panel) return { missing: true };
+    // 창이 미끄러져 들어오는 중이면 끝난 자리로 잼 (느린 점검 환경에서 등장 애니메이션 중간을 화면 밖으로 잘못 잡지 않게)
+    for (const a of panel.getAnimations({ subtree: true })) { try { if (a.effect?.getTiming().iterations !== Infinity) a.finish(); } catch { /* 무한 반복은 그대로 */ } }
     const vw = innerWidth, vh = innerHeight, pr = panel.getBoundingClientRect();
     const issues = [];
     const label = (el) => (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 26) || el.className;
