@@ -170,9 +170,9 @@ export class UI {
       this.fsBtn = mk('⛶', '전체 화면', () => toggleFullscreen());
       this.fsBtn.classList.add('fs-btn');
       this.bar.classList.add('has-fs');
+      // 'on' 은 붙이지 않음 (오토플레이의 '켜짐' 강조·통통 튀기가 따라옴) — 이름만 바꿈
       const sync = () => {
         const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
-        this.fsBtn.classList.toggle('on', on);
         this.fsBtn.innerHTML = on ? '<span>🗗</span>창 모드' : '<span>⛶</span>전체 화면';
       };
       document.addEventListener('fullscreenchange', sync);

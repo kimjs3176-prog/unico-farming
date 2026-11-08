@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import * as THREE from 'three';
 
 // 브라우저 없이: 세로 터치 폰처럼 보이게 하는 최소 흉내 (각 시험 파일은 따로 실행됨)
@@ -258,6 +258,39 @@ test('입력: reset 으로 눌린 것 모두 정리, 조이스틱 손가락을 �
   assert.equal(I.interact(), false);
 });
 
+// ---------------------------------------------------------------- 탭 대상 종류 ↔ 안내 종류 약속
+// 도착하면 같은 종류의 안내만 실행하므로, 어느 쪽 이름이 바뀌면 휴대폰에서 탭해도 아무 일이 없음
+test('탭 대상 종류: pointer.js 의 key 마다 같은 key 의 안내가 실제로 있음', () => {
+  const src = read('src/game/pointer.js').toString();
+  const a = src.indexOf('  targets() {'), b = src.indexOf('  click(sx, sy', a);
+  assert.ok(a > 0 && b > a, 'targets()~pick() 부분을 찾음');
+  const body = src.slice(a, b);
+  const keys = new Set(), prefixes = new Set();
+  const strs = (t) => [...t.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  // key: 'x' · key: ['x', 'y'] · key: 조건 ? 'x' : 'y' · key: 'home_' + 자리
+  for (const m of body.matchAll(/key: (\[[^\]]*\]|[^,}\n]+)/g)) {
+    const ex = m[1];
+    if (/^'[a-z_]+' *\+/.test(ex)) { prefixes.add(strs(ex)[0]); continue; }
+    for (const k of strs(ex)) keys.add(k);
+  }
+  // 상자 대상: add(near(...), x, z, stop, 'key' 또는 [...])
+  for (const m of body.matchAll(/\badd\(near\(.*,\s*(\[[^\]]*\]|'[a-z_]+')\);/g)) for (const k of strs(m[1])) keys.add(k);
+  for (const k of ['npc', 'pet', 'petfind', 'player', 'tractor', 'koat', 'bug', 'fish', 'eggcatch', 'barn', 'honey', 'hive', 'build', 'trough']) {
+    assert.ok(keys.has(k), `pointer.js 에서 '${k}' 를 읽어 냄 (시험 정규식 확인)`);
+  }
+  assert.ok(prefixes.has('home_'));
+  const files = [...readdirSync(new URL('src/game/view/', root)).filter((f) => f.endsWith('.js')).map((f) => `src/game/view/${f}`), 'src/game/net.js'];
+  const texts = files.map((f) => read(f).toString());
+  for (const k of keys) {
+    const re = new RegExp(`key: ['"]${k}['"]`);
+    assert.ok(texts.some((t) => re.test(t)), `탭 대상 '${k}' 의 안내(key: '${k}')가 view/·net.js 어디에도 없음`);
+  }
+  for (const pfx of prefixes) {
+    const re = new RegExp(`key: ['"]${pfx}['"] *\\+`);
+    assert.ok(texts.some((t) => re.test(t)), `'${pfx}' + 자리 안내가 없음`);
+  }
+});
+
 // ---------------------------------------------------------------- 전체 화면·아이콘·서버
 test('전체 화면: 휴대폰 + API 있을 때만, 누르면 켜고 다시 누르면 끔', () => {
   assert.equal(canFullscreen({ fullscreenEnabled: false }), false, 'iPhone 사파리 (API 없음)');
@@ -277,6 +310,15 @@ test('전체 화면: 휴대폰 + API 있을 때만, 누르면 켜고 다시 누�
   const wk = { documentElement: { webkitRequestFullscreen: () => calls.push(['wk']) } };
   toggleFullscreen(wk);
   assert.deepEqual(calls[2], ['wk']);
+});
+
+test('전체 화면 단추: 켜져도 오토플레이의 켜짐 표시(on: 강조·통통 튀기)를 쓰지 않음', () => {
+  const src = read('src/ui/ui.js').toString();
+  const a = src.indexOf('this.fsBtn = mk('), b = src.indexOf('root.append(this.bar)', a);
+  assert.ok(a > 0 && b > a, '전체 화면 단추 코드를 찾음');
+  const blk = src.slice(a, b);
+  assert.doesNotMatch(blk, /classList\.(toggle|add)\(\s*'on'/);
+  assert.match(blk, /창 모드/, '켜지면 이름만 바뀜');
 });
 
 test('홈 화면 아이콘: PNG 192·512(+maskable)·180 이 실제 크기로 있고 매니페스트·index.html 이 가리킴', () => {
