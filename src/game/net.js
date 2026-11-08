@@ -3,7 +3,7 @@ import { Unico } from './unico.js';
 
 const SEND_HZ = 5;
 const PROBE_AFTER = 15000; // 이보다 오래 숨겨졌다 돌아오면 소켓이 살아 있는지 확인
-const PROBE_WAIT = 4000;   // 확인(ping) 뒤 이 안에 아무것도 안 오면 끊긴 것으로 봄
+const PROBE_WAIT = 4000;   // 확인(ping) 뒤 이 안에 pong 이 안 오면 끊긴 것으로 봄
 
 /** 멀티플레이 클라이언트: 위치/포즈/채팅 릴레이 (서버 없으면 오프라인) */
 export class Net {
@@ -21,6 +21,7 @@ export class Net {
     this.reconnect = 0;
     this.probeTimer = 0;
     this.hiddenAt = 0;
+    this.lastRecv = 0; // 마지막으로 무엇이든 받은 시각
   }
 
   connect(room = '') {
@@ -42,7 +43,7 @@ export class Net {
     };
     ws.onmessage = (e) => {
       if (ws !== this.ws) return;
-      clearTimeout(this.probeTimer); this.probeTimer = 0; // 무엇이든 오면 살아 있음
+      this.lastRecv = Date.now(); // 확인(probe)은 pong 으로만 끝냄: 복귀 때 늦게 오는 옛 메시지로는 살아 있다고 보지 않음
       try { this.handle(JSON.parse(e.data)); } catch {}
     };
     ws.onclose = () => { if (ws === this.ws) this.lost(); };
@@ -56,7 +57,7 @@ export class Net {
     clearTimeout(this.reconnect); this.reconnect = 0;
     clearTimeout(this.probeTimer); this.probeTimer = 0;
     if (ws) { ws.onopen = ws.onmessage = ws.onclose = null; try { ws.close(); } catch {} }
-    if (this.connected || this.remote.size) { this.connected = false; this.clearRemote(); this.game.ui.setOnline(0, ''); }
+    if (ws || this.connected || this.remote.size) { this.connected = false; this.clearRemote(); this.game.ui.setOnline(0, ''); } // 한 번도 못 붙었어도 오프라인 표시
   }
 
   /** 끊김 → 다시 접속 예약. 잘 붙어 있다가 끊겼으면(앱 전환·망 바뀜) 바로, 숨김 중이면 화면으로 돌아올 때(wake) */
@@ -83,9 +84,9 @@ export class Net {
     this.connect(this.wantRoom);
   }
 
-  /** 반쯤 끊긴 소켓 찾기: ping 을 보내고 PROBE_WAIT 안에 아무것도 안 오면 끊긴 것으로 보고 다시 접속 (pong 을 아는 서버에만) */
+  /** 반쯤 끊긴 소켓 찾기: ping 을 보내고 PROBE_WAIT 안에 pong 이 안 오면 끊긴 것으로 보고 다시 접속 (pong 을 아는 서버에, 붙어 있을 때만) */
   probe() {
-    if (!this.pongOk || this.probeTimer) return;
+    if (!this.pongOk || this.probeTimer || !this.connected || this.ws?.readyState !== 1) return;
     const ws = this.ws;
     this.send({ t: 'ping' });
     this.probeTimer = setTimeout(() => { this.probeTimer = 0; if (ws === this.ws) this.lost(); }, PROBE_WAIT);
@@ -179,7 +180,7 @@ export class Net {
         break;
       case 'act': g.socialView?.onAct(m); break;
       case 'act_fail': g.socialView?.onActFail?.(m); break; // 선물을 전하지 못함 → 돌려받기
-      case 'pong': this.pongOk = true; break;
+      case 'pong': this.pongOk = true; clearTimeout(this.probeTimer); this.probeTimer = 0; break; // 살아 있음
     }
   }
 

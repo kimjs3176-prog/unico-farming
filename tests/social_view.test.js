@@ -61,3 +61,34 @@ test('친구 신청 자동 수락은 같은 사람에게 잠깐 사이 한 번�
   for (let i = 0; i < 5; i++) sv.onAct({ t: 'act', k: 'friend', from: 2, name: '친구' });
   assert.equal(acts.filter((a) => a[1] === 'friend_ok').length, 1);
 });
+
+test('선물: 연결을 확인하는 중(probe)이거나 인터넷이 끊겼으면 가방에서 빼지 않음 (반쯤 끊긴 소켓이면 돌려받을 수 없어서)', (t) => {
+  const { sv, game, acts, toasts } = setup();
+  game.net.probeTimer = 7;
+  sv.sendGift(2, 'carrot', 2);
+  assert.equal(game.economy.count('carrot'), 5);
+  assert.equal(acts.length, 0);
+  assert.equal(game.social.gifts, 0);
+  assert.match(toasts.at(-1), /확인하는 중/);
+  game.net.probeTimer = 0;
+  const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator'); // t.mock.property 는 테스트 실행기를 멈추게 해서 직접 바꿨다 되돌림
+  t.after(() => (nav ? Object.defineProperty(globalThis, 'navigator', nav) : delete globalThis.navigator));
+  Object.defineProperty(globalThis, 'navigator', { value: { onLine: false }, configurable: true, writable: true });
+  sv.sendGift(2, 'carrot', 2);
+  assert.equal(game.economy.count('carrot'), 5);
+  assert.equal(acts.length, 0);
+  assert.match(toasts.at(-1), /인터넷 연결이 끊겨서/);
+});
+
+test('상호작용 창을 열 때 한동안 받은 게 없으면 미리 연결을 확인함 (물건을 고르는 사이 끊긴 소켓을 바꿈)', () => {
+  const { sv, game } = setup();
+  let probes = 0;
+  game.net.probe = () => probes++;
+  game.ui.openPanel = () => ({ classList: { add() {} }, append() {} });
+  game.net.lastRecv = Date.now() - 60000;
+  sv.open(2);
+  assert.equal(probes, 1);
+  game.net.lastRecv = Date.now();
+  sv.open(2);
+  assert.equal(probes, 1, '방금 받았으면 확인하지 않음');
+});

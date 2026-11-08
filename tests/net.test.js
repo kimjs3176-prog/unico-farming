@@ -27,17 +27,17 @@ function setup(t) {
   FakeWS.all.length = 0;
   document.hidden = false;
   document.ls = {}; window.ls = {};
-  const toasts = [], fails = [];
+  const toasts = [], fails = [], online = [];
   let look = 'a.b';
   const game = {
     playerName: '나', look: () => look,
-    ui: { setOnline() {}, toast: (s) => toasts.push(s), chatLine() {} },
+    ui: { setOnline: (...a) => online.push(a), toast: (s) => toasts.push(s), chatLine() {} },
     world: { scene: { add() {}, remove() {} } },
     social: { isFriend: () => false },
     socialView: { onAct() {}, onActFail: (m) => fails.push(m) },
   };
   const net = new Net(game);
-  return { net, toasts, fails, setLook: (l) => { look = l; }, last: () => FakeWS.all.at(-1), tick: (ms) => t.mock.timers.tick(ms) };
+  return { net, toasts, fails, online, setLook: (l) => { look = l; }, last: () => FakeWS.all.at(-1), tick: (ms) => t.mock.timers.tick(ms) };
 }
 
 test('net: 끊겨서 기다리는 중에 방을 옮겨도, 그 뒤 끊기면 다시 접속함 (switching 이 굳지 않음)', (t) => {
@@ -186,4 +186,50 @@ test('net: 다시 들어가면 서 있어도 첫 위치를 보내고, 같은 옷
   assert.equal(net.sendAct(5, 'wave'), true);
   last().drop();
   assert.equal(net.sendAct(5, 'wave'), false, '끊겼으면 false');
+});
+
+test('net: 서버에 한 번도 못 붙고 끊겨도 왼쪽 아래를 ⚪ 오프라인으로 바꿈 (VITE_WS_URL 점검용)', (t) => {
+  const { net, last, online } = setup(t);
+  net.connect();
+  last().drop(); // 열리기 전에 닫힘 (서버 없음·주소 틀림)
+  assert.deepEqual(online, [[0, '']]);
+  assert.equal(net.connected, false);
+});
+
+test('net: 확인(ping) 중에 늦게 온 옛 메시지로는 살아 있다고 보지 않음, pong 이 와야 함', (t) => {
+  const { net, last, tick } = setup(t);
+  net.connect();
+  const ws = last();
+  ws.welcome();
+  ws.recv({ t: 'pong' });
+  tick(30000);
+  document.hidden = true; document.fire('visibilitychange');
+  tick(60000);
+  document.hidden = false; document.fire('visibilitychange');
+  assert.ok(net.probeTimer, '확인 시작');
+  ws.recv({ t: 'state', players: [] }); // 끊기기 전에 쌓여 있던 메시지
+  assert.ok(net.probeTimer, '옛 메시지로는 확인이 끝나지 않음');
+  tick(4100);
+  assert.equal(net.connected, false, 'pong 이 없으면 끊긴 것으로 봄');
+  tick(1000);
+  assert.equal(FakeWS.all.length, 2, '소켓을 바꿈');
+});
+
+test('net: 붙어 있지 않을 때는 확인(probe)하지 않음 (접속 중인 소켓·기다리는 재접속을 건드리지 않음)', (t) => {
+  const { net, last, tick } = setup(t);
+  net.connect();
+  last().welcome();
+  last().recv({ t: 'pong' });
+  tick(20000);
+  last().drop(); // 재접속 예약됨
+  net.probe();
+  assert.equal(net.probeTimer, 0);
+  tick(1000);
+  assert.equal(FakeWS.all.length, 2);
+  net.probe(); // 접속 중 (아직 열리지 않음)
+  assert.equal(net.probeTimer, 0);
+  tick(10000);
+  assert.equal(FakeWS.all.length, 2, '접속 중인 소켓을 끊지 않음');
+  last().welcome();
+  assert.ok(net.lastRecv > 0, '받은 시각을 기록');
 });

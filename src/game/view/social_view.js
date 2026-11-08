@@ -36,6 +36,7 @@ export class SocialView {
   open(id) {
     const g = this.game, ui = g.ui, so = g.social, r = this.remote(id);
     if (!r) return;
+    if (Date.now() - (g.net.lastRecv || 0) > 20000) g.net.probe?.(); // 한동안 받은 게 없으면 미리 확인: 물건을 고르는 사이 끊긴 소켓을 찾아 바꿈
     this.face(r);
     const fr = so.isFriend(r.name);
     const p = ui.openPanel(`${fr ? '⭐' : '👤'} ${esc(r.name)}`);
@@ -103,8 +104,10 @@ export class SocialView {
 
   sendGift(id, item, n) {
     const g = this.game, eco = g.economy, so = g.social, r = this.remote(id);
-    if (!r) return g.ui.toast('그 플레이어가 방을 떠났어요');
     if (!g.net.connected) return g.ui.toast('🎁 서버와 연결이 끊겨서 지금은 보낼 수 없어요');
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return g.ui.toast('🎁 인터넷 연결이 끊겨서 지금은 보낼 수 없어요');
+    if (g.net.probeTimer) return g.ui.toast('🎁 연결을 확인하는 중이에요. 잠시 뒤 다시 보내 주세요'); // 반쯤 끊긴 소켓이면 서버가 못 받아 돌려받을 수도 없음
+    if (!r) return g.ui.toast('그 플레이어가 방을 떠났어요');
     const why = so.whyNotGift(eco.count(item), n);
     if (why) return g.ui.toast(`🎁 ${why}`);
     if (!eco.take(item, n)) return;
