@@ -44,9 +44,12 @@ export class Player {
     this.unico.setName(`⭐ ${this.name} (나) · 🏅${title}`, '#ffffff', 'rgba(36,157,146,0.95)');
   }
 
-  /** 클릭/탭 이동: pos() 위치까지 걸어가 stop 거리 안에 들면 멈춤. interact 면 도착 시 상호작용 */
-  goTo(pos, stop = 0.2, interact = false) {
-    this.moveTarget = { pos, stop, interact, stuck: 0 };
+  /**
+   * 클릭/탭 이동: pos() 위치까지 걸어가 stop 거리 안에 들면 멈춤. interact 면 도착 시 상호작용
+   * key: 누른 대상의 안내 종류 (문자열 또는 배열) → 도착하면 arrivedKey 로 알려 그 대상만 실행 (옆 안내가 대신 실행되지 않게)
+   */
+  goTo(pos, stop = 0.2, interact = false, key = null) {
+    this.moveTarget = { pos, stop, interact, key, stuck: 0 };
   }
 
   update(dt, input, followCam) {
@@ -60,6 +63,8 @@ export class Player {
       const dist = d.length();
       if (dist <= t.stop) {
         this.arrivedInteract = t.interact;
+        this.arrivedKey = t.interact ? t.key ?? null : null;
+        this.arrivedTarget = t.interact ? t : null;
         this.moveTarget = null;
         if (t.interact && dist > 0.01) this.unico.facing = Math.atan2(d.x, d.z);
       } else {
@@ -67,7 +72,10 @@ export class Player {
         // 장애물에 막혀 거의 못 움직이면 포기 (상호작용 대상 근처면 도착 처리)
         t.stuck = (t.lastDist !== undefined && t.lastDist - dist < SPEED * dt * 0.25) ? t.stuck + dt : 0;
         t.lastDist = dist;
-        if (t.stuck > 0.6) { if (t.interact && dist < t.stop + 1.5) this.arrivedInteract = true; this.moveTarget = null; dir.set(0, 0, 0); }
+        if (t.stuck > 0.6) {
+          if (t.interact && dist < t.stop + 1.5) { this.arrivedInteract = true; this.arrivedKey = t.key ?? null; this.arrivedTarget = t; }
+          this.moveTarget = null; dir.set(0, 0, 0);
+        }
       }
     }
     const wants = dir.lengthSq() > 0.0001;

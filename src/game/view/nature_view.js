@@ -7,6 +7,7 @@ import { FishingSim, rollBug } from '../sim/fishing.js';
 import { ReelFight, needsFight, BAIT_RARE } from '../sim/angling.js';
 import { makeFish, showLength } from '../fishmesh.js';
 import { makeLabel } from '../label.js';
+import { touchUI } from '../input.js';
 
 const FRUIT_COLOR = { fruit_apple: 0xe0413a, fruit_peach: 0xf7a8a0, fruit_pear: 0xd9d26a, fruit_persimmon: 0xf08a24 };
 const BUG_COLOR = { bug_butterfly: 0xffffff, bug_swallowtail: 0xf6d64a, bug_dragonfly: 0xe0413a, bug_ladybug: 0xd93025, bug_beetle: 0x5a3a22, bug_firefly: 0xd8ff6a };
@@ -256,6 +257,7 @@ export class NatureView {
       const btn = el.querySelector('.rh-hold');
       const on = (e) => { this.holdBtn = true; e.preventDefault(); }, off = () => { this.holdBtn = false; };
       btn.addEventListener('pointerdown', on);
+      btn.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false }); // iOS 길게 누르기가 감기를 끊지 않게
       for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) btn.addEventListener(ev, off);
       this.hud = { el, fish: el.querySelector('.fish'), ten: el.querySelector('.ten b'), tip: el.querySelector('.rh-tip'), name: el.querySelector('.nm') };
     }
@@ -360,7 +362,7 @@ export class NatureView {
     if (ev === 'landed') return this.endFishing({ ok: true, fish: f.result.fish, size: f.result.size, fought: true });
     if (ev === 'snapped') return this.endFishing({ ok: false, snapped: true });
     if (ev === 'escaped') return this.endFishing({ ok: false, ran: true });
-    return { d: -1, label: F.surging ? '🌊 몸부림친다! 손을 떼요!' : reeling ? '🎣 감는 중…' : '🎣 꾹 눌러 감기 (E · 스페이스 · 화면 꾹)', key: 'fishing', onInteract: () => {} };
+    return { d: -1, label: F.surging ? '🌊 몸부림친다! 손을 떼요!' : reeling ? '🎣 감는 중…' : touchUI() ? '🎣 화면 꾹 눌러 감기' : '🎣 꾹 눌러 감기 (E · 스페이스 · 화면 꾹)', key: 'fishing', onInteract: () => {} };
   }
 
   /** 낚은 물고기를 머리 위로 들어 보이기 (1.8초) */

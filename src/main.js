@@ -8,6 +8,7 @@ import { World, LAYOUT } from './game/world.js';
 import { Input } from './game/input.js';
 import { FollowCamera, BASE_FOV, fovFor, releaseInput } from './game/camera.js';
 import { Player } from './game/player.js';
+import { Unico } from './game/unico.js';
 import { FarmView } from './game/view/farm_view.js';
 import { RanchView } from './game/view/ranch_view.js';
 import { Pet } from './game/view/pet.js';
@@ -36,7 +37,7 @@ import { SURF } from './game/surface.js';
 import { Music } from './game/music.js';
 import { Guide } from './game/guide.js';
 import { WeatherService } from './game/weather.js';
-import { PointerNav } from './game/pointer.js';
+import { PointerNav, PromptPick, arrivalStep } from './game/pointer.js';
 import { RiceView } from './game/view/rice_view.js';
 import { NatureView } from './game/view/nature_view.js';
 import { Villagers } from './game/sim/villagers.js';
@@ -274,6 +275,7 @@ class Game {
   applyQuality(q, { rebuildPost = false } = {}) {
     this.quality = q;
     this.world.quality = q;
+    Unico.setQuality(q.level); // 낮음이면 NPC·다른 접속자는 저해상도 몸·실제 그림자 끔
     this.renderer.setPixelRatio(q.pixelRatio);
     // 그림자: 끄기/켜기, 해상도 바꾸면 그림자 맵 다시 만들기
     const sun = this.world.sun;
@@ -283,7 +285,8 @@ class Game {
       sun.shadow.map?.dispose();
       sun.shadow.map = null;
     }
-    this.renderer.shadowMap.autoUpdate = q.shadowEvery <= 1;
+    // 그림자 맵은 loop 에서 한 프레임에 한 번만 갱신 (자동 갱신이면 GTAO·반사 연못의 추가 render 마다 똑같이 다시 그림)
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.needsUpdate = true;
     this.world.scenery?.setDensity(q.grass);
     if (rebuildPost) {
@@ -382,7 +385,13 @@ class Game {
 
   /** 로딩 화면이 사라진 뒤 실행 (첫 접속 컷신 등) */
   whenShown(fn) { if (this._shown) fn(); else (this._onShown ||= []).push(fn); }
-  shown() { this._shown = true; for (const fn of this._onShown || []) fn(); this._onShown = null; }
+  shown() {
+    this._shown = true;
+    for (const fn of this._onShown || []) fn();
+    this._onShown = null;
+    // 첫 화면에 필요 없는 모델은 뒤에서 받고, 다 받으면 목장 손님 동물을 들임
+    this.assets.loadDeferred?.().then(() => this.ranch?.addVisitors?.()).catch(() => {});
+  }
 
   resetSave() { clearSave(); location.reload(); } // clearSave 뒤에는 떠날 때 저장이 막힘 (지운 농장이 되살아나지 않게)
 
@@ -535,8 +544,10 @@ class Game {
     this.world.update(dt, this.tractor.driving ? this.tractor.riderGroup.position : pp);
     this.season.update(dt);
     // 상호작용 후보: 진행 중인 미니게임(d<0)이 최우선, 그다음 가장 가까운 대상
+    // 탭해서 걸어간 대상의 안내 종류도 함께 봄 (도착하면 옆의 다른 안내가 아니라 그 대상을 실행)
+    const cand = new PromptPick(this.player.arrivedKey);
+    const pick = (p) => cand.add(p);
     let prompt = null;
-    const pick = (p) => { if (p && (!prompt || (p.d ?? 99) < (prompt.d ?? 99))) prompt = p; };
     const pw = this.home.inside ? this.home.outVec : pp; // 집 안이면 바깥 것들은 문 앞 기준
     pick(this.tractor.update(dt, input, pw));
     if (!this.tractor.driving) {
@@ -558,18 +569,25 @@ class Game {
       pick(this.net.prompt(pw)); // 가까운 다른 플레이어
       pick(this.decor.update(dt, pp)); // 꾸미기 모드 (켜져 있을 때만, 다른 안내보다 먼저)
       const homePrompt = this.home.update(dt, pp);
-      if (this.home.inside) prompt = homePrompt; else pick(homePrompt); // 집 안에서는 가구 안내만
+      if (this.home.inside) cand.only(homePrompt); else pick(homePrompt); // 집 안에서는 가구 안내만
       this.pointer.update(dt, input);
       this.autoplay.update(dt, input);
-      const arrived = this.player.arrivedInteract;
+      const arrived = this.player.arrivedInteract, arrivedAt = this.player.arrivedTarget;
       this.player.arrivedInteract = false;
+      this.player.arrivedKey = this.player.arrivedTarget = null;
       const talking = this.dialogue.active || this.cinema.locked || this.dialogue.justClosed();
-      if (talking) prompt = null;
-      // 탭해 걸어가 도착하면 자동 상호작용. 꾸미기 안내는 제외 (도착하자마자 소품이 놓이거나 치워지지 않게, E·놓기 버튼으로만)
-      if (prompt?.onInteract && (input.interact() || (arrived && prompt.key !== 'decor')) && !this.ui.panel) prompt.onInteract();
+      if (!talking) prompt = cand.prompt;
+      // 탭해 걸어가 도착하면 자동 상호작용: 종류가 있는 대상은 그 대상만, 없으면(밭·동물) 가장 가까운 안내
+      const step = arrived && !talking ? arrivalStep(cand, arrivedAt) : {};
+      if (!this.ui.panel) {
+        if (prompt?.onInteract && input.interact()) prompt.onInteract();
+        else if (step.run) step.run.onInteract();
+        else if (step.closer) { this.player.goTo(arrivedAt.pos, Math.min(arrivedAt.stop, 0.35), true, arrivedAt.key); this.player.moveTarget.closer = true; }
+      }
       this.player.update(dt, input, this.followCam);
       this.followCam.update(dt, this.ui.panel || this.cinema.locked ? null : input, pp);
     } else {
+      prompt = cand.prompt; // 운전 중 안내 (쟁기 상태)
       this.smartfarm.update(dt, input, pp);
       this.farm.update(dt, pp);
       this.ranch.update(dt, pp);
@@ -636,13 +654,13 @@ class Game {
     }
     this.saveTimer += dt;
     if (this.saveTimer > 10) this.save();
-    // 그림자 맵 갱신 주기 (낮음: 3프레임, 보통: 2프레임마다 — 정적 장면이 대부분이라 체감 차이 작음)
-    const shEvery = this.cinema.locked ? Math.max(3, this.quality.shadowEvery) : this.quality.shadowEvery;
-    this.renderer.shadowMap.autoUpdate = shEvery <= 1;
-    if (shEvery > 1) {
-      this.frameNo = (this.frameNo || 0) + 1;
-      if (this.frameNo % shEvery === 0) this.renderer.shadowMap.needsUpdate = true;
-    }
+    // 그림자 맵 갱신 주기 (높음: 매 프레임, 보통: 2프레임, 낮음: 3프레임마다 — 정적 장면이 대부분이라 체감 차이 작음)
+    // 자동 갱신은 끄고 프레임마다 한 번만 요청 → 한 프레임 안의 여러 render(GTAO·반사 연못)가 그림자를 다시 그리지 않음
+    const shBase = this.quality.shadowEvery;
+    const shEvery = shBase > 0 && this.cinema.locked ? Math.max(3, shBase) : shBase;
+    this.renderer.shadowMap.autoUpdate = false;
+    this.frameNo = (this.frameNo || 0) + 1;
+    if (shEvery > 0 && this.frameNo % Math.max(1, shEvery) === 0) this.renderer.shadowMap.needsUpdate = true;
     this.postfx.setGrade(this.home?.inside ? null : this.world.tod, this.world.weatherCur?.cloud || 0); // 시간대 색 (집 안은 그대로)
     this.postfx.render();
     input.endFrame();

@@ -1,6 +1,7 @@
 import { josa } from '../game/sim/josa.js';
 import { LAYOUT } from '../game/world.js';
 import { HILLS } from '../game/terrain.js';
+import { touchUI } from '../game/input.js';
 
 /** 빠른 이동 장소 (지도 아래 버튼) — x,z 는 도착 지점(길 위) */
 export const PLACES = [
@@ -142,7 +143,7 @@ export class Minimap {
     p.append(chips);
     const tip = document.createElement('p');
     tip.className = 'map-tip';
-    tip.textContent = '지도를 누르면 그 자리로 바로 이동해요 (M 키로 열고 닫기)';
+    tip.textContent = `지도를 누르면 그 자리로 바로 이동해요${touchUI() ? '' : ' (M 키로 열고 닫기)'}`;
     p.append(tip);
     cv.addEventListener('click', (e) => {
       const r = cv.getBoundingClientRect();

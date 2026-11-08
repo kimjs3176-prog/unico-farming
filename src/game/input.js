@@ -104,6 +104,8 @@ export class Input {
 
   touchStart(e, now = performance.now()) {
     blurTextInput();
+    // 조이스틱 손가락을 뗀 이벤트를 놓쳤으면(화면 밖으로 끌고 나감 등) 먼저 풀어 줌 → 새 손가락으로 다시 잡힘
+    if (this.joy.active && e.touches && ![...e.touches].some((o) => o.identifier === this.joy.id)) this._joyOff();
     for (const t of e.changedTouches) {
       const st = { x: t.clientX, y: t.clientY, t: now, moved: 0 };
       // 다른 손가락 하나가 방금 닿았다면 → 핀치 (좌우 어느 쪽이든, 어느 손가락이 먼저든)
@@ -210,6 +212,17 @@ export class Input {
   manual() {
     const a = this.axis();
     return Math.abs(a.x) + Math.abs(a.y) > 0.05;
+  }
+
+  /** 화면을 벗어날 때(앱 전환 등): 손 뗀 이벤트를 놓쳐 눌린 채 남은 키·조이스틱·시점 터치 정리 */
+  reset() {
+    this.keys.clear(); this.pressed.clear();
+    this.clicks.length = 0;
+    this.drag.active = false; this.drag.dx = this.drag.dy = 0;
+    this.down = null; this.wheel = 0; this.interactTap = false;
+    this.touches.clear(); this.tapStart.clear(); this.pinch = null;
+    this.virtual.x = this.virtual.y = 0;
+    if (this.joy.active || this.joy.id != null) this._joyOff();
   }
 
   endFrame() {

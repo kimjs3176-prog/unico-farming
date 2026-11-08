@@ -43,7 +43,7 @@ export function mgIntro(g, o) {
   if (o.controls?.length) p.append(h('div', 'mg-keys', o.controls.map((c) => `<span>${c}</span>`).join('')));
   const best = bestOf(o.id);
   p.append(h('div', 'mg-goal', `${starsHtml(1)} ${o.th[0]}${o.unit} · ${starsHtml(2)} ${o.th[1]}${o.unit} · ${starsHtml(3)} ${o.th[2]}${o.unit}<br><b>내 최고 기록 ${best}${o.unit}</b> ${starsHtml(starsFor(best, o.th))}`));
-  const go = h('button', 'gold mg-go', '▶ 시작 <small>(E · 스페이스)</small>');
+  const go = h('button', 'gold mg-go', '▶ 시작 <small class="hint-kbd">(E · 스페이스)</small>'); // 터치 화면에서는 키 안내 숨김 (CSS)
   let started = false;
   const start = () => {
     if (started) return;

@@ -21,9 +21,9 @@ const MAX_PLAYERS_PER_ROOM = Number(process.env.MAX_PLAYERS_PER_ROOM || 50);
 const MAX_ROOMS = Number(process.env.MAX_ROOMS || 20);
 const TICK_MS = 100;
 const DIST = path.join(__dirname, '..', 'dist');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.glb': 'model/gltf-binary', '.bin': 'application/octet-stream', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.glb': 'model/gltf-binary', '.bin': 'application/octet-stream', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg' };
 // 압축해서 보낼 형식 (이미지·소리·폰트는 이미 압축되어 있어 제외)
-const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.svg', '.glb', '.bin']);
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.webmanifest', '.svg', '.glb', '.bin']);
 /** 정적 파일 캐시: 파일별로 한 번만 읽고 압축(br/gzip)해 메모리에 보관 (수정 시각이 바뀌면 다시) */
 const fileCache = new Map();
 function loadStatic(file, st) {
@@ -63,10 +63,11 @@ function serve(req, res) {
   if (!fs.existsSync(file)) { res.writeHead(404); return res.end('빌드 결과가 없습니다. npm run build 를 먼저 실행하세요.'); }
   const st = fs.statSync(file);
   const e = loadStatic(file, st);
-  // 해시가 붙은 빌드 결과(/assets/)는 영구 캐시, 나머지(모델·index.html)는 ETag 로 재검증(바뀌지 않았으면 304)
+  // 해시가 붙은 빌드 결과(/assets/)와 내용 버전(?v=)을 붙여 부른 모델은 영구 캐시, 나머지(모델·index.html)는 ETag 로 재검증(바뀌지 않았으면 304)
+  const immutable = url.pathname.startsWith('/assets/') || (url.searchParams.has('v') && file.startsWith(path.join(DIST, 'models') + path.sep)); // 없는 모델(index.html 로 대신)은 오래 캐시하지 않음
   const headers = {
     'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
-    'Cache-Control': url.pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
+    'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
     ETag: e.etag,
     Vary: 'Accept-Encoding',
   };

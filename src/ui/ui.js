@@ -10,7 +10,7 @@ import { RICE_STAGES, WATER_MAX } from '../game/sim/rice.js';
 const anyItem = (k) => CROPS[k] || PRODUCTS[k] || ITEMS[k];
 import { recordsHtml } from './minigame_frame.js';
 import { installKoatUI } from './koat_ui.js';
-import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf } from '../game/quality.js';
+import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf, isMobileDevice } from '../game/quality.js';
 import { blurTextInput, touchUI } from '../game/input.js';
 
 /** iPhone·iPad 인가 (iPadOS 사파리는 'Macintosh' 로 알려서 터치 점 수로 가림) */
@@ -25,6 +25,19 @@ function matchPreset(s) {
   return Object.keys(PRESETS).find((p) => keys.every((k) => PRESETS[p][k] === s[k])) || 'custom';
 }
 
+/** 전체 화면을 쓸 수 있는 휴대폰인가 (iPhone 사파리는 API 가 없어 false, 홈 화면 앱으로 연 경우도 false — 이미 전체 화면) */
+export function canFullscreen(doc = typeof document !== 'undefined' ? document : null) {
+  if (!doc || !(doc.fullscreenEnabled || doc.webkitFullscreenEnabled) || !isMobileDevice()) return false;
+  return !(typeof matchMedia !== 'undefined' && matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches);
+}
+/** 전체 화면 켜고 끄기 (누른 그 순간에 불러야 함. 거부되면 조용히 무시) */
+export function toggleFullscreen(doc = document) {
+  const p = doc.fullscreenElement || doc.webkitFullscreenElement
+    ? (doc.exitFullscreen ? doc.exitFullscreen() : doc.webkitExitFullscreen?.())
+    : (doc.documentElement.requestFullscreen ? doc.documentElement.requestFullscreen({ navigationUI: 'hide' }) : doc.documentElement.webkitRequestFullscreen?.());
+  p?.catch?.(() => {});
+}
+
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 
 /** DOM 기반 HUD / 패널 */
@@ -34,6 +47,8 @@ export class UI {
     this.root = root;
     this.panel = null;
     root.innerHTML = '';
+    // iOS 사파리: 조상에 터치 리스너가 있어야 버튼 :active(눌림 모양)가 보임 (아무것도 하지 않음)
+    root.addEventListener('touchstart', () => {}, { passive: true });
     // 상단 HUD
     this.top = h('div', 'hud-top');
     this.moneyChip = h('div', 'chip', '🪙 <span class="money">0</span>');
@@ -150,6 +165,19 @@ export class UI {
     mk('📸', '찰칵', () => this.snapshot());
     this.autoBtn = mk('🤖', '자동', () => game.autoplay.toggle());
     this.autoBtn.title = '오토플레이 (P)';
+    // 휴대폰: 전체 화면 (가로 화면에서 주소창이 차지하는 높이를 게임에 씀). 크기는 resize 가 맞춤
+    if (canFullscreen()) {
+      this.fsBtn = mk('⛶', '전체 화면', () => toggleFullscreen());
+      this.fsBtn.classList.add('fs-btn');
+      this.bar.classList.add('has-fs');
+      const sync = () => {
+        const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        this.fsBtn.classList.toggle('on', on);
+        this.fsBtn.innerHTML = on ? '<span>🗗</span>창 모드' : '<span>⛶</span>전체 화면';
+      };
+      document.addEventListener('fullscreenchange', sync);
+      document.addEventListener('webkitfullscreenchange', sync);
+    }
     root.append(this.bar);
     // 모바일: 행동 막대는 ☰ 버튼 하나로 접어 두고, 누르면 펼침 (버튼을 고르면 다시 접힘)
     this.barToggle = h('button', 'bar-toggle', '☰');
@@ -176,7 +204,7 @@ export class UI {
     const src = { live: '실시간 (Open-Meteo)', manual: '수동 설정', offline: '연결 실패 · 맑음으로 표시', default: '기본값' }[svc.source] || svc.source;
     const rows = [
       `${w.emoji} <b>${w.label}</b>${w.temperature != null ? ` · ${Math.round(w.temperature)}°C` : ''}`,
-      `📍 ${esc(svc.loc?.name || '-')}  <small>(위치 권한을 거부하면 기본 위치를 사용해요)</small>`,
+      `📍 ${esc(svc.loc?.name || '-')}  <small>${svc.usingDefault ? "아래 '📡 내 위치 날씨'를 누르면 지금 있는 동네 날씨로 바뀌어요 (위치는 약 1km 단위로만 써요)" : '(위치 권한을 거부하면 기본 위치를 사용해요)'}</small>`,
       `💨 바람 ${Math.round(w.windKmh || 0)} km/h · ☁️ 구름 ${Math.round(w.cloud * 100)}%`,
       `🔄 출처: ${src} · 15분마다 갱신`,
       `🌱 게임 효과: ${w.autoWater ? '비가 와서 밭에 자동으로 물이 뿌려져요' : w.kind === 'snow' ? '눈 때문에 작물 성장이 40% 느려져요 (스마트팜은 영향 없음)' : w.kind === 'fog' ? '안개로 시야가 짧아져요' : '맑은 날엔 직접 물을 줘야 해요'}`,
@@ -184,8 +212,11 @@ export class UI {
     p.append(h('div', 'rows', rows.map((t) => `<div class="row">${t}</div>`).join('')));
     p.append(h('h3', '', '날씨 바꿔 보기 (체험용)'));
     const grid = h('div', 'room-list');
-    const live = h('button', svc.source === 'live' ? 'cur' : '', '📡 실시간 날씨<small>현재 위치 기준</small>');
-    live.onclick = () => { svc.useLive(); this.toast('📡 현재 위치 날씨를 불러와요'); };
+    const live = h('button', svc.source === 'live' && !svc.usingDefault ? 'cur' : '', svc.usingDefault ? '📡 내 위치 날씨<small>위치 권한을 물어요</small>' : '📡 실시간 날씨<small>현재 위치 기준</small>');
+    live.onclick = async () => {
+      this.toast('📡 현재 위치 날씨를 불러와요');
+      if (!(await svc.useLive())) this.toast('📍 위치를 못 받아 기본 위치 날씨를 보여 줘요');
+    };
     grid.append(live);
     for (const [k, label] of [['clear', '☀️ 맑음'], ['cloudy', '☁️ 흐림'], ['rain', '🌧️ 비'], ['storm', '⛈️ 뇌우'], ['snow', '❄️ 눈'], ['fog', '🌫️ 안개']]) {
       const b = h('button', svc.source === 'manual' && w.kind === k ? 'cur' : '', label);
@@ -577,6 +608,7 @@ export class UI {
     const foot = h('div', 'mk-foot');
     p.append(foot);
     const TABS = [['buy', '🌱 사기'], ['sell', '💰 팔기'], ['cos', '👗 의상'], ['fac', '🛠️ 시설']];
+    const saveSoon = () => { g.saveTimer = Math.max(g.saveTimer || 0, 9); }; // 사고판 뒤 1초 안에 저장 (연달아 눌러도 한 번만)
     const sellables = () => {
       const list = [];
       for (const [k, c] of Object.entries({ ...CROPS, ...PRODUCTS })) list.push([k, c]);
@@ -590,7 +622,7 @@ export class UI {
       for (const [n, fn] of opts) {
         const bt = h('button', '', `${n}개`);
         bt.disabled = eco.money < price * n;
-        bt.onclick = () => { if (fn(n)) { g.audio.play('coin'); render(); } };
+        bt.onclick = () => { if (fn(n)) { g.audio.play('coin'); saveSoon(); render(); } };
         r.append(bt);
       }
       return r;
@@ -645,10 +677,10 @@ export class UI {
           const trend = tr > 0 ? '<span class="trend-up">▲</span>' : tr < 0 ? '<span class="trend-down">▼</span>' : '<span class="trend-flat">–</span>';
           const ev = eco.event?.item === k ? ' 🔥' : '';
           const r = h('div', `row mk-row${have ? '' : ' none'}`, `<span class="ic">${c.emoji}</span><span class="nm">${c.name}${ev} <span class="qty">보유 ${have}</span></span><span class="pr">${eco.sellPrice(k)}🪙 ${trend}</span>`);
-          if (have > 1) { const b1 = h('button', '', '1개'); b1.onclick = () => { const got = eco.sell(k, 1); g.onEvent('sell', 1); g.audio.play('coin'); this.toast(`+${got} 코인`); render(); }; r.append(b1); }
+          if (have > 1) { const b1 = h('button', '', '1개'); b1.onclick = () => { const got = eco.sell(k, 1); g.onEvent('sell', 1); g.audio.play('coin'); this.toast(`+${got} 코인`); saveSoon(); render(); }; r.append(b1); }
           const b = h('button', 'gold', have > 1 ? `전부 ${(eco.sellPrice(k) * have).toLocaleString()}` : '판매');
           b.disabled = have <= 0;
-          b.onclick = () => { const got = eco.sell(k, have); g.onEvent('sell', have); g.audio.play('coin'); this.toast(`+${got} 코인`); render(); };
+          b.onclick = () => { const got = eco.sell(k, have); g.onEvent('sell', have); g.audio.play('coin'); this.toast(`+${got} 코인`); saveSoon(); render(); };
           r.append(b);
           rows.append(r);
         }
@@ -659,7 +691,7 @@ export class UI {
           foot.style.display = '';
           foot.append(h('span', 'mk-total', `가방 속 판매 가능 <b>${total.toLocaleString()}🪙</b>`));
           const ab = h('button', 'gold', '🧺 모두 판매하기');
-          ab.onclick = () => { const n = sellables().reduce((a, [k]) => a + eco.count(k), 0); const got = eco.sellAll(); g.onEvent('sell', n); g.audio.play('coin'); this.toast(`+${got} 코인`); render(); };
+          ab.onclick = () => { const n = sellables().reduce((a, [k]) => a + eco.count(k), 0); const got = eco.sellAll(); g.onEvent('sell', n); g.audio.play('coin'); this.toast(`+${got} 코인`); saveSoon(); render(); };
           foot.append(ab);
         }
       } else if (cur === 'cos') {
@@ -690,6 +722,7 @@ export class UI {
               g.audio.play('levelup'); g.player.unico.playAction('cheer', 1.2);
               this.toast(`${c.icon} ${c.name}${josa(c.name, '을/를')} 샀어요! 바로 입었어요 · ${c.perkText}`);
               g.onEvent('costume', cs.owned.size);
+              saveSoon();
               render();
             };
             r.append(b);
@@ -705,12 +738,12 @@ export class UI {
         const SPR = [400, 800, 1300];
         const sr = sim.sprinklerRows;
         const spr = h('div', 'row mk-row', `<span class="ic">💦</span><span class="nm">스프링클러 <span class="qty">${sr}/3줄</span><br><small>설치한 줄은 물이 마르면 자동으로 물을 줘요</small></span><span class="pr">${sr < 3 ? `${SPR[sr]}🪙` : '완료'}</span>`);
-        if (sr < 3) { const bt = h('button', 'gold', `${sr + 1}번째 줄 설치`); bt.disabled = eco.money < SPR[sr]; bt.onclick = () => { if (eco.money < SPR[sim.sprinklerRows]) return; eco.money -= SPR[sim.sprinklerRows]; eco.stats.spent += SPR[sim.sprinklerRows]; sim.sprinklerRows++; g.audio.play('levelup'); this.toast(`💦 밭 ${sim.sprinklerRows}번째 줄에 스프링클러를 설치했어요!`); g.onEvent('sprinkler', sim.sprinklerRows); render(); }; spr.append(bt); }
+        if (sr < 3) { const bt = h('button', 'gold', `${sr + 1}번째 줄 설치`); bt.disabled = eco.money < SPR[sr]; bt.onclick = () => { if (eco.money < SPR[sim.sprinklerRows]) return; eco.money -= SPR[sim.sprinklerRows]; eco.stats.spent += SPR[sim.sprinklerRows]; sim.sprinklerRows++; g.audio.play('levelup'); this.toast(`💦 밭 ${sim.sprinklerRows}번째 줄에 스프링클러를 설치했어요!`); g.onEvent('sprinkler', sim.sprinklerRows); saveSoon(); render(); }; spr.append(bt); }
         fac.append(spr);
         if (fc) {
           const jp = fc.proc.nextJarPrice;
           const jr = h('div', 'row mk-row', `<span class="ic">🏺</span><span class="nm">장독 추가 <span class="qty">${fc.proc.jars}/4개</span><br><small>밭 서쪽 장독대에서 김치·잼·주스를 동시에 더 담가요</small></span><span class="pr">${jp ? `${jp}🪙` : '완료'}</span>`);
-          if (jp) { const bt = h('button', 'gold', '장독 사기'); bt.disabled = eco.money < jp; bt.onclick = () => { if (eco.money < jp || !fc.proc.buyJar()) return; eco.money -= jp; eco.stats.spent += jp; g.audio.play('levelup'); this.toast('🏺 장독대에 장독을 하나 더 놓았어요!'); render(); }; jr.append(bt); }
+          if (jp) { const bt = h('button', 'gold', '장독 사기'); bt.disabled = eco.money < jp; bt.onclick = () => { if (eco.money < jp || !fc.proc.buyJar()) return; eco.money -= jp; eco.stats.spent += jp; g.audio.play('levelup'); this.toast('🏺 장독대에 장독을 하나 더 놓았어요!'); saveSoon(); render(); }; jr.append(bt); }
           fac.append(jr);
         }
         body.append(fac);
@@ -889,6 +922,7 @@ export class UI {
       const b = h('button', cls, label);
       const start = (e) => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); b.classList.add('on'); on(); };
       const stop = () => { b.classList.remove('on'); off(); };
+      b.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false }); // iOS 길게 누르기가 끼어들지 않게 (포인터 이벤트는 그대로 옴)
       b.addEventListener('pointerdown', start);
       b.addEventListener('pointerup', stop);
       b.addEventListener('pointercancel', stop);

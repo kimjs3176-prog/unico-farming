@@ -11,6 +11,8 @@
   "background_color": "#bfe4ff",
   "theme_color": "#8fd0ff",
   "icons": [
-    { "src": "portraits/front.webp", "sizes": "256x256", "type": "image/webp", "purpose": "any" }
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

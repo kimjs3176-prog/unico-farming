@@ -13,6 +13,36 @@ export function nearestOnScreen(cands, sx, sy, radius = TOUCH_PICK_PX) {
   return best;
 }
 
+/**
+ * 한 프레임의 안내 후보 고르기: 가장 가까운 안내(prompt, d 가 작을수록 먼저 — 진행 중인 미니게임은 d<0)와
+ * 탭해서 걸어간 대상의 종류(key, 문자열 또는 배열)와 같은 안내 중 가장 가까운 것(wanted)
+ */
+export class PromptPick {
+  constructor(key = null) { this.want = [].concat(key ?? []); this.prompt = null; this.wanted = null; }
+  add(p) {
+    if (!p) return;
+    const d = p.d ?? 99;
+    if (this.want.length && this.want.includes(p.key) && (!this.wanted || d < (this.wanted.d ?? 99))) this.wanted = p;
+    if (!this.prompt || d < (this.prompt.d ?? 99)) this.prompt = p;
+  }
+  /** 이 안내만 (집 안: 가구 안내만 씀) */
+  only(p) { this.prompt = p ?? null; this.wanted = p && this.want.includes(p.key) ? p : null; }
+  /** 도착했을 때 자동으로 실행할 안내: 종류가 있는 대상은 그 대상만(옆 안내가 대신 실행되지 않게), 없으면(밭·동물) 가장 가까운 것 */
+  arrival() { return this.want.length ? this.wanted : this.prompt; }
+}
+
+/**
+ * 탭해 걸어가 도착했을 때 할 일 (arrivedAt: 도착한 이동 목표 { pos, stop, key, closer })
+ *  { run: 안내 } 그 안내 실행 · { closer: true } 누른 대상의 안내가 아직 안 잡힘(바로 옆 시설이 더 가까움) → 한 번만 더 다가감 · {} 아무것도 안 함
+ * 꾸미기 안내는 실행하지 않음 (도착하자마자 소품이 놓이거나 치워지지 않게, E·놓기 버튼으로만)
+ */
+export function arrivalStep(cand, arrivedAt) {
+  const p = cand.arrival();
+  if (p?.onInteract && p.key !== 'decor') return { run: p };
+  if (!p && arrivedAt?.key && !arrivedAt.closer) return { closer: true };
+  return {};
+}
+
 const inBox = (b, x, z, m = 0) => x > b.x0 - m && x < b.x1 + m && z > b.z0 - m && z < b.z1 + m;
 
 /**
@@ -39,7 +69,7 @@ export function roomSpotSolids(room) {
 function pairedAt(pairs, x, z) {
   let best = null, bd = Infinity;
   for (const [sp, b] of pairs) {
-    if (!inBox(b, x, z, 0.05)) continue;
+    if (!inBox(b, x, z, 0.0501)) continue; // 0.0001: 벽면처럼 딱 경계에 놓인 점이 소수점 오차로 갈리지 않게
     const d = Math.hypot((b.x0 + b.x1) / 2 - x, (b.z0 + b.z1) / 2 - z);
     if (d < bd) { bd = d; best = sp; }
   }
@@ -138,7 +168,8 @@ export class PointerNav {
     this.markerT = 0;
   }
 
-  /** 상호작용 대상 목록 { objs, pos(): Vector3, stop, key?, big? } — key 는 대상의 안내 종류(prompt.key). goTo 에 넘기지만 아직 쓰지 않음 (도착하면 가장 가까운 안내가 실행됨) */
+  /** 상호작용 대상 목록 { objs, pos(): Vector3, stop, key?, big? } — key 는 대상의 안내 종류(prompt.key, 여럿이면 배열).
+   *  goTo 에 넘겨 도착하면 그 종류의 안내만 실행 (key 가 없으면 가장 가까운 안내) */
   targets() {
     const g = this.game, out = [], L = LAYOUT;
     const at = (x, z) => { const v = new THREE.Vector3(x, 0, z); return () => v; };
@@ -259,7 +290,12 @@ export class PointerNav {
     if (room !== this._room) { this._room = room; this._pairs = roomSpotSolids(room); } // 집을 넓히면 방이 바뀜
     const tag = hit && (() => { for (let m = hit.object; m && m !== room.group; m = m.parent) if (m.userData.spot) return m.userData.spot; return null; })();
     let mid = null;
-    if (hit && !onFloor) { const c = hit.object.getWorldPosition(this._v); mid = { x: c.x - o.x, z: c.z - o.z }; }
+    if (hit && !onFloor) {
+      const pcs = hit.object.userData.mids; // 합친 메시: 맞힌 삼각형이 든 조각의 가운데 (home_interior.js mergeRoomMeshes)
+      const pc = pcs && pcs.find((q) => (hit.faceIndex ?? 0) < q[0]);
+      if (pc) mid = { x: pc[1], z: pc[2] };
+      else if (!pcs) { const c = hit.object.getWorldPosition(this._v); mid = { x: c.x - o.x, z: c.z - o.z }; }
+    }
     const sp = (tag && room.spots.find((s) => s.key === tag)) || roomSpotAt(room, lx, lz, onFloor, this._pairs, mid);
     if (sp) { const v = new THREE.Vector3(o.x + sp.x, o.y, o.z + sp.z); return { target: { pos: () => v, stop: 0.3, key: 'home_' + sp.key } }; }
     const { W, D } = room;
@@ -275,7 +311,7 @@ export class PointerNav {
     if (g.ui.panel || g.tractor.driving || g.smartfarm.active) return;
     const r = this.pick(sx, sy, touch);
     if (!r) return;
-    if (r.target) g.player.goTo(r.target.pos, r.target.stop, true, r.target.key);
+    if (r.target) g.player.goTo(r.target.pos, r.target.stop, !g.decor?.mode, r.target.key); // 꾸미기 중에는 걸어가기만
     else g.player.goTo(() => r.point, 0.15, false);
     const p = r.target ? r.target.pos() : r.point;
     const fy = g.home?.inside ? g.home.room.group.position.y : heightAt(p.x, p.z);

@@ -1,5 +1,6 @@
 import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LAYOUT } from '../world.js';
 import { HomeSim, HOME_LEVELS, OUTFIT } from '../sim/home.js';
 import { COSTUMES, COSTUME } from '../sim/costume.js';
@@ -67,6 +68,35 @@ function windowAt(x, y, z, w, h, glass) {
   return g;
 }
 
+/**
+ * 묶음 안의 메시를 재질별로 하나씩 합침 (집 약 30개 → 12개 안팎, 그림자 그리기도 같이 줆)
+ * 하위 묶음(지붕·창문)의 위치·회전까지 펴서 합치고, 묶음의 userData(굴뚝·지붕 높이)는 그대로
+ */
+export function mergeByMaterial(g) {
+  g.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), rel = new THREE.Matrix4();
+  const sets = new Map();
+  g.traverse((o) => {
+    if (!o.isMesh || Array.isArray(o.material)) return;
+    if (!sets.has(o.material)) sets.set(o.material, []);
+    sets.get(o.material).push(o);
+  });
+  const out = [];
+  for (const [mat, list] of sets) {
+    const geos = list.map((o) => o.geometry.clone().applyMatrix4(rel.multiplyMatrices(inv, o.matrixWorld)));
+    const geo = mergeGeometries(geos, false);
+    for (const x of geos) x.dispose();
+    if (!geo) return g; // 속성이 달라 못 합치면 그대로 둠
+    out.push(new THREE.Mesh(geo, mat));
+  }
+  const old = new Set();
+  g.traverse((o) => { if (o.isMesh) old.add(o.geometry); });
+  for (const x of old) x.dispose();
+  g.clear();
+  for (const m of out) g.add(m);
+  return g;
+}
+
 /** 집 전체 크기 배율: 벽 높이 1.9m × 1.5 ≈ 2.9m (키 1.8m 유니코보다 넉넉히 크게, 문 높이 약 2m) */
 const HOUSE_SCALE = 1.5;
 const HOUSE_BACK = 0.55; // 커진 만큼 뒤로 물려 앞문 위치는 그대로
@@ -112,7 +142,7 @@ function buildHouse(level, glass) {
       [MAT.red, MAT.pink, MAT.yellow].forEach((m, k) => g.add(ball(0.09, m, x + (k - 1) * 0.22, 1.0, D / 2 + 0.16)));
     }
   }
-  return g;
+  return mergeByMaterial(g);
 }
 
 /** 마당: 꽃밭·우편함(1단계부터), 정원 등불(2단계) */
@@ -125,7 +155,7 @@ function buildYard(level, lampMat) {
     g.add(box(0.04, 0.22, 0.12, MAT.red, 2.1, 1.25, 3.1));                    // 깃발
   }
   if (level >= 2) for (const x of [-1.1, 1.1]) { g.add(box(0.08, 0.9, 0.08, MAT.woodD, x, 0.45, 3.4)); g.add(box(0.22, 0.22, 0.22, lampMat, x, 1.0, 3.4)); }
-  return g;
+  return mergeByMaterial(g);
 }
 
 export class HomeView {
@@ -159,7 +189,7 @@ export class HomeView {
 
   /** 실내 방 다시 짓기 (집 단계가 바뀌면) */
   buildRoom() {
-    if (this.room) this.game.world.scene.remove(this.room.group);
+    if (this.room) { this.game.world.scene.remove(this.room.group); this.room.group.traverse((o) => o.geometry?.dispose()); }
     this.room = buildRoom(this.sim.level, { glass: this.roomGlass, lampMat: this.roomLampMat });
     this.room.group.position.set(IO.x, IO.y, IO.z);
     this.game.world.scene.add(this.room.group);
@@ -167,7 +197,7 @@ export class HomeView {
   }
 
   build() {
-    if (this.house) this.root.remove(this.house, this.yard);
+    if (this.house) { this.root.remove(this.house, this.yard); for (const o of [this.house, this.yard]) o.traverse((m) => m.geometry?.dispose()); }
     this.house = buildHouse(this.sim.level, this.glass);
     this.house.scale.setScalar(HOUSE_SCALE);
     this.house.position.z = -HOUSE_BACK;
@@ -305,6 +335,8 @@ export class HomeView {
       g.player.moveTarget = null; g.player.vel?.set(0, 0, 0);
       g.player.unico.facing = Math.PI; // 북쪽(길)을 보고 나옴
       if (this._cam) Object.assign(cam, this._cam);
+      cam.lookOffsetY = 0; // 옷장 미리보기 중에 지도로 나가도 시점이 낮은 채 남지 않게
+      this._wdCam = null; this._wdPanel = null;
       cam.first = true;
       if (g.world.scenery?.sky) g.world.scenery.sky.visible = true;
     };
@@ -375,9 +407,11 @@ export class HomeView {
     const p = ui.openPanel('👗 옷장');
     p.classList.add('wardrobe');
     // 미리보기 카메라 (창을 닫으면 _updateInside 가 되돌림)
-    if (!this._wdCam) this._wdCam = { yaw: cam.yaw, pitch: cam.pitch, distance: cam.distance };
+    if (!this._wdCam) this._wdCam = { yaw: cam.yaw, pitch: cam.pitch, distance: cam.distance, lookOffsetY: cam.lookOffsetY || 0 };
     this._wdPanel = p;
     cam.yaw = -0.35; cam.pitch = 0.28; cam.distance = 4.6;
+    // 세로 폰: 창이 화면 아래 절반을 덮으므로 조금 물러나 바라보는 점을 낮춤 → 유니코가 창 위쪽에 보임
+    if (typeof matchMedia !== 'undefined' && matchMedia('(max-width: 600px)').matches) { cam.distance = 6.5; cam.lookOffsetY = -1.25; }
     g.player.unico.facing = cam.yaw + 0.35;
     const body = el('div', 'wd');
     p.append(body);

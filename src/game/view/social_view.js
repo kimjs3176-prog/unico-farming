@@ -135,8 +135,7 @@ export class SocialView {
     this.sent.delete(m.gid);
     const g = this.game, so = g.social, it = CATALOG[s.item];
     this.refund(s.item, s.n);
-    so.gifts = Math.max(0, so.gifts - 1); // 오늘 보낸 횟수도 되돌림
-    so.stats.giftsSent = Math.max(0, so.stats.giftsSent - 1);
+    so.undoGift(); // 오늘 보낸 횟수·누적 기록도 되돌림
     g.ui.toast(m.why === 'busy'
       ? `🎁 너무 빨리 보내서 전하지 못했어요. ${it.emoji} ${it.name} ${s.n}개를 가방에 돌려놨어요`
       : `🎁 ${s.name} 님에게 전하지 못해 ${it.emoji} ${it.name} ${s.n}개를 가방에 돌려놨어요`);

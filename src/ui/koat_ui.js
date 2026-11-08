@@ -3,6 +3,7 @@ import {
   DIVISIONS, PASS_SCORE, TOUR_REWARD, makeMatchRound, scoreMatch, makeStagesRound, SEED_KINDS,
   makeInspectRound, makeCarbonRound, scoreRun, scoreConveyor, makeConveyor,
 } from '../game/sim/koat.js';
+import { touchUI } from '../game/input.js';
 
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -405,7 +406,7 @@ export function installKoatUI(UI) {
       };
       p.append(b);
     }
-    const go = h('div', 'koat-meta', '💡 부스 앞에서 E 를 누르거나 부스를 클릭하면 체험이 시작돼요. 출처: koat.or.kr 조직도·주요사업');
+    const go = h('div', 'koat-meta', `💡 ${touchUI() ? '부스를 누르면 걸어가서' : '부스 앞에서 E 를 누르거나 부스를 클릭하면'} 체험이 시작돼요. 출처: koat.or.kr 조직도·주요사업`);
     p.append(go);
   };
 }

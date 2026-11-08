@@ -40,6 +40,7 @@ export class FollowCamera {
     this.smooth = new THREE.Vector3();
     this.first = true;
     this.lockTarget = null;
+    this.lookOffsetY = 0; // 바라보는 높이 보정 (세로 폰 옷장: 유니코가 아래 창 위로 보이게 낮춤)
   }
 
   update(dt, input, targetPos) {
@@ -49,7 +50,7 @@ export class FollowCamera {
       this.distance = THREE.MathUtils.clamp(this.distance + input.wheel * 0.01, 4, 18);
     }
     this.target.copy(targetPos);
-    this.target.y += 1.1;
+    this.target.y += 1.1 + (this.lookOffsetY || 0);
     if (this.first) { this.smooth.copy(this.target); this.first = false; }
     this.smooth.lerp(this.target, 1 - Math.pow(0.001, dt));
     const off = (this._off ||= new THREE.Vector3()).set(
