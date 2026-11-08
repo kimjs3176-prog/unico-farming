@@ -153,7 +153,10 @@ button:disabled { opacity: 0.45; cursor: default; }
 /* 글자를 키웠는데 화면이 좁으면 채팅을 아래 행동 막대 위로 올림 */
 @media (max-width: 1500px) { body.ui-big .chat { bottom: 92px; width: min(60vw, 280px); } }
 /* 좁은 데스크톱 창·태블릿: 가운데 행동 막대(폭 약 641px)가 채팅 자리까지 넓어서 채팅을 막대 위로 (폰은 뒤의 모바일 블록이 이김) */
-@media (min-width: 601px) and (max-width: 1340px) { .chat { bottom: 112px; } body.ui-big .chat { bottom: 128px; } }
+@media (min-width: 601px) and (max-width: 1340px) { .chat { bottom: 112px; } body.ui-big .chat { bottom: 128px; }
+  /* 올린 채팅이 가운데 안내(E)를 덮지 않게: 입력 중이 아닐 때만 맨 아래 층 (안내를 올리면 스마트팜 창·운전 버튼을 덮음).
+     isolate: 채팅이 게임 화면 아래로 가지 않게 */
+  #ui { isolation: isolate; } .chat:not(:focus-within) { z-index: -1; } }
 .chat .log { max-height: 120px; overflow: auto; font-size: 13px; display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
 .chat .log div { background: rgba(255,255,255,0.8); border-radius: 10px; padding: 3px 8px; width: fit-content; max-width: 100%; }
 .chat input { width: 100%; font: inherit; padding: 8px 10px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.8); background: rgba(255,255,255,0.85); }
@@ -290,6 +293,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 .map-tip { margin: 8px 0 0; font-size: 13px; opacity: 0.75; text-align: center; }
 /* 창 높이가 낮으면 지도를 줄여 장소 버튼까지 스크롤 없이 보이게 (260px = 제목·버튼·안내·여백) */
 .bigmap { width: min(100%, max(200px, calc(86vh / var(--ui-zoom, 1) - 260px))); width: min(100%, max(200px, calc(86dvh / var(--ui-zoom, 1) - 260px))); margin: 0 auto; }
+/* 세로 폰: 제목 리본이 두 줄, 장소 버튼이 네 줄이라 덜어 낼 높이가 더 큼 (가로 폰은 뒤의 '.map-panel .bigmap' 이 이김) */
+@media (max-width: 600px) { .bigmap { width: min(100%, max(200px, calc(86vh / var(--ui-zoom, 1) - 330px))); width: min(100%, max(200px, calc(86dvh / var(--ui-zoom, 1) - 330px))); } }
 
 /* 환경설정 (그래픽 품질) */
 .fps-chip { position: absolute; right: 12px; top: calc(var(--hud-b, 52px) + 162px); background: rgba(35,25,22,0.7); color: #fff; font-size: 12px; padding: 3px 9px; border-radius: 10px; display: none; pointer-events: none; font-variant-numeric: tabular-nums; }

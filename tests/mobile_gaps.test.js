@@ -106,6 +106,22 @@ test('FX: 동시에 떠 있는 입자는 낮음 48개, 그 밖 128개까지 (넘
   assert.equal(fx.live, 128);
 });
 
+test('FX: 상한에 걸린 별 터지기는 개수를 줄여 고른 고리로 (한쪽으로 쏠리지 않음)', () => {
+  SURF.seeCam.value.set(0, 5, 10);
+  const fx = new FX(new THREE.Scene(), { level: 'low' });
+  fx.sprinkle(0, 0); fx.sprinkle(0, 0); // 28
+  for (let i = 0; i < 4; i++) fx.dust(0, 0); // 40
+  assert.equal(fx.live, 40);
+  fx.burst(0, 1, 0, 0xffd75a, 24);
+  const stars = fx.items.filter((it) => it.star);
+  assert.equal(stars.length, 8, '남은 8개만');
+  assert.equal(fx.live, 48);
+  const ang = stars.map((it) => Math.atan2(it.obj.userData.v.z, it.obj.userData.v.x)).map((a) => (a + Math.PI * 2) % (Math.PI * 2)).sort((a, b) => a - b);
+  ang.forEach((a, i) => assert.ok(Math.abs(a - (i / 8) * Math.PI * 2) < 1e-9, `${i}번째 별 각도`));
+  fx.burst(0, 1, 0, 0xffd75a, 24); // 가득 차면 아무것도 안 만듦
+  assert.equal(fx.items.filter((it) => it.star).length, 8);
+});
+
 // ---------------------------------------------------------------- 마우스 올림: 상자로 먼저 거름
 function outdoorGame(camera, extra = {}) {
   return {
@@ -239,4 +255,27 @@ test('입장 뒤: 목장 손님 동물은 플레이어 위치 없이 바로 넣�
   assert.match(shown, /loadDeferred\?\.\(\)\.then\(\(\) => this\.warmDeferred\(\)\)/);
   assert.match(shown, /compileAsync\(batch, this\.camera, this\.world\.scene\)/);
   assert.match(read('src/game/view/ranch_view.js'), /this\.addVisitors\(playerPos\)/);
+});
+
+test('뒤에서 받는 동물 셰이더: 도착한 것만 모델마다 한 번, 로딩 화면 뒤에서도 준비', () => {
+  const main = read('src/main.js');
+  const src = main.slice(main.indexOf('  warmDeferred() {'), main.indexOf('  resetSave()')).trim();
+  const warm = new Function('THREE', 'DEFERRED_MODELS', `return function ${src}`)(THREE, [['q_horse', 'q_donkey'], ['q_wolf']]);
+  const have = new Set(['q_horse']);
+  const batches = [];
+  const g = {
+    camera: new THREE.PerspectiveCamera(), world: { scene: new THREE.Scene() }, postfx: null,
+    assets: { deferredDone: false, has: (n) => have.has(n), anims: new Map(), clone: (n) => Object.assign(new THREE.Object3D(), { name: n }) },
+    renderer: { compileAsync: (b) => { batches.push(b.children.map((o) => o.name)); return Promise.resolve(); }, getRenderTarget: () => null, setRenderTarget() {} },
+  };
+  assert.ok(warm.call(g) instanceof Promise, '기다릴 수 있게 약속을 돌려줌');
+  assert.equal(warm.call(g), null, '이미 준비한 것은 다시 하지 않음');
+  have.add('q_donkey'); have.add('q_wolf');
+  warm.call(g);
+  assert.deepEqual(batches, [['q_horse'], ['q_donkey', 'q_wolf']]);
+  assert.equal(g._warmedDeferred, true, '다 왔으면 멈춤');
+  // 입장 전 컴파일(5초 경주) 안에서 함께, 게임 루프에서는 도착하는 대로 (목장이 풀기 전에)
+  assert.match(main, /Promise\.race\(\[Promise\.all\(\[R\.compileAsync\(sc, cm\), window\.game\.warmDeferred\(\)\]\)/);
+  const loop = main.slice(main.indexOf('  loop(now'), main.indexOf('this.ranch.update(dt, pw)'));
+  assert.match(loop, /if \(!this\._warmedDeferred\) this\.warmDeferred\(\)/);
 });

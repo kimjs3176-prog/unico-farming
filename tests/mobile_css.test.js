@@ -130,6 +130,22 @@ test('좁은 데스크톱 창(601~1340px): 채팅이 가운데 행동 막대 위
   for (const env of [PHONE, LAND]) assert.match(value(env, '.chat', 'bottom'), /^calc\(60px/);
 });
 
+test('좁은 데스크톱 창: 올린 채팅이 가운데 안내(E)를 덮지 않음, 입력 중에는 채팅이 위', () => {
+  const NARROW = { w: 800, h: 600, coarse: false };
+  for (const env of [NARROW, DESK, DESK2]) {
+    // 안내는 z-index 없음(0 층) → 입력 중이 아닌 채팅(음수)이 그 아래. 안내를 올리지 않으므로 스마트팜 창·운전 버튼은 그대로 안내 위
+    assert.equal(value(env, '.prompt', 'z-index'), undefined);
+    assert.ok(Number(value(env, '.chat:not(:focus-within)', 'z-index')) < 0);
+    assert.equal(value(env, '.chat:focus-within', 'z-index'), undefined, '입력 중이면 원래 순서');
+    assert.equal(value(env, '#ui', 'isolation'), 'isolate', '음수 층이 게임 화면 아래로 가지 않게');
+  }
+  // 입력 중 원래 순서에서 채팅이 안내보다 위: #ui 안에서 안내 → 채팅 순서
+  const ui = read('src/ui/ui.js');
+  assert.ok(ui.indexOf('root.append(this.prompt)') < ui.indexOf('root.append(this.chat)'));
+  // 넓은 창·세로 폰은 그대로 (채팅이 안내와 겹치지 않음)
+  for (const env of [WIDE, PHONE]) assert.equal(value(env, '.chat:not(:focus-within)', 'z-index'), undefined);
+});
+
 test('낮은 창(가로 폰·낮은 데스크톱 창): 장터 압축, 큰 지도는 옆으로 나란히', () => {
   for (const env of [LAND, SHORT]) {
     assert.equal(value(env, '.panel.market', 'max-height'), 'none');
@@ -146,6 +162,9 @@ test('낮은 창(가로 폰·낮은 데스크톱 창): 장터 압축, 큰 지도
   }
   // 큰 지도: 창 높이에 맞춘 상한 (넓고 높은 창에서는 100% 그대로)
   assert.match(value(WIDE, '.bigmap', 'width'), /^min\(100%, max\(200px, calc\(86dvh/);
+  for (const env of [DESK, DESK2, WIDE, TABLET]) assert.match(value(env, '.bigmap', 'width'), /- 260px\)\)\)$/);
+  // 세로 폰: 두 줄 제목·네 줄 장소 버튼만큼 더 뺌 (390x664 에서 지도 약 241px, 스크롤 없음)
+  assert.match(value(PHONE, '.bigmap', 'width'), /^min\(100%, max\(200px, calc\(86dvh \/ var\(--ui-zoom, 1\) - 330px\)\)\)$/);
 });
 
 test('미니게임 창은 투명도만 나타남 (화면 전체가 미끄러지면 바구니 끌기가 어긋남)', () => {

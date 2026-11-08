@@ -396,22 +396,29 @@ class Game {
     this.assets.loadDeferred?.().then(() => this.warmDeferred()).catch(() => {});
   }
 
-  /** 뒤에서 받은 동물(말·당나귀·알파카·늑대·여우)의 셰이더를 미리 준비 → 처음 화면에 나올 때 끊기지 않게 (가능하면 병렬) */
+  /**
+   * 뒤에서 받은 동물(말·당나귀·알파카·늑대·여우)의 셰이더를 미리 준비 → 처음 화면에 나올 때 끊기지 않게 (가능하면 병렬).
+   * 도착한 것 중 아직 안 한 것만 (여러 번 불러도 모델마다 한 번). 준비가 끝나면 풀리는 약속, 할 것이 없으면 null
+   */
   warmDeferred() {
     const r = this.renderer, A = this.assets;
-    if (this._warmedDeferred || !r?.compileAsync) return;
-    this._warmedDeferred = true;
+    if (this._warmedDeferred) return null;
+    if (!r?.compileAsync) { this._warmedDeferred = true; return null; }
+    const done = (this._warmedNames ||= new Set());
     const batch = new THREE.Object3D();
     for (const n of DEFERRED_MODELS.flat()) {
-      if (A.has(n)) batch.add(A.anims.get(n)?.length ? A.cloneAnimated(n).root : A.clone(n)); // 실제로 놓을 때와 같은 복제 (재질 공유)
+      if (done.has(n) || !A.has(n)) continue;
+      done.add(n);
+      batch.add(A.anims.get(n)?.length ? A.cloneAnimated(n).root : A.clone(n)); // 실제로 놓을 때와 같은 복제 (재질 공유)
     }
-    if (!batch.children.length) return;
+    if (A.deferredDone || done.size === DEFERRED_MODELS.flat().length) this._warmedDeferred = true; // 더 올 것이 없음
+    if (!batch.children.length) return null;
     const prevRT = r.getRenderTarget?.() ?? null;
     try {
       // 화면 효과가 켜져 있으면 그 버퍼에 그리므로(톤매핑·색 공간이 다름) 그 대상으로 준비, 불빛·안개는 실제 장면 것
       r.setRenderTarget?.(this.postfx?.enabled ? this.postfx.composer.readBuffer : null);
-      r.compileAsync(batch, this.camera, this.world.scene).catch(() => {});
-    } catch { /* 처음 나올 때 준비 */ } finally { r.setRenderTarget?.(prevRT); }
+      return r.compileAsync(batch, this.camera, this.world.scene).catch(() => {});
+    } catch { return null; /* 처음 나올 때 준비 */ } finally { r.setRenderTarget?.(prevRT); }
   }
 
   resetSave() { clearSave(); location.reload(); } // clearSave 뒤에는 떠날 때 저장이 막힘 (지운 농장이 되살아나지 않게)
@@ -562,6 +569,7 @@ class Game {
     if (input.pressed.has('KeyM') && (!this.ui.panel || this.ui.panel.dataset.kind === 'map')) this.minimap.openBig(); // 지도 열기/닫기
 
     const pp = this.player.position;
+    if (!this._warmedDeferred) this.warmDeferred(); // 뒤에서 받는 동물: 도착한 프레임에 셰이더 준비 (목장이 1초마다 풀어 놓기 전에)
     this.world.update(dt, this.tractor.driving ? this.tractor.riderGroup.position : pp);
     this.season.update(dt);
     // 상호작용 후보: 진행 중인 미니게임(d<0)이 최우선, 그다음 가장 가까운 대상
@@ -728,9 +736,10 @@ async function boot() {
     await new Promise((r) => requestAnimationFrame(r)); // '화면 준비 중' 문구가 먼저 보이게
     // 셰이더 미리 준비: 지원 브라우저(KHR_parallel_shader_compile)는 병렬로, 화면을 멈추지 않고 기다림.
     // 일부 환경에서 compileAsync 가 끝나지 않는 일이 있어 최대 5초만 기다림 (남은 것은 첫 프레임에)
+    // 닉네임을 고르는 동안 받아 둔 동물도 여기서 함께 (로딩 화면이 사라지는 순간에 컴파일이 몰리지 않게)
     const R = window.game.renderer, sc = window.game.world.scene, cm = window.game.camera;
     try {
-      try { await Promise.race([R.compileAsync(sc, cm), new Promise((r) => setTimeout(r, 5000))]); }
+      try { await Promise.race([Promise.all([R.compileAsync(sc, cm), window.game.warmDeferred()]), new Promise((r) => setTimeout(r, 5000))]); }
       catch { try { R.compile(sc, cm); } catch { /* 첫 프레임에 컴파일 */ } }
       window.game.warmUp?.();
     } finally { window.game.startLoop(); } // 이제부터 루프: 아래 두 프레임은 로딩 화면 뒤에서 실제로 그려짐

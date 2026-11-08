@@ -48,6 +48,8 @@ export class FX {
   /** 별 반짝임 터지기 (가산 혼합) */
   burst(x, y, z, color = 0xffd75a, n = 12) {
     if (n <= 6 && this._far(x, y, z)) return; // 순간이동·집 넓히기처럼 큰 효과는 카메라가 아직 멀어도 그대로
+    n = Math.min(n, this.cap - this.live); // 상한에 걸리면 개수를 줄여 고른 둥근 고리로 (앞쪽 각도만 나와 한쪽으로 쏠리지 않게)
+    if (n <= 0) return;
     if (!this.starGeo) this.starGeo = new THREE.OctahedronGeometry(0.06, 0);
     const make = () => {
       const s = new THREE.Mesh(this.starGeo, new THREE.MeshBasicMaterial({ transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false }));
