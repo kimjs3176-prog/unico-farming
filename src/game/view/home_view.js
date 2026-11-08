@@ -27,6 +27,24 @@ const MAT = {
 for (const [k, m] of Object.entries(MAT)) { m.name = `home_${k}`; enhanceMaterial(m); }
 const box = (w, h, d, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); return o; };
 const ball = (r, m, x, y, z) => { const o = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), m); o.position.set(x, y, z); return o; };
+/** 빛을 받는 재질 (장면의 불빛 개수가 바뀌면 셰이더를 새로 만듦) */
+const litMat = (m) => !!m && !!(m.isMeshStandardMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial || m.isMeshToonMaterial
+  || m.isShadowMaterial || (m.isShaderMaterial && m.lights));
+const litMesh = (o) => (Array.isArray(o.material) ? o.material.some(litMat) : litMat(o.material));
+const _sph = new THREE.Sphere();
+/** 화면 밖 판정에 쓰는 경계 구(월드 좌표)의 가장 낮은 높이 */
+function sphereBottom(o) {
+  let s = o.boundingSphere; // 묶음(인스턴스)·스킨 메시는 자기 경계 구
+  if (s === null && !o.isSkinnedMesh && o.computeBoundingSphere) { o.computeBoundingSphere(); s = o.boundingSphere; }
+  if (!s) {
+    const geo = o.geometry;
+    if (!geo?.attributes?.position) return Infinity;
+    if (!geo.boundingSphere) geo.computeBoundingSphere();
+    s = geo.boundingSphere;
+  }
+  _sph.copy(s).applyMatrix4(o.matrixWorld);
+  return _sph.center.y - _sph.radius;
+}
 
 /** 박공 지붕 (앞뒤로 기운 판 두 장 + 마룻대) */
 function roof(w, d, y, rise, mat = MAT.roof) {
@@ -124,8 +142,9 @@ export class HomeView {
     this.obstacle = { x: H.x, z: H.z + HOUSE_BACK, r: 2.8 };
     game.world.obstacles.push(this.obstacle);
     this.smokeT = 0;
-    // 실내 (맵 밖 IO 에 지어 둠). 불빛은 밖에서는 장면 계산에서 빼 둠(visible=false → 바깥 조각마다 빛 계산 하나 덜 함)
-    // 실내용 셰이더는 처음 들어갈 때 페이드 뒤에서 한 번 준비 (_warmRoom), 그 뒤로는 드나들어도 다시 만들지 않음
+    // 실내 (맵 밖 IO 에 지어 둠). 불빛은 후처리를 안 쓰는 품질(낮음)에서는 밖에서 장면 계산에서 빼 둠 (바깥 조각마다 빛 계산 하나 덜 함)
+    // 그때 실내용 셰이더는 처음 들어갈 때 페이드 동안 한 번 준비 (_warmRoom), 그 뒤로는 드나들어도 다시 만들지 않음
+    // 후처리를 쓰는 품질은 예전처럼 꺼진 채(세기 0)로 늘 장면에 둠 → 들어갈 때 셰이더를 새로 만들 일이 없음
     this.inside = false;
     this.outPos = { x: LAYOUT.home.door.x, z: LAYOUT.home.door.z - 0.8 };
     this.outVec = new THREE.Vector3(this.outPos.x, 0, this.outPos.z);
@@ -133,7 +152,7 @@ export class HomeView {
     this.roomLampMat = new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffc46b, emissiveIntensity: 0.2 });
     this.roomLight = new THREE.PointLight(0xffd6a0, 0, 16, 1.4);
     this.roomLight.position.set(IO.x, IO.y + 2.7, IO.z);
-    this.roomLight.visible = false;
+    this.roomLight.visible = this._lightOutside();
     game.world.scene.add(this.roomLight);
     this.build();
   }
@@ -158,9 +177,15 @@ export class HomeView {
     this.buildRoom();
   }
 
+  /** 밖에서도 방 불빛(세기 0)을 장면에 둘지: 후처리를 쓸 때만. 품질이 바뀌어 후처리가 켜지고 꺼질 때는
+   *  어차피 모든 셰이더가 다시 만들어지므로 그때 함께 바꿈 (update 가 매 프레임 맞춤) */
+  _lightOutside() { return !!this.game.postfx?.enabled; }
+
   update(dt, pp) {
     const g = this.game, w = g.world;
     if (this.inside) return this._updateInside(dt, pp);
+    const keep = this._lightOutside();
+    if (this.roomLight.visible !== keep) { this.roomLight.visible = keep; this.roomLight.intensity = 0; }
     // 밤엔 창문·등불에 불, 굴뚝 연기 (저녁·아침과 2층 집은 늘)
     const night = 1 - THREE.MathUtils.clamp(w.daylight * 2.2, 0, 1);
     this.glass.emissiveIntensity = night * 1.1;
@@ -208,15 +233,32 @@ export class HomeView {
     if (el) { el.classList.remove('on'); setTimeout(() => el.remove(), 700); }
   }
 
-  /** 처음 들어갈 때 한 번: 방 불빛을 켠 상태의 셰이더를 페이드 동안 미리 준비 (가능하면 병렬, 화면을 멈추지 않음)
-   *  화면 효과(후처리)를 쓰는 품질은 그리는 대상이 달라 미리 준비해도 쓰이지 않으므로 건너뜀 */
+  /** 처음 들어갈 때 한 번 (밖에서 방 불빛을 빼 둔 경우만): 불빛을 켠 상태의 셰이더를 페이드 동안 미리 준비 (가능하면 병렬)
+   *  대상: 방·내 캐릭터 + 방 카메라에 잡힐 수 있는 빛 받는 메시
+   *   - 컬링을 끈 메시 (목장 동물·콩이 등 — 어디서나 그려짐)
+   *   - 경계 구가 방 높이까지 내려오는 큰 메시 (맵 전체를 묶은 지형·물·나무 묶음 등)
+   *     방 카메라는 IO.y+20 아래에서 내려다보고, 옷장 미리보기도 IO.y+6 아래에서 위로 7° 안이라 600m 안에서 IO.y+80 위는 화면에 없음
+   *  그리는 대상(화면)에 따라 톤매핑·색 공간이 달라 셰이더가 다르므로, 실제로 그릴 대상을 묶어 두고 준비 */
   _warmRoom() {
     const g = this.game, r = g.renderer;
-    if (this._warmed || !r?.compileAsync || g.postfx?.enabled) return;
+    if (this._warmed || !r?.compileAsync || this.roomLight.visible) return;
     this._warmed = true;
+    const list = [this.room.group, g.player.unico.group], reach = IO.y + 80;
+    g.world.scene.traverseVisible((o) => {
+      if (o.isMesh && litMesh(o) && (o.frustumCulled === false || sphereBottom(o) < reach)) list.push(o);
+    });
+    // 부모를 바꾸지 않고 한 번에 준비 (자식 목록만 빌린 빈 묶음 → 장면 불빛 모으기도 한 번만)
+    const batch = new THREE.Object3D();
+    batch.children = list;
+    const prevRT = r.getRenderTarget?.() ?? null;
     this.roomLight.visible = true;
-    try { for (const o of [this.room.group, g.player.unico.group]) r.compileAsync(o, g.camera, g.world.scene).catch(() => {}); } catch { /* 첫 프레임에 준비 */ }
-    this.roomLight.visible = this.inside;
+    try {
+      r.setRenderTarget?.(g.postfx?.enabled ? g.postfx.composer.readBuffer : null);
+      r.compileAsync(batch, g.camera, g.world.scene).catch(() => {}); // compile 자체는 바로 끝남 → 아래에서 되돌려도 됨
+    } catch { /* 첫 프레임에 준비 */ } finally {
+      r.setRenderTarget?.(prevRT);
+      this.roomLight.visible = this.inside || this._lightOutside();
+    }
   }
 
   /** 들어가기: 방으로 옮기고, 카메라를 위·앞에서 내려다보게, 바깥(하늘·비·안개)은 가림 */
@@ -255,7 +297,8 @@ export class HomeView {
       this.inside = false;
       this.room.group.visible = false;
       g.world.playerCollision = null;
-      this.roomLight.visible = false;
+      this.roomLight.intensity = 0;
+      this.roomLight.visible = this._lightOutside();
       g.player.unico.floorY = null;
       SURF.floor.value = 0;
       g.player.position.set(this.outPos.x, 0, this.outPos.z);

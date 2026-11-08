@@ -135,7 +135,9 @@ function presetBounds(skin) {
 }
 
 // 그래픽 품질: 낮음이면 NPC·다른 접속자는 가까이서도 저해상도 몸으로, 실제 그림자는 내 캐릭터만 (Unico.setQuality)
-let CHAR_Q = 'high';
+let CHAR_Q = null;
+/** 지금 품질 단계: setQuality 로 알려 준 값, 없으면 게임의 현재 품질 (자동으로 한 단계 내린 것 포함) */
+const charQ = () => CHAR_Q ?? globalThis.game?.quality?.level ?? 'high';
 // 프레임 번호: 내 캐릭터(labelAlways)가 매 프레임 한 번 올림 → 다른 캐릭터가 최근에 화면에 그려졌는지 판단
 let TICK = 0;
 /** 화면 밖 캐릭터의 자세 계산 간격(초), 낮음에서 아주 먼(40m 넘는) 캐릭터의 간격 */
@@ -374,8 +376,8 @@ function makeProp(kind) {
 const EMOTE_ICON = { startle: '❗', cheer: '🎉', heart: '❤️', wave: '👋', think: '❓', water: '💧', tablet: '📱', present: '📊', megaphone: '📣', lab: '🧪' };
 
 export class Unico {
-  /** 그래픽 품질 단계 알려 주기 ('low' | 'medium' | 'high') — 낮음이면 NPC·다른 접속자를 가볍게 그림 */
-  static setQuality(level) { CHAR_Q = level || 'high'; }
+  /** 그래픽 품질 단계 알려 주기 ('low' | 'medium' | 'high') — 낮음이면 NPC·다른 접속자를 가볍게 그림. 비우면 게임 품질을 따라감 */
+  static setQuality(level) { CHAR_Q = level || null; }
 
   /**
    * @param assets (사용 안 함, 호환용)
@@ -650,9 +652,10 @@ export class Unico {
     if (this.group.parent?.isScene) this.group.position.y = (this.floorY ?? heightAt(this.group.position.x, this.group.position.z)) + this.sink;
     // 이름표: 가까울 때만 또렷하게 (멀면 흐려져 화면이 복잡하지 않게). 내 캐릭터는 항상 표시
     let d = Infinity;
+    const low = charQ() === 'low';
     if (camera) {
       d = camera.position.distanceTo(this.group.position);
-      const low = CHAR_Q === 'low', hero = !!this.labelAlways;
+      const hero = !!this.labelAlways;
       // 거리별 표현: 15m 넘으면 저해상도 몸, 24m 넘으면 그림자 끔, 40m 넘으면 얼굴 부품 생략 (경계에서 깜빡이지 않게 여유)
       // 낮음: 내 캐릭터가 아니면 9m 넘으면 저해상도 몸 (대화 구도 7m 안팎은 원본), 실제 그림자 대신 바닥 그림자만
       if (this.skinLod) {
@@ -675,7 +678,7 @@ export class Unico {
     // 내 캐릭터는 늘 매 프레임, 몸 그림자가 화면에 비칠 수 있는 동안도 매 프레임
     if (!this.labelAlways) {
       const hidden = TICK - this._seen > 2 && !(this.skin.castShadow && this.skin.visible);
-      const step = hidden ? HIDDEN_STEP : d > 40 && CHAR_Q === 'low' ? FAR_STEP : 0;
+      const step = hidden ? HIDDEN_STEP : d > 40 && low ? FAR_STEP : 0;
       if (step) {
         this._lazyDt = (this._lazyDt ?? Math.random() * step) + dt;
         if (this._lazyDt < step) return;

@@ -115,3 +115,26 @@ test('화면 밖 NPC 는 자세를 몰아서 계산하고, 화면에 그려지�
     assert.ok(Math.abs(me.t - t0 - 10 / 60) < 1e-9);
   } finally { Unico.setQuality('high'); }
 });
+
+test('품질을 따로 알려 주지 않으면 게임의 현재 품질(자동으로 내린 단계 포함)을 따라감', () => {
+  const npc = new Unico(null, {});
+  const had = 'game' in globalThis, prev = globalThis.game;
+  try {
+    Unico.setQuality(null);
+    globalThis.game = { quality: { level: 'low' } };
+    npc.update(1 / 60, camAt(10));
+    assert.equal(npc.isLod, true);
+    assert.equal(npc.skin.castShadow, false);
+    globalThis.game.quality = { level: 'high' };
+    npc.update(1 / 60, camAt(10));
+    assert.equal(npc.isLod, false);
+    assert.equal(npc.skin.castShadow, true);
+    // 직접 알려 준 값이 우선
+    Unico.setQuality('low');
+    npc.update(1 / 60, camAt(10));
+    assert.equal(npc.isLod, true);
+  } finally {
+    Unico.setQuality('high');
+    if (had) globalThis.game = prev; else delete globalThis.game;
+  }
+});
