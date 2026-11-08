@@ -156,7 +156,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 @media (min-width: 601px) and (max-width: 1340px) { .chat { bottom: 112px; } body.ui-big .chat { bottom: 128px; }
   /* 올린 채팅이 가운데 안내(E)를 덮지 않게: 입력 중이 아닐 때만 맨 아래 층 (안내를 올리면 스마트팜 창·운전 버튼을 덮음).
      isolate: 채팅이 게임 화면 아래로 가지 않게 */
-  #ui { isolation: isolate; } .chat:not(:focus-within) { z-index: -1; } }
+  #ui { isolation: isolate; } .chat:not(:focus-within) { z-index: -1; }
+  /* 올린 채팅이 주민 대화창 아래에 깔리므로 대화하는 동안은 숨김 (대화가 끝나면 다시 보임) */
+  #ui:has(> .dlg:not(.hidden)) > .chat { visibility: hidden; } }
 .chat .log { max-height: 120px; overflow: auto; font-size: 13px; display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
 .chat .log div { background: rgba(255,255,255,0.8); border-radius: 10px; padding: 3px 8px; width: fit-content; max-width: 100%; }
 .chat input { width: 100%; font: inherit; padding: 8px 10px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.8); background: rgba(255,255,255,0.85); }

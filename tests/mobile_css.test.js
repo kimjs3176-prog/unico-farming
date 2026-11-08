@@ -128,6 +128,9 @@ test('좁은 데스크톱 창(601~1340px): 채팅이 가운데 행동 막대 위
   }
   assert.equal(value(WIDE, '.chat', 'bottom'), '12px');
   for (const env of [PHONE, LAND]) assert.match(value(env, '.chat', 'bottom'), /^calc\(60px/);
+  // 올린 채팅(바닥 112px)은 주민 대화창(바닥 96px) 아래에 깔리므로 대화 중에는 숨김
+  for (const env of [DESK, DESK2]) assert.equal(value(env, '#ui:has(> .dlg:not(.hidden)) > .chat', 'visibility'), 'hidden');
+  assert.equal(value(WIDE, '#ui:has(> .dlg:not(.hidden)) > .chat', 'visibility'), undefined, '넓은 창은 채팅이 대화창과 안 겹쳐 그대로');
 });
 
 test('좁은 데스크톱 창: 올린 채팅이 가운데 안내(E)를 덮지 않음, 입력 중에는 채팅이 위', () => {
