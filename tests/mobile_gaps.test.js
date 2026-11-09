@@ -60,7 +60,7 @@ test('입력칸 Enter: 한글 조합을 확정하는 Enter 는 보내기가 아�
   assert.equal(isSubmitEnter({ key: 'Enter', isComposing: false }), true);
   assert.equal(isSubmitEnter({ key: 'Enter' }), true);
   assert.equal(isSubmitEnter({ key: 'a', isComposing: false }), false);
-  assert.match(read('src/main.js'), /nick\.addEventListener\('keydown', \(e\) => \{ if \(isSubmitEnter\(e\)\) start\(\); \}\)/);
+  assert.match(read('src/boot.js'), /nick\.addEventListener\('keydown', \(e\) => \{ if \(isSubmitEnter\(e\)\) start\(\); \}\)/);
 });
 
 // ---------------------------------------------------------------- 음악: 늦게 불린 예약 타이머
@@ -249,17 +249,19 @@ test('꾸미기 시작: 그 전에 탭해 걷던 목표는 지움 (도착해서 
 // ---------------------------------------------------------------- 뒤에서 받는 동물
 test('입장 뒤: 목장 손님 동물은 플레이어 위치 없이 바로 넣지 않음 (ranch.update 가 화면 밖에 풀어 놓음), 셰이더는 미리 준비', () => {
   const main = read('src/main.js');
-  const shown = main.slice(main.indexOf('  shown() {'), main.indexOf('  resetSave()'));
-  assert.ok(shown.length > 0);
+  const at = main.indexOf('  shown() {');
+  const shown = main.slice(at, main.indexOf('\n  }\n', at));
+  assert.ok(at > 0 && shown.length > 0);
   assert.ok(!/addVisitors/.test(shown), 'shown() 이 addVisitors() 를 부르지 않음');
   assert.match(shown, /loadDeferred\?\.\(\)\.then\(\(\) => this\.warmDeferred\(\)\)/);
-  assert.match(shown, /compileAsync\(batch, this\.camera, this\.world\.scene\)/);
+  assert.match(read('src/game/game_gfx.js'), /compileAsync\(batch, this\.camera, this\.world\.scene\)/);
   assert.match(read('src/game/view/ranch_view.js'), /this\.addVisitors\(playerPos\)/);
 });
 
 test('뒤에서 받는 동물 셰이더: 도착한 것만 모델마다 한 번, 로딩 화면 뒤에서도 준비', () => {
-  const main = read('src/main.js');
-  const src = main.slice(main.indexOf('  warmDeferred() {'), main.indexOf('  resetSave()')).trim();
+  const main = read('src/main.js'), gfx = read('src/game/game_gfx.js');
+  const at = gfx.indexOf('  warmDeferred() {');
+  const src = gfx.slice(at, gfx.indexOf('\n  },', at) + 4).trim(); // 믹스인 객체의 메서드 하나 (끝 쉼표 빼고)
   const warm = new Function('THREE', 'DEFERRED_MODELS', `return function ${src}`)(THREE, [['q_horse', 'q_donkey'], ['q_wolf']]);
   const have = new Set(['q_horse']);
   const batches = [];
@@ -275,7 +277,7 @@ test('뒤에서 받는 동물 셰이더: 도착한 것만 모델마다 한 번, 
   assert.deepEqual(batches, [['q_horse'], ['q_donkey', 'q_wolf']]);
   assert.equal(g._warmedDeferred, true, '다 왔으면 멈춤');
   // 입장 전 컴파일(5초 경주) 안에서 함께, 게임 루프에서는 도착하는 대로 (목장이 풀기 전에)
-  assert.match(main, /Promise\.race\(\[Promise\.all\(\[R\.compileAsync\(sc, cm\), window\.game\.warmDeferred\(\)\]\)/);
+  assert.match(read('src/boot.js'), /Promise\.race\(\[Promise\.all\(\[R\.compileAsync\(sc, cm\), window\.game\.warmDeferred\(\)\]\)/);
   const loop = main.slice(main.indexOf('  loop(now'), main.indexOf('this.ranch.update(dt, pw)'));
   assert.match(loop, /if \(!this\._warmedDeferred\) this\.warmDeferred\(\)/);
 });

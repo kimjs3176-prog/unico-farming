@@ -3,12 +3,11 @@ import { HomeView } from './game/view/home_view.js';
 import { TownView } from './game/view/town_view.js';
 import { AutoPlay } from './game/autoplay.js';
 import * as THREE from 'three';
-import { Assets, DEFERRED_MODELS } from './game/assets.js';
-import { World, LAYOUT } from './game/world.js';
-import { Input, lookHold, isSubmitEnter } from './game/input.js';
-import { FollowCamera, BASE_FOV, fovFor, releaseInput } from './game/camera.js';
+import './game/assets.js'; // 모델 로더는 예전처럼 여기서 평가 (three·공유 청크 내용과 해시가 그대로 → 브라우저 캐시 재사용)
+import { World } from './game/world.js';
+import { Input, lookHold } from './game/input.js';
+import { FollowCamera, BASE_FOV, releaseInput } from './game/camera.js';
 import { Player } from './game/player.js';
-import { Unico } from './game/unico.js';
 import { FarmView } from './game/view/farm_view.js';
 import { RanchView } from './game/view/ranch_view.js';
 import { Pet } from './game/view/pet.js';
@@ -27,12 +26,10 @@ import { UI } from './ui/ui.js';
 import { FX } from './game/fx.js';
 import { Audio } from './game/audio.js';
 import { Net } from './game/net.js';
-import { saveGame, loadSave, clearSave } from './game/save.js';
 import { Minimap } from './ui/minimap.js';
-import { randomName } from './game/names.js';
 import { Juice } from './game/juice.js';
 import { PostFX, FrameCap } from './game/postfx.js';
-import { loadSettings, saveSettings, resolveQuality, applyPreset, FpsGovernor, LEVELS, PRESET_INFO, uiScaleOf, isMobileDevice } from './game/quality.js';
+import { loadSettings, resolveQuality, applyPreset, FpsGovernor, LEVELS, PRESET_INFO, isMobileDevice } from './game/quality.js';
 import { SURF } from './game/surface.js';
 import { Music } from './game/music.js';
 import { Guide } from './game/guide.js';
@@ -48,24 +45,17 @@ import { Angling } from './game/sim/angling.js';
 import { WaterFX } from './game/waterfx.js';
 import { FarmCraftView } from './game/view/farmcraft_view.js';
 import { CostumeSim, COSTUME, encodeLook } from './game/sim/costume.js';
-import { joinQrBox } from './ui/join_qr.js';
 import { SocialSim } from './game/sim/social.js';
 import { SocialView } from './game/view/social_view.js';
 import { SeasonView } from './game/view/season_view.js';
 import { DecorView } from './game/view/decor_view.js';
 import { DIVISIONS } from './game/sim/koat.js';
-import { HILLS } from './game/terrain.js';
-
-/** 뒤로 가기용 기록 하나 끼워 두기 (주소·쿼리는 그대로) */
-function pushBackGuard() {
-  try { if (!history.state?.unicoBack) history.pushState({ unicoBack: 1 }, ''); } catch { /* 무시 */ }
-}
-/** 캔버스로 굽는 이름표·표지판 글자: Jua 한글 조각을 미리 받아 대체 글꼴로 굳지 않게 */
-const LABEL_TEXT = [
-  ...Object.values(LAYOUT.npcs).map((n) => n.name), ...HILLS.map((h) => h.name),
-  '유니코 팜 스마트팜 목장 밭갈이 트랙터 체험 양 몰이 우리에 넣어요 전망대 올라와 보세요 오늘의 주문서 로컬푸드 직매장 납품',
-  '낚시터 기록판 의뢰 최대어 새 마을 부지 코인으로 건물을 지어요 KOAT 체험관 콩이 명예 연구원',
-].join(' ');
+import { boot, pushBackGuard } from './boot.js';
+import { GameGfx } from './game/game_gfx.js';
+import { GameSave } from './game/game_save.js';
+import { GameStory } from './game/game_story.js';
+import { GameTravel } from './game/game_travel.js';
+import { GameProgress } from './game/game_progress.js';
 
 class Game {
   constructor(canvas, assets, name, audio) {
@@ -187,13 +177,6 @@ class Game {
     this.renderer.setAnimationLoop((t) => this.loop(t));
   }
 
-  /** 지금 상태 저장 (초기화 중이면 save.js 가 막음) */
-  save() {
-    this.saveTimer = 0;
-    if (this._introPending) return; // 첫 접속: 인트로 시작 전에는 저장하지 않음 (저장이 생기면 다음 접속에 인트로가 안 나옴)
-    saveGame(this);
-  }
-
   /** 앱 전환·탭 닫기: 바로 저장, 눌린 입력 정리, (모바일) 소리 멈춤 → 돌아오면 다시 켬 */
   watchLifecycle() {
     document.addEventListener('visibilitychange', () => {
@@ -262,129 +245,6 @@ class Game {
     });
   }
 
-  /** 환경설정에서 그래픽 설정을 바꿨을 때 (저장 + 즉시 적용) */
-  setGraphics(settings) {
-    this.saver = 0; // 설정을 바꾸면 절전 단계 풀림
-    this.gfx = settings;
-    saveSettings(settings);
-    const prev = this.quality;
-    const q = resolveQuality(settings);
-    const rebuildPost = prev.post !== q.post || prev.ao !== q.ao || prev.tiltShift !== q.tiltShift || prev.env !== q.env; // env: 환경맵(IBL) 켜고 끄기
-    this.applyQuality(q, { rebuildPost });
-  }
-
-  applyQuality(q, { rebuildPost = false } = {}) {
-    this.quality = q;
-    this.world.quality = q;
-    Unico.setQuality(q.level); // 낮음이면 NPC·다른 접속자는 저해상도 몸·실제 그림자 끔
-    this.renderer.setPixelRatio(q.pixelRatio);
-    // 그림자: 끄기/켜기, 해상도 바꾸면 그림자 맵 다시 만들기
-    const sun = this.world.sun;
-    sun.castShadow = q.shadows !== 'off';
-    if (sun.shadow.mapSize.x !== q.shadowMap) {
-      sun.shadow.mapSize.set(q.shadowMap, q.shadowMap);
-      sun.shadow.map?.dispose();
-      sun.shadow.map = null;
-    }
-    // 그림자 맵은 loop 에서 한 프레임에 한 번만 갱신 (자동 갱신이면 GTAO·반사 연못의 추가 render 마다 똑같이 다시 그림)
-    this.renderer.shadowMap.autoUpdate = false;
-    this.renderer.shadowMap.needsUpdate = true;
-    this.world.scenery?.setDensity(q.grass);
-    this.fx?.setQuality(q); // 입자 상한
-    if (rebuildPost) {
-      this.world.scenery?._water(); // 반사 연못은 화면 효과가 켜진 품질에서만
-      this.postfx.dispose();
-      this.postfx = new PostFX(this.renderer, this.world.scene, this.camera, q);
-    }
-    this.postfx.enabled = q.post;
-    this.resize();
-    this.ui?.updateFps?.();
-    this.applyUiScale();
-  }
-
-  /** 자동 품질이 이미 가장 낮은데도 끊길 때: 저장하지 않는 절전 단계 (새로 고치거나 설정을 바꾸면 원래대로) */
-  lighten() {
-    if ((this.saver || 0) >= 2) return;
-    this.saver = (this.saver || 0) + 1;
-    this.applyQuality(this.withSaver(resolveQuality(this.gfx)));
-    if (this.saver === 1) this.ui.toast('⚙️ 화면이 끊겨서 풀과 그림자 갱신을 줄여 더 가볍게 했어요');
-  }
-
-  /** 절전 단계: 1) 풀 절반 + 그림자 갱신 덜 자주 2) 해상도 80% (셰이더를 다시 만들지 않는 항목만) */
-  withSaver(q) {
-    const s = this.saver || 0;
-    if (!s) return q;
-    return {
-      ...q,
-      grass: q.grass * 0.5,
-      shadowEvery: q.shadowEvery > 0 ? Math.max(q.shadowEvery, 6) : q.shadowEvery,
-      pixelRatio: s >= 2 ? Math.max(0.5, q.pixelRatio * 0.8) : q.pixelRatio,
-    };
-  }
-
-  /** 글자·버튼 크기: 화면 UI 요소마다 배율 (환경설정) */
-  applyUiScale() {
-    const v = uiScaleOf(this.gfx);
-    document.getElementById('ui')?.style.setProperty('--ui-zoom', String(v));
-    document.body.classList.toggle('ui-big', v > 1);
-    this.ui?.syncHudBottom?.();
-  }
-
-  resize() {
-    const w = innerWidth, h = innerHeight;
-    this.renderer.setSize(w, h, false);
-    this.camera.aspect = w / h;
-    this.camera.fov = fovFor(w / h); // 세로 폰: 주변이 보이도록 시야를 넓힘
-    this.camera.updateProjectionMatrix();
-    this.postfx?.setSize(w, h);
-  }
-
-  restore() {
-    const s = loadSave();
-    if (!s) { this._introPending = true; this.whenShown(() => setTimeout(() => this.introCutscene(), 700)); return; }
-    this.flags = s.flags || {};
-    this.farm.sim.load(s.farm);
-    this.farm.refreshAll();
-    this.economy.load(s.economy);
-    this.quests.load(s.quests);
-    this.ranch.load(s.ranch);
-    this.rice.load(s.rice);
-    this.nature.load(s.nature);
-    this.villagers.load(s.villagers);
-    this.collection.load(s.collection);
-    this.koat.load(s.koat);
-    this.explore.load(s.explore);
-    this.bees.load(s.bees);
-    this.angling.load(s.angling);
-    this.farmcraft.load(s.farmcraft);
-    this.town.load(s.town);
-    this.home.load(s.home);
-    this.costume.load(s.costume);
-    this.social.load(s.social);
-    this.decor.load(s.decor);
-    this.applyLook(false);
-    if (this.pet.ok) this.pet.load(s.pet);
-    if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원');
-    if (s.world) { this.world.time = s.world.time; this.world.day = s.world.day; }
-    this.social.newDay(this.world.day);
-    if (s.player) this.player.position.set(s.player.x, 0, s.player.z);
-    this.ui.toast('💾 저장된 농장을 불러왔어요');
-  }
-
-  /** 로딩 화면 뒤에서 인트로 전경 시점으로 한 번 그려 둠: 처음 화면에 들어오는 물체·그림자를 미리 준비해 인트로 첫 몇 초의 끊김을 줄임 */
-  warmUp() {
-    if (this.flags.intro) return; // 인트로를 이미 본 저장이면 생략
-    const cam = this.camera, p = cam.position.clone(), q = cam.quaternion.clone();
-    try {
-      for (const [pos, look] of [[[10, 22, 30], [0, 0, 0]], [[16, 16, 26], [0, 0, 0]]]) {
-        cam.position.set(...pos); cam.lookAt(...look); cam.updateMatrixWorld();
-        this.renderer.shadowMap.needsUpdate = true;
-        this.postfx.render();
-      }
-    } catch { /* 첫 프레임에 준비 */ }
-    cam.position.copy(p); cam.quaternion.copy(q); cam.updateMatrixWorld();
-  }
-
   /** 로딩 화면이 사라진 뒤 실행 (첫 접속 컷신 등) */
   whenShown(fn) { if (this._shown) fn(); else (this._onShown ||= []).push(fn); }
   shown() {
@@ -396,82 +256,6 @@ class Game {
     this.assets.loadDeferred?.().then(() => this.warmDeferred()).catch(() => {});
   }
 
-  /**
-   * 뒤에서 받은 동물(말·당나귀·알파카·늑대·여우)의 셰이더를 미리 준비 → 처음 화면에 나올 때 끊기지 않게 (가능하면 병렬).
-   * 도착한 것 중 아직 안 한 것만 (여러 번 불러도 모델마다 한 번). 준비가 끝나면 풀리는 약속, 할 것이 없으면 null
-   */
-  warmDeferred() {
-    const r = this.renderer, A = this.assets;
-    if (this._warmedDeferred) return null;
-    if (!r?.compileAsync) { this._warmedDeferred = true; return null; }
-    const done = (this._warmedNames ||= new Set());
-    const batch = new THREE.Object3D();
-    for (const n of DEFERRED_MODELS.flat()) {
-      if (done.has(n) || !A.has(n)) continue;
-      done.add(n);
-      batch.add(A.anims.get(n)?.length ? A.cloneAnimated(n).root : A.clone(n)); // 실제로 놓을 때와 같은 복제 (재질 공유)
-    }
-    if (A.deferredDone || done.size === DEFERRED_MODELS.flat().length) this._warmedDeferred = true; // 더 올 것이 없음
-    if (!batch.children.length) return null;
-    const prevRT = r.getRenderTarget?.() ?? null;
-    try {
-      // 화면 효과가 켜져 있으면 그 버퍼에 그리므로(톤매핑·색 공간이 다름) 그 대상으로 준비, 불빛·안개는 실제 장면 것
-      r.setRenderTarget?.(this.postfx?.enabled ? this.postfx.composer.readBuffer : null);
-      return r.compileAsync(batch, this.camera, this.world.scene).catch(() => {});
-    } catch { return null; /* 처음 나올 때 준비 */ } finally { r.setRenderTarget?.(prevRT); }
-  }
-
-  resetSave() { clearSave(); location.reload(); } // clearSave 뒤에는 떠날 때 저장이 막힘 (지운 농장이 되살아나지 않게)
-
-  /** KOAT 체험관 입구로 이동 */
-  goKoat() {
-    if (this.tractor.driving || this.smartfarm.active || this.nature.fishing || this.rice.threshing) return this.ui.toast('지금은 이동할 수 없어요');
-    this.teleport(25, -24, { yaw: 0, pitch: 0.62, distance: 13, facing: Math.PI });
-    this.audio.play('levelup');
-    if (!this.flags.koatIntro) { this.flags.koatIntro = true; this.koatCutscene(); }
-    else this.ui.toast('🏢 KOAT 체험관에 도착! 본부별 부스에서 체험하고 안내데스크에서 스탬프를 확인하세요');
-  }
-
-  /** 처음 접속: 마을을 한 바퀴 둘러보며 안내 강아지가 소개 */
-  introCutscene() {
-    const ge = this.npcs.list.find((e) => e.id === 'guide'), guide = ge?.u;
-    const G = { speaker: guide, name: ge?.name ?? LAYOUT.npcs.guide.name, color: '#6dbb4f', emote: 'megaphone' };
-    const pp = this.player.position;
-    this.flags.intro = true;
-    this._introPending = false; // 이제부터 저장 (다음 접속은 인트로 없이 이어 하기)
-    return this.cinema.play([
-      // 첫 장면: 비스듬한 마을 전경 (정면 높은 전경보다 그리기 25% 가벼움 — 인트로 첫 몇 초 끊김 완화)
-      { cam: [[10, 22, 30], [0, 0, 0], 0.01], hold: 0 },
-      { cam: [[16, 16, 26], [0, 0, 0], 3.2] },
-      { say: [{ ...G, text: `안녕, ${this.playerName}! 유니코 팜에 온 걸 환영해 🦄${guide?.species ? ' 나는 마을 안내를 맡은 강아지야!' : ''}` }] },
-      { cam: [[6, 6, -2], [0, 1, -10], 2.0] },
-      { say: [{ ...G, text: '북쪽 장터에서는 씨앗과 사료를 사고, 키운 작물을 팔 수 있어. 시세는 매일 바뀌니까 잘 보고 팔아!' }] },
-      { cam: [[10, 9, 14], [22, 0, 0], 2.2] },
-      { say: [{ ...G, text: '동쪽 목장에는 젖소·양·닭이 있고, 말이랑 알파카도 놀러 와. 사료를 주면 우유랑 달걀이 생겨.' }] },
-      { cam: [[8, 14, -6], [22, 0, -28], 2.4] },
-      { say: [{ ...G, text: '저 너머 북동쪽은 KOAT 체험관! 한국농업기술진흥원 본부들이 하는 일을 미니게임으로 체험할 수 있어.' }] },
-      { cam: [[pp.x + 3.5, 3.2, pp.z + 6], [pp.x, 1, pp.z], 2.2] },
-      { say: [{ ...G, text: '먼저 밭부터 갈아 보자! 노란 빛기둥이 지금 할 일을 알려 줄 거야. 궁금하면 언제든 나한테 말 걸어 줘 😊' }] },
-      { run: () => { this.ui.toast('🎯 왼쪽 위 목표를 따라가 보세요 · ⚙️ 환경설정에서 그래픽 품질을 바꿀 수 있어요'); saveGame(this); } },
-    ]);
-  }
-
-  /** KOAT 체험관 첫 방문: 광장과 본관을 비추며 안내데스크가 설명 */
-  koatCutscene() {
-    const desk = this.koat.desk;
-    const D = { speaker: desk, name: '안내데스크 (기획운영본부)', color: '#30b6aa', emote: 'present' };
-    return this.cinema.play([
-      { cam: [[25, 7, -12], [25, 2, -30], 2.4] },
-      { say: [{ ...D, text: '한국농업기술진흥원(KOAT) 체험관에 온 걸 환영해요!' }] },
-      { cam: [[19.5, 3.4, -24], [17.2, 1.3, -27], 1.8] },
-      { say: [{ ...D, text: '왼쪽은 기술사업화·벤처창업·종자사업, 오른쪽은 스마트농업·농기계검정·농업환경분석 본부 부스예요.' }] },
-      { cam: [[25, 2.6, -26.2], [25, 1.3, -29.3], 1.6] },
-      { say: [{ ...D, text: '부스마다 미니게임을 통과하면 스탬프를 드려요. 여섯 개를 모아 오면 \'KOAT 명예 연구원\' 칭호를 드릴게요!' }] },
-    ]);
-  }
-
-
-  /** 순간이동 (지도·체험관 버튼). 카메라는 현재 각도 유지가 기본 */
   /** 지금 옷차림 (옷장 소품 + 코스튬) */
   outfitNow() {
     const o = this.home.sim.outfit || {};
@@ -484,61 +268,6 @@ class Game {
     const o = this.outfitNow();
     this.player.unico.setOutfit(o);
     if (send) this.net?.sendLook();
-  }
-
-  teleport(x, z, { yaw, pitch, distance, facing } = {}) {
-    this.home?.leave(true); // 집 안에서 지도로 이동하면 먼저 밖으로
-    this.ui.closePanel();
-    this.player.position.set(x, 0, z);
-    this.player.moveTarget = null;
-    this.player.vel?.set(0, 0, 0);
-    if (facing !== undefined) this.player.unico.facing = facing;
-    if (yaw !== undefined) this.followCam.yaw = yaw;
-    if (pitch !== undefined) this.followCam.pitch = pitch;
-    if (distance !== undefined) this.followCam.distance = distance;
-    this.followCam.first = true;
-    this.fx.burst(x, 1.0, z, 0xbfe8ff, 16);
-    this.audio.play('plant');
-  }
-
-  /** 막힌 자리(건물·연못·울타리)면 가까운 빈자리를 나선형으로 찾음 */
-  findOpenSpot(x, z) {
-    const B = LAYOUT.bounds - 2;
-    x = Math.max(-B, Math.min(B, x)); z = Math.max(-B, Math.min(B, z));
-    if (!this.world.isBlocked(x, z, 0.5)) return { x, z };
-    for (let r = 0.8; r < 12; r += 0.8) for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
-      const nx = x + Math.cos(a) * r, nz = z + Math.sin(a) * r;
-      if (Math.abs(nx) < B && Math.abs(nz) < B && !this.world.isBlocked(nx, nz, 0.5)) return { x: nx, z: nz };
-    }
-    return { x: 0, z: 6 };
-  }
-
-  /** 도감 등록 후: 진행 퀘스트, 카테고리 완성 보상 */
-  afterCollect() {
-    this.onEvent('book', Object.keys(this.collection.entries).length);
-    for (const r of this.collection.claimCompletions()) {
-      this.economy.earn(r.money);
-      this.audio.play('levelup');
-      this.ui.result('🏅 도감 완성!', [`${{ fish: '물고기', bug: '곤충', fruit: '과일' }[r.cat]} 도감을 모두 채웠어요!`, `보상 +${r.money}🪙`]);
-    }
-  }
-
-  /** 게임 이벤트 → 퀘스트 진행 */
-  onEvent(event, amount = 1) {
-    const done = this.quests.report(event, amount);
-    for (const q of done) this.ui.toast(`✅ 퀘스트 완료: ${q.title} (Q 에서 보상 받기)`);
-    if (event !== 'money') this.quests.report('money', this.economy.money);
-  }
-
-  claimQuest(id) {
-    const r = this.quests.claim(id);
-    if (!r) return;
-    this.economy.earn(r.reward.money);
-    this.audio.play(r.levelUp ? 'levelup' : 'coin');
-    this.ui.toast(`🎁 +${r.reward.money} 코인, +${r.reward.xp} XP`);
-    if (r.levelUp) { this.ui.toast(`⬆️ 레벨 ${r.level} 달성! 새 씨앗이 해금됐는지 장터를 확인하세요`); this.player.unico.playAction('cheer', 2); }
-    this.onEvent('money', this.economy.money);
-    this.saveTimer = Math.max(this.saveTimer, 9); // 보상은 1초 안에 저장 (연속으로 받아도 한 번만 직렬화)
   }
 
   loop(now = performance.now()) {
@@ -696,62 +425,8 @@ class Game {
   }
 }
 
-async function boot() {
-  const canvas = document.getElementById('game');
-  const bar = document.getElementById('loading-bar');
-  const btn = document.getElementById('start-btn');
-  const nick = document.getElementById('nickname');
-  const saved = loadSave();
-  nick.value = saved?.name || randomName();
-  const assets = new Assets();
-  // 글자를 넘겨야 그 글자가 든 한글 조각을 받음 (글자 없이 부르면 라틴 조각만 받아 이름표가 대체 글꼴로 구워짐)
-  const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua', `${LABEL_TEXT} ${nick.value}`), document.fonts?.load?.("20px 'Unico Coin'", '🪙')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
-  await Promise.all([assets.loadAll((p) => (bar.style.width = Math.round(p * 100) + '%')), fontReady]);
-  assets.loadDeferred(saved?.player).catch(() => {}); // 첫 화면에 필요 없는 모델(늑대·산여우·주민 원본 몸·KOAT 네 발 원본)은 닉네임을 고르는 동안 뒤에서, 원본 몸은 저장 위치에서 가까운 주민부터
-  const lt = document.getElementById('loading-text');
-  if (lt) lt.textContent = '준비 완료! 닉네임을 정하고 입장하세요';
-  // 로그인 화면 접속 QR (휴대폰으로 같은 게임에 바로 들어오기, 좁은 화면·터치 기기에서는 숨김)
-  try { const q = joinQrBox(); q.classList.add('login-qr'); document.getElementById('loading')?.append(q); } catch { /* QR 없이도 입장 가능 */ }
-  btn.disabled = false;
-  btn.textContent = '입장하기';
-  let started = false;
-  const start = async () => {
-    if (started) return;
-    started = true;
-    // iOS: 소리 장치는 탭 처리 안에서(첫 await 전에) 만들고 켜야 함
-    const audio = new Audio();
-    audio.unlock();
-    if (isMobileDevice()) pushBackGuard(); // 뒤로 가기 기록도 탭 처리 안에서 (사용자 동작 없이 넣은 기록은 브라우저가 건너뜀)
-    const name = (nick.value.trim() || randomName()).slice(0, 12);
-    const ld = document.getElementById('loading');
-    btn.disabled = true;
-    if (lt) lt.textContent = '농장을 만드는 중…';
-    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); // 문구가 먼저 그려지게 (월드 만들기는 한 번에 실행돼 화면이 잠시 멈춤)
-    await Promise.race([Promise.resolve(document.fonts?.load?.('40px Jua', name)).catch(() => {}), new Promise((r) => setTimeout(r, 800))]); // 바꾼 닉네임 글자
-    window.game = new Game(canvas, assets, name, audio);
-    window.game.audio.play('click'); // 입장 소리 (소리 장치는 위에서 탭 처리 안에 이미 켬)
-    window.game.music.start();
-    // 첫 화면 끊김 방지: 로딩 화면 뒤에서 셰이더를 미리 컴파일(가능하면 병렬)하고 두 프레임 그린 뒤 보여 줌
-    if (lt) lt.textContent = '화면 준비 중…';
-    await new Promise((r) => requestAnimationFrame(r)); // '화면 준비 중' 문구가 먼저 보이게
-    // 셰이더 미리 준비: 지원 브라우저(KHR_parallel_shader_compile)는 병렬로, 화면을 멈추지 않고 기다림.
-    // 일부 환경에서 compileAsync 가 끝나지 않는 일이 있어 최대 5초만 기다림 (남은 것은 첫 프레임에)
-    // 닉네임을 고르는 동안 받아 둔 동물도 여기서 함께 (로딩 화면이 사라지는 순간에 컴파일이 몰리지 않게)
-    const R = window.game.renderer, sc = window.game.world.scene, cm = window.game.camera;
-    try {
-      try { await Promise.race([Promise.all([R.compileAsync(sc, cm), window.game.warmDeferred()]), new Promise((r) => setTimeout(r, 5000))]); }
-      catch { try { R.compile(sc, cm); } catch { /* 첫 프레임에 컴파일 */ } }
-      window.game.warmUp?.();
-    } finally { window.game.startLoop(); } // 이제부터 루프: 아래 두 프레임은 로딩 화면 뒤에서 실제로 그려짐
-    await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), new Promise((r) => setTimeout(r, 1500))]);
-    ld.classList.add('out');
-    setTimeout(() => ld.remove(), 650);
-    window.game.shown();
-  };
-  btn.onclick = start;
-  nick.addEventListener('keydown', (e) => { if (isSubmitEnter(e)) start(); }); // 한글 조합 중 Enter 로 이름 끝 글자가 빠진 채 입장하지 않게
-  if (new URLSearchParams(location.search).has('autostart')) start();
-}
+// 메서드 묶음 (그래픽·저장·컷신·이동·퀘스트 진행): 파일별로 나눠 두고 여기서 Game 에 붙임
+Object.assign(Game.prototype, GameGfx, GameSave, GameStory, GameTravel, GameProgress);
 
-boot();
+boot(Game);
 export { QUESTS };
