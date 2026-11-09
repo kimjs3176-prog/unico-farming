@@ -1,6 +1,7 @@
 /* 화면 UI 스타일 목록 — 규칙은 css/ 조각에 (index.html 이 이 파일을 읽고, Vite 가 @import 를 한 파일로 합침)
    적힌 순서가 곧 덮어쓰기 순서: 바꾸지 말 것. 여러 조각에 걸친 상태 규칙은 맨 끝 states.css
-   새 규칙은 자기 조각에만 — @import 를 더하거나 JS 에서 CSS 를 불러오지 않음 (조각 이름도 그대로) */
+   새 규칙은 자기 조각에만 — @import 를 더하거나 JS 에서 CSS 를 불러오지 않음 (조각 이름도 그대로)
+   theme.css(나무 액자 테마)는 이 목록 전체 뒤에 읽힘 → 단추·창 제목을 다르게 하려면 클래스 하나 더 (각 조각 머리말 참고) */
 @import './css/base.css';
 @import './css/title.css';
 @import './css/hud.css';
