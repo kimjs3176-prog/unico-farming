@@ -39,7 +39,10 @@ test('빌드: HTML 에 <meta name="unico-build"> 를 넣고 __BUILD__ 도 같은
 
 test('CI: 모든 브랜치 push·PR 에서 npm ci → npm test → npm run build, 액션은 커밋 해시 고정, 읽기 권한만', () => {
   const y = read('.github/workflows/ci.yml');
-  assert.match(y, /^on:\n {2}push:\n {4}paths-ignore: \['docs\/\*\*'\]\n {2}pull_request:\n {4}paths-ignore: \['docs\/\*\*'\]/m, 'push(브랜치 제한 없음)·PR, 문서만 바뀌면 건너뜀');
+  assert.match(y, /^on:\n {2}push:\n {4}paths-ignore: \['docs\/\*\*'\]\n {2}pull_request:\n {2}workflow_dispatch:$/m, 'push(브랜치 제한 없음)는 문서만 바뀌면 건너뜀, PR 은 거르지 않음');
+  // 필수 검사는 경로로 건너뛰면 '대기 중' 으로 남아 합칠 수 없음 → pull_request 에는 경로·브랜치 거르기가 없어야 함
+  const pr = y.slice(y.indexOf('\n  pull_request:'), y.indexOf('\n  workflow_dispatch:'));
+  assert.ok(!/paths|branches/.test(pr), 'pull_request 는 늘 실행');
   assert.match(y, /^permissions:\n {2}contents: read$/m);
   assert.match(y, /^concurrency:\n(?: {2}.*\n)* {2}cancel-in-progress: true$/m);
   const uses = [...y.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
@@ -61,6 +64,16 @@ test('CI: 모든 브랜치 push·PR 에서 npm ci → npm test → npm run build
   assert.match(smoke, /if: github\.event_name == 'workflow_dispatch'/);
   assert.match(smoke, /npm i --no-save playwright@\d+\.\d+\.\d+/, 'Playwright 는 package.json 에 넣지 않음');
   assert.match(smoke, /VITE_WS_URL: ''/, '연기 시험 빌드는 릴레이 서버에 붙지 않음');
+});
+
+test('연기 시험(scripts/smoke.mjs): 바깥 주소는 모두 막고, 휴대폰 낮음·데스크톱 높음 둘 다, 세 곳 순간이동 뒤 컷신이 풀리는지', () => {
+  const s = read('scripts/smoke.mjs');
+  assert.match(s, /ctx\.route\('\*\*\/\*', \(route\) => \(local\(route\.request\(\)\.url\(\)\) \? route\.continue\(\) : route\.abort\(\)\)\)/, '릴레이 서버·바깥 주소에 붙지 않음');
+  assert.equal((s.match(/browser\.newContext\(/g) || []).length, 1, '창은 open() 한 곳에서만 열어 막기가 빠지지 않게');
+  assert.match(s, /\?autostart&quality=low/);
+  assert.match(s, /\?autostart&quality=high/);
+  for (const go of ['game.teleport(-12.5, 22.4)', 'game.goKoat()', 'game.home.enter()']) assert.ok(s.includes(go), go);
+  assert.match(s, /컷신·대화가 5초 안에 풀림/);
 });
 
 test('package.json: npm test 는 순수 단위 테스트(node --test), 생성물 검사는 check:gen 으로 따로', () => {

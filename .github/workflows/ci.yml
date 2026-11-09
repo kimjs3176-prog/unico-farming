@@ -3,11 +3,11 @@
 # Actions 탭에서 직접 실행(Run workflow)하면 브라우저 연기 시험(smoke)도 함께 돎
 name: CI
 
+# push 는 docs/ 만 바뀌면 건너뜀. PR 은 늘 돎: 필수 검사로 지정한 'test' 가 건너뛰어지면 '대기 중' 으로 남아 문서만 고친 PR 을 합칠 수 없게 됨
 on:
   push:
     paths-ignore: ['docs/**']
   pull_request:
-    paths-ignore: ['docs/**']
   workflow_dispatch:
 
 permissions:

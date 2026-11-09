@@ -13,6 +13,8 @@
 
 ## 예시
 
+아래의 `node scripts/balance.mjs --md` 는 **아직 없는 옵션**입니다 (지금은 콘솔 표만 출력). 표 검사를 추가할 때 그 옵션도 함께 만듭니다.
+
 ```js
 // 문서 수치 표 = balance.mjs 결과 (다시 만들기: node scripts/balance.mjs --md)
 import test from 'node:test';
