@@ -229,7 +229,10 @@ blender/                 Blender(bpy) 에셋 생성 스크립트 + .blend
 scripts/optimize-cc0.mjs CC0 GLB 재색칠·애니메이션 정리·meshopt 압축 (glTF-Transform)
 public/models/           GLB (자체 제작 + CC0 q_*.glb)
 src/
-  main.js                게임 루프 / 부트스트랩
+  main.js                class Game: 생성자·게임 루프·생명주기 (메서드는 game/game_*.js 믹스인)
+  boot.js                부팅: 모델·글꼴 받기·입장·셰이더 미리 준비
+  game/game_*.js         Game 믹스인: gfx(그래픽) · save(저장) · story(컷신) · travel(이동) · progress(퀘스트)
+  ui/ui.js·ui/*.js·ui/panels/  화면 UI 껍데기와 조각(HUD·안내·알림·채팅·행동 막대·창), ui/css·ui/theme 에 조각별 스타일
   game/world.js          월드 배치(LAYOUT), 조명, 충돌, 낮/밤
   game/unico.js          유니코 3D 캐릭터 (코드 조립, 애니메이션, 감정표현, 옷차림)
   game/sim/*.js          렌더링과 분리된 게임 규칙 (테스트 대상)
@@ -239,6 +242,7 @@ src/
 server/                  Node WebSocket 릴레이 (rooms.js 는 전송 계층 독립)
 deploy/cloudflare/       Durable Objects 버전 릴레이 + wrangler.toml
 tests/                   node:test 단위 테스트
+.github/workflows/ci.yml push·PR 마다 npm test + npm run build (docs/DEPLOY.md)
 docs/                    게임 디자인, 배포, 스크린샷
 .claude/skills/          이 저장소 작업용 에이전트 스킬
 ```
