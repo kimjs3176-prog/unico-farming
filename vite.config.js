@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 
 const MODELS = 'public/models';
@@ -47,12 +48,42 @@ function modelPreload(versions) {
   };
 }
 
+/**
+ * 빌드 번호 '<커밋 앞 7자> <빌드 날짜(한국 시간)>': 플레이어 오류 제보를 어느 배포인지 잇기 위해
+ * 커밋은 Vercel·GitHub Actions 환경변수 → git → 없으면 'dev' (Vercel 빌드에는 .git 이 없을 수 있음)
+ */
+export function buildId(env = process.env, now = new Date(), gitHead = readGitHead) {
+  let sha = env.VERCEL_GIT_COMMIT_SHA || env.GITHUB_SHA || '';
+  if (!sha) { try { sha = gitHead(); } catch { sha = ''; } }
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  return `${/^[0-9a-f]{7,40}$/i.test(sha) ? sha.slice(0, 7).toLowerCase() : 'dev'} ${day}`;
+}
+function readGitHead() {
+  return execFileSync('git', ['rev-parse', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 }).toString().trim();
+}
+
+/**
+ * 빌드한 HTML(3D 판·도트 판)에 <meta name="unico-build"> 를 넣음.
+ * 게임 코드는 이 meta 를 읽을 것: JS 상수로 넣으면 문서만 바뀐 커밋에도 큰 main 청크 해시가 바뀌어 폰이 다시 받음 (index.html 은 오래 캐시하지 않음)
+ */
+function buildMeta(id) {
+  return {
+    name: 'unico-build-id',
+    apply: 'build',
+    transformIndexHtml() {
+      return [{ tag: 'meta', attrs: { name: 'unico-build', content: id }, injectTo: 'head' }];
+    },
+  };
+}
+
 // 개발 중에는 멀티플레이 서버(server/index.js, 기본 8787 포트)로 WebSocket 을 프록시
 export default defineConfig(({ command }) => {
   const versions = command === 'build' ? modelVersions() : null; // 개발 서버는 버전 없이 (파일을 고쳐도 바로 반영)
+  const build = versions ? buildId() : null;
   return {
-    define: versions ? { __MODEL_V__: JSON.stringify(versions) } : {},
-    plugins: versions ? [modelPreload(versions)] : [],
+    // __BUILD__: 같은 빌드 번호 (쓰는 청크는 커밋마다 해시가 바뀜 → 브라우저 코드는 meta 를 먼저). 개발 서버에는 없음 → typeof 로 확인
+    define: versions ? { __MODEL_V__: JSON.stringify(versions), __BUILD__: JSON.stringify(build) } : {},
+    plugins: versions ? [modelPreload(versions), buildMeta(build)] : [],
     server: {
       port: 5173,
       proxy: {

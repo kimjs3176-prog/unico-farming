@@ -2,7 +2,7 @@
 // (모듈 단위 검사는 input_look·music_timer·fx_cap·pointer_static.test.js 로 나눔)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import * as THREE from 'three';
 
 // 브라우저 없이: window·canvas 는 이벤트 등록만 받는 가짜
@@ -125,4 +125,35 @@ test('뒤에서 받는 동물 셰이더: 도착한 것만 모델마다 한 번, 
   assert.match(read('src/boot.js'), /Promise\.race\(\[Promise\.all\(\[R\.compileAsync\(sc, cm\), window\.game\.warmDeferred\(\)\]\)/);
   const loop = main.slice(main.indexOf('  loop(now'), main.indexOf('this.ranch.update(dt, pw)'));
   assert.match(loop, /if \(!this\._warmedDeferred\) this\.warmDeferred\(\)/);
+});
+
+// ---------------------------------------------------------------- Game 믹스인 (main.js + src/game/game_*.js)
+test('Game 믹스인: 메서드는 한 파일에만 있고, this.메서드() 호출은 모두 Game 에 있으며, 믹스인 파일은 모두 main.js 에서 붙임', () => {
+  const main = read('src/main.js');
+  const mixins = readdirSync(new URL('src/game/', root)).filter((f) => /^game_\w+\.js$/.test(f)).sort();
+  assert.ok(mixins.length >= 5, mixins.join());
+  const start = main.indexOf('class Game {');
+  const cls = main.slice(start, main.indexOf('\n}\n', start));
+  const defs = new Map(); // 메서드 이름 → 파일
+  const add = (name, file) => { assert.ok(!defs.has(name), `${name} 이 ${defs.get(name)} 와 ${file} 에 둘 다 있음 (Object.assign 이 몰래 덮어씀)`); defs.set(name, file); };
+  const METHOD = /^ {2}(?:async )?([a-zA-Z_]\w*)\(/gm, CALL = /this\.([a-zA-Z_]\w*)\??\.?\(/g;
+  for (const m of cls.matchAll(METHOD)) add(m[1], 'main.js');
+  const calls = [...cls.matchAll(CALL)].map((m) => [m[1], 'main.js']);
+  for (const f of mixins) {
+    const src = read(`src/game/${f}`);
+    const name = src.match(/^export const (\w+) = \{$/m)?.[1];
+    assert.ok(name, `${f}: export const <이름> = { … } 꼴`);
+    assert.match(main, new RegExp(`import \\{ ${name} \\} from './game/${f}'`), `${f} 를 main.js 가 import`);
+    assert.match(main, new RegExp(`Object\\.assign\\(Game\\.prototype,[^)]*\\b${name}\\b`), `${name} 을 Game.prototype 에 붙임`);
+    assert.ok(!/^ {2}[a-zA-Z_]\w*\s*:\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>/m.test(src), `${f}: 화살표 함수 속성 없이 축약 메서드만 (this 가 Game 이 되게)`);
+    for (const m of src.matchAll(METHOD)) add(m[1], f);
+    for (const m of src.matchAll(CALL)) calls.push([m[1], f]);
+  }
+  for (const [n, f] of calls) assert.ok(defs.has(n), `${f}: this.${n}() 가 Game 에 없음`);
+  for (const n of ['save', 'restore', 'introCutscene', 'teleport', 'onEvent', 'applyQuality', 'warmDeferred', 'loop', 'shown']) assert.ok(defs.has(n), n);
+  // boot.js 는 Game 을 받아서 만듦 (main.js 를 import 하지 않음: 순환 없음)
+  const boot = read('src/boot.js');
+  assert.match(boot, /export async function boot\(Game\)/);
+  assert.ok(!/from '\.\/main\.js'/.test(boot));
+  assert.match(main, /\nboot\(Game\);\nexport \{ QUESTS \};\n$/);
 });

@@ -12,6 +12,8 @@
     "start": "NODE_ENV=production node server/index.js",
     "models": "python3 blender/build_all.py",
     "test": "node --test",
+    "check:gen": "node scripts/check-gen.mjs",
+    "smoke": "node scripts/smoke.mjs dist",
     "models:compress": "node scripts/compress-models.mjs",
     "models:unico": "node scripts/build-unico-mesh.mjs"
   },

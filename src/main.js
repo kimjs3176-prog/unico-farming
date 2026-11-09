@@ -1,3 +1,5 @@
+// 3D 판 진입점: class Game (생성자·startLoop·loop·생명주기·뒤로 가기·컨텍스트 손실·옷차림·whenShown/shown)
+// 나머지 메서드는 src/game/game_*.js 믹스인 — gfx(그래픽·화면 크기) · save(저장) · story(컷신) · travel(이동) · progress(퀘스트 진행), 부팅은 src/boot.js
 import { josa } from './game/sim/josa.js';
 import { HomeView } from './game/view/home_view.js';
 import { TownView } from './game/view/town_view.js';
