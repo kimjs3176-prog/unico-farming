@@ -1,0 +1,3 @@
+/* 테마: 알림·이벤트 배너 */
+.toast { background: linear-gradient(180deg, #fffdf7, #f6efe0); border: 2px solid var(--wood-l); border-left: 6px solid var(--teal); border-radius: 12px; color: var(--wood-d); box-shadow: var(--chip-shadow); }
+.event-banner { border-radius: 12px; background: linear-gradient(180deg, #ffe08a, var(--gold)); box-shadow: 0 0 0 2px #fff, 0 4px 0 var(--gold-d), 0 8px 18px rgba(20,14,10,0.25); }

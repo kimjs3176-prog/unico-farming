@@ -1,0 +1,50 @@
+/* 창(패널) 공통 틀·제목·목록 줄·방 목록 + 주민·목장·건설·집 창 내용 (ui.js · panels/villager.js) */
+/* 패널 */
+.panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--panel); border: 4px solid var(--panel-edge); border-radius: 28px; padding: 18px 20px; width: min(calc(94vw / var(--ui-zoom, 1)), 560px);
+  max-height: calc(86vh / var(--ui-zoom, 1)); max-height: calc(86dvh / var(--ui-zoom, 1)); /* dvh: 주소창을 뺀 실제 보이는 높이 (모르는 브라우저는 앞 줄 vh) */
+  overflow: auto; box-shadow: var(--shadow); color: var(--brown); animation: panelin 0.32s cubic-bezier(.3,1.45,.5,1);
+  z-index: 10; /* 꾸미기 막대(5)보다 위, 대화창(30)·미니게임(40)보다 아래 */ }
+@keyframes panelin { from { opacity: 0; transform: translate(-50%, -46%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+.panel h2 { margin: 0 0 10px; display: flex; align-items: center; gap: 8px; color: var(--teal-d); font-size: 24px; }
+.row { background: var(--cream) !important; }
+.panel h2 .close { margin-left: auto; }
+.panel h3 { margin: 12px 0 6px; font-size: 14px; color: #555; }
+.rows { display: flex; flex-direction: column; gap: 6px; }
+.row { display: flex; align-items: center; gap: 8px; background: #f7f7f7; border-radius: 12px; padding: 8px 10px; }
+.row .nm { font-weight: 700; flex: 1; }
+.row .pr { font-weight: 700; color: var(--teal-d); min-width: 80px; text-align: right; }
+.row .qty { color: #666; font-size: 13px; }
+.row button { padding: 6px 10px; font-size: 13px; }
+.room-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.room-list button { background: #f7f7f7; color: var(--ink); box-shadow: none; border: 2px solid #eee; text-align: left; padding: 10px 12px; }
+.room-list button.cur { border-color: var(--teal); background: #e4f7f4; }
+.room-list button small { display: block; color: #666; font-weight: 500; }
+
+/* 주민 대화 */
+.villager-line { background: #fff7e0; border-radius: 14px; padding: 12px 14px; margin-bottom: 8px; font-size: 15px; line-height: 1.5; border: 2px solid #f5e1a8; }
+
+/* 목장 동물 이름 바꾸기 */
+.name-input { font-family: 'Unico Coin', Jua, sans-serif; font-size: 16px; width: 9em; padding: 2px 8px; border: 2px solid var(--panel-edge); border-radius: 10px; background: #fffdf5; color: var(--brown); }
+/* 모든 창: 끝까지 내려도 제목·✕ 닫기가 위에 붙어 있음 */
+.panel h2 { position: sticky; top: -18px; z-index: 4; background: var(--panel); margin: -18px -20px 10px; padding: 16px 20px 10px; border-radius: 24px 24px 0 0; box-shadow: 0 6px 8px -8px rgba(107,74,46,0.35); }
+.panel h2 .close { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 16px; flex: 0 0 auto; }
+/* 마을 건설 */
+.build-confetti { position: absolute; left: 50%; top: 18%; width: 420px; height: 10px; transform: translateX(-50%); pointer-events: none; z-index: 30; }
+.build-row .nm small { display: block; }
+.panel .row .nm, .panel .row .pr, .panel button { min-width: 0; }
+.panel .row .pr { flex: 0 0 auto; white-space: nowrap; }
+
+/* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  /* 손가락 크기 단추 (창 닫기·목록 단추·지도 장소·건너뛰기) */
+  .panel h2 .close { width: 40px; height: 40px; }
+  .panel .row button { min-height: 36px; }
+}
+/* 유니코 집: 잠잘 때 화면이 어두워졌다 밝아짐 */
+.sleep-fade { position: absolute; inset: 0; background: #0d1426; opacity: 0; pointer-events: none; transition: opacity 0.6s ease; display: flex; align-items: center; justify-content: center; z-index: 40; }
+.sleep-fade.on { opacity: 1; pointer-events: auto; }
+.sleep-fade span { color: #fff7d6; font-family: var(--display); font-size: 34px; letter-spacing: 2px; text-shadow: 0 0 18px rgba(255,220,140,0.6); }
+.sleep-fade.quick { transition-duration: 0.35s; }
+.wd h3 { margin: 12px 0 6px; }
+.wd-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wd-row button { flex: 1 1 auto; min-width: 84px; }

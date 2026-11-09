@@ -1,0 +1,39 @@
+/* 안내 말풍선·조이스틱·터치 E 버튼 (prompt.js) */
+.prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 30px; font-weight: 700; box-shadow: var(--shadow); display: flex; gap: 10px; align-items: center; white-space: nowrap; max-width: calc(92vw / var(--ui-zoom, 1)); }
+.prompt kbd { background: var(--gold); color: var(--ink); border-radius: 8px; padding: 2px 8px; font-weight: 900; }
+.prompt.hidden { display: none; }
+
+/* 모바일 컨트롤 */
+.joystick { position: absolute; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.35); border: 2px solid rgba(255,255,255,0.7); display: none; }
+.joystick i { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: var(--teal); }
+.touch-btn { position: absolute; right: 24px; bottom: 36px; width: 84px; height: 84px; border-radius: 50%; font-size: 28px; display: none; background: var(--gold); color: var(--ink); box-shadow: 0 4px 0 #d9a21c; }
+@media (pointer: coarse) { .touch-btn { display: block; } }
+@media (max-width: 600px) { .prompt { bottom: 140px; font-size: 13px; } }
+@media (max-width: 600px) { .touch-btn { bottom: 20px; } }
+
+/* 클릭 가능한 상호작용 안내 */
+.prompt.clickable { cursor: pointer; pointer-events: auto; transition: transform 0.1s; }
+.prompt.clickable:hover { transform: translateX(-50%) scale(1.04); background: #3a2b26; }
+.prompt .tapme { animation: tap 1s infinite; display: inline-block; }
+@keyframes tap { 0%,100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+
+/* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  .touch-btn { right: calc(10px + var(--sar)); bottom: calc(8px + var(--sab)); width: 58px; height: 58px; font-size: 22px; }
+  #ui.bar-open .touch-btn { bottom: calc(64px + var(--sab)); }
+  /* 안내 말풍선: 긴 안내는 낱말 단위로 줄바꿈 (화면 밖으로 넘치지 않게), 채팅 기록 위에 그려짐 */
+  .prompt { bottom: calc(74px + var(--sab)); padding: 6px 12px; font-size: 13px; white-space: normal; width: max-content; max-width: calc(100vw / var(--ui-zoom, 1) - 24px); text-align: center; line-height: 1.3; justify-content: center; z-index: 3; }
+  .prompt kbd, .prompt .tapme { flex: none; }
+}
+/* 세로 폰: 두 줄 행동 막대를 펼치거나 운전할 때 E 버튼·안내 말풍선 자리 */
+@media (max-width: 600px) {
+  #ui.bar-open .touch-btn { bottom: calc(116px + var(--sab)); } /* 두 줄 막대(약 110px) 위로 */
+  /* 막대를 펼치면 안내 말풍선·자동 칩도 막대 위로 (폭은 위로 올라간 E 버튼 왼쪽까지: 양쪽 76px 씩 비움) */
+  #ui.bar-open > .prompt { bottom: calc(124px + var(--sab)); max-width: calc(100vw / var(--ui-zoom, 1) - 152px); }
+  /* 트랙터 운전: 안내(쟁기 상태)는 운전 버튼 위로, 쟁기·내리기 글자가 두 줄로 쪼개지지 않게 */
+  #ui.driving > .prompt { bottom: calc(156px + var(--sab)); }
+}
+/* 터치 태블릿: E 버튼을 가운데 행동 막대 위로 (채팅은 chat.css) */
+@media (pointer: coarse) and (min-width: 601px) and (min-height: 501px) {
+  .touch-btn { bottom: 110px; }
+}

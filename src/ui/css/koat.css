@@ -1,0 +1,129 @@
+/* KOAT 체험관 창과 체험 미니게임 (koat_ui.js) */
+/* ---------------- KOAT 체험관 ---------------- */
+.panel.koat { border-top: 8px solid var(--div, #30b6aa); }
+.panel.koat h2 { color: #231916; }
+.koat-summary { background: #f4fbfa; border-radius: 14px; padding: 12px 14px; line-height: 1.6; margin-bottom: 8px; }
+.koat-teams { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.koat-teams span { background: #fff; border: 2px solid var(--div, #30b6aa); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
+.koat-game { background: #fff8e6; border-radius: 14px; padding: 12px 14px; line-height: 1.6; margin-bottom: 8px; }
+.koat-meta { font-size: 13px; color: #555; font-weight: 700; margin: 8px 0; }
+.koat-go { width: 100%; font-size: 17px; padding: 12px; margin-top: 8px; }
+.koat-how { margin: 0 0 10px; color: #444; }
+.koat-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.koat-score { font-size: 56px; font-weight: 900; text-align: center; color: var(--div); }
+.koat-score small { font-size: 20px; }
+.koat-score.fail { color: #999; }
+.koat-match { display: grid; grid-template-columns: 1fr 28px 1fr; gap: 6px; align-items: center; }
+.koat-match .col { display: flex; flex-direction: column; gap: 6px; }
+.koat-match .arrow { text-align: center; }
+.koat-match .pick { background: #fff; color: var(--ink); box-shadow: none; border: 3px solid #e5e5e5; text-align: left; font-size: 13px; padding: 10px; min-height: 52px; }
+.koat-match .pick.sel { border-color: var(--div); background: #fffbe8; }
+.koat-match .pick.used { background: #f4f4f4; }
+.koat-stage { background: #f7f7f7; border-radius: 14px; padding: 14px; line-height: 1.6; margin-bottom: 10px; font-size: 15px; }
+.koat-stage .tag { background: var(--div); color: #fff; border-radius: 8px; padding: 2px 8px; font-weight: 800; margin-right: 6px; }
+.koat-opt { background: #fff; color: var(--ink); box-shadow: none; border: 3px solid #e5e5e5; text-align: left; padding: 12px; font-size: 15px; }
+.koat-opt.right { border-color: #6dbb4f; background: #eef9e6; }
+.koat-opt.wrong { border-color: #e35d5d; background: #fdeeee; }
+.koat-progress { display: flex; gap: 6px; justify-content: center; margin-top: 10px; }
+.koat-progress i { width: 26px; height: 6px; border-radius: 3px; background: #e5e5e5; }
+.koat-progress i.on { background: var(--div); }
+.koat-progress i.cur { background: #f2c94c; }
+.koat-timer { position: relative; font-weight: 900; margin-bottom: 8px; height: 26px; background: #eee; border-radius: 13px; overflow: hidden; text-align: center; line-height: 26px; }
+.koat-timer i { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--div) 45%, transparent); z-index: 0; }
+.koat-seeds { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.koat-seeds .seed { background: #fbf5e8; box-shadow: none; border: 2px solid #eadfc8; font-size: 30px; padding: 8px 0; transition: transform 0.1s, opacity 0.2s; }
+.koat-seeds .seed.out { opacity: 0.25; transform: scale(0.8); border-color: #e35d5d; }
+.koat-insp .on-ok { background: #6dbb4f; box-shadow: none; }
+.koat-insp .on-ng { background: #e35d5d; box-shadow: none; }
+.koat-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.koat-cards .card { background: #fff; color: var(--ink); box-shadow: none; border: 3px solid #e5e5e5; padding: 14px 10px; min-height: 64px; font-size: 14px; }
+.koat-cards .card.on { border-color: #6dbb4f; background: #eef9e6; }
+.koat-stamps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+.koat-stamps .stamp { background: #fff; color: var(--ink); box-shadow: none; border: 3px dashed #ddd; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; font-size: 13px; }
+.koat-stamps .stamp .em { font-size: 30px; }
+.koat-stamps .stamp small { color: #777; font-size: 11px; font-weight: 600; }
+.koat-stamps .stamp.got { border: 3px solid var(--div); background: color-mix(in srgb, var(--div) 10%, white); }
+@media (max-width: 600px) { .koat-stamps { grid-template-columns: repeat(2, 1fr); } .koat-match { grid-template-columns: 1fr; } .koat-match .arrow { display: none; } }
+.koat-stars { font-size: 36px; }
+
+/* ---------------- KOAT 체험관 미니게임 ---------------- */
+.koat-runhead { display: flex; justify-content: space-between; align-items: center; min-height: 22px; margin-bottom: 6px; font-family: 'Unico Coin', Jua, sans-serif; }
+.koat-runhead .combo { color: #e8742a; animation: mgstar 0.3s; }
+.koat-runhead .koat-progress { margin: 0; }
+.koat-progress i.miss { background: #e35d5d; }
+.koat-timer.warn { color: #e8495a; animation: mgwarn 0.5s infinite alternate; }
+.koat-runbody { min-height: 120px; }
+.koat-runbody.enter { animation: koatin 0.35s cubic-bezier(.2,1.4,.4,1); }
+@keyframes koatin { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+.koat-choices { display: grid; gap: 8px; margin-top: 8px; }
+.koat-choices:has(.okc) { grid-template-columns: 1fr 1fr; }
+.koat-choices .koat-opt { font-size: 16px; min-height: 52px; transition: transform 0.08s; }
+.koat-choices .koat-opt:active { transform: scale(0.97); }
+.koat-choices .koat-opt kbd { font-size: 12px; }
+.koat-choices .okc { border-color: #9fd88a; }
+.koat-choices .ngc { border-color: #f2a1a1; }
+.koat-choices .koat-opt:disabled { opacity: 1; }
+.koat-why { max-height: 0; overflow: hidden; border-radius: 12px; font-size: 14px; line-height: 1.5; transition: all 0.25s; }
+.koat-why.show { max-height: 90px; padding: 8px 12px; margin-top: 8px; }
+.koat-why.ok { background: #eef9e6; color: #2f6b1d; }
+.koat-why.ng { background: #fdeeee; color: #9a2f2f; }
+.panel.shake { animation: panelshake 0.12s 3; }
+@keyframes panelshake { 0% { transform: translate(calc(-50% - 5px), -50%); } 50% { transform: translate(calc(-50% + 5px), -50%); } 100% { transform: translate(-50%, -50%); } }
+.koat-review { max-height: 220px; overflow: auto; font-size: 13px; }
+/* 창업 로켓 트랙 */
+.koat-rocket { position: relative; margin: 4px 0 12px; }
+.koat-rocket .track { display: flex; justify-content: space-between; background: #f3f3f3; border-radius: 999px; padding: 4px 6px; font-size: 11px; }
+.koat-rocket .track span { opacity: 0.45; }
+.koat-rocket .track span.past { opacity: 1; color: var(--div); }
+.koat-rocket .track span.now { opacity: 1; font-weight: 900; }
+.koat-rocket i { position: absolute; top: -18px; font-style: normal; font-size: 22px; transition: left 0.6s cubic-bezier(.3,1.4,.5,1); }
+/* 기술이전 연결선 */
+.koat-match { position: relative; }
+.koat-lines { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.koat-lines .draw { stroke-dasharray: 600; stroke-dashoffset: 600; animation: koatdraw 0.45s ease-out forwards; }
+@keyframes koatdraw { to { stroke-dashoffset: 0; } }
+/* 종자 컨베이어 */
+.koat-belt { position: relative; height: 170px; border-radius: 14px; overflow: hidden; background: linear-gradient(#e9e2d3, #d8cdb6); border: 3px solid #b9aa8c; touch-action: none; }
+.koat-belt .rollers { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(0,0,0,0.06) 0 18px, transparent 18px 36px); }
+.koat-belt.shake { animation: reelshake 0.1s 2; }
+.koat-belt .seed { position: absolute; left: 0; width: 48px; height: 48px; padding: 0; font-size: 30px; border-radius: 50%; background: #fbf5e8; border: 2px solid #eadfc8; box-shadow: 0 3px 0 rgba(0,0,0,0.12); }
+.koat-belt .seed.got { transform: scale(1.4) !important; opacity: 0; transition: all 0.25s; border-color: #6dbb4f; }
+.koat-belt .seed.oops { background: #fdd; border-color: #e35d5d; transition: all 0.25s; opacity: 0.4; }
+.koat-float { position: absolute; font-family: 'Unico Coin', Jua, sans-serif; font-size: 18px; pointer-events: none; animation: koatfloat 0.7s ease-out forwards; white-space: nowrap; }
+.koat-float.ok { color: #2f8f1d; }
+.koat-float.ng { color: #d33; }
+@keyframes koatfloat { to { transform: translateY(-36px); opacity: 0; } }
+/* 농기계 검정 게이지 */
+.koat-insp1 { background: #f7f7f7; border-radius: 14px; padding: 12px 14px; }
+.koat-insp1 .nm { font-family: 'Unico Coin', Jua, sans-serif; font-size: 20px; }
+.koat-insp1 .std { color: #666; margin: 2px 0 10px; }
+.koat-meter .scale { position: relative; height: 22px; background: #f6d0d0; border-radius: 11px; overflow: hidden; }
+.koat-meter .scale .ok { position: absolute; top: 0; bottom: 0; background: #bfe6ae; }
+.koat-meter .scale .lim { position: absolute; top: 0; bottom: 0; width: 3px; background: #231916; }
+.koat-meter .scale .needle { position: absolute; top: -2px; bottom: -2px; width: 6px; border-radius: 3px; background: var(--div); box-shadow: 0 0 0 2px #fff; left: 0; animation: koatneedle 0.9s cubic-bezier(.3,1.5,.5,1) forwards; }
+@keyframes koatneedle { to { left: var(--to); } }
+.koat-meter .read { text-align: right; margin-top: 4px; }
+.koat-meter .read b { font-size: 24px; font-family: 'Unico Coin', Jua, sans-serif; }
+.koat-meter.text { display: flex; align-items: center; gap: 10px; font-size: 22px; }
+/* 저탄소 카드 */
+.koat-bigcard { background: #fff; border: 3px solid var(--div); border-radius: 18px; padding: 26px 16px; text-align: center; font-family: 'Unico Coin', Jua, sans-serif; font-size: 22px; box-shadow: 0 6px 0 rgba(0,0,0,0.08); }
+/* 결과: 스탬프 쾅 */
+.koat-result { position: relative; overflow: hidden; }
+.koat-result .koat-score b { font-family: 'Unico Coin', Jua, sans-serif; }
+.koat-stampfx { position: absolute; right: 18px; top: 78px; z-index: 3; width: 104px; height: 104px; border-radius: 50%; border: 5px solid #d33a3a; color: #d33a3a; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-14deg); background: rgba(255,255,255,0.6); font-family: 'Unico Coin', Jua, sans-serif; animation: koatstamp 0.45s cubic-bezier(.5,0,.6,1.4) both; }
+.koat-stampfx span { font-size: 28px; line-height: 1.1; }
+.koat-stampfx b { font-size: 13px; line-height: 1.15; white-space: nowrap; }
+.koat-stampfx small { font-size: 9px; letter-spacing: 2px; line-height: 1.2; margin-top: 2px; }
+@keyframes koatstamp { 0% { transform: scale(3) rotate(-30deg); opacity: 0; } 70% { transform: scale(0.9) rotate(-12deg); opacity: 1; } 100% { transform: scale(1) rotate(-14deg); opacity: 1; } }
+/* 링크형 체험 버튼 (a 태그를 버튼 모양으로) */
+.koat-link { display: block; box-sizing: border-box; text-align: center; text-decoration: none; color: var(--ink, #231916); background: var(--gold, #fac03e); border-radius: 14px; box-shadow: 0 4px 0 rgba(0,0,0,0.15); font-family: var(--display); }
+.koat-link small { font-size: 12px; opacity: 0.75; margin-left: 4px; }
+.koat-link:hover { filter: brightness(1.05); }
+/* ---------------- 가로로 눕힌 폰 (낮은 화면 + 터치) ---------------- */
+@media (max-height: 500px) and (pointer: coarse) {
+  /* KOAT 씨앗 고르기: 낮은 화면에서도 벨트·설명이 창 안에 들어오게 (lane 위치는 koat_ui.js 가 벨트 높이에 맞춤) */
+  .panel.koat { max-height: calc(86vh / var(--ui-zoom, 1)); max-height: calc(94dvh / var(--ui-zoom, 1)); }
+  .koat-how { font-size: 13px; line-height: 1.35; margin-bottom: 4px; }
+  .koat-belt { height: 132px; }
+  .koat-belt .seed { width: 40px; height: 40px; font-size: 24px; }
+}

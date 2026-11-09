@@ -1,0 +1,22 @@
+/* 목표 안내 칩 (objective.js) */
+/* 목표 안내 */
+.objective { position: absolute; left: 12px; top: calc(var(--hud-b, 52px) + 10px); background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 18px; padding: 8px 12px; box-shadow: 0 4px 0 rgba(107,74,46,0.15); color: var(--brown); display: flex; align-items: center; gap: 10px; max-width: min(calc(70vw / var(--ui-zoom, 1)), 340px); cursor: pointer; animation: popin 0.4s cubic-bezier(.3,1.5,.5,1); }
+.objective .ic { font-size: 22px; }
+.objective .tt { font-size: 15px; line-height: 1.2; }
+.objective .tt small { display: block; font-family: 'Unico Coin', "Gowun Dodum", sans-serif; font-size: 12px; color: #8a7a66; }
+.objective .dir { width: 34px; height: 34px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; color: var(--brown); font-size: 16px; flex: none; transition: transform 0.2s; }
+.objective.done { border-color: #6dbb4f; background: #f1fbe8; }
+.objective.done .dir { background: #6dbb4f; color: #fff; }
+.objective .bar { height: 5px; background: #eadfc8; border-radius: 3px; overflow: hidden; margin-top: 3px; }
+.objective .bar i { display: block; height: 100%; background: var(--teal); }
+@media (max-width: 600px) { .objective { max-width: 58vw; } }
+
+/* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  /* 목표: 제목 한 줄만 (설명·진행 막대는 숨김, 누르면 퀘스트 창) */
+  .objective { left: calc(4px + var(--sal)); top: calc(var(--hud-b, 40px) + 4px); max-width: min(calc(100vw / var(--ui-zoom, 1) - 96px - var(--sal) - var(--sar)), 360px); padding: 3px 8px; gap: 5px; border-width: 2px; border-radius: 12px; box-shadow: 0 2px 0 rgba(107,74,46,0.15); }
+  .objective .ic { font-size: 14px; }
+  .objective .tt { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .objective .tt small, .objective .bar { display: none; }
+  .objective .dir { width: 20px; height: 20px; font-size: 10px; }
+}

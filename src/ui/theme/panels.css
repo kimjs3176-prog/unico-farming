@@ -1,0 +1,100 @@
+/* 테마: 창 나무 액자·리본 제목·목록 카드 + 옷장·함께하기·꾸미기 */
+/* ---------------- 창: 나무 액자 + 청록 리본 제목 ---------------- */
+.panel { background: linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%); border: 0; border-radius: 22px;
+  box-shadow: var(--frame), var(--lift); }
+.panel h2 { background: linear-gradient(180deg, var(--teal-hi) 0%, var(--teal) 60%, var(--teal-d) 100%); color: #fff;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.18); border-radius: 22px 22px 0 0; padding-top: 14px; padding-bottom: 12px;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.3), inset 0 -3px 0 rgba(0,0,0,0.1), 0 6px 10px -8px rgba(20,14,10,0.5); }
+/* 리본 아래 바느질 선 */
+.panel h2::after { content: ''; position: absolute; left: 14px; right: 14px; bottom: 5px; border-bottom: 2px dashed rgba(255,255,255,0.38); pointer-events: none; }
+/* 닫기: 빨간 둥근 나무 단추 */
+.panel h2 .close { background: linear-gradient(180deg, #ff8a7a 0%, #e8564a 60%, #c93c33 100%); color: #fff;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.35), 0 3px 0 #8f2a24, 0 0 0 3px rgba(255,255,255,0.85); }
+.panel h2 .close:active { box-shadow: inset 0 2px 4px rgba(0,0,0,0.25), 0 1px 0 #8f2a24, 0 0 0 3px rgba(255,255,255,0.85); }
+.panel h3 { color: var(--wood-d); display: flex; align-items: center; gap: 6px; }
+.panel h3::after { content: ''; flex: 1; border-bottom: 2px dotted rgba(154,100,56,0.28); margin-left: 4px; }
+
+/* 목록 줄: 흰 카드 + 아래 그림자 */
+.row { background: #fff !important; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 2px 0 #e6e0d2; transition: border-color 0.12s, transform 0.12s; }
+.row:hover { border-color: #bfe6df; }
+.row .pr { color: var(--teal-dd); font-variant-numeric: tabular-nums; }
+.quest { border-left: 5px solid #e0d6c2; }
+.quest.done { background: #f1fbe8 !important; border-left-color: var(--leaf); }
+.quest .bar, .objective .bar { background: #e9dcc5; box-shadow: inset 0 1px 1px rgba(0,0,0,0.12); }
+.quest .bar i, .objective .bar i { background: linear-gradient(180deg, var(--teal-hi), var(--teal)); }
+.book-cell, .room-list button, .seed-grid button, .koat-opt, .koat-match .pick { background: #fff; border: 2px solid var(--line); box-shadow: 0 2px 0 #e6e0d2; text-shadow: none; }
+.room-list button.cur { border-color: var(--teal); background: #e7f8f5; }
+
+/* ---------------- 옷장 (집 실내): 옆에 붙는 창 + 코스튬 칸 ---------------- */
+.panel.wardrobe { left: auto; right: calc(18px + var(--sar, 0px)); top: 50%; transform: translateY(-50%); width: min(calc(94vw / var(--ui-zoom, 1)), 400px); animation: wdin 0.3s cubic-bezier(.3,1.4,.5,1); }
+@keyframes wdin { from { opacity: 0; transform: translate(30px, -50%); } to { opacity: 1; transform: translateY(-50%); } }
+/* 세로 폰: 아래에 붙는 창은 화면 절반 아래로만 (미리보기 중인 유니코를 덜 가리게) */
+@media (max-width: 600px) { .panel.wardrobe { right: 8px; left: 8px; top: auto; bottom: calc(8px + var(--sab, 0px)); transform: none; width: auto;
+  max-height: calc(46vh / var(--ui-zoom, 1)); max-height: calc(46dvh / var(--ui-zoom, 1)); animation: popin 0.3s; } }
+.wd-tabs { margin-bottom: 10px; }
+.cos-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.cos-slot { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px 9px; background: #fff; color: var(--ink); text-shadow: none; border: 2px solid var(--line); box-shadow: 0 2px 0 #e6e0d2; min-height: 104px; }
+.cos-slot .ic { font-size: 30px; line-height: 1.1; }
+.cos-slot b { font-size: 14px; }
+.cos-slot small { font-size: 11px; color: #7d6a55; line-height: 1.3; text-align: center; }
+.cos-slot.on { border-color: var(--gold); background: linear-gradient(180deg, #fffbea, #fff1c6); box-shadow: 0 0 0 2px #ffe08a, 0 3px 0 var(--gold-d); }
+.cos-slot i { position: absolute; top: 6px; right: 6px; font-style: normal; font-size: 10px; background: var(--gold); color: #4a2f12; border-radius: 6px; padding: 1px 5px; }
+.cos-slot.locked { opacity: 1; filter: none; background: #f4f1ea; }
+.cos-slot.locked .ic { filter: grayscale(1); opacity: 0.45; }
+
+/* ---------------- 다른 플레이어와 상호작용 ---------------- */
+.panel.soc { width: min(calc(94vw / var(--ui-zoom, 1)), 420px); }
+.soc-sub { margin: 0 0 10px; color: #7d6a55; font-size: 13px; }
+.soc-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.soc-act { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px 10px; background: #fff; color: var(--ink); text-shadow: none; border: 2px solid var(--line); box-shadow: 0 2px 0 #e6e0d2; }
+.soc-act .ic { font-size: 30px; line-height: 1.1; }
+.soc-act b { font-size: 15px; }
+.soc-act small { font-size: 11px; color: #7d6a55; text-align: center; line-height: 1.3; }
+.soc-act:hover:not(:disabled) { border-color: var(--teal); }
+/* 요청 카드는 12초 뒤 사라지고 받기 단추가 있으므로 열린 창(.panel, z 10)보다 위에 둠 */
+.soc-reqs { position: absolute; left: 50%; bottom: 178px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; z-index: 12; }
+.soc-req { pointer-events: auto; display: flex; align-items: center; gap: 8px; background: linear-gradient(180deg, #fffdf7, #f6efe0); border: 2px solid var(--wood-l); border-left: 6px solid var(--gold); border-radius: 12px; padding: 6px 8px 6px 12px; box-shadow: var(--chip-shadow); color: var(--wood-d); font-size: 14px; max-width: min(calc(92vw / var(--ui-zoom, 1)), 460px); animation: popin 0.3s cubic-bezier(.3,1.5,.5,1); transition: opacity 0.25s, transform 0.25s; }
+.soc-req span { flex: 1; min-width: 0; }
+.soc-req button { padding: 6px 10px; font-size: 13px; flex: 0 0 auto; }
+.soc-req.out { opacity: 0; transform: translateY(6px); }
+@media (max-width: 600px) { .soc-reqs { bottom: 220px; } }
+
+/* ---------------- 농장 꾸미기 ---------------- */
+.panel.decor { width: min(calc(94vw / var(--ui-zoom, 1)), 460px); }
+.decor-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 10px; }
+.decor-grid .cos-slot { min-height: 92px; }
+.decor-foot { display: flex; justify-content: flex-end; margin-top: 10px; }
+.decor-bar { position: absolute; left: 50%; bottom: 174px; /* 아래 'E 놓기' 안내(bottom 120px) 위로 */ transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: linear-gradient(180deg, #a56c3e 0%, var(--wood) 45%, var(--wood-d) 100%); border-radius: 16px; box-shadow: inset 0 2px 0 rgba(255,220,170,0.45), 0 0 0 2px #4a2c18, 0 8px 18px rgba(20,14,10,0.35); max-width: calc(100vw / var(--ui-zoom, 1) - 24px); flex-wrap: wrap; justify-content: center; z-index: 5; }
+/* 창이 열려 있는 동안에는 꾸미기 막대를 숨김 (창 가장자리로 막대 단추가 눌리지 않게) */
+#ui:has(> .panel) > .decor-bar { visibility: hidden; }
+.decor-what { color: #fff8ea; font-family: var(--display); font-size: 15px; padding: 0 6px; text-shadow: 0 1px 0 rgba(0,0,0,0.45); white-space: nowrap; }
+.decor-bar button { padding: 8px 12px; font-size: 14px; min-height: 40px; }
+@media (max-width: 600px) { .decor-bar { bottom: 196px; } .decor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------------- 모바일 (css/ 조각의 모바일 블록과 같은 조건 — 함께 고칠 것) ----------------
+   위의 테마 규칙은 미디어쿼리 없이 css/ 조각 다음에 읽히므로 모바일 압축 값을 덮어씀 → 여기서 다시 잡음 */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  /* 요청 카드 단추: 엄지로 '받기'·'✕' 를 구분해 누를 수 있게 */
+  .soc-reqs { width: max-content; max-width: calc(100vw / var(--ui-zoom, 1) - 16px); } /* 가운데 정렬이라 화면 절반 폭으로 줄어들어 글이 여러 줄로 쪼개지던 것 */
+  .soc-req { gap: 8px; }
+  .soc-req button { min-width: 40px; min-height: 40px; }
+  /* 꾸미기 막대: 단추는 한 줄 (이름이 길면 말줄임) */
+  .decor-bar { flex-wrap: nowrap; gap: 4px; padding: 4px 6px; width: max-content; max-width: calc(100vw / var(--ui-zoom, 1) - 16px - var(--sal, 0px) - var(--sar, 0px)); }
+  .decor-what { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+  .decor-bar button { flex: 0 0 auto; padding: 6px 9px; font-size: 13px; min-height: 40px; }
+}
+/* 세로 폰: 꾸미기 이름은 단추 위 한 줄에 따로 (단추에 밀려 '원…' 만 보이지 않게) */
+@media (max-width: 600px) {
+  .decor-bar { flex-wrap: wrap; row-gap: 2px; }
+  .decor-what { flex: 1 0 100%; text-align: center; }
+}
+/* 가로 폰: 창 제목 리본은 낮게, 꾸미기 막대·요청 카드는 화면 가운데(유니코·미리보기)를 비우고 오른쪽으로 */
+@media (max-height: 500px) and (pointer: coarse) {
+  .panel h2 { font-size: 19px; padding-top: 8px; padding-bottom: 8px; }
+  .decor-bar { left: auto; right: calc(8px + var(--sar, 0px)); bottom: calc(74px + var(--sab, 0px)); transform: none; flex-direction: column; align-items: stretch; max-width: min(calc(30vw / var(--ui-zoom, 1)), 170px); }
+  .decor-what { flex: 0 0 auto; text-align: center; }
+  #ui.bar-open > .decor-bar { right: calc(76px + var(--sar, 0px)); } /* 위로 올라간 E 버튼 왼쪽으로 */
+  /* 요청 카드: 목표 칩·가운데 배너 아래 왼쪽 (오른쪽의 미니맵·스마트팜 패널·꾸미기 막대와 겹치지 않게) */
+  .soc-reqs { left: calc(6px + var(--sal, 0px)); right: auto; transform: none; top: calc(var(--hud-b, 40px) + 64px); bottom: auto; align-items: flex-start; }
+  .soc-req { max-width: min(calc(40vw / var(--ui-zoom, 1)), 340px); font-size: 12px; }
+}

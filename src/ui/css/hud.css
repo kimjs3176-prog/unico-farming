@@ -1,0 +1,48 @@
+/* 위쪽 HUD: 돈·시계·계절·레벨·날씨 칩, 오른쪽 버튼, FPS 칩, 가방으로 날아가는 아이콘 (hud.js) */
+/* HUD */
+.hud-top { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
+.chip { background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 16px; padding: 6px 12px; box-shadow: 0 4px 0 rgba(107,74,46,0.15); display: flex; align-items: center; gap: 6px; font-size: 15px; color: var(--brown); }
+.chip .money { color: #b7791f; font-size: 17px; display: inline-block; }
+.chip .money.bump { animation: bump 0.4s cubic-bezier(.3,1.8,.5,1); }
+@keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
+.hud-right button.bump { animation: bump 0.4s cubic-bezier(.3,1.8,.5,1); }
+.chip small { font-weight: 500; color: #666; }
+.chip .xpbar { width: 70px; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
+.chip .xpbar i { display: block; height: 100%; background: var(--leaf); }
+.hud-right { margin-left: auto; display: flex; gap: 6px; }
+.hud-right button { padding: 8px 10px; font-size: 14px; }
+@media (pointer: coarse) { .hint-kbd { display: none; } }
+.money { font-weight: 900; color: var(--ink); }
+
+.weather-chip { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); padding: 8px 12px; font-size: 14px; }
+.weather-chip small { color: #666; font-weight: 500; }
+/* 가방으로 날아가는 아이템 */
+.fly { position: fixed; z-index: 40; font-size: 30px; pointer-events: none; transition: transform 0.75s cubic-bezier(.5,-0.4,.7,1), opacity 0.75s; filter: drop-shadow(0 3px 2px rgba(0,0,0,0.25)); }
+
+/* 초당 프레임 표시 (환경설정에서 켜기) */
+.fps-chip { position: absolute; right: 12px; top: calc(var(--hud-b, 52px) + 162px); background: rgba(35,25,22,0.7); color: #fff; font-size: 12px; padding: 3px 9px; border-radius: 10px; display: none; pointer-events: none; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .fps-chip { top: 206px; } }
+.hud-right .lbl { display: inline; }
+
+/* ---------------- 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) ----------------
+   위: 돈·시계·레벨·날씨 아이콘 + 아이콘 버튼 한 줄 / 목표는 제목 한 줄 / 미니맵 작게
+   아래: 행동 막대는 ☰ 하나로 접고, 채팅 입력은 '말하기' 를 눌렀을 때만
+   (theme/ 조각 끝의 같은 조건 블록이 테마 규칙에 덮이는 값을 다시 잡아 줌 — 함께 고칠 것)
+   가장자리 값은 노치·홈 막대 안전 영역(--sal/--sar/--sat/--sab)만큼 안쪽으로 */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  .hud-top { top: calc(4px + var(--sat)); left: calc(4px + var(--sal)); right: calc(4px + var(--sar)); gap: 3px; align-items: center; }
+  .chip, .weather-chip { border-width: 2px; border-radius: 10px; padding: 2px 6px; font-size: 11px; gap: 3px; box-shadow: 0 2px 0 rgba(107,74,46,0.15); }
+  .chip .money { font-size: 12px; }
+  .chip .xpbar { width: 28px; height: 5px; }
+  .chip .xp { display: none; }
+  .weather-chip > span, .weather-chip small { display: none; }
+  /* 누르는 칸: 날씨 칩·위 버튼은 보이는 모양보다 조금 넓게 (좌우는 간격의 절반까지만 → 옆 칸과 안 겹침) */
+  .weather-chip { position: relative; min-width: 30px; min-height: 26px; justify-content: center; }
+  .weather-chip::after { content: ''; position: absolute; inset: -5px -1px -2px; }
+  .hud-right { gap: 6px; }
+  .hud-right button { position: relative; min-width: 36px; min-height: 32px; padding: 4px 6px; font-size: 15px; border-radius: 10px; box-shadow: 0 2px 0 #ccc; }
+  .hud-right button::after { content: ''; position: absolute; inset: -3px -3px -6px; }
+  .hud-right .lbl { display: none; }
+  .hud-right b { font-size: 11px; }
+  .fps-chip { right: calc(4px + var(--sar)); top: calc(var(--hud-b, 40px) + 84px); }
+}

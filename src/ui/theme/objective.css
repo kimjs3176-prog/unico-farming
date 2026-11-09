@@ -1,0 +1,4 @@
+/* 테마: 목표 칩 */
+.objective { background: linear-gradient(180deg, #fffdf7, #f6efe0); border: 2px solid var(--wood-l); border-radius: 14px; box-shadow: var(--chip-shadow); }
+.objective.done { border-color: #8fd06f; background: linear-gradient(180deg, #f6fdf0, #e6f7da); }
+.objective .dir { background: linear-gradient(180deg, #ffe08a, var(--gold)); box-shadow: inset 0 -2px 0 var(--gold-d); }

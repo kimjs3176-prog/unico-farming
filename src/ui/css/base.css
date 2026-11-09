@@ -1,0 +1,36 @@
+/* 바탕: 코인 글꼴·색 변수·글꼴·#ui 층(클릭·확대·안전 영역)·기본 단추 */
+/* 🪙 코인: 오래된 Windows 등 시스템에 없는 이모지라 안 보이던 문제 → 코인 한 글자만 든 컬러 글꼴(524바이트)을 앞에 둠
+   (Fluent Emoji Flat 'coin', MIT · Microsoft — docs/ASSETS_CC0.md). unicode-range 덕분에 다른 글자는 그대로 */
+@font-face { font-family: 'Unico Coin'; src: url('/fonts/unico-coin.woff2') format('woff2'); unicode-range: U+1FA99; font-display: block; }
+:root {
+  --ink: #231916; --teal: #30b6aa; --teal-d: #299d93; --gold: #fac03e; --leaf: #6dbb4f; --pink: #f1deec;
+  --panel: #fffaf0; --panel-edge: #ead9b8; --brown: #6b4a2e; --cream: #fff4dc;
+  --shadow: 0 6px 0 rgba(107,74,46,0.18), 0 12px 28px rgba(35,25,22,0.16);
+  --display: 'Unico Coin', "Jua", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+  font-family: 'Unico Coin', "Gowun Dodum", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+}
+h1, h2, h3, button, .chip, .prompt, .toast, .mini-hud, .koat-score, .event-banner, .objective, kbd { font-family: var(--display); font-weight: 400 !important; letter-spacing: 0.01em; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe4ff; color: var(--ink); touch-action: none; }
+/* iOS 가로 화면에서 글자가 저절로 커지지 않게, 탭할 때 회색 상자가 번쩍이지 않게 */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#ui { position: fixed; inset: 0; pointer-events: none; }
+/* 게임 UI: 길게 눌러도 글자 선택·복사 메뉴가 뜨지 않게 (트랙터 페달을 누르고 있어도 끊기지 않음). 입력칸·접속 주소는 그대로 */
+#ui { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+#ui input, #ui textarea, #ui [contenteditable] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+#ui .join-qr-txt small { -webkit-user-select: text; user-select: text; }
+/* 노치·홈 막대 안전 영역: 확대(zoom)된 요소 안에서는 배율이 다시 곱해지므로 미리 나눠 둠 */
+#ui { --sal: calc(env(safe-area-inset-left, 0px) / var(--ui-zoom, 1)); --sar: calc(env(safe-area-inset-right, 0px) / var(--ui-zoom, 1));
+  --sat: calc(env(safe-area-inset-top, 0px) / var(--ui-zoom, 1)); --sab: calc(env(safe-area-inset-bottom, 0px) / var(--ui-zoom, 1)); }
+/* 화면 UI 는 클릭을 받되, 각 요소가 pointer-events: none 을 정하면 그것이 이기도록 우선순위 0 (:where) — 컷신 레터박스·카운트다운 같은 전체 화면 레이어가 클릭을 가로채지 않게 */
+:where(#ui) > * { pointer-events: auto; }
+/* 글자·버튼 크기 (환경설정): 화면 전체를 덮는 레이어와 JS 가 화면 좌표로 놓는 요소(.fly, .joystick)는 제외 — 조이스틱이 손가락 자리에 그대로 */
+:where(#ui) > :not(.cine-bars, .mg-count, .mg-wrap, .fly, .joystick) { zoom: var(--ui-zoom, 1); }
+button { font-size: inherit; cursor: pointer; border: 0; border-radius: 14px; padding: 8px 14px; background: var(--teal); color: #fff; box-shadow: 0 4px 0 var(--teal-d); transition: transform 0.12s cubic-bezier(.3,1.6,.5,1), filter 0.12s; }
+button:hover:not(:disabled) { transform: translateY(-2px) scale(1.03); filter: brightness(1.05); }
+button:active:not(:disabled) { transform: translateY(3px) scale(0.98); box-shadow: 0 1px 0 var(--teal-d); }
+button.ghost { background: #eee; color: var(--ink); box-shadow: 0 3px 0 #ccc; }
+button.gold { background: var(--gold); color: var(--ink); box-shadow: 0 3px 0 #d9a21c; }
+button:disabled { opacity: 0.45; cursor: default; }
+@keyframes popin { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
