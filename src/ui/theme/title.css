@@ -77,3 +77,10 @@
 }
 /* 터치 기기: 키보드 안내 숨김 */
 @media (pointer: coarse) { .hint.keys { display: none; } }
+/* 마우스를 따라다니는 노란 나비 (boot.js) — 누르기는 통과 */
+.title-butterfly { position: fixed; left: 0; top: 0; z-index: 60; width: 44px; height: 36px; pointer-events: none; will-change: transform; filter: drop-shadow(0 4px 3px rgba(80, 60, 10, 0.25)); }
+.title-butterfly svg { width: 100%; height: 100%; overflow: visible; }
+.title-butterfly .wl, .title-butterfly .wr { transform-box: view-box; transform-origin: 0 0; animation: flapl 0.22s ease-in-out infinite alternate; }
+.title-butterfly .wr { animation-name: flapr; }
+@keyframes flapl { to { transform: scaleX(0.25); } }
+@keyframes flapr { to { transform: scaleX(0.25); } }

@@ -32,6 +32,38 @@ function titleFriends() {
     `<figure style="animation-delay:${0.15 + i * 0.08}s"><svg viewBox="0 0 200 200">${speciesSVG(VILLAGER_SPECIES[id], FRIEND_COLOR[id], 'cheer', `tf_${id}_`)}</svg><figcaption>${VILLAGER_NAMES[id]}</figcaption></figure>`).join('');
 }
 
+// 첫 화면: 마우스(손가락)를 따라 팔랑팔랑 날아다니는 노란 나비 — 로딩 화면이 사라지면 스스로 멈춤
+const BUTTERFLY = '<svg viewBox="-24 -20 48 40"><g class="wl"><path d="M-2 -2C-10 -20 -24 -16 -21 -4C-19 4 -9 3 -2 0Z" fill="#ffd84a" stroke="#c98a12" stroke-width="2"/><path d="M-2 1C-12 4 -17 15 -9 17C-4 18 -1 9 -1 3Z" fill="#ffe887" stroke="#c98a12" stroke-width="2"/><circle cx="-13" cy="-8" r="2.6" fill="#f08a24"/></g><g class="wr"><path d="M2 -2C10 -20 24 -16 21 -4C19 4 9 3 2 0Z" fill="#ffd84a" stroke="#c98a12" stroke-width="2"/><path d="M2 1C12 4 17 15 9 17C4 18 1 9 1 3Z" fill="#ffe887" stroke="#c98a12" stroke-width="2"/><circle cx="13" cy="-8" r="2.6" fill="#f08a24"/></g><rect x="-1.8" y="-9" width="3.6" height="22" rx="1.8" fill="#5a3b1e"/><path d="M-1 -9Q-5 -17 -8 -18M1 -9Q5 -17 8 -18" stroke="#5a3b1e" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>';
+function titleButterfly() {
+  const ld = document.getElementById('loading');
+  if (!ld || ld.querySelector('.title-butterfly') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const b = document.createElement('div');
+  b.className = 'title-butterfly';
+  b.setAttribute('aria-hidden', 'true');
+  b.innerHTML = BUTTERFLY;
+  ld.append(b);
+  // 처음에는 화면 위쪽을 한가로이 날다가, 포인터가 움직이면 그 곁으로 (커서를 가리지 않게 살짝 위·옆에서 맴돎)
+  let x = innerWidth * 0.3, y = innerHeight * 0.25, tx = x, ty = y, ang = 0, t = 0, last = performance.now(), idle = 99;
+  const onMove = (e) => { tx = e.clientX; ty = e.clientY; idle = 0; };
+  addEventListener('pointermove', onMove, { passive: true });
+  addEventListener('pointerdown', onMove, { passive: true });
+  const step = (now) => {
+    if (!ld.isConnected || ld.classList.contains('out')) { removeEventListener('pointermove', onMove); removeEventListener('pointerdown', onMove); b.remove(); return; }
+    const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt; idle += dt;
+    // 멈춰 있으면 포인터 둘레를 맴돌고, 오래 멈추면 더 넓게 노님
+    const orbit = idle > 2.5 ? 70 : 34;
+    const gx = tx + Math.cos(t * 1.3) * orbit + 18, gy = ty - 26 + Math.sin(t * 2.1) * orbit * 0.6;
+    const k = 1 - Math.exp(-dt * 3.2);
+    const vx = (gx - x) * k, vy = (gy - y) * k;
+    x += vx; y += vy + Math.sin(t * 9) * 0.6; // 날갯짓에 맞춰 살짝 오르내림
+    const want = Math.max(-0.6, Math.min(0.6, vx * 0.05));
+    ang += (want - ang) * Math.min(1, dt * 6);
+    b.style.transform = `translate(${x - 22}px, ${y - 18}px) rotate(${ang}rad)`;
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 export async function boot(Game) {
   const canvas = document.getElementById('game');
   const bar = document.getElementById('loading-bar');
@@ -40,6 +72,7 @@ export async function boot(Game) {
   const saved = loadSave();
   nick.value = saved?.name || randomName();
   titleFriends();
+  titleButterfly();
   const assets = new Assets();
   // 글자를 넘겨야 그 글자가 든 한글 조각을 받음 (글자 없이 부르면 라틴 조각만 받아 이름표가 대체 글꼴로 구워짐)
   const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua', `${LABEL_TEXT} ${nick.value}`), document.fonts?.load?.("20px 'Unico Coin'", '🪙')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
