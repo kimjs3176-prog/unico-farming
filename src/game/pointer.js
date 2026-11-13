@@ -196,7 +196,7 @@ export class PointerNav {
     for (const e of g.ranch.ents) out.push({ objs: [e.m], pos: () => e.m.position, stop: 1.7 });
     for (const e of g.ranch.visitors || []) out.push({ objs: [e.m], pos: () => e.m.position, stop: 1.7, key: 'pet' });
     for (const e of g.npcs.list) out.push({ objs: [e.u.group], pos: () => e.u.group.position, stop: 1.9, key: 'npc' });
-    if (!g.tractor.driving) out.push({ objs: [g.tractor.model], pos: () => new THREE.Vector3(g.tractor.vehicle.x, 0, g.tractor.vehicle.z), stop: 2.7, key: 'tractor' });
+    if (!g.ride.driving) for (const r of g.ride.rides) out.push({ objs: [r.model], pos: () => new THREE.Vector3(r.vehicle.x, 0, r.vehicle.z), stop: r.reach - 0.5, key: 'ride' });
     for (const tr of g.nature.trees) out.push({ objs: [tr.m], pos: () => new THREE.Vector3(tr.x, 0, tr.z), stop: 1.6, fixed: true });
     for (const b of g.nature.bugs) if (b.g.visible) out.push({ objs: [b.g], pos: () => b.g.position.clone().setY(0), stop: 1.2, big: true, key: 'bug' });
     // fixed: 움직이지 않는 대상 → 마우스 올림 판정에서 상자로 먼저 거름 (부스 주민은 움직이므로 따로)
@@ -346,7 +346,7 @@ export class PointerNav {
     if (g.nature.fishing || g.rice.threshing) { g.input.interactTap = true; return; } // 낚시 중 클릭 = 당기기, 탈곡 중 = 연타
     if (g.dialogue?.active) { g.dialogue.advance(); return; } // 대화 중 화면을 누르면 다음 줄 (E 키와 같게)
     if (g.cinema?.locked || g.dialogue?.justClosed?.()) return;
-    if (g.ui.panel || g.tractor.driving || g.smartfarm.active) return;
+    if (g.ui.panel || g.ride.driving || g.smartfarm.active) return;
     const r = this.pick(sx, sy, touch);
     if (!r) return;
     if (r.target) g.player.goTo(r.target.pos, r.target.stop, !g.decor?.mode, r.target.key); // 꾸미기 중에는 걸어가기만

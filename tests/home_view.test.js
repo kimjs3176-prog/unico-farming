@@ -22,7 +22,7 @@ function fakeGame() {
     audio: { play() {} },
     player: { frozen: false, position: new THREE.Vector3(), moveTarget: null, unico: { playAction() {}, floorY: null, facing: 0, group: new THREE.Group() } },
     followCam: { yaw: 1.2, pitch: 0.45, distance: 9, first: false },
-    tractor: { driving: false },
+    ride: { driving: false },
     onEvent() {},
   };
   return g;

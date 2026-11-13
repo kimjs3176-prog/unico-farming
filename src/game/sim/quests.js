@@ -5,7 +5,7 @@ export const QUESTS = [
   { id: 'water3',    title: '물 주기',              desc: '자라는 작물에 물을 3번 주세요',           event: 'water',    goal: 3, reward: { money: 30, xp: 25 } },
   { id: 'harvest5',  title: '첫 수확',              desc: '작물을 5개 수확하세요',                   event: 'harvest',  goal: 5, reward: { money: 80, xp: 60 } },
   { id: 'sell10',    title: '장터 거래',            desc: '장터에서 농산물 10개를 판매하세요',        event: 'sell',     goal: 10, reward: { money: 60, xp: 50 } },
-  { id: 'tractor1',  title: '트랙터 운전 면허',     desc: '트랙터 밭갈이 미니게임을 완주하세요',      event: 'tractor',  goal: 1, reward: { money: 120, xp: 80 } },
+  { id: 'tractor1',  title: '트랙터 운전 면허',     desc: '트랙터를 타고 쟁기를 내려 밭을 갈아 보세요',  event: 'tractor',  goal: 1, reward: { money: 120, xp: 80 } },
   { id: 'smart1',    title: '스마트팜 점검',        desc: '스마트팜 환경제어 미니게임을 완료하세요',  event: 'smartfarm', goal: 1, reward: { money: 120, xp: 80 } },
   { id: 'feed3',     title: '목장 돌보기',          desc: '동물에게 사료를 3번 주세요',              event: 'feed',     goal: 3, reward: { money: 50, xp: 40 } },
   { id: 'collect5',  title: '신선한 생산물',        desc: '달걀/우유/양털을 5개 모으세요',           event: 'collect',  goal: 5, reward: { money: 100, xp: 70 } },
@@ -54,7 +54,8 @@ export const QUESTS = [
   { id: 'rprocess2', title: '치즈 공방 견습생',      desc: '목장 가공소에서 치즈·털실 같은 가공품 2개 만들기', event: 'rprocess', goal: 2, reward: { money: 150, xp: 120 } },
   { id: 'rgold1',    title: '목장의 보물',          desc: '하트 4개 동물에게서 황금 달걀 같은 특별한 생산물 받기', event: 'rgold', goal: 1, reward: { money: 250, xp: 180 } },
   { id: 'rich',      title: '천 원의 농부',         desc: '보유 금액 1,000 코인 달성',               event: 'money',    goal: 1000, reward: { money: 200, xp: 150 }, absolute: true },
-  { id: 'plow30',    title: '밭갈이 달인',          desc: '트랙터 미니게임에서 한 번에 30칸 이상 갈기', event: 'plowbest', goal: 30, reward: { money: 250, xp: 200 }, absolute: true },
+  { id: 'plow30',    title: '밭갈이 달인',          desc: '트랙터를 한 번 타고 밭을 30칸 이상 갈기',   event: 'plowbest', goal: 30, reward: { money: 250, xp: 200 }, absolute: true },
+  { id: 'ride5',     title: '마을 드라이브',        desc: '트랙터·자전거·농장 카트 같은 마을 탈것에 5번 타 보세요', event: 'ride', goal: 5, reward: { money: 60, xp: 40 } },
 ];
 
 export const LEVELS = [0, 100, 250, 500, 900, 1500, 2400, 3600, 5200, 7500];

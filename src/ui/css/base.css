@@ -9,7 +9,7 @@
   --display: 'Unico Coin', "Jua", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
   font-family: 'Unico Coin', "Gowun Dodum", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
-h1, h2, h3, button, .chip, .prompt, .toast, .mini-hud, .koat-score, .event-banner, .objective, kbd { font-family: var(--display); font-weight: 400 !important; letter-spacing: 0.01em; }
+h1, h2, h3, button, .chip, .prompt, .toast, .koat-score, .event-banner, .objective, kbd { font-family: var(--display); font-weight: 400 !important; letter-spacing: 0.01em; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe4ff; color: var(--ink); touch-action: none; }
 /* iOS 가로 화면에서 글자가 저절로 커지지 않게, 탭할 때 회색 상자가 번쩍이지 않게 */

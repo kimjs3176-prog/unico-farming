@@ -166,7 +166,7 @@ test('net: 오늘 사용량이 다 찼으면 화면 복귀·방 이동에도 접
 test('net: 다시 들어가면 서 있어도 첫 위치를 보내고, 같은 옷은 두 번 보내지 않음, 선물 실패는 화면에 넘김', (t) => {
   const { net, last, fails, setLook } = setup(t);
   const g = net.game;
-  g.tractor = { driving: false }; g.home = { inside: false };
+  g.ride = { driving: false }; g.home = { inside: false };
   g.player = { position: { x: 1, z: 2 }, unico: { facing: 0, action: '' } };
   g.followCam = {}; g.world.daylight = 1;
   net.connect();

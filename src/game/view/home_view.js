@@ -294,7 +294,7 @@ export class HomeView {
   /** 들어가기: 방으로 옮기고, 카메라를 위·앞에서 내려다보게, 바깥(하늘·비·안개)은 가림 */
   enter() {
     const g = this.game, cam = g.followCam;
-    if (this.inside || this._fadeT || this._sleeping || g.tractor.driving) return; // 페이드 중 E 를 또 눌러도 한 번만
+    if (this.inside || this._fadeT || this._sleeping || g.ride.driving) return; // 페이드 중 E 를 또 눌러도 한 번만
     g.ui.closePanel();
     g.audio.play('click');
     this._warmRoom();

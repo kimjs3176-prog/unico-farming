@@ -49,7 +49,7 @@ export class AutoPlay {
   /** 다른 일(창·대화·미니게임 등) 때문에 쉬어야 하나 */
   _busy() {
     const g = this.g;
-    return !!(g.home?.inside || g.ui.panel || g.dialogue.active || g.cinema.locked || g.tractor.driving || g.player.frozen || g.farm.job
+    return !!(g.home?.inside || g.ui.panel || g.dialogue.active || g.cinema.locked || g.ride.driving || g.player.frozen || g.farm.job
       || g.herding?.active || g.smartfarm?.active || g.decor?.mode || document.querySelector('.mg-count, .mg-wrap'));
   }
 

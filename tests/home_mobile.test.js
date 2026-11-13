@@ -77,7 +77,7 @@ function homeGame() {
     player: { frozen: false, position: new THREE.Vector3(), vel: new THREE.Vector3(), moveTarget: null, unico: { playAction() {}, floorY: null, facing: 0, group: new THREE.Group() } },
     followCam: { yaw: 0, pitch: 0.92, distance: 9.5, lookOffsetY: 0, first: false },
     costume: { wearing: null, has: () => false, sets: [] }, outfitNow: () => ({}), applyLook() {},
-    tractor: { driving: false }, onEvent() {},
+    ride: { driving: false }, onEvent() {},
   };
 }
 

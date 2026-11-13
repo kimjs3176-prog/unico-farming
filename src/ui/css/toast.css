@@ -4,7 +4,7 @@
 @keyframes toast { 0% { opacity: 0; transform: translateY(-14px) scale(0.9); } 8% { opacity: 1; transform: translateY(2px) scale(1.03); } 14% { transform: none; } 85% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
 .event-banner { position: absolute; top: calc(var(--hud-b, 52px) + 4px); left: 50%; transform: translateX(-50%); background: var(--gold); color: var(--ink); font-weight: 900; padding: 6px 14px; border-radius: 20px; box-shadow: var(--shadow); }
 /* 미니게임 HUD 가 떠 있는 동안에는 같은 자리의 이벤트 배너를 숨김 (겹치지 않게) */
-#ui:has(> .mini-hud, > .herd-hud:not(.hidden)) > .event-banner { display: none; }
+#ui:has(> .herd-hud:not(.hidden)) > .event-banner { display: none; }
 /* 수확 축제 날 배너·장터 표시 */
 .event-banner.fest { background: linear-gradient(90deg, #ffe08a, #ffb3c1, #b8e6ff); color: #5a3a1a; box-shadow: 0 0 0 3px rgba(255,255,255,0.7), var(--shadow); animation: festglow 1.6s ease-in-out infinite alternate; }
 @keyframes festglow { from { filter: brightness(1); } to { filter: brightness(1.08); } }
@@ -15,7 +15,7 @@
   .event-banner { font-size: 11px; line-height: 1.35; padding: 3px 10px; text-align: center; }
   /* 알림: 목표 칩 아래 (배너·미니게임 HUD 가 떠 있으면 그 아래로) */
   .toasts { top: calc(var(--hud-b, 40px) + 38px); }
-  #ui:has(> .mini-hud, > .herd-hud:not(.hidden), > .event-banner:not([style*="none"])) > .toasts { top: calc(var(--hud-b, 40px) + 96px); }
+  #ui:has(> .herd-hud:not(.hidden), > .event-banner:not([style*="none"])) > .toasts { top: calc(var(--hud-b, 40px) + 96px); }
   .toast { font-size: 12px; padding: 5px 12px; border-width: 2px; }
 }
 /* ---------------- 가로로 눕힌 폰 (낮은 화면 + 터치) ---------------- */

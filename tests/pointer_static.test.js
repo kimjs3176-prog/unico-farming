@@ -17,7 +17,7 @@ const { LAYOUT } = await import('../src/game/world.js');
 function outdoorGame(camera, extra = {}) {
   return {
     world: { scene: new THREE.Scene(), placed: [] }, camera, home: { inside: false },
-    ranch: { ents: [], visitors: [] }, npcs: { list: [] }, tractor: { driving: true }, koat: { booths: [], desk: { group: new THREE.Group() } },
+    ranch: { ents: [], visitors: [] }, npcs: { list: [] }, ride: { driving: true }, koat: { booths: [], desk: { group: new THREE.Group() } },
     nature: { trees: [], bugs: [] }, rice: { thresher: new THREE.Group(), paddyAt: () => -1, paddies: [] },
     farm: { tiles: [] }, player: { position: new THREE.Vector3() }, ...extra,
   };

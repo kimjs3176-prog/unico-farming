@@ -106,7 +106,7 @@ test('바깥 PointerNav.pick: 곤충은 터치로 조금 빗나가도 잡히고,
   const none = { list: [], ents: [], visitors: [], trees: [], booths: [] };
   const game = {
     world: { scene, placed: [] }, camera, home: { inside: false },
-    ranch: { ents: [], visitors: [] }, npcs: none, tractor: { driving: true }, koat: { booths: [], desk: { group: new THREE.Group() } },
+    ranch: { ents: [], visitors: [] }, npcs: none, ride: { driving: true }, koat: { booths: [], desk: { group: new THREE.Group() } },
     nature: { trees: [], bugs: [{ g: bug }] }, rice: { thresher: new THREE.Group(), paddyAt: () => -1, paddies: [] },
     farm: { tiles: [] }, player: { position: new THREE.Vector3(0, 0, 5) },
   };
@@ -160,7 +160,7 @@ test('집 안 PointerNav.pick: 실제 카메라(위·앞)에서 의자를 눌러
 function outdoorGame(camera, extra = {}) {
   return {
     world: { scene: new THREE.Scene(), placed: [] }, camera, home: { inside: false },
-    ranch: { ents: [], visitors: [] }, npcs: { list: [] }, tractor: { driving: true }, koat: { booths: [], desk: { group: new THREE.Group() } },
+    ranch: { ents: [], visitors: [] }, npcs: { list: [] }, ride: { driving: true }, koat: { booths: [], desk: { group: new THREE.Group() } },
     nature: { trees: [], bugs: [] }, rice: { thresher: new THREE.Group(), paddyAt: () => -1, paddies: [] },
     farm: { tiles: [] }, player: { position: new THREE.Vector3() }, ...extra,
   };

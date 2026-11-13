@@ -5,7 +5,7 @@ import { LAYOUT } from './world.js';
 export const GameTravel = {
   /** KOAT 체험관 입구로 이동 */
   goKoat() {
-    if (this.tractor.driving || this.smartfarm.active || this.nature.fishing || this.rice.threshing) return this.ui.toast('지금은 이동할 수 없어요');
+    if (this.ride.driving || this.smartfarm.active || this.nature.fishing || this.rice.threshing) return this.ui.toast('지금은 이동할 수 없어요');
     this.teleport(25, -24, { yaw: 0, pitch: 0.62, distance: 13, facing: Math.PI });
     this.audio.play('levelup');
     if (!this.flags.koatIntro) { this.flags.koatIntro = true; this.koatCutscene(); }

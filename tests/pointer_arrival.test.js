@@ -121,7 +121,7 @@ test('꾸미기 중 탭: 걸어가기만 (도착해도 대상이 실행되지 �
   nav.marker = { position: new THREE.Vector3(), visible: false };
   nav.pick = () => ({ target: { pos: () => new THREE.Vector3(1, 0, 1), stop: 1, key: 'npc' } });
   nav.game = {
-    nature: {}, rice: {}, ui: {}, tractor: {}, smartfarm: {}, decor: { mode: { id: 'bench' } }, audio: { play() {} }, home: {},
+    nature: {}, rice: {}, ui: {}, ride: {}, smartfarm: {}, decor: { mode: { id: 'bench' } }, audio: { play() {} }, home: {},
     player: { goTo: (...a) => calls.push(a) },
   };
   nav.click(10, 10);
@@ -149,7 +149,7 @@ test('탭 대상 종류: pointer.js 의 key 마다 같은 key 의 안내가 실�
   }
   // 상자 대상: add(near(...), x, z, stop, 'key' 또는 [...])
   for (const m of body.matchAll(/\badd\(near\(.*,\s*(\[[^\]]*\]|'[a-z_]+')\);/g)) for (const k of strs(m[1])) keys.add(k);
-  for (const k of ['npc', 'pet', 'petfind', 'player', 'tractor', 'koat', 'bug', 'fish', 'eggcatch', 'barn', 'honey', 'hive', 'build', 'trough']) {
+  for (const k of ['npc', 'pet', 'petfind', 'player', 'ride', 'koat', 'bug', 'fish', 'eggcatch', 'barn', 'honey', 'hive', 'build', 'trough']) {
     assert.ok(keys.has(k), `pointer.js 에서 '${k}' 를 읽어 냄 (시험 정규식 확인)`);
   }
   assert.ok(prefixes.has('home_'));

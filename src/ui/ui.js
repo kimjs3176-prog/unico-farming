@@ -31,13 +31,12 @@ export class UI {
     this.buildToasts();
     this.buildPrompt();
     this.buildChat();
-    this.miniHud = null;
     this.smart = null;
     this.buildActionbar();
   }
 
   // ---------------------------------------------------------------- 패널
-  closePanel() { this.panel?.remove(); this.panel = null; this.game.input.enabled = true; this.game.player.frozen = this.game.tractor.driving || this.game.smartfarm.active; }
+  closePanel() { this.panel?.remove(); this.panel = null; this.game.input.enabled = true; this.game.player.frozen = this.game.ride.driving || this.game.smartfarm.active; }
   openPanel(title) {
     this.closePanel();
     this.game.input.enabled = false;

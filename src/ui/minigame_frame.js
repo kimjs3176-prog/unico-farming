@@ -18,7 +18,6 @@ export const starsFor = (v, [a, b, c]) => (v >= c ? 3 : v >= b ? 2 : v >= a ? 1 
 export const GRADE = ['아쉬워요', '좋아요!', '훌륭해요!', '완벽해요!'];
 /** 미니게임 목록 (기록 화면용) */
 export const MINIGAMES = [
-  { id: 'tractor', icon: '🚜', title: '트랙터 밭갈이', unit: '칸', th: [15, 30, 45] },
   { id: 'thresh', icon: '⚙️', title: '탈곡', unit: '%', th: [40, 70, 90] },
   { id: 'smart', icon: '📱', title: '스마트팜 환경 제어', unit: '점', th: [50, 70, 90] },
   { id: 'herd', icon: '🐑', title: '양 몰이', unit: '마리', th: [3, 5, 6] },

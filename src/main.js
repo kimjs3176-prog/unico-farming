@@ -19,7 +19,7 @@ import { Herding } from './game/view/herding.js';
 import { Bees } from './game/view/bees.js';
 import { Cinematics } from './game/cutscene.js';
 import { Dialogue } from './ui/dialogue.js';
-import { TractorView } from './game/view/tractor_view.js';
+import { RideView } from './game/view/ride_view.js';
 import { SmartFarmView } from './game/view/smartfarm_view.js';
 import { NPCs } from './game/view/npcs.js';
 import { Economy } from './game/sim/economy.js';
@@ -102,7 +102,7 @@ class Game {
     this.player.unico.onStep = (x, z) => this.fx.dust(x, z);
     this.farm = new FarmView(this);
     this.ranch = new RanchView(this);
-    this.tractor = new TractorView(this);
+    this.ride = new RideView(this); // 마을 탈것 (트랙터·자전거·농장 카트)
     this.smartfarm = new SmartFarmView(this);
     this.villagers = new Villagers();
     this.collection = new Collection();
@@ -301,7 +301,7 @@ class Game {
 
     const pp = this.player.position;
     if (!this._warmedDeferred) this.warmDeferred(); // 뒤에서 받는 동물: 도착한 프레임에 셰이더 준비 (목장이 1초마다 풀어 놓기 전에)
-    this.world.update(dt, this.tractor.driving ? this.tractor.riderGroup.position : pp);
+    this.world.update(dt, this.ride.driving ? this.ride.riderGroup.position : pp);
     this.season.update(dt);
     // 상호작용 후보: 진행 중인 미니게임(d<0)이 최우선, 그다음 가장 가까운 대상
     // 탭해서 걸어간 대상의 안내 종류도 함께 봄 (도착하면 옆의 다른 안내가 아니라 그 대상을 실행)
@@ -309,8 +309,8 @@ class Game {
     const pick = (p) => cand.add(p);
     let prompt = null;
     const pw = this.home.inside ? this.home.outVec : pp; // 집 안이면 바깥 것들은 문 앞 기준
-    pick(this.tractor.update(dt, input, pw));
-    if (!this.tractor.driving) {
+    pick(this.ride.update(dt, input, pw));
+    if (!this.ride.driving) {
       pick(this.smartfarm.update(dt, input, pw));
       pick(this.npcs.update(dt, pw));
       pick(this.farm.update(dt, pw));
@@ -355,7 +355,7 @@ class Game {
       this.rice.update(dt, pp);
       this.nature.update(dt, pp);
       this.koat.update(dt, pp);
-      this.pet.update(dt, this.tractor.riderGroup.position);
+      this.pet.update(dt, this.ride.riderGroup.position);
       this.explore.update(dt, pp);
       this.pests.update(dt, pp);
       this.bees.update(dt, pp);
@@ -364,20 +364,20 @@ class Game {
       this.town.update(dt, pp);
       this.home.update(dt, pp);
       // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스·터치로 돌리는 동안은 멈추고, 손을 뗀 뒤 0.5초 지나면 천천히 복귀)
-      const behind = this.tractor.vehicle.heading + Math.PI;
+      const behind = this.ride.vehicle.heading + Math.PI;
       const dy = ((behind - this.followCam.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
       this._lookHold = lookHold(this._lookHold, input.looking, dt);
       if (!this._lookHold) this.followCam.yaw += dy * Math.min(1, dt * 3);
-      this.followCam.update(dt, input, this.tractor.riderGroup.position);
+      this.followCam.update(dt, input, this.ride.riderGroup.position);
     }
     this.cinema.update(dt); // 대화·컷신 연출 카메라 (따라가기 카메라 위에 섞음)
     // 잔디를 눕히는 위치: 나, 반려견, 트랙터, 가장 가까운 다른 플레이어
     const pu = this.world.scenery?.pushers?.value;
     if (pu) {
       const far = (v) => v.set(9999, 0.01, 9999);
-      if (this.tractor.driving) { const t = this.tractor.riderGroup.position; pu[0].set(t.x, 1.8, t.z); } else pu[0].set(pp.x, 0.85, pp.z);
+      if (this.ride.driving) { const t = this.ride.riderGroup.position; pu[0].set(t.x, 1.8, t.z); } else pu[0].set(pp.x, 0.85, pp.z);
       const pe = this.pet.e?.m.position; if (pe) pu[1].set(pe.x, 0.5, pe.z); else far(pu[1]);
-      const tv = this.tractor.vehicle; if (!this.tractor.driving) pu[2].set(tv.x, 1.6, tv.z); else far(pu[2]);
+      const tv = this.ride.vehicle; if (!this.ride.driving) pu[2].set(tv.x, 1.6, tv.z); else far(pu[2]);
       const rm = this.net.remote.values().next().value; if (rm) { const q = rm.unico.group.position; pu[3].set(q.x, 0.85, q.z); } else far(pu[3]);
     }
     this.ui.setPrompt(this.ui.panel ? null : prompt);
@@ -421,7 +421,7 @@ class Game {
     this.renderer.shadowMap.autoUpdate = false;
     this.frameNo = (this.frameNo || 0) + 1;
     // 움직이는 동안은 매 프레임 (몇 프레임마다 그리면 캐릭터 그림자가 뒤처져 깜빡임). 낮음은 캐릭터가 실제 그림자를 안 드리워 그대로
-    const moving = this.player?.unico?.moving || this.tractor?.driving;
+    const moving = this.player?.unico?.moving || this.ride?.driving;
     if (shEvery > 0 && (this.frameNo % Math.max(1, shEvery) === 0 || (moving && this.quality.level !== 'low'))) this.renderer.shadowMap.needsUpdate = true;
     this.postfx.setGrade(this.home?.inside ? null : this.world.tod, this.world.weatherCur?.cloud || 0); // 시간대 색 (집 안은 그대로)
     this.postfx.render();

@@ -38,6 +38,7 @@ export class DecorView {
     for (const n of Object.values(L.npcs || {})) if (!n.wander) z.push({ x: n.x, z: n.z, r: 1.6 });
     if (L.home?.door) z.push({ x: L.home.door.x, z: L.home.door.z, r: 2.2 });
     if (L.tractorHome) z.push({ x: L.tractorHome.x, z: L.tractorHome.z, r: 3 });
+    for (const list of Object.values(L.rides || {})) for (const p of list) z.push({ x: p.x, z: p.z, r: 2.4 }); // 자전거·카트 세워 두는 자리
     for (const r of L.reserved || []) if (r[4] !== 'trees') z.push([r[0], r[1], r[2], r[3]]);
     return z;
   }
@@ -82,7 +83,7 @@ export class DecorView {
   start(id) {
     const g = this.game;
     if (g.home?.inside) return g.ui.toast('🏠 집 밖에서 꾸밀 수 있어요');
-    if (g.tractor?.driving) return;
+    if (g.ride?.driving) return;
     this.stop(true);
     g.ui.closePanel();
     g.player.moveTarget = null; // 시작 전에 탭해 걷던 목표는 지움 (도착해서 그 대상이 실행되지 않게)
@@ -198,7 +199,7 @@ export class DecorView {
   update(dt, pp) {
     const g = this.game, m = this.mode;
     if (!m) return null;
-    if (g.home?.inside || g.tractor?.driving) { this.stop(true); return null; }
+    if (g.home?.inside || g.ride?.driving) { this.stop(true); return null; }
     const input = g.input;
     if (input.justPressed('KeyR')) this.rotate();
     if (input.justPressed('Escape') && !g.ui.panel) { this.stop(); return null; }

@@ -23,8 +23,13 @@ export const LAYOUT = {
   sensor: { x: -17, z: -12.5 },
   field: { x0: 6, z0: 14, cols: 10, rows: 6, cell: 2 },
   tractorHome: { x: 28.5, z: 17, heading: -Math.PI / 2 },
-  // 트랙터 마당: 밭갈이 밭 + 트랙터 자리를 울타리로 둘러 트랙터가 밖으로 나가지 않게 (사람은 북쪽 문으로 드나듦)
-  tractorYard: { x0: 6.0, z0: 12.0, x1: 31.6, z1: 27.8, gate: { x: 8.2, w: 3.2 } }, // 문은 농장에서 오는 흙길 끝(북서쪽)
+  // 트랙터 마당: 밭갈이 밭 + 트랙터 자리를 울타리로 두름. 북서쪽 문은 트랙터도 드나들 만큼 넓게 (트랙터는 마을 탈것)
+  tractorYard: { x0: 6.0, z0: 12.0, x1: 31.6, z1: 27.8, gate: { x: 9.6, w: 6.0 } }, // 문은 농장에서 오는 흙길 끝(북서쪽)
+  // 자전거·농장 카트를 세워 두는 자리 후보 (막히지 않은 첫 자리)
+  rides: {
+    bike: [{ x: 3.6, z: 2.6, heading: Math.PI / 2 }, { x: -4.5, z: 3.6, heading: -Math.PI / 2 }],
+    cart: [{ x: 2.4, z: -16, heading: Math.PI }, { x: 1.8, z: -5.4, heading: Math.PI / 2 }],
+  },
   windmill: { x: -27, z: 15 },
   pond: { x: -12, z: 18, r: 4.5 },
   // 논 (3x2), 탈곡장, 허수아비
@@ -801,7 +806,7 @@ export class World {
     });
   }
 
-  /** 트랙터 마당 울타리: 북쪽(z0)에 사람이 드나드는 문, 나머지는 막힘 (트랙터는 tractor_view 에서 문까지 막음) */
+  /** 트랙터 마당 울타리: 북쪽(z0)에 사람이 드나드는 문, 나머지는 막힘 (문은 트랙터도 지나갈 만큼 넓음) */
   _fenceYard(Y) {
     const { x0, z0, x1, z1, gate } = Y, g0 = gate.x - gate.w / 2, g1 = gate.x + gate.w / 2, t = 0.25;
     for (let x = x0 + 1; x < x1; x += 2) {

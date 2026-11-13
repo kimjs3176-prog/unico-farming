@@ -102,7 +102,7 @@ export class NPCs {
   update(dt, playerPos) {
     let hit = null, hd = 2.6;
     // 트랙터가 빠르게 스쳐 지나가면 가까운 주민이 놀람
-    const tr = this.game.tractor, tv = tr?.driving ? tr.vehicle : null;
+    const tr = this.game.ride, tv = tr?.driving ? tr.vehicle : null;
     for (const e of this.list) {
       const p = e.u.group.position;
       if (tv && Math.abs(tv.speed) > 1.2 && Math.hypot(p.x - tv.x, p.z - tv.z) < 2.9) this.startle(e, tv);

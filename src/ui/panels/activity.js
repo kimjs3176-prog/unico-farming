@@ -51,12 +51,9 @@ export const ActivityUI = {
 
   hideThresh() { this.threshPanel?.remove(); this.threshPanel = null; this._th = null; },
 
-  showMinigame(kind, s) {
-    this.hideMinigame();
-    this.miniHud = h('div', 'mini-hud', `<div class="tm"><small>남은 시간</small><span class="t">${Math.ceil(s.time)}</span>s</div><div><small>갈아낸 칸</small><span class="s">${s.score}</span>/${s.max}<i class="prog"><b></b></i></div><div class="stk"><small>연속</small><span class="k">0</span>🔥</div>`);
-    this.miniMax = s.max;
-    this.root.append(this.miniHud);
-    // 마우스/터치용 운전 버튼 (누르고 있는 동안 동작)
+  /** 탈것 운전 버튼 (마우스·터치, 누르고 있는 동안 동작). plow = 트랙터 쟁기 버튼 */
+  showDrivePad({ plow: hasPlow = false } = {}) {
+    this.hideDrivePad();
     const inp = this.game.input;
     const pad = h('div', 'drive-pad');
     const hold = (label, cls, on, off) => {
@@ -77,11 +74,14 @@ export const ActivityUI = {
     pedals.append(hold('▲<small>전진</small>', 'pad-btn gas', () => (inp.virtual.y = -1), () => inp.virtual.y === -1 && (inp.virtual.y = 0)),
       hold('▼<small>후진</small>', 'pad-btn', () => (inp.virtual.y = 1), () => inp.virtual.y === 1 && (inp.virtual.y = 0)));
     const extra = h('div', 'pad-extra');
-    const plow = h('button', 'pad-small', '🪓 쟁기');
-    plow.onclick = () => { this.game.tractor.plowDown = !this.game.tractor.plowDown; this.game.audio.play('click'); };
+    if (hasPlow) {
+      const plow = h('button', 'pad-small', '🪓 쟁기');
+      plow.onclick = () => { this.game.ride.plowDown = !this.game.ride.plowDown; this.game.audio.play('click'); };
+      extra.append(plow);
+    }
     const exit = h('button', 'pad-small ghost', '🚪 내리기');
-    exit.onclick = () => this.game.tractor.dismount(false);
-    extra.append(plow, exit);
+    exit.onclick = () => this.game.ride.dismount();
+    extra.append(exit);
     pad.append(steer, extra, pedals);
     this.root.append(pad);
     this.drivePad = pad;
@@ -91,18 +91,7 @@ export const ActivityUI = {
     this.root.classList.add('driving');
   },
 
-  updateMinigame(s) {
-    const H = this.miniHud;
-    if (!H) return;
-    const t = Math.ceil(s.time), k = s.streak || 0;
-    if (t !== this._mgT) { this._mgT = t; H.querySelector('.t').textContent = t; }
-    if (s.score !== this._mgS) { this._mgS = s.score; H.querySelector('.s').textContent = s.score; H.querySelector('.prog b').style.width = `${Math.min(100, (s.score / (this.miniMax || 1)) * 100)}%`; }
-    if (k !== this._mgK) { this._mgK = k; const el = H.querySelector('.k'); el.textContent = k; H.querySelector('.stk').classList.toggle('hot', k >= 10); el.classList.remove('bump'); void el.offsetWidth; if (k > 1) el.classList.add('bump'); }
-    H.querySelector('.tm').classList.toggle('warn', !!s.warn);
-  },
-
-  hideMinigame() {
-    this.miniHud?.remove(); this.miniHud = null;
+  hideDrivePad() {
     this.drivePad?.remove(); this.drivePad = null;
     this.game.input.virtual.x = this.game.input.virtual.y = 0;
     this.bar.style.display = '';

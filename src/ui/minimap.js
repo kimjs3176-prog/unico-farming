@@ -97,7 +97,7 @@ export class Minimap {
     c.fillStyle = '#4a90d9';
     for (const r of this.game.net.remote.values()) { const p = r.unico.group.position; c.beginPath(); c.arc(X(p.x), Z(p.z), 2.5 * ui, 0, 7); c.fill(); }
     // 나 (바라보는 방향 표시)
-    const p = this.game.tractor.driving ? this.game.tractor.riderGroup.position : this.game.home?.inside ? this.game.home.outPos : this.game.player.position;
+    const p = this.game.ride.driving ? this.game.ride.riderGroup.position : this.game.home?.inside ? this.game.home.outPos : this.game.player.position;
     c.fillStyle = '#fac03e'; c.strokeStyle = '#231916'; c.lineWidth = 1.5 * ui;
     c.beginPath(); c.arc(X(p.x), Z(p.z), 4 * ui, 0, 7); c.fill(); c.stroke();
     // 라벨
@@ -159,7 +159,7 @@ export class Minimap {
   /** 지정한 곳으로 이동 (막힌 곳이면 가장 가까운 빈자리로) */
   travel(x, z, name) {
     const g = this.game;
-    if (g.tractor.driving || g.smartfarm.active || g.nature.fishing || g.rice.threshing || g.lake?.diving || g.farm.job) return g.ui.toast('지금은 이동할 수 없어요');
+    if (g.ride.driving || g.smartfarm.active || g.nature.fishing || g.rice.threshing || g.lake?.diving || g.farm.job) return g.ui.toast('지금은 이동할 수 없어요');
     const pos = g.findOpenSpot(x, z);
     this.pick = pos;
     g.teleport(pos.x, pos.z);

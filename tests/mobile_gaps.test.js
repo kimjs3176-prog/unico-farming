@@ -19,7 +19,7 @@ const read = (p) => readFileSync(new URL(p, root), 'utf8');
 // ---------------------------------------------------------------- 트랙터 시점 복귀
 test('트랙터·낚시: 시점 판정을 input.looking 하나로', () => {
   assert.match(read('src/main.js'), /lookHold\(this\._lookHold, input\.looking, dt\)/);
-  assert.match(read('src/game/view/tractor_view.js'), /g\._lookHold = 0/);
+  assert.match(read('src/game/view/ride_view.js'), /g\._lookHold = 0/);
   assert.match(read('src/game/view/nature_view.js'), /input\.looking \|\| input\.joy\.active/);
 });
 
@@ -84,7 +84,7 @@ test('스크린샷(iPhone): 누른 그 순간에 공유 시트 (동기로 파일
 
 // ---------------------------------------------------------------- 꾸미기 시작
 test('꾸미기 시작: 그 전에 탭해 걷던 목표는 지움 (도착해서 주민 대화 등이 실행되지 않게)', () => {
-  const g = { home: { inside: false }, tractor: { driving: false }, ui: { closePanel() {}, toast() {} }, player: { moveTarget: { pos: () => null, stop: 1.9, interact: true, key: 'npc' } } };
+  const g = { home: { inside: false }, ride: { driving: false }, ui: { closePanel() {}, toast() {} }, player: { moveTarget: { pos: () => null, stop: 1.9, interact: true, key: 'npc' } } };
   const dv = Object.assign(Object.create(DecorView.prototype), { game: g, mode: null, _bar() {}, _ghost: () => null });
   dv.start(null);
   assert.equal(g.player.moveTarget, null);

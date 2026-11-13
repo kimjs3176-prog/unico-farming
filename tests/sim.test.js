@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { FarmSim } from '../src/game/sim/farm.js';
 import { Economy } from '../src/game/sim/economy.js';
 import { Quests, QUESTS } from '../src/game/sim/quests.js';
-import { FieldSim, Vehicle } from '../src/game/sim/tractor.js';
+import { FieldSim, FreeField, Vehicle, RIDE_SPECS } from '../src/game/sim/tractor.js';
 import { SmartFarmSim } from '../src/game/sim/smartfarm.js';
 import { RanchSim } from '../src/game/sim/ranch.js';
 import { CROPS } from '../src/game/sim/crops.js';
@@ -90,6 +90,33 @@ test('tractor: field plowing, rocks, timer', () => {
   const v = new Vehicle(0, 0, 0);
   v.step(1, 1, 0);
   assert.ok(v.speed > 0 && v.z > 0);
+});
+
+test('tractor field: free plowing, rocks, regrow', () => {
+  const f = new FreeField(4, 2, 2, 0, 0, [[1, 0]]);
+  assert.equal(f.open, 7);
+  assert.equal(f.plowAt(1, 1, 10), 0);
+  assert.equal(f.plowAt(1, 1, 11), -1, 'already plowed');
+  assert.equal(f.plowAt(3, 1), -1, 'rock');
+  assert.ok(f.isRock(3, 1));
+  assert.equal(f.plowAt(100, 1), -1, 'outside');
+  assert.equal(f.total, 1);
+  assert.equal(f.plowedCount, 1);
+  assert.deepEqual(f.regrow(100, 240), [], 'not yet');
+  assert.deepEqual(f.regrow(250, 240), [0], 'grass grows back');
+  assert.equal(f.plowAt(1, 1, 251), 0, 'can plow again');
+  assert.equal(f.total, 2);
+  const v = new Vehicle(0, 0, 0);
+  v.step(1, 1, 0);
+  assert.ok(v.speed > 0 && v.z > 0);
+});
+
+test('rides: bike is quicker and turns tighter than the tractor', () => {
+  const run = (spec) => { const v = new Vehicle(0, 0, 0, spec); for (let i = 0; i < 300; i++) v.step(1 / 60, 1, 1); return v; };
+  const t = run(RIDE_SPECS.tractor), b = run(RIDE_SPECS.bike), c = run(RIDE_SPECS.cart);
+  assert.ok(b.speed > t.speed && c.speed > t.speed);
+  assert.ok(Math.abs(b.heading) > Math.abs(t.heading));
+  for (const k of Object.keys(RIDE_SPECS)) assert.ok(RIDE_SPECS[k].R > 0 && RIDE_SPECS[k].MAX > 0, k);
 });
 
 test('tractor: smooth start, no sudden acceleration, gentle stop', () => {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dismountSpot } from '../src/game/view/tractor_view.js';
+import { dismountSpot } from '../src/game/view/ride_view.js';
 import { beltLaneY, beltSpeedScale, BELT_REF } from '../src/ui/koat_ui.js';
 import { LAYOUT } from '../src/game/world.js';
 import { isIOS } from '../src/ui/ui.js';

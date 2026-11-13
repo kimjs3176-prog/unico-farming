@@ -1883,7 +1883,9 @@ export class Unico {
       if (bp) { // 의자에 앉아 두 손으로 핸들
         bodyY = BODY_Y - 0.1;
         bodyPitch = 0;
-        for (const l of legs) { l.rotation.x = -1.4; l.scale.y = 1; }
+        // 자전거(pedalPhase 가 숫자)면 두 다리가 번갈아 페달을 밟음
+        const pp = this.pedalPhase;
+        legs.forEach((l, i) => { l.rotation.x = -1.4 + (pp == null ? 0 : Math.sin(pp + i * Math.PI) * 0.38); l.scale.y = 1; });
         arms[0].rotation.set(-1.15, 0, 0.35); arms[1].rotation.set(-1.15, 0, -0.35);
         tailBase = 0.4;
       } else {
