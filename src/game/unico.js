@@ -308,7 +308,7 @@ function buildTemplate(rig = 'quad') {
 function meshOf(b) {
   const m = new THREE.Mesh(b.geo, b.mats.length === 1 ? b.mats[0] : b.mats);
   m.castShadow = false; // 얼굴·소품은 작아서 그림자는 몸이 대신 (그림자 패스 부담 감소)
-  m.receiveShadow = true;
+  m.receiveShadow = false; // 몸처럼 자기 그림자를 받지 않음 — 그림자 맵을 몇 프레임마다 그릴 때 움직이는 얼굴·옷에 지난 자리 그림자가 깜빡이던 것
   return m;
 }
 
@@ -1253,7 +1253,7 @@ export class Unico {
       // 몸빼 바지: 같은 뼈대에 스킨 (몸과 같은 묶기 행렬 — 뼈 역행렬은 다시 계산하지 않음)
       const m = new THREE.SkinnedMesh(TPL.momppe, momppeMat());
       m.castShadow = false;
-      m.receiveShadow = true;
+      m.receiveShadow = false; // 얼굴·옷과 같은 이유 (움직일 때 지난 그림자 깜빡임)
       this.root.add(m);
       m.bind(this.skeleton, this.skin.bindMatrix);
       presetBounds(m);
@@ -1477,7 +1477,8 @@ export class Unico {
         const far = low && !hero ? d > (this.isLod ? 8 : 9) : d > (this.isLod ? 14 : 16);
         if (far !== this.isLod) { this.isLod = far; this.skin.visible = !far; this.skinLod.visible = far; }
       }
-      this.skin.castShadow = d < 24 && (hero || !low);
+      // 낮음은 그림자 맵을 3프레임마다 그려서 움직이는 캐릭터의 실제 그림자가 끊겨 깜빡임 → 내 캐릭터도 바닥 그림자만
+      this.skin.castShadow = d < 24 && !low;
       if (this.skinLod) this.skinLod.castShadow = this.skin.castShadow; // 저해상도로 바뀌어도 땅 그림자가 사라지지 않게 (약 5천 삼각형)
       const faceOn = d < (this.faceOff ? 36 : 40);
       if (faceOn === !!this.faceOff) {

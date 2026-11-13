@@ -66,7 +66,7 @@ test('코스튬 병합 지오메트리는 두 발 유니코끼리 공유', () =>
   assert.notEqual(a.costumeMeshes.raincoat[0], b.costumeMeshes.raincoat[0]); // 메시(뼈에 붙는 것)는 따로
 });
 
-test('품질 낮음: NPC 는 9m 넘으면 저해상도·실제 그림자 끔, 내 캐릭터는 그대로', () => {
+test('품질 낮음: NPC 는 9m 넘으면 저해상도, 실제 그림자는 모두 끄고 바닥 그림자만 (3프레임 그림자 깜빡임 방지)', () => {
   const npc = new Unico(null, {}), me = new Unico(null, { rig: 'biped' });
   me.labelAlways = true;
   try {
@@ -76,7 +76,8 @@ test('품질 낮음: NPC 는 9m 넘으면 저해상도·실제 그림자 끔, �
     assert.equal(npc.isLod, true);
     assert.equal(npc.skin.castShadow, false);
     assert.ok(!me.isLod);
-    assert.equal(me.skin.castShadow, true);
+    assert.equal(me.skin.castShadow, false);
+    assert.equal(me.shadow.visible, true);
     // 대화 구도처럼 7m 안으로 오면 원본 몸
     npc.update(1 / 60, camAt(7));
     assert.equal(npc.isLod, false);

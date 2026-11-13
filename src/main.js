@@ -420,7 +420,9 @@ class Game {
     const shEvery = shBase > 0 && this.cinema.locked ? Math.max(3, shBase) : shBase;
     this.renderer.shadowMap.autoUpdate = false;
     this.frameNo = (this.frameNo || 0) + 1;
-    if (shEvery > 0 && this.frameNo % Math.max(1, shEvery) === 0) this.renderer.shadowMap.needsUpdate = true;
+    // 움직이는 동안은 매 프레임 (몇 프레임마다 그리면 캐릭터 그림자가 뒤처져 깜빡임). 낮음은 캐릭터가 실제 그림자를 안 드리워 그대로
+    const moving = this.player?.unico?.moving || this.tractor?.driving;
+    if (shEvery > 0 && (this.frameNo % Math.max(1, shEvery) === 0 || (moving && this.quality.level !== 'low'))) this.renderer.shadowMap.needsUpdate = true;
     this.postfx.setGrade(this.home?.inside ? null : this.world.tod, this.world.weatherCur?.cloud || 0); // 시간대 색 (집 안은 그대로)
     this.postfx.render();
     input.endFrame();
