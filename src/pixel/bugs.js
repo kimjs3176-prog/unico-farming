@@ -1,3 +1,4 @@
+import { withJosa as josaW } from '../game/sim/josa.js';
 import { rollBug } from '../game/sim/fishing.js';
 import { ITEMS } from '../game/sim/items.js';
 import { Spr } from './pxl.js';
@@ -94,7 +95,7 @@ export const BugMethods = {
     const r = this.book.add(b.kind, { day: this.day });
     this.report('bug'); this.audio.play('harvest');
     this.popIcon('bug', b.x, b.y - b.h - 8);
-    this.ui.toast(`${ITEMS[b.kind].name}을(를) 잡았어요!${r.isNew ? ' (도감 등록!)' : ''}`, 'bug');
+    this.ui.toast(`${josaW(ITEMS[b.kind].name, '을/를')} 잡았어요!${r.isNew ? ' (도감 등록!)' : ''}`, 'bug');
     this.checkBook?.();
   },
 

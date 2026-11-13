@@ -20,7 +20,7 @@ export const TYPES = {
 /** 적 정의 (3D 판과 같은 까마귀·여우·늑대) */
 export const ENEMIES = {
   crow: { name: '까마귀', hp: 34, shield: 3, weak: ['water', 'sound'], reward: 25, moves: [{ name: '쪼기', dmg: [4, 6] }, { name: '날개 치기', dmg: [3, 5] }, { name: '깍깍 울기', dmg: [0, 0], fx: 'rattle' }] },
-  fox: { name: '여우', hp: 52, shield: 4, weak: ['light', 'dash'], reward: 45, moves: [{ name: '할퀴기', dmg: [6, 9] }, { name: '꼬리 흔들어 홀리기', dmg: [2, 3], fx: 'rattle' }, { name: '덥석 물기', dmg: [8, 10] }] },
+  fox: { name: '산여우', hp: 52, shield: 4, weak: ['light', 'dash'], reward: 45, moves: [{ name: '할퀴기', dmg: [6, 9] }, { name: '꼬리 흔들어 홀리기', dmg: [2, 3], fx: 'rattle' }, { name: '덥석 물기', dmg: [8, 10] }] },
   wolf: { name: '늑대', hp: 84, shield: 5, weak: ['light', 'sound'], reward: 75, moves: [{ name: '물기', dmg: [9, 12] }, { name: '하울링', dmg: [0, 0], fx: 'howl' }, { name: '돌진', dmg: [11, 14] }] },
 };
 

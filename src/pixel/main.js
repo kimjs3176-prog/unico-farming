@@ -32,6 +32,7 @@ ui.onAction = (a) => {
   else if (a === 'sound') { audio.cycle(); }
   else if (a === 'book') game.bookMenu?.();
   else if (a === 'menu') systemMenu();
+  else if (a === 'decor') game.decorMenu();
 };
 
 /** ☰ 메뉴: 자주 안 쓰는 설정은 여기로 모아 HUD 를 가볍게 (game-ui-design 스킬) */
@@ -43,6 +44,7 @@ function systemMenu() {
       sub: `${game.day}일차 · Lv.${game.level} · 자동 저장돼요`,
       items: [
         { icon: 'book', label: '도감', right: '수집 기록', onPick: () => { ui.closeMenu(); game.bookMenu?.(); } },
+        { icon: 'gift', label: '농장 꾸미기', right: `${game.decor.count}개 · B`, onPick: () => { ui.closeMenu(); game.decorMenu(); } },
         { icon: game.raining ? 'rain' : 'sun', label: '날씨 바꾸기', right: game.raining ? '비' : '맑음', onPick: () => ui.onAction('weather') },
         { icon: 'star', label: 'HD-2D 효과', right: R.fx.dof ? '켬' : '끔', onPick: () => ui.onAction('fx') },
         { icon: 'note', label: '소리', right: audio.enabled ? (audio.musicOn ? '켬' : '효과음만') : '끔', onPick: () => { audio.cycle(); } },
@@ -67,13 +69,14 @@ addEventListener('keydown', (e) => {
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { game.run = true; return; }
   if (e.code === 'Space' && game.tr.driving && !ui.busy) { e.preventDefault(); if (!e.repeat) game.togglePlow(); return; }
   const k = KEYMAP[e.code] || (/^Digit[1-9]$/.test(e.code) ? e.code.slice(5) : null);
-  if (e.code === 'Escape' && !ui.busy && !game.fish && !game.battle && !game.fight && !game.tr.driving && !game.smartRun && !game.threshing) { e.preventDefault(); systemMenu(); return; }
+  if (e.code === 'Escape' && !ui.busy && !game.decorMode && !game.fish && !game.battle && !game.fight && !game.tr.driving && !game.smartRun && !game.threshing) { e.preventDefault(); systemMenu(); return; }
   if (k) { e.preventDefault(); if (!e.repeat || !['up', 'down', 'left', 'right'].includes(k) || ui.busy) game.press(k); return; }
   if (ui.busy) return;
   if (e.code === 'KeyQ') game.cycleSeed();
   else if (e.code === 'KeyI') game.bag();
   else if (e.code === 'KeyJ') game.questMenu();
-  else if (e.code === 'KeyR') ui.onAction('weather');
+  else if (e.code === 'KeyR') { if (game.decorMode) game.decorKey('rot'); else ui.onAction('weather'); }
+  else if (e.code === 'KeyB') game.decorMenu();
   else if (e.code === 'KeyF') ui.onAction('fx');
   else if (e.code === 'KeyM') audio.cycle();
 });

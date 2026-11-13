@@ -51,7 +51,8 @@ export class UI {
 
   /* ── HUD ── */
   hud(s) {
-    this.q('.day').textContent = `${s.day}일차${s.festival ? ' · 축제' : ''}`;
+    this.q('.day').textContent = `${s.season ? `${s.season.name} ${s.season.dayIn}일 · ` : ''}${s.day}일차${s.festival ? ' · 축제' : ''}`;
+    this.q('.status').dataset.season = s.season?.id || '';
     this.q('.time').textContent = s.clock;
     const tod = this.S.iconURL(s.night ? 'moon' : 'sun'), wx = this.S.iconURL(s.raining ? 'rain' : 'sun');
     if (this.q('.tod').src !== tod) this.q('.tod').src = tod;
@@ -241,7 +242,7 @@ export class UI {
     if (!data.items.length) list.appendChild(el('div', 'empty', data.empty || '비어 있어요'));
     M.sel = Math.min(M.sel, Math.max(0, data.items.length - 1));
     data.items.forEach((it, i) => {
-      const row = el('div', 'row' + (it.disabled ? ' off' : '') + (i === M.sel ? ' sel' : ''), `<i class="cur">▶</i>${it.icon ? `<img class="ico" src="${this.S.iconURL(it.icon)}">` : ''}<span class="lb">${it.label}</span><span class="rt">${it.right ?? ''}</span>`);
+      const row = el('div', 'row' + (it.disabled ? ' off' : '') + (i === M.sel ? ' sel' : ''), `<i class="cur">▶</i>${it.img ? `<img class="ico" src="${it.img}">` : it.icon ? `<img class="ico" src="${this.S.iconURL(it.icon)}">` : ''}<span class="lb">${it.label}</span><span class="rt">${it.right ?? ''}</span>`);
       row.onclick = () => { M.sel = i; this.pickMenu(); };
       row.onmouseenter = () => { if (M.sel !== i) { M.sel = i; [...list.children].forEach((c, k) => c.classList.toggle('sel', k === i)); } };
       list.appendChild(row);

@@ -1,3 +1,4 @@
+import { withJosa as josaW } from '../game/sim/josa.js';
 import { BattleSim, UNICO_SKILLS, PET_SKILLS, TYPES, BOOST_MAX } from './battle_sim.js';
 import { rampRGB } from './pxl.js';
 
@@ -100,7 +101,7 @@ export class Battle {
   /* ── 진행 ── */
   async run() {
     await wait(650); // 화면 전환
-    await this.say(`앗! ${this.sim.enemy.name}이(가) ${this.night ? '목장을 노리고 있다!' : '밭을 쪼아 먹고 있다!'}`, 1300);
+    await this.say(`앗! ${josaW(this.sim.enemy.name, '이/가')} ${this.night ? '목장을 노리고 있다!' : '밭을 쪼아 먹고 있다!'}`, 1300);
     this.hideMsg();
     while (this.sim.state === 'fight') {
       // 파티 명령
@@ -179,8 +180,8 @@ export class Battle {
 
   async enemyAnim(ev) {
     for (const e of ev) {
-      if (e.kind === 'stunned') { await this.say(`${this.sim.enemy.name}은(는) 브레이크 상태라 움직이지 못한다!`, 1000); continue; }
-      if (e.kind === 'recover') { this.fx.push({ text: '방패 회복', x: 92, y: 60, t: 0, col: '#c8ea80' }); await this.say(`${this.sim.enemy.name}이(가) 정신을 차렸다!`, 700); continue; }
+      if (e.kind === 'stunned') { await this.say(`${josaW(this.sim.enemy.name, '은/는')} 브레이크 상태라 움직이지 못한다!`, 1000); continue; }
+      if (e.kind === 'recover') { this.fx.push({ text: '방패 회복', x: 92, y: 60, t: 0, col: '#c8ea80' }); await this.say(`${josaW(this.sim.enemy.name, '이/가')} 정신을 차렸다!`, 700); continue; }
       if (e.kind === 'enemy') {
         this.lunge.enemy = 0.4;
         await this.say(`${this.sim.enemy.name}의 ${e.move}!`, 450);
@@ -205,10 +206,10 @@ export class Battle {
       this.fx.push({ text: '도망갔다!', x: 92, y: 70, t: 0, col: '#c8ea80' });
       g.audio.play('win');
       g.econ.earn(coins); g.report('shoo');
-      await this.say(`${S.enemy.name}을(를) 쫓아냈어요! 밭과 목장을 지켰어요 · +${coins}코인`, 300);
+      await this.say(`${josaW(S.enemy.name, '을/를')} 쫓아냈어요! 밭과 목장을 지켰어요 · +${coins}코인`, 300);
     } else if (S.state === 'lose') {
       g.audio.play('bump');
-      await this.say(P.kind === 'crow' ? '기운이 다 빠졌어요… 까마귀가 작물을 쪼아 먹고 날아갔어요' : `기운이 다 빠졌어요… ${S.enemy.name}이(가) 동물들을 놀라게 하고 숲으로 갔어요`, 300);
+      await this.say(P.kind === 'crow' ? '기운이 다 빠졌어요… 까마귀가 작물을 쪼아 먹고 날아갔어요' : `기운이 다 빠졌어요… ${josaW(S.enemy.name, '이/가')} 동물들을 놀라게 하고 숲으로 갔어요`, 300);
       if (P.kind === 'crow') { const pl = g.farm.plots[P.plot]; if (pl.state === 'ready') { pl.state = 'growing'; pl.progress = 0.5; } else if (pl.state === 'growing') pl.progress = Math.max(0, pl.progress - 0.3); }
       else for (const a of g.ranch.animals) { a.aff = Math.max(0, a.aff - 4); if (a.fedTimer > 0) a.fedTimer += 30; }
     }
