@@ -9,6 +9,8 @@ import { randomName } from './game/names.js';
 import { isMobileDevice } from './game/quality.js';
 import { joinQrBox } from './ui/join_qr.js';
 import { HILLS } from './game/terrain.js';
+import { VILLAGER_SPECIES, VILLAGER_NAMES } from './game/species.js';
+import { speciesSVG } from './ui/portrait_species.js';
 
 /** 뒤로 가기용 기록 하나 끼워 두기 (주소·쿼리는 그대로) */
 export function pushBackGuard() {
@@ -21,6 +23,15 @@ const LABEL_TEXT = [
   '낚시터 기록판 의뢰 최대어 새 마을 부지 코인으로 건물을 지어요 KOAT 체험관 콩이 명예 연구원',
 ].join(' ');
 
+// 첫 화면 아래 마을 친구들 줄 (2D 초상화, 3D 모델을 받기 전에 바로 보임)
+const FRIEND_COLOR = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a07e5c', fisher: '#3a7bd5', kid: '#f28bb0' };
+function titleFriends() {
+  const box = document.querySelector('#loading .title-friends');
+  if (!box || box.childElementCount) return;
+  box.innerHTML = Object.keys(VILLAGER_SPECIES).map((id, i) =>
+    `<figure style="animation-delay:${0.15 + i * 0.08}s"><svg viewBox="0 0 200 200">${speciesSVG(VILLAGER_SPECIES[id], FRIEND_COLOR[id], 'cheer', `tf_${id}_`)}</svg><figcaption>${VILLAGER_NAMES[id]}</figcaption></figure>`).join('');
+}
+
 export async function boot(Game) {
   const canvas = document.getElementById('game');
   const bar = document.getElementById('loading-bar');
@@ -28,6 +39,7 @@ export async function boot(Game) {
   const nick = document.getElementById('nickname');
   const saved = loadSave();
   nick.value = saved?.name || randomName();
+  titleFriends();
   const assets = new Assets();
   // 글자를 넘겨야 그 글자가 든 한글 조각을 받음 (글자 없이 부르면 라틴 조각만 받아 이름표가 대체 글꼴로 구워짐)
   const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua', `${LABEL_TEXT} ${nick.value}`), document.fonts?.load?.("20px 'Unico Coin'", '🪙')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);

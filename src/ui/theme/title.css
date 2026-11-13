@@ -1,1 +1,79 @@
-/* 테마: 첫 화면 — 아직 규칙 없음 */
+/* 테마: 첫 화면 — 그림책 같은 들판 배경, 유니코 배지·로고, 나무 액자 카드, 마을 친구들 */
+#loading { background: linear-gradient(180deg, #7cc8f5 0%, #b9e6ff 42%, #fdf2d0 70%, #e9f6c9 100%); }
+/* 해와 햇살 */
+.sky-deco .sun { position: absolute; top: 7%; right: 12%; width: 120px; height: 120px; border-radius: 50%;
+  background: radial-gradient(circle, #fff7c2 0 38%, #ffe27a 39% 52%, rgba(255, 226, 122, 0.35) 53% 70%, rgba(255, 226, 122, 0) 71%);
+  animation: sunpulse 5s ease-in-out infinite; }
+@keyframes sunpulse { 50% { transform: scale(1.08); } }
+/* 언덕 세 겹 + 밭 이랑 + 헛간 */
+.hill.h3 { width: 1400px; height: 420px; left: 15%; bottom: -150px; background: #a9d978; }
+.hill.h1 { background: radial-gradient(ellipse at 50% 20%, #9bd968, #7cbf4c); z-index: 1; }
+.hill.h2 { background: radial-gradient(ellipse at 40% 15%, #8fd05e, #66ad3f); z-index: 3; }
+.sky-deco .field { position: absolute; left: -5%; right: -5%; bottom: -40px; height: 150px; z-index: 4; border-radius: 50% 50% 0 0 / 70% 70% 0 0;
+  background: repeating-linear-gradient(100deg, #b98a55 0 16px, #a5774a 16px 30px); box-shadow: inset 0 10px 0 #8fd05e; opacity: 0.95; }
+.sky-deco .barn { position: absolute; z-index: 2; left: 9%; bottom: 120px; width: 170px; height: 140px; background: no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 170 140%22%3E%3Cellipse cx=%2285%22 cy=%22134%22 rx=%2284%22 ry=%227%22 fill=%22%235d9c3a%22 opacity=%22.55%22/%3E%3Crect x=%22124%22 y=%2234%22 width=%2232%22 height=%2298%22 rx=%223%22 fill=%22%23dfe3e8%22/%3E%3Cpath d=%22M124 52h32M124 72h32M124 92h32M124 112h32%22 stroke=%22%23b9c0c9%22 stroke-width=%222%22/%3E%3Crect x=%22124%22 y=%2234%22 width=%229%22 height=%2298%22 fill=%22%23fff%22 opacity=%22.35%22/%3E%3Cpath d=%22M121 36q19-26 38 0z%22 fill=%22%238b4b3a%22 stroke=%22%236e3a2c%22 stroke-width=%222%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M14 62 32 30 64 14 96 30 114 62z%22 fill=%22%237a3b2e%22 stroke=%22%235e2c22%22 stroke-width=%223%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M24 60 38 34 64 21 90 34 104 60%22 fill=%22none%22 stroke=%22%23f6efe3%22 stroke-width=%224%22 stroke-linejoin=%22round%22/%3E%3Crect x=%2222%22 y=%2258%22 width=%2284%22 height=%2274%22 fill=%22%23d9534a%22/%3E%3Cpath d=%22M36 58v74M50 58v74M78 58v74M92 58v74%22 stroke=%22%23c4463e%22 stroke-width=%222%22/%3E%3Crect x=%2222%22 y=%2258%22 width=%2284%22 height=%2274%22 fill=%22none%22 stroke=%22%23f6efe3%22 stroke-width=%224%22/%3E%3Crect x=%2253%22 y=%2234%22 width=%2222%22 height=%2218%22 rx=%222%22 fill=%22%23ffe9a8%22 stroke=%22%23f6efe3%22 stroke-width=%223%22/%3E%3Cpath d=%22M64 34v18M53 43h22%22 stroke=%22%23f6efe3%22 stroke-width=%222%22/%3E%3Crect x=%2242%22 y=%2284%22 width=%2244%22 height=%2248%22 fill=%22%23b9443c%22 stroke=%22%23f6efe3%22 stroke-width=%224%22/%3E%3Cpath d=%22M44 86l40 44M84 86l-40 44M64 84v48%22 stroke=%22%23f6efe3%22 stroke-width=%223%22/%3E%3Cpath d=%22M0 118h22M106 118h18M0 128h22M106 128h18%22 stroke=%22%23f3e2c4%22 stroke-width=%223%22/%3E%3Cpath d=%22M4 112v20M14 112v20M112 112v20M120 112v20%22 stroke=%22%23e8d3ad%22 stroke-width=%223%22 stroke-linecap=%22round%22/%3E%3C/svg%3E"); filter: drop-shadow(0 6px 6px rgba(40, 70, 20, 0.25)); }
+/* 날리는 꽃잎 */
+.sky-deco .petal { position: absolute; top: -20px; width: 12px; height: 9px; border-radius: 70% 0 70% 0; background: #ffc1d6; opacity: 0.85; z-index: 5; animation: petalfall 11s linear infinite; }
+.petal.p1 { left: 8%; } .petal.p2 { left: 28%; animation-delay: -3s; animation-duration: 13s; } .petal.p3 { left: 52%; animation-delay: -6s; background: #fff2a8; }
+.petal.p4 { left: 74%; animation-delay: -8s; animation-duration: 12s; } .petal.p5 { left: 90%; animation-delay: -1.5s; background: #fff; }
+@keyframes petalfall { to { transform: translate(-60px, 105vh) rotate(540deg); } }
+@media (prefers-reduced-motion: reduce) { .sky-deco .petal, .sky-deco .sun, .cloud, .title-badge { animation: none !important; } }
+
+/* 가운데 묶음 */
+.title-wrap { position: relative; z-index: 6; margin: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(94vw, 460px); }
+.title-hero { display: flex; flex-direction: column; align-items: center; animation: popin 0.6s cubic-bezier(.3,1.5,.5,1); }
+.title-badge { width: 112px; height: 112px; border-radius: 50%; overflow: hidden; background: #fff; border: 5px solid #fff;
+  box-shadow: 0 0 0 5px var(--gold), 0 10px 22px rgba(60, 40, 20, 0.28); animation: bob 2.4s ease-in-out infinite; }
+.title-badge img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.title-logo { margin: 8px 0 0; line-height: 1; display: flex; gap: 10px; align-items: baseline; }
+.title-logo span { font-size: 58px; color: #fff; -webkit-text-stroke: 7px var(--teal-d); paint-order: stroke fill;
+  text-shadow: 0 6px 0 #1d7d75, 0 12px 18px rgba(20, 60, 55, 0.35); }
+.title-logo .tl-b { color: var(--gold); -webkit-text-stroke-color: #b9781e; text-shadow: 0 6px 0 #9a6214, 0 12px 18px rgba(80, 50, 10, 0.35); }
+.title-ribbon { margin: 12px 0 0; position: relative; }
+.title-ribbon span { display: inline-block; position: relative; z-index: 1; background: var(--teal); color: #fff; font-family: var(--display); font-size: 15px;
+  padding: 6px 18px; border-radius: 6px; box-shadow: 0 3px 0 var(--teal-d); }
+.title-ribbon::before, .title-ribbon::after { content: ''; position: absolute; top: 7px; width: 22px; height: 24px; background: var(--teal-d); z-index: 0; }
+.title-ribbon::before { left: -14px; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 40% 50%); }
+.title-ribbon::after { right: -14px; clip-path: polygon(0 0, 100% 0, 60% 50%, 100% 100%, 0 100%); }
+
+/* 카드: 나무 액자 */
+#loading .loading-card { width: 100%; margin: 4px 0 0; padding: 18px 22px 14px; border: 0; border-radius: 26px; background: var(--panel);
+  box-shadow: 0 0 0 6px #c9935a, 0 0 0 10px #8a5a33, 0 16px 30px rgba(60, 40, 20, 0.3); }
+.feature-row span { background: #fff; box-shadow: 0 2px 0 var(--panel-edge); }
+#loading-text { font-family: var(--display); color: var(--brown); font-size: 15px; }
+/* 불러오기 막대: 흙 이랑 위로 새싹 초록이 차오름 */
+#loading .loading-card .bar { height: 16px; margin: 10px 0 14px; background: #e9dcc2; border-radius: 10px; box-shadow: inset 0 2px 3px rgba(80, 50, 20, 0.25); }
+#loading-bar { border-radius: 10px; background: repeating-linear-gradient(-45deg, #6dbb4f 0 10px, #82cc62 10px 20px); background-size: 28px 28px; animation: barflow 1s linear infinite; }
+@keyframes barflow { to { background-position: 28px 0; } }
+.name-row input { border-color: var(--panel-edge); background: #fff; text-align: center; font-family: var(--display); font-size: 17px; }
+.name-row input:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(48, 182, 170, 0.25); }
+#start-btn { font-size: 22px; padding: 14px; border-radius: 18px; background: linear-gradient(180deg, #44c9bd, var(--teal)); box-shadow: 0 6px 0 var(--teal-d), 0 10px 18px rgba(30, 110, 100, 0.3); }
+#start-btn:disabled { filter: grayscale(0.5) brightness(1.05); opacity: 0.75; }
+#start-btn:not(:disabled) { animation: startpulse 1.8s ease-in-out infinite; }
+@keyframes startpulse { 50% { transform: scale(1.03); box-shadow: 0 6px 0 var(--teal-d), 0 12px 26px rgba(30, 110, 100, 0.45); } }
+.pixel-link { color: var(--brown); font-weight: 700; text-decoration: none; border-bottom: 2px dotted var(--panel-edge); }
+.hint.keys { color: #8a7a66; margin-bottom: 0; }
+
+/* 마을 친구들 (boot.js 가 2D 초상화로 채움) */
+.title-friends { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.title-friends figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; animation: popin 0.5s both cubic-bezier(.3,1.5,.5,1); }
+.title-friends svg { width: 58px; height: 58px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 4px 10px rgba(60, 40, 20, 0.25); background: #fff; }
+.title-friends figcaption { font-family: var(--display); font-size: 12px; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); white-space: nowrap; }
+
+/* 낮은 화면(가로 폰): 작게, 친구들·배지 숨김 */
+@media (max-height: 500px) {
+  .title-badge, .title-friends, .sky-deco .barn { display: none; }
+  .title-logo span { font-size: 32px; -webkit-text-stroke-width: 5px; }
+  .title-ribbon { margin-top: 6px; } .title-ribbon span { font-size: 12px; padding: 4px 12px; }
+  #loading .loading-card { padding: 10px 16px; }
+}
+/* 좁은 화면(세로 폰) */
+@media (max-width: 420px) {
+  .title-logo span { font-size: 46px; }
+  .title-badge { width: 92px; height: 92px; }
+  .title-ribbon span { font-size: 13px; padding: 5px 12px; }
+  .title-friends svg { width: 48px; height: 48px; }
+  .title-friends figcaption { font-size: 11px; }
+}
+/* 터치 기기: 키보드 안내 숨김 */
+@media (pointer: coarse) { .hint.keys { display: none; } }
