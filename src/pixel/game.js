@@ -1,7 +1,12 @@
+import { withJosa as josaW } from '../game/sim/josa.js';
+import { seasonOf, growthMult, priceMult, isInSeason } from '../game/sim/season.js';
 import { FarmSim } from '../game/sim/farm.js';
 import { Economy } from '../game/sim/economy.js';
 import { RanchSim } from '../game/sim/ranch.js';
-import { Villagers, VILLAGERS } from '../game/sim/villagers.js';
+import { Villagers, VILLAGERS as SIM_VILLAGERS } from '../game/sim/villagers.js';
+import { VILLAGER_NAMES, VILLAGER_SPECIES, SPECIES } from '../game/species.js';
+/** 3D 판과 같은 주민 이름 (장터 여우·연구원 너구리 …) — 규칙(sim)의 이름표는 그대로 둠 */
+const VILLAGERS = Object.fromEntries(Object.entries(SIM_VILLAGERS).map(([k, v]) => [k, { ...v, name: VILLAGER_NAMES[k] || v.name, species: VILLAGER_SPECIES[k] }]));
 import { Quests, QUESTS } from '../game/sim/quests.js';
 import { PetSim, TRICKS } from '../game/sim/pet.js';
 import { FishingSim } from '../game/sim/fishing.js';
@@ -20,6 +25,7 @@ import { initPests, PestMethods } from './pests.js';
 import { Battle } from './battle.js';
 import { initBugs, BugMethods } from './bugs.js';
 import { ActionMethods } from './actions.js';
+import { initDecor, decorSave, decorLoad, DecorMethods } from './decor.js';
 
 const T = 32;
 export const DAY_LENGTH = 360; // 3D 버전과 같은 하루 6분
@@ -29,7 +35,7 @@ const dirOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 
 const nameOf = (k) => (CROPS[k] || PRODUCTS[k] || ITEMS[k])?.name || k;
 const iconOf = (k) => (k.startsWith('bug_') ? 'bug' : k === 'rice_seed' || k === 'paddy' || k.startsWith('rice_') ? 'rice' : CROPS[k] ? k : PRODUCTS[k] ? k : k === 'feed' ? 'feed' : k === 'pet_treat' ? 'treat' : k.startsWith('fish_') ? 'fish' : k === 'compost' ? 'compost' : k.startsWith('fruit_') ? 'tomato' : k.endsWith('_gold') ? 'star' : 'gift');
 // 도트 버전에서 할 수 있는 퀘스트만 보여 줌
-const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built', 'swim', 'dive', 'honey', 'process', 'rprocess', 'fert', 'shoo', 'bug', 'book']);
+const SUPPORTED = new Set(['till', 'plant', 'water', 'harvest', 'sell', 'feed', 'collect', 'fish', 'shake', 'hearts', 'petfeed', 'weed', 'riceplant', 'thresh', 'tractor', 'plowbest', 'smartfarm', 'koatstamp', 'koatall', 'lookout', 'chest', 'lakefish', 'lakereq', 'fightwin', 'built', 'swim', 'dive', 'honey', 'process', 'rprocess', 'fert', 'shoo', 'bug', 'book', 'decor']);
 const THRESH_TIME = 6, THRESH_BAND = [0.55, 0.9]; // 3D 판과 같은 탈곡 규칙
 const M = 16; // 트랙터 시뮬레이션 1m = 16px (밭 한 칸 2m = 32px)
 
@@ -68,6 +74,9 @@ export class Game {
     this.farm = new FarmSim(PLOTS.cols * PLOTS.rows, PLOTS.cols);
     this.farm.weedChance = 0.004;
     this.econ = new Economy();
+    // 계절 (3D 판과 같은 규칙): 제철 작물 25% 빨리 자람·10% 비싸게, 겨울 바깥 밭 ×0.6
+    this.farm.growthMult = (crop) => growthMult(this.season, crop);
+    this.econ.seasonMult = (item) => priceMult(this.season, item);
     this.ranch = new RanchSim(ANIMAL_START.map((a) => ({ type: a.type })));
     this.villagers = new Villagers();
     this.quests = new Quests();
@@ -101,6 +110,7 @@ export class Game {
     initCraft(this);
     initPests(this);
     initBugs(this);
+    initDecor(this);
     this.battle = null;
     this.load();
     this.refreshDayWeather(false);
@@ -113,7 +123,7 @@ export class Game {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         v: 1, day: this.day, time: this.time, seed: this.seed, raining: this.raining,
         farm: this.farm.toJSON(), econ: this.econ.toJSON(), ranch: this.ranch.toJSON(), villagers: this.villagers.toJSON(), quests: this.quests.toJSON(), rice: { ...this.rice.toJSON(), batches: this.riceBatches }, plowBest: this.tr.best, pet: this.pet.toJSON(), book: { entries: this.book.entries, rewarded: this.book.rewarded },
-        region: regionSave(this), craft: craftSave(this), player: { x: this.player.x, y: this.player.y, dir: this.player.dir }, trees: this.fruitTrees.map((t) => t.lastShake || 0),
+        region: regionSave(this), craft: craftSave(this), decor: decorSave(this), player: { x: this.player.x, y: this.player.y, dir: this.player.dir }, trees: this.fruitTrees.map((t) => t.lastShake || 0),
       }));
     } catch { /* 저장 불가 (사생활 보호 모드 등) */ }
   }
@@ -122,7 +132,7 @@ export class Game {
     try { d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch { d = null; }
     if (!d) return;
     this.day = d.day || 1; this.time = d.time ?? 0.27; this.seed = d.seed || 'carrot'; this.raining = !!d.raining;
-    this.farm.load(d.farm); this.econ.load(d.econ); this.ranch.load(d.ranch); this.villagers.load(d.villagers); this.quests.load(d.quests); this.pet.load(d.pet); regionLoad(this, d.region); craftLoad(this, d.craft); this.rice.load(d.rice); this.riceBatches = d.rice?.batches || []; this.tr.best = d.plowBest || 0;
+    this.farm.load(d.farm); this.econ.load(d.econ); this.ranch.load(d.ranch); this.villagers.load(d.villagers); this.quests.load(d.quests); this.pet.load(d.pet); regionLoad(this, d.region); craftLoad(this, d.craft); decorLoad(this, d.decor); this.rice.load(d.rice); this.riceBatches = d.rice?.batches || []; this.tr.best = d.plowBest || 0;
     if (d.book) { this.book.entries = d.book.entries || {}; this.book.rewarded = d.book.rewarded || {}; }
     if (d.player && !this.blocked(d.player.x, d.player.y)) { this.player.place(d.player.x, d.player.y); this.player.dir = d.player.dir || 'down'; this.dog.place(d.player.x, d.player.y); }
     (d.trees || []).forEach((v, i) => { if (this.fruitTrees[i]) { this.fruitTrees[i].lastShake = v; this.fruitTrees[i].shaken = v === this.day; } });
@@ -156,6 +166,7 @@ export class Game {
     if (this.fight) { if (k === 'ok') this.reeling = true; return; }
     if (this.pano) return;
     if (this.threshing) { if (k === 'ok') this.mash(); return; }
+    if (this.decorMode && !DIRS[k] && this.decorKey(k)) return;
     if (this.tr.driving) { if (k === 'ok' || k === 'back') this.dismount(false); else if (DIRS[k] && !this.held.includes(k)) this.held.push(k); return; }
     if (k === 'ok') return this.fish ? this.reel() : this.interact();
     if (k === 'back' && this.fish) return this.cancelFish();
@@ -236,7 +247,7 @@ export class Game {
     // 여우·늑대가 울타리에 붙어 있으면 동물들이 겁먹어 생산이 멈춤
     const ready = this.ranch.tick(this.ranchThreat() ? 0 : dt, this.day);
     for (const a of ready) { const v = this.animals.find((x) => x.sim === a); if (v) v.eat = 0; }
-    if (this.pet.tick(dt) === 'dig') { this.pet.dig(); this.dogBubble = '!'; this.audio.play('bark'); this.ui.toast(`${this.pet.name}가 땅을 파서 뭔가 찾았어요!`); }
+    if (this.pet.tick(dt) === 'dig') { this.pet.dig(); this.dogBubble = '!'; this.audio.play('bark'); this.ui.toast(`${josaW(this.pet.name, '이/가')} 땅을 파서 뭔가 찾았어요!`); }
   }
 
   /** 주인공 몸 상자 (발 주변 14×9px) 가 막힌 칸이나 주민·가축과 겹치는지 */
@@ -407,6 +418,7 @@ export class Game {
     for (const t of this.fruitTrees) t.shaken = false;
     this.refreshDayWeather(true);
     this.ui.toast(`${this.day}일차 아침이 밝았어요`, 'sun');
+    { const se = this.season; if (se.dayIn === 1) { this.ui.toast(`${se.name}이 왔어요! ${se.desc}`, se.id === 'winter' ? 'rain' : se.id === 'autumn' ? 'tomato' : 'sun'); this.audio.play('levelup', 0.5); } }
     if (this.econ.festival) this.ui.toast(this.econ.festival.name, 'star');
     else if (ev) this.ui.toast(ev.name, 'coin');
     this.save();
@@ -418,10 +430,11 @@ export class Game {
 
   /** 칸에 무엇이 있는지 → { label, run } */
   targetInfo(x, y) {
+    { const dt = this.decorTarget(x, y); if (dt) return dt; }
     const p = this.player;
     const ent = this.entityAt(x, y);
     if (ent?.kind === 'npc' && ent.n.koat !== undefined) { const n = ent.n; return { label: n.koat === 'desk' ? '안내데스크 직원과 이야기' : `${n.koat >= 0 ? ['기술사업', '벤처창업', '종자사업', '스마트농업', '농기계검정', '농업환경분석'][n.koat] + '본부' : ''} 담당자와 이야기`, run: () => { n.a.dir = dirOf(this.player.x - n.a.x, this.player.y - n.a.y); this.koatTalk(n); } }; }
-    if (ent?.kind === 'npc') { const n = ent.n; return { label: `${VILLAGERS[n.id].name}와 이야기`, run: () => this.talk(n) }; }
+    if (ent?.kind === 'npc') { const n = ent.n; return { label: `${josaW(VILLAGERS[n.id].name, '와/과')} 이야기`, run: () => this.talk(n) }; }
     if (ent?.kind === 'animal') { const v = ent.a, a = v.sim; const act = this.ranch.actionFor(a, this.day); return { label: `${a.name}(${ANIMALS[a.type].name}) ${'♥'.repeat(this.ranch.hearts(a))} · ${act.type === 'feed' ? `사료 주기 (사료 ${this.econ.inventory.feed})` : act.label}`, run: () => this.animalAct(v) }; }
     if (this.dog.x === x && this.dog.y === y) return { label: `${this.pet.name} 돌보기 ${'♥'.repeat(this.pet.hearts)}`, run: () => this.dogMenu() };
     if (this.tractorTile(x, y)) return { label: '트랙터 타기 (밭갈이 미니게임)', run: () => this.beginTractor() };
@@ -453,8 +466,8 @@ export class Game {
     return null;
   }
   /** 앞 칸에 할 게 없으면 서 있는 논 (논 안에 들어가 일하기) */
-  target() { if (this.swimming) return this.diving ? null : this.swimTarget(); const pe = this.pestNear(); if (pe) return { label: `${pe.name}와 배틀! (쫓아내기)`, run: () => this.startBattle(pe) }; const bu = this.bugNear(); if (bu) return { label: `곤충채로 잡기 · ${this.book.entries[bu.kind] ? ITEMS[bu.kind].name : '처음 보는 곤충!'}`, run: () => this.catchBug(bu) }; const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) return t; const pd = paddyAt(this.player.x, this.player.y); return pd >= 0 ? this.paddyInfo(pd) : null; }
-  hintText() { if (this.player.speed > 70) return null; return this.target()?.label || null; }
+  target() { if (this.swimming) return this.diving ? null : this.swimTarget(); const pe = this.pestNear(); if (pe) return { label: `${josaW(pe.name, '와/과')} 배틀! (쫓아내기)`, run: () => this.startBattle(pe) }; const bu = this.bugNear(); if (bu) return { label: `곤충채로 잡기 · ${this.book.entries[bu.kind] ? ITEMS[bu.kind].name : '처음 보는 곤충!'}`, run: () => this.catchBug(bu) }; const [x, y] = this.facing(); const t = this.targetInfo(x, y); if (t) return t; const pd = paddyAt(this.player.x, this.player.y); return pd >= 0 ? this.paddyInfo(pd) : null; }
+  hintText() { if (this.decorMode) return `${this.decorMode.move !== undefined ? '옮겨 놓기' : '놓기'} · R 뒤집기 · Esc 그만`; if (this.player.speed > 70) return null; return this.target()?.label || null; }
   interact() { const t = this.target(); if (t) t.run(); }
 
   report(ev, n = 1) {
@@ -495,7 +508,7 @@ export class Game {
   animalAct(v) {
     const a = v.sim, act = this.ranch.actionFor(a, this.day);
     const wx = v.a.wx, wy = v.a.wy - 20;
-    if (this.night > 0.7 && act.type !== 'collect') { this.ui.toast(`${a.name}는 자고 있어요. 쉿!`, 'moon'); return; }
+    if (this.night > 0.7 && act.type !== 'collect') { this.ui.toast(`${josaW(a.name, '은/는')} 자고 있어요. 쉿!`, 'moon'); return; }
     if (act.type !== 'wait') this.startAct('pet');
     if (act.type === 'feed') {
       if (!this.econ.useFeed()) { this.ui.toast('사료가 없어요. 장터에서 사 오세요', 'feed'); return; }
@@ -753,6 +766,14 @@ export class Game {
       if (rock) { F.hits++; F.time = Math.max(0, F.time - 3); this.ui.toast('바위에 부딪혔어요! -3초', 'star'); this.audio.play('bump'); }
       else if (!this.bumpT || this.bumpT < performance.now()) { this.audio.play('bump', 0.4); this.bumpT = performance.now() + 500; }
     }
+    // 주민이 트랙터에 부딪히거나 빠르게 스치면 펄쩍 놀람 (3D 판과 같음)
+    if (Math.abs(v.speed) > 1.2) {
+      const now = performance.now();
+      for (const n of this.npcs) {
+        const d = Math.hypot(n.a.wx - v.x * M, n.a.wy - v.z * M);
+        if (d < 46 && !(n.startleUntil > now - 4000)) this.startleNpc(n);
+      }
+    }
     // 쟁기 = 트랙터 뒤 2.3m
     const plx = v.x - Math.sin(v.heading) * 2.3, plz = v.z - Math.cos(v.heading) * 2.3;
     if (tr.plowDown && Math.abs(v.speed) > 0.5 && F.running) {
@@ -776,6 +797,13 @@ export class Game {
     if (F.running && TRACTOR_TIME - F.time - tr.lastPlow > 1.2) tr.streak = 0;
     this.ui.meter({ title: '트랙터 밭갈이', time: tr.counting > 0 ? TRACTOR_TIME : F.time, text: tr.counting > 0 ? `${Math.ceil(tr.counting)}…` : `간 칸 ${F.score} / ${F.cols * F.rows - F.rocks.size}${tr.streak > 1 ? ` · 연속 ${tr.streak}` : ''} · 쟁기 ${tr.plowDown ? '내림' : '올림'}` });
     if (F.tick(dt)) this.dismount(true);
+  }
+  startleNpc(n) {
+    n.startleUntil = performance.now() + 900;
+    const V = VILLAGERS[n.id], sp = V?.species && SPECIES[V.species];
+    const line = sp?.startle?.[0] || '깜짝이야!';
+    this.audio.play('bump', 0.3);
+    this.ui.toast(`${V?.name || '주민'}: "${line}"`, 'star');
   }
   dismount(finished) {
     const tr = this.tr, F = this.field, v = this.vehicle;
@@ -804,11 +832,12 @@ export class Game {
       title: '유니코 장터', tabs: [{ id: 'buy', label: '사기' }, { id: 'sell', label: '팔기' }], tab: 'buy',
       onClose: () => { if (n) n.talking = false; },
       build: (tab) => {
-        const sub = `${e.festival ? '🎉 ' + e.festival.name + ' · ' : ''}${e.event ? '📢 ' + e.event.name + ' · ' : ''}가진 돈 ${e.money.toLocaleString()}코인`;
+        const se = this.season;
+        const sub = `<b>${se.name}</b> ${se.crops.length ? `제철: ${se.crops.map((c) => CROPS[c].name).join('·')} (빨리 자라고 10% 비싸게)` : '겨울: 바깥 밭이 천천히 자라요'} · ${e.festival ? '🎉 ' + e.festival.name + ' · ' : ''}${e.event ? '📢 ' + e.event.name + ' · ' : ''}가진 돈 ${e.money.toLocaleString()}코인`;
         if (tab === 'buy') {
           const items = Object.keys(CROPS).map((k) => {
             const C = CROPS[k], lock = C.unlockLevel > this.level;
-            return { icon: k, label: `${C.name} 씨앗${lock ? ` (Lv.${C.unlockLevel})` : ''}`, right: `${C.seedPrice} · 보유 ${e.inventory.seeds[k] || 0}`, disabled: lock || e.money < C.seedPrice, onPick: () => { if (e.buySeed(k)) { this.audio.play('coin'); } } };
+            return { icon: k, label: `${C.name} 씨앗${isInSeason(this.season, k) ? ' · 제철' : ''}${lock ? ` (Lv.${C.unlockLevel})` : ''}`, right: `${C.seedPrice} · 보유 ${e.inventory.seeds[k] || 0}`, disabled: lock || e.money < C.seedPrice, onPick: () => { if (e.buySeed(k)) { this.audio.play('coin'); } } };
           });
           items.push({ icon: 'rice', label: '볍씨 (논에 모내기)', right: `${ITEMS.rice_seed.price} · 보유 ${e.inventory.items.rice_seed || 0}`, disabled: e.money < ITEMS.rice_seed.price, onPick: () => e.buyItem('rice_seed') && this.audio.play('coin') });
           items.push({ icon: 'feed', label: '가축 사료', right: `${FEED_PRICE} · 보유 ${e.inventory.feed}`, disabled: e.money < FEED_PRICE, onPick: () => e.buyFeed() && this.audio.play('coin') });
@@ -833,7 +862,7 @@ export class Game {
     const P = this.pet;
     if (P.found) {
       const f = P.take(); this.dogBubble = null;
-      if (f.type === 'coin') { this.econ.earn(f.n); this.ui.toast(`${P.name}가 ${f.n}코인을 물어 왔어요!`, 'coin'); }
+      if (f.type === 'coin') { this.econ.earn(f.n); this.ui.toast(`${josaW(P.name, '이/가')} ${f.n}코인을 물어 왔어요!`, 'coin'); }
       else if (f.type === 'seed') { const k = this.unlockedCrops()[Math.floor(Math.random() * this.unlockedCrops().length)]; this.econ.inventory.seeds[k] = (this.econ.inventory.seeds[k] || 0) + 2; this.ui.toast(`${CROPS[k].name} 씨앗 2개를 찾았어요!`, k); }
       else { this.econ.addItem('fruit_apple'); this.ui.toast('사과를 하나 물어 왔어요!', 'tomato'); }
       this.audio.play('coin');
@@ -922,11 +951,13 @@ export class Game {
   }
   cycleSeed() { const list = this.unlockedCrops(); this.seed = list[(list.indexOf(this.seed) + 1) % list.length]; this.audio.play('click'); }
 
+  /** 지금 계절 (7일마다 봄 → 여름 → 가을 → 겨울) */
+  get season() { if (this._seaDay !== this.day) { this._seaDay = this.day; this._sea = seasonOf(this.day); } return this._sea; }
   hudState() {
     const h = Math.floor(this.time * 24), m = Math.floor((this.time * 24 - h) * 6) * 10;
     const qs = this.quests.active().filter((q) => SUPPORTED.has(q.event));
     return {
-      day: this.day, clock: `${h < 12 ? '오전' : '오후'} ${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')}`, night: this.night > 0.5, raining: this.raining, festival: !!this.econ.festival,
+      season: this.season, day: this.day, clock: `${h < 12 ? '오전' : '오후'} ${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')}`, night: this.night > 0.5, raining: this.raining, festival: !!this.econ.festival,
       money: this.econ.money, level: this.level, quest: qs[0], seed: { id: this.seed, name: CROPS[this.seed].name, n: this.econ.inventory.seeds[this.seed] || 0 },
       sound: !this.audio.enabled ? '✕' : this.audio.musicOn ? '♪' : '♩',
     };
@@ -952,7 +983,7 @@ export class Game {
   takeParticles() { const p = this.parts; this.parts = []; return p; }
   extraLights() {
     const L = [{ x: this.player.wx, y: this.player.wy - 16, r: 56, c: [150, 160, 210], k: 0.55 }];
-    return L;
+    return L.concat(this.decorLights());
   }
   drawEntities() {
     const S = this.S, out = [];
@@ -985,6 +1016,7 @@ export class Game {
   drawOthers() {
     const S = this.S, out = [];
     this.drawPests(out);
+    this.pushDecorDrawables(out);
     // 스마트팜 드론 (비닐하우스 위를 천천히 돎)
     { const t = performance.now() / 1000, cx = (59 + 4) * T, cy = (17 - 2) * T; const dx = cx + Math.cos(t * 0.4) * 150, dy = cy + Math.sin(t * 0.4) * 60; out.push({ img: S.drone[Math.floor(t * 20) % 2], x: dx - 15, y: dy - 60 + Math.sin(t * 2) * 3, sy: dy + 200, shadow: 's', sx: dx, shy: dy + 10 }); }
     // 반려견
@@ -995,8 +1027,11 @@ export class Game {
     out.push({ img: dimg, x: d.wx - 16, y: d.wy - 25 - Math.round(jump), sy: d.wy - 1, shadow: 's', sx: d.wx, shy: d.wy, bubble: this.dogBubble });
     // 주민
     for (const n of this.npcs) {
-      const img = S.char(n.id, n.look, n.a.dir, n.a.frame);
-      out.push({ img, x: n.a.wx - 20, y: n.a.wy - 50, sy: n.a.wy, shadow: 'm', sx: n.a.wx, shy: n.a.wy - 1, bubble: n.talking ? 'dots' : !this.villagers.state[n.id] ? null : this.villagers.state[n.id].request && !this.villagers.state[n.id].request.done && this.villagers.state[n.id].request.day === this.day ? null : (this.villagers.state[n.id].lastTalk !== this.day && Math.floor(performance.now() / 1600) % 3 === 0 ? '?' : null) });
+      const sp = VILLAGERS[n.id]?.species;
+      const img = sp ? S.villager(sp, n.a.dir, n.a.frame) : S.char(n.id, n.look, n.a.dir, n.a.frame);
+      const st = n.startleUntil > performance.now() ? (n.startleUntil - performance.now()) / 900 : 0; // 펄쩍 (높이 0→8→0, 부르르)
+      const jump = st ? Math.round(Math.sin(st * Math.PI) * 8) : 0, shiver = st ? Math.round(Math.sin(st * 60)) : 0;
+      out.push({ img, x: n.a.wx - 20 + shiver, y: n.a.wy - 50 - jump, sy: n.a.wy, shadow: 'm', sx: n.a.wx, shy: n.a.wy - 1, bubble: st ? '!' : n.talking ? 'dots' : !this.villagers.state[n.id] ? null : this.villagers.state[n.id].request && !this.villagers.state[n.id].request.done && this.villagers.state[n.id].request.day === this.day ? null : (this.villagers.state[n.id].lastTalk !== this.day && Math.floor(performance.now() / 1600) % 3 === 0 ? '?' : null) });
     }
     // 가축
     const sleeping = this.night > 0.7;
@@ -1052,7 +1087,7 @@ export class Game {
 /** 주민 인사말 (성격별) */
 const LINES = {
   guide: ['안녕! 유니코 마을에 온 걸 환영해. 동쪽은 밭, 서쪽은 장터, 남쪽엔 목장과 연못이 있어.', '오늘도 좋은 하루! 밭에 다가가서 E 를 누르면 갈고, 심고, 물 주고, 거둘 수 있어.', '퀘스트를 끝내면 J 를 눌러 보상을 꼭 받아. 레벨이 오르면 새 씨앗이 열려!'],
-  merchant: ['어서 와! 신선한 씨앗 있어요~ 오늘 시세도 확인해 봐!', '수확한 건 여기서 팔면 돼. 시세는 매일 바뀌니까 ▲ 표시를 잘 봐!', '7일마다 수확 축제야! 그날은 다 1.3배로 사 줄게.'],
+  merchant: ['어서 와! 신선한 씨앗 있어요~ 오늘 시세도 확인해 봐!', '밤에 닭장 노리는 건 산여우야. 난 장사만 한다구!', '수확한 건 여기서 팔면 돼. 시세는 매일 바뀌니까 ▲ 표시를 잘 봐!', '7일마다 수확 축제야! 그날은 다 1.3배로 사 줄게.'],
   granny: ['아이고, 우리 강아지 왔구나. 밭은 물만 잘 줘도 별 셋이란다.', '잡초가 나면 바로 매 줘야 해. 그래야 작물이 잘 커.', '연못에서 낚시 해 봤니? 찌가 쑥 들어갈 때 당기는 거야.'],
   kid: ['헤헤, 나랑 놀자! 연못에 황금 잉어가 산대!', '밤에는 반딧불이가 반짝반짝해. 진짜 예뻐!', '나무를 흔들면 열매가 떨어져! 하루에 한 번만!'],
   researcher: ['연구에 따르면, 물 준 밭은 3배 빨리 자라요. 퇴비를 주면 더 빠르죠.', '토마토와 딸기는 다시 열리는 작물이에요. 한 번 심으면 여러 번!', '가끔 대왕 작물이 자라요. 퇴비를 주면 확률이 두 배!'],
@@ -1135,6 +1170,7 @@ Game.prototype.kitchenMenu = function () {
 };
 Object.assign(Game.prototype, BugMethods);
 Object.assign(Game.prototype, ActionMethods);
+Object.assign(Game.prototype, DecorMethods);
 /** 도감: 종 수 퀘스트 + 카테고리 완성 보상 (3D 판과 같은 Collection) */
 Game.prototype.checkBook = function () {
   this.report('book', Object.keys(this.book.entries).length);
@@ -1145,7 +1181,7 @@ Game.prototype.checkBook = function () {
 Game.prototype.setupPortraits = function () {
   const looks = new Map();
   for (const n of NPCS) {
-    if (VILLAGERS[n.id]) looks.set(VILLAGERS[n.id].name, n.look);
+    if (VILLAGERS[n.id]) looks.set(VILLAGERS[n.id].name, VILLAGERS[n.id].species ? { species: VILLAGERS[n.id].species } : n.look);
     if (n.koat === 'desk') { looks.set('안내데스크', n.look); looks.set('안내데스크 (기획운영본부)', n.look); }
   }
   this.portraitLooks = looks;
@@ -1161,7 +1197,7 @@ Game.prototype.setupPortraits = function () {
     if (!look && key === '유니코') look = {};
     if (!look) return null;
     if (cache.has(key)) return cache.get(key);
-    const src = look === 'dog' ? this.S.shiba.down[0] : this.S.char('npc:' + key, look, 'down', 0);
+    const src = look === 'dog' ? this.S.shiba.down[0] : look.species ? this.S.villager(look.species, 'down', 0) : this.S.char('npc:' + key, look, 'down', 0);
     const box = look === 'dog' ? [0, 0, src.width, src.height] : [4, 2, 32, 32];
     const k = 3, c = document.createElement('canvas');
     c.width = c.height = 32 * k;

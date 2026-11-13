@@ -3,6 +3,8 @@ import { MW, MH, G, PLOTS, PADDIES, FIELD, WATERS, HOME, OUT } from './map.js';
 const CHUNK = 256;
 
 import { rampRGB, bayer } from './pxl.js';
+import { seasonMap, swapCanvas, seasonImg, SEASON_FX } from './season_pix.js';
+import { timeOfDay } from '../game/sim/tod.js';
 
 const T = 32;
 const EXACT = new Set([G.paddy, G.field, G.plaza, G.hill, G.cliff, G.stairs, G.floor, G.wall, G.void]);
@@ -195,7 +197,16 @@ export class Renderer {
         return fc;
       });
     }
+    if (this.season && this.season !== 'summer') swapCanvas(c, seasonMap(this.season));
     return { c, foam, x: cx * CH, y: cy * CH };
+  }
+
+  /** 계절이 바뀌면 땅을 다시 구움 (보이는 곳부터) */
+  setSeason(id) {
+    if (this.season === id) return;
+    const first = this.season === undefined;
+    this.season = id;
+    if (!first || id !== 'summer') { this.chunks = new Map(); if (!first) this.warmChunks(); }
   }
 
   /** 땅 재질별 픽셀 색 (M: 주변 재질 조회) */
@@ -307,7 +318,7 @@ export class Renderer {
         case 'stump': list.push({ img: S.stump, x: cx(o) - 13, y: by(o) - 22, sy: by(o) - 8 }); break;
         case 'hay': list.push({ img: S.hay, x: cx(o) - 17, y: by(o) - 28, sy: by(o) - 6, shadow: 'm', sx: cx(o), shy: by(o) - 4 }); break;
         case 'crate': list.push({ img: S.crate, x: cx(o) - 13, y: by(o) - 28, sy: by(o) - 6 }); break;
-        case 'flowers': decals.push({ img: S.flowers[o.seed % 8], x: cx(o) - 14, y: by(o) - 22 }); break;
+        case 'flowers': decals.push({ img: S.flowers[o.seed % 8], x: cx(o) - 14, y: by(o) - 22, flower: true }); break;
         case 'reeds': list.push({ img: S.reeds[o.seed % 3], x: cx(o) - 10, y: by(o) - 32, sy: by(o) - 4 }); break;
         case 'lily': decals.push({ img: S.lily[o.seed % 2], x: Math.round(o.px) - 9, y: Math.round(o.py) - 6, bob: o.seed }); break;
         case 'house': list.push({ img: S.house.day, glow: S.house.night, x: o.x * T, y: by(o) - 148, sy: by(o) - 2, tall: true });
@@ -355,6 +366,8 @@ export class Renderer {
         case 'fence': list.push({ img: S.fence[o.mask], x: o.x * T, y: by(o) - 42, sy: by(o) - 6 }); break;
       }
     }
+    for (const d of list) { d.st = true; d.alt = (d.o?.type === 'tree' && !d.o.fruit && d.o.seed % 3 === 0); }
+    for (const d of decals) d.fl = hash(d.x | 0, d.y | 0);
     this.statics = list;
     this.decals = decals;
   }
@@ -381,6 +394,7 @@ export class Renderer {
     this.camX = camX; this.camY = camY; this.camFX = cfx; this.camFY = cfy;
     const night = nightness(game.time);
     const rain = game.raining ? 1 : 0;
+    this.setSeason(game.season.id);
 
     g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
     g.fillStyle = '#173d30'; g.fillRect(0, 0, VW, VH);
@@ -399,7 +413,11 @@ export class Renderer {
       const len = Math.round(p.len * (k - 0.55) / 0.45) + 1;
       g.fillRect(p.x - camX - (len >> 1), p.y - camY, len, 1);
     }
-    for (const d of this.decals) g.drawImage(d.img, d.x - camX, d.y - camY + (d.bob ? Math.round(Math.sin(this.t * 1.2 + d.bob) * 0.6) : 0));
+    const sea = this.season || 'summer', sfx = SEASON_FX[sea];
+    for (const d of this.decals) {
+      if (d.flower && d.fl >= sfx.flowers) continue; // 계절마다 들꽃 양
+      g.drawImage(d.st2 ? seasonImg(d.img, sea) : d.img, d.x - camX, d.y - camY + (d.bob ? Math.round(Math.sin(this.t * 1.2 + d.bob) * 0.6) : 0));
+    }
 
     const drawables = [];
     // 트랙터 밭 (간 칸은 이랑)
@@ -496,6 +514,8 @@ export class Renderer {
       }
       if (d.thresher) img = S.thresher[Math.floor(this.t * (game.threshing ? 6 + game.threshing.gauge * 30 : 1.5)) % 3];
       if (!img) return;
+      if (d.st && sea !== 'summer') img = seasonImg(img, sea, d.alt); // 계절 색 (풀·잎·눈 쌓인 지붕)
+      if (d.ghost) { g.fillStyle = d.ghost === 'ok' ? 'rgba(90,230,130,0.35)' : 'rgba(235,70,70,0.4)'; g.fillRect(d.gx - camX, d.gy - camY, 32, 32); g.fillStyle = d.ghost === 'ok' ? '#7cf0a0' : '#ff7070'; g.fillRect(d.gx - camX, d.gy - camY, 32, 1); g.fillRect(d.gx - camX, d.gy - camY + 31, 32, 1); g.fillRect(d.gx - camX, d.gy - camY, 1, 32); g.fillRect(d.gx - camX + 31, d.gy - camY, 1, 32); }
       if (d.alpha !== undefined) g.globalAlpha = d.alpha;
       if (d.flash) g.filter = 'brightness(1.6)';
       if (d.sh) g.drawImage(img, 0, 0, img.width, d.sh, x, y, img.width, d.sh); else g.drawImage(img, x, y);
@@ -527,7 +547,11 @@ export class Renderer {
 
     // ── 조명: 주변광(곱하기) + 등불(더하기) ──
     const indoor = game.player.y >= OUT;
-    const amb = indoor ? [255 - night * 55, 244 - night * 72, 228 - night * 70] : ambientAt(game.time);
+    const amb = indoor ? [255 - night * 55, 244 - night * 72, 228 - night * 70] : [...ambientAt(game.time)];
+    if (!indoor) { // 3D 판 시간대 색 보정(sim/tod.js)을 곱함: 새벽 분홍 → 아침 금빛 → 노을 주황 → 해질녘 보랏빛을 부드럽게
+      const td = timeOfDay(game.time, this._tod ||= { sun: [0, 0, 0], tint: [0, 0, 0], warmth: 0, sat: 0 });
+      for (let k = 0; k < 3; k++) amb[k] = Math.min(255, amb[k] * (1 + (td.tint[k] - 1) * 0.8));
+    }
     const dim = rain && !indoor ? 0.78 : 1;
     const lt = this.lt;
     lt.globalCompositeOperation = 'source-over';
@@ -573,7 +597,8 @@ export class Renderer {
     game.drawGlow(g, gg, camX, camY, this.t, night);
 
     // 비
-    if (rain && !indoor) this.drawRain(g, dt);
+    if (!indoor && this.season === 'winter') this.drawSnow(g, dt, rain);
+    else if (rain && !indoor) this.drawRain(g, dt);
 
     // ── 화면 출력 + HD-2D 후처리 ──
     const ctx = this.ctx, sc = this.scale;
@@ -605,6 +630,21 @@ export class Renderer {
     if (this.fx.vignette) { ctx.fillStyle = this.vignette; ctx.fillRect(0, 0, this.canvas.width, this.canvas.height); }
   }
 
+  /** 겨울: 눈송이 (비 오는 날은 함박눈) */
+  drawSnow(g, dt, heavy) {
+    const VW = this.VW, VH = this.VH, N = heavy ? 220 : 90;
+    this.snow ||= [];
+    while (this.snow.length < N) this.snow.push({ x: Math.random() * (VW + 40), y: Math.random() * VH, v: 14 + Math.random() * 22, ph: Math.random() * 6.3, big: Math.random() < 0.25 });
+    if (this.snow.length > N) this.snow.length = N;
+    if (heavy) { g.globalAlpha = 0.12; g.fillStyle = '#c8d4f0'; g.fillRect(0, 0, VW, VH); g.globalAlpha = 1; }
+    g.fillStyle = 'rgba(255,255,255,0.9)';
+    for (const f of this.snow) {
+      f.y += f.v * dt * (heavy ? 1.6 : 1); f.ph += dt * 1.4; f.x += Math.sin(f.ph) * dt * 8 - dt * 4;
+      if (f.y > VH + 2) { f.y = -2; f.x = Math.random() * (VW + 40); }
+      g.fillRect(Math.round(f.x), Math.round(f.y), f.big ? 2 : 1, f.big ? 2 : 1);
+    }
+  }
+
   drawRain(g, dt) {
     const VW = this.VW, VH = this.VH;
     while (this.rain.length < 160) this.rain.push({ x: Math.random() * (VW + 60), y: Math.random() * VH, v: 260 + Math.random() * 120, l: 5 + Math.random() * 4, gy: Math.random() * VH });
@@ -625,7 +665,13 @@ export class Renderer {
     // 떠다니는 빛 먼지(낮) · 떨어지는 잎
     const indoor = game.player.y >= OUT;
     if (night < 0.5 && Math.random() < dt * (indoor ? 2 : 6)) this.particles.push({ kind: 'dust', x: camX + Math.random() * VW, y: camY + Math.random() * VH, vx: 3 + Math.random() * 4, vy: -2 - Math.random() * 3, life: 1, decay: 0.25 });
-    if (!indoor && Math.random() < dt * 0.8) this.particles.push({ kind: 'leaf', x: camX + Math.random() * VW, y: camY - 4, vx: 6 + Math.random() * 8, vy: 14 + Math.random() * 8, a: 0, life: 1, decay: 0.09, col: Math.random() < 0.5 ? `rgb(${rampRGB('fol', 4)})` : `rgb(${rampRGB('flowr', 3)})` });
+    const fall = SEASON_FX[this.season || 'summer'].fall;
+    // 봄 꽃잎·가을 낙엽은 더 자주, 여름은 가끔 초록 잎
+    const rate = fall === 'petal' ? 3.2 : fall === 'leaf' ? 2.6 : fall === 'snow' ? 0 : 0.8;
+    if (!indoor && Math.random() < dt * rate) {
+      const col = fall === 'petal' ? (Math.random() < 0.6 ? '#ffd0e0' : '#f8a6c4') : fall === 'leaf' ? ['#e0802c', '#d4502e', '#f6aa48', '#b8561e'][Math.floor(Math.random() * 4)] : Math.random() < 0.5 ? `rgb(${rampRGB('fol', 4)})` : `rgb(${rampRGB('flowr', 3)})`;
+      this.particles.push({ kind: 'leaf', x: camX + Math.random() * VW, y: camY - 4, vx: 6 + Math.random() * 8, vy: 14 + Math.random() * 8, a: Math.random() * 6, life: 1, decay: 0.09, col });
+    }
     for (const p of game.takeParticles()) this.particles.push(p);
     for (const p of this.particles) {
       p.x += p.vx * dt; p.y += p.vy * dt; p.life -= p.decay * dt;

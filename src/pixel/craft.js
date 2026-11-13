@@ -1,3 +1,4 @@
+import { withJosa as josaW } from '../game/sim/josa.js';
 import { Processor, RECIPES, RANCH_RECIPES, JAR_PRICES, WORKSHOP_PRICES, MAX_JARS, Composter, COMPOST_PER, COMPOST_MAX } from '../game/sim/farmcraft.js';
 import { CROPS, PRODUCTS } from '../game/sim/crops.js';
 import { ITEMS } from '../game/sim/items.js';
@@ -20,7 +21,7 @@ export function craftLoad(g, d) { if (!d) return; g.jars.load(d.jars); g.worksho
 export const CraftMethods = {
   craftTick(dt) {
     for (const [P, label] of [[this.jars, '장독대'], [this.workshop, '목장 가공소']]) {
-      for (const i of P.tick(dt)) { this.audio.play('pop'); this.ui.toast(`${label}: ${nameOf(P.slots[i].id)}이(가) 다 됐어요!`, 'gift'); }
+      for (const i of P.tick(dt)) { this.audio.play('pop'); this.ui.toast(`${label}: ${josaW(nameOf(P.slots[i].id), '이/가')} 다 됐어요!`, 'gift'); }
     }
     if (this.composter.tick(dt)) { this.audio.play('pop'); this.ui.toast('퇴비통: 퇴비가 다 익었어요!', 'compost'); }
   },
@@ -50,7 +51,7 @@ export const CraftMethods = {
             const id = P.collect(i); if (!id) return;
             e.addItem(id); this.audio.play('harvest'); this.report(ranch ? 'rprocess' : 'process');
             if (ranch) this.ranch.xp += 6; else this.farm.xp += 8;
-            this.ui.toast(`${nameOf(id)}을(를) 꺼냈어요 (장터에서 ${e.sellPrice(id)}코인)`, 'gift');
+            this.ui.toast(`${josaW(nameOf(id), '을/를')} 꺼냈어요 (장터에서 ${e.sellPrice(id)}코인)`, 'gift');
           } });
           else items.push({ icon: 'quest', label: `${slotName} ${i + 1}: ${nameOf(s.id)} 숙성 중`, right: `${Math.floor((s.t / P.recipes[s.id].time) * 100)}%`, onPick: () => {} });
         }

@@ -1,3 +1,4 @@
+import { withJosa as josaW } from '../game/sim/josa.js';
 import { SmartFarmSim, SMART_TIME } from '../game/sim/smartfarm.js';
 import {
   DIVISIONS, PASS_SCORE, TOUR_REWARD, StampBook, makeMatchRound, makeStagesRound, makeInspectRound, makeCarbonRound, makeConveyor, SEED_KINDS, scoreRun, scoreConveyor,
@@ -157,7 +158,7 @@ export const RegionMethods = {
     const link = d.game.type === 'link'; // 기술사업본부: 외부 특허 체험 페이지
     const rule = link ? '체험하면 스탬프' : `${PASS_SCORE}점 이상이면 스탬프${best !== undefined ? ` · 최고 ${best}점` : ''}`;
     const c = await this.ui.say(`${d.name}`, `${d.summary} [체험] ${d.game.title}: ${d.game.how} (${rule}${this.stamps.stamps[d.id] ? ' · 스탬프 있음' : ''})`, [link ? `${d.game.title} (새 창)` : '체험 시작', '담당 팀 듣기', '다음에']);
-    if (c === 1) { await this.ui.say(d.name, `우리 본부에는 ${d.teams.join(', ')}이(가) 있어요.`); return this.koatBooth(i); }
+    if (c === 1) { await this.ui.say(d.name, `우리 본부에는 ${josaW(d.teams.join(', '), '이/가')} 있어요.`); return this.koatBooth(i); }
     if (c !== 0) return;
     const type = d.game.type;
     if (type === 'link') { // 새 창(탭)으로 열고, 처음이면 체험 완료로 스탬프
@@ -208,7 +209,7 @@ export const RegionMethods = {
       for (const [k, it] of list.entries()) {
         const K = SEED_KINDS[it.kind];
         if (K.bad) total++;
-        const a = await this.askTimed(`${d.game.title} (${k + 1}/${list.length})`, `컨베이어에 ${K.label === '좋은 종자' ? '통통한 종자' : K.label.replace('종자', '것').replace('돌·이물질', '돌멩이')}이(가) 지나가요!`, ['골라내기', '통과'], Math.max(1.6, 3 - k * 0.09));
+        const a = await this.askTimed(`${d.game.title} (${k + 1}/${list.length})`, `컨베이어에 ${josaW(K.label === '좋은 종자' ? '통통한 종자' : K.label.replace('종자', '것').replace('돌·이물질', '돌멩이'), '이/가')} 지나가요!`, ['골라내기', '통과'], Math.max(1.6, 3 - k * 0.09));
         const pick = a.i === 0;
         if (pick && K.bad) { hit++; this.audio.play('coin', 0.4); } else if (pick && !K.bad) { wrong++; this.audio.play('bump', 0.4); }
       }
@@ -299,7 +300,7 @@ export const RegionMethods = {
       if (rec.biggest) extra += ' · 낚시터 최대어!';
     }
     this.popIcon('fish', this.player.wx, this.player.wy - 50);
-    this.ui.say('', `${nameOf(fish)}을(를) 낚았다! ${size}cm${b.isNew ? ' (도감 등록!)' : b.isRecord ? ' (최대 크기 갱신!)' : ''}${extra}`);
+    this.ui.say('', `${josaW(nameOf(fish), '을/를')} 낚았다! ${size}cm${b.isNew ? ' (도감 등록!)' : b.isRecord ? ' (최대 크기 갱신!)' : ''}${extra}`);
   },
   fishShop() {
     const A = this.angling, e = this.econ;
@@ -450,7 +451,7 @@ export const RegionMethods = {
     else if (r < 0.82) { const n = 30 + Math.floor(Math.random() * 6) * 10; this.econ.earn(n); text = `물에 빠진 동전 ${n}`; this.audio.play('coin'); icon = 'coin'; }
     else { this.econ.addItem('fish_snail', 1); const rec = this.book.add('fish_snail', { size: 4 + Math.round(Math.random() * 3), day: this.day }); this.checkBook(); text = `우렁이${rec.isNew ? ' (도감 등록!)' : ''}`; this.audio.play('harvest'); icon = 'fish'; }
     this.popIcon(icon, p.wx, p.wy - 30);
-    this.ui.toast(`잠수해서 ${text}을(를) 찾았어요!`, icon);
+    this.ui.toast(`잠수해서 ${josaW(text, '을/를')} 찾았어요!`, icon);
     this.report('dive');
   },
   /** 물 위 그림: 보물 반짝임 · 벌 · 헤엄칠 때 물결 */
