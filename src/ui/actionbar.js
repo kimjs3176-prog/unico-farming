@@ -67,6 +67,13 @@ export const ActionbarUI = {
     this.barToggle.onclick = () => this.setBarOpen(!this.root.classList.contains('bar-open'));
     root.append(this.barToggle);
     this.bar.addEventListener('click', (e) => { if (e.target.closest('button')) this.setBarOpen(false); });
+    // 터치 기기: 카메라 버튼 (＋ 가까이 · － 멀리 · 🎥 기본 거리로 캐릭터 뒤에서). 시점 돌리기는 오른쪽 화면 밀기
+    this.camPad = h('div', 'cam-pad');
+    const cb = (txt, label, fn) => { const b = h('button', '', txt); b.setAttribute('aria-label', label); b.title = label; b.onclick = (e) => { e.stopPropagation(); fn(); game.audio.play('click', 0.4); }; this.camPad.append(b); return b; };
+    cb('＋', '카메라 가까이', () => game.followCam.zoom(-1));
+    cb('－', '카메라 멀리', () => game.followCam.zoom(+1));
+    cb('🎥', '카메라 처음 거리로 (캐릭터 뒤에서)', () => game.followCam.resetView(game.player.unico.facing));
+    root.append(this.camPad);
     this.emoteMenu = null;
   },
 

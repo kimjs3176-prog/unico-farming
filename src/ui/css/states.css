@@ -1,6 +1,8 @@
 /* 여러 조각에 걸친 상태 규칙 (운전 중 E·☰ 숨김, 컷신 중 HUD 숨김, 누르는 메뉴 층 등) — style.css 안에서 마지막 (theme.css 는 그 뒤에 읽힘) */
 /* 트랙터 운전 중(#ui.driving): 운전 버튼과 겹치는 E·☰ 숨김 (내리기는 운전 버튼에 있음) */
 #ui.driving .touch-btn, #ui.driving .bar-toggle { display: none; }
+/* 카메라 버튼: 운전 버튼·펼친 행동 막대(E 버튼이 올라감)·컷신과 겹치지 않게 숨김 */
+#ui.driving .cam-pad, #ui.bar-open .cam-pad, body.cine .cam-pad { display: none; }
 /* 보여 주기만 하는 HUD 는 터치를 가로채지 않게 (아래 화면·버튼으로 통과) */
 .toasts, .event-banner, .herd-hud { pointer-events: none; }
 body.cine .hud-top, body.cine .actionbar, body.cine .chat, body.cine .minimap, body.cine .objective, body.cine .prompt, body.cine .fps-chip, body.cine .touch-btn { opacity: 0; pointer-events: none; transition: opacity 0.4s; }

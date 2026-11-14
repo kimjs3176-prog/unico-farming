@@ -7,8 +7,9 @@ import { AutoPlay } from './game/autoplay.js';
 import * as THREE from 'three';
 import './game/assets.js'; // 모델 로더는 예전처럼 여기서 평가 (three·공유 청크 내용과 해시가 그대로 → 브라우저 캐시 재사용)
 import { World } from './game/world.js';
-import { Input, lookHold } from './game/input.js';
+import { Input, lookHold, touchUI } from './game/input.js';
 import { FollowCamera, BASE_FOV, releaseInput } from './game/camera.js';
+const CAM_KEY = 'unico.cam'; // 터치 기기에서 맞춘 카메라 거리·높이각
 import { Player } from './game/player.js';
 import { FarmView } from './game/view/farm_view.js';
 import { RanchView } from './game/view/ranch_view.js';
@@ -86,7 +87,15 @@ class Game {
     this.world = new World(assets, this.renderer, this.quality);
     this.postfx = new PostFX(this.renderer, this.world.scene, this.camera, this.quality);
     this.postfx.enabled = this.quality.post;
-    this.followCam = new FollowCamera(this.camera);
+    // 카메라: 터치 기기는 멀리·높이서 시작하고, 사람이 맞춘 거리·높이각을 기억 (PC 는 예전 그대로)
+    const touchCam = touchUI();
+    let savedCam = null;
+    if (touchCam) try { savedCam = JSON.parse(localStorage.getItem(CAM_KEY) || 'null'); } catch { /* 저장소 없음 */ }
+    this.followCam = new FollowCamera(this.camera, { touch: touchCam, aspect: innerWidth / Math.max(1, innerHeight), saved: savedCam });
+    if (touchCam) this.followCam.onChange = (v) => {
+      if (this.herding?.active || this.home?.inside || this.cinema?.locked) return; // 미니게임·집 안의 임시 카메라는 기억하지 않음
+      try { localStorage.setItem(CAM_KEY, JSON.stringify(v)); } catch { /* 무시 */ }
+    };
     this.economy = new Economy();
     this.costume = new CostumeSim(); // 코스튬 (옷장·장터 의상 탭)
     this.social = new SocialSim();   // 다른 플레이어와 상호작용 (인사·하이파이브·선물·친구)
@@ -256,6 +265,19 @@ class Game {
     // 첫 화면에 필요 없는 모델(boot 에서 이미 받는 중)을 다 받으면 셰이더만 미리 준비.
     // 목장 손님 동물은 ranch.update 가 1초마다 플레이어 위치를 보고 화면 밖 먼 자리에 풀어 놓음 (여기서 바로 넣으면 눈앞에 나타날 수 있음)
     this.assets.loadDeferred?.().then(() => this.warmDeferred()).catch(() => {});
+    this.camHintOnce();
+  }
+
+  /** 터치 기기 첫 플레이: 컷신·대화가 끝난 뒤 카메라 조작법을 한 번만 알려 줌 */
+  camHintOnce() {
+    if (!touchUI()) return;
+    try { if (localStorage.getItem(CAM_KEY + '.hint')) return; } catch { return; }
+    const tick = () => {
+      if (this.cinema?.locked || this.dialogue?.active || this.ui?.panel) return setTimeout(tick, 1500);
+      this.ui.toast('🎥 오른쪽 화면을 밀면 시점이 돌아가요 · 오른쪽 ＋/－ 버튼으로 가까이/멀리');
+      try { localStorage.setItem(CAM_KEY + '.hint', '1'); } catch { /* 무시 */ }
+    };
+    setTimeout(tick, 2500);
   }
 
   /** 지금 옷차림 (옷장 소품 + 코스튬) */
