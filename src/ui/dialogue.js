@@ -1,4 +1,5 @@
 import { portraitSVG, preloadPortraits } from './portrait2d.js';
+import { textOn } from './contrast.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -66,6 +67,7 @@ export class Dialogue {
       const who = `${ln.speaker?.palette || ln.portrait || ''}:${ln.emote || ''}:${ln.speaker ? 1 : 0}`;
       if (who !== lastSpeaker) { this._portrait(ln.speaker, ln.color, ln.portrait, ln.emote); lastSpeaker = who; }
       this.el.style.setProperty('--dlg-accent', ln.color || '#30b6aa');
+      this.el.style.setProperty('--dlg-on', textOn(ln.color || '#30b6aa')); // 이름표 글자색: 배경색에 따라 흰색/진한 갈색
       this.$('.dlg-name b').textContent = ln.name || '';
       this.$('.dlg-name small').innerHTML = ln.sub ? esc(ln.sub) : '';
       this.$('.dlg-choices').innerHTML = '';

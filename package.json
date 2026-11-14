@@ -15,7 +15,9 @@
     "check:gen": "node scripts/check-gen.mjs",
     "smoke": "node scripts/smoke.mjs dist",
     "models:compress": "node scripts/compress-models.mjs",
-    "models:unico": "node scripts/build-unico-mesh.mjs"
+    "models:unico": "node scripts/build-unico-mesh.mjs",
+    "a11y": "node scripts/a11y-check.mjs http://localhost:5173/",
+    "perf": "node scripts/perf-budget.mjs http://localhost:5173/"
   },
   "dependencies": {
     "galmuri": "^2.40.3",

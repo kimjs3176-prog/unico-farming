@@ -54,3 +54,17 @@ test('재주는 하트 순서대로 열리고, 하트 4·5에 손!·춤추기', 
   assert.equal(p.unlocked('dance'), true);
   for (const t of TRICKS) assert.ok(TRICK_TIME[t.id] > 0, `${t.id} 길이`);
 });
+
+test('강아지 땅 파기 간격은 주입한 rng 로 정해짐 (rng 0 → 90초, 0.999… → 150초 미만)', () => {
+  // 준비: 하트 3개·배부름 충분, 다음 땅 파기까지 남은 시간 0 직전
+  const p = new PetSim(() => 0);
+  p.affection = 60; p.hunger = 100; p.digTimer = 0.01;
+  // 실행
+  const r = p.tick(0.05);
+  // 확인
+  assert.equal(r, 'dig');
+  assert.equal(p.digTimer, 90);
+  const q = new PetSim(() => 0.9999);
+  q.affection = 60; q.hunger = 100; q.digTimer = 0.01; q.tick(0.05);
+  assert.ok(q.digTimer > 149 && q.digTimer < 150, `digTimer ${q.digTimer}`);
+});

@@ -518,7 +518,7 @@ export class Game {
   fillTrough() {
     const n = Math.min(this.econ.inventory.feed, 20 - this.ranch.trough);
     if (n <= 0) { this.ui.toast(this.ranch.trough >= 20 ? '여물통이 가득 찼어요' : '사료가 없어요', 'feed'); return; }
-    this.econ.inventory.feed -= n; this.ranch.fillTrough(n); this.audio.play('plant');
+    this.econ.useFeed(n); this.ranch.fillTrough(n); this.audio.play('plant');
     this.ui.toast(`여물통에 사료 ${n}개를 채웠어요`, 'feed');
   }
   barnInfo() {
@@ -622,7 +622,7 @@ export class Game {
     if (!r?.rewards) return;
     for (const w of r.rewards) {
       if (w.money) this.econ.earn(w.money);
-      if (w.seeds) for (const [k, v] of Object.entries(w.seeds)) this.econ.inventory.seeds[k] = (this.econ.inventory.seeds[k] || 0) + v;
+      if (w.seeds) for (const [k, v] of Object.entries(w.seeds)) this.econ.addSeeds(k, v);
       if (w.item) for (const [k, v] of Object.entries(w.item)) this.econ.addItem(k, v);
       this.ui.toast(`${VILLAGERS[id].name} 하트 ${w.hearts}! "${w.text}"`, 'heart');
     }
@@ -834,7 +834,7 @@ export class Game {
     if (P.found) {
       const f = P.take(); this.dogBubble = null;
       if (f.type === 'coin') { this.econ.earn(f.n); this.ui.toast(`${P.name}가 ${f.n}코인을 물어 왔어요!`, 'coin'); }
-      else if (f.type === 'seed') { const k = this.unlockedCrops()[Math.floor(Math.random() * this.unlockedCrops().length)]; this.econ.inventory.seeds[k] = (this.econ.inventory.seeds[k] || 0) + 2; this.ui.toast(`${CROPS[k].name} 씨앗 2개를 찾았어요!`, k); }
+      else if (f.type === 'seed') { const k = this.unlockedCrops()[Math.floor(Math.random() * this.unlockedCrops().length)]; this.econ.addSeeds(k, 2); this.ui.toast(`${CROPS[k].name} 씨앗 2개를 찾았어요!`, k); }
       else { this.econ.addItem('fruit_apple'); this.ui.toast('사과를 하나 물어 왔어요!', 'tomato'); }
       this.audio.play('coin');
       return;

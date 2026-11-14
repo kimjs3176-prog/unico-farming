@@ -26,3 +26,6 @@
 @media (hover: none) {
   .actionbar button:not(.on):hover span { transform: none; background: rgba(255,240,215,0.16); }
 }
+
+/* ---- 접근성: 글자 명암 대비 (WCAG 2.1 SC 1.4.3, scripts/a11y-check.mjs · docs/a11y) ---- */
+.actionbar { background: linear-gradient(180deg, var(--wood) 0%, #8a5832 45%, var(--wood-d) 100%); } /* 글자 아래 밝은 나무색 4.1 → 4.7:1 */

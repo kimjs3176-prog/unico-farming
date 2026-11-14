@@ -24,7 +24,7 @@ const LABEL_TEXT = [
 ].join(' ');
 
 // 첫 화면 아래 마을 친구들 줄 (2D 초상화, 3D 모델을 받기 전에 바로 보임)
-const FRIEND_COLOR = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a07e5c', fisher: '#3a7bd5', kid: '#f28bb0' };
+const FRIEND_COLOR = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a07e5c', fisher: '#3170c9', kid: '#f28bb0' };
 function titleFriends() {
   const box = document.querySelector('#loading .title-friends');
   if (!box || box.childElementCount) return;

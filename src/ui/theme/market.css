@@ -6,3 +6,6 @@
 .mk-row.none-soft .ic { filter: saturate(0.6); }
 /* 낮은 데스크톱 창: 장터 제목 리본도 낮게 (가로 폰은 위 규칙이 모든 창에) */
 @media (max-height: 500px) { .panel.market h2 { font-size: 19px; padding-top: 8px; padding-bottom: 8px; } }
+
+/* ---- 접근성: 글자 명암 대비 (WCAG 2.1 SC 1.4.3, scripts/a11y-check.mjs · docs/a11y) ---- */
+.mk-tabs button.on { background: linear-gradient(180deg, var(--teal-t-hi), var(--teal-t) 60%, var(--teal-t-d)); box-shadow: 0 3px 0 var(--teal-t-dd); }

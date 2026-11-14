@@ -26,3 +26,9 @@
 @media (hover: none) {
   .minimap:hover { transform: none; }
 }
+
+/* ---- 접근성: 글자 명암 대비 (WCAG 2.1 SC 1.4.3, scripts/a11y-check.mjs · docs/a11y) ---- */
+.chip .money { color: #8a5208; }   /* 4.05 → 5.6:1 */
+.chip small { color: #74583e; }     /* 4.32 → 5.7:1 */
+/* 폰: 위쪽 아이콘 버튼·날씨도 누르기 쉬운 크기 (WCAG 2.2 SC 2.5.8 최소 24px) */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) { .hud-right button, .weather-chip { min-height: 30px; min-width: 32px; } }

@@ -19,15 +19,15 @@
 .mk-body { flex: 1 1 auto; min-height: 120px; min-height: min(120px, 16vh); min-height: min(120px, 16dvh); /* 낮은 화면에서는 목록이 먼저 줄어듦 */ overflow-y: auto; margin: 0 -10px; padding: 4px 10px 8px; overscroll-behavior: contain; }
 .mk-body h3 { margin: 12px 0 6px; }
 .mk-row .ic { font-size: 22px; width: 28px; text-align: center; flex: 0 0 auto; }
-.mk-row small { color: #8a7660; font-weight: 500; font-size: 12px; }
+.mk-row small { color: #74604c; font-weight: 500; font-size: 12px; }
 .mk-row.none { opacity: 0.55; }
 .mk-row .pr { min-width: 64px; }
 .mk-sellhead { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-weight: 700; }
 .mk-sellhead span { flex: 1; }
-.mk-sellhead small { color: #8a7660; font-weight: 500; font-size: 12px; display: block; }
+.mk-sellhead small { color: #74604c; font-weight: 500; font-size: 12px; display: block; }
 .mk-sellhead button { padding: 6px 10px; font-size: 13px; }
-.mk-empty { text-align: center; padding: 26px 10px; color: #8a7660; line-height: 1.6; }
-.mk-note { font-size: 13px; color: #8a7660; margin: 12px 2px 0; }
+.mk-empty { text-align: center; padding: 26px 10px; color: #74604c; line-height: 1.6; }
+.mk-note { font-size: 13px; color: #74604c; margin: 12px 2px 0; }
 .trend-flat { color: #aaa; }
 .mk-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 2px dashed rgba(107,74,46,0.18); }
 .mk-total { flex: 1; font-size: 14px; }

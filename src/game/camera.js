@@ -29,13 +29,41 @@ export function releaseInput(I) {
   }
 }
 
-/** 3인칭 추적 카메라 (드래그 회전 / 휠 줌) */
+/** 줌 한 단계 배율 (＋/－ 버튼) */
+export const ZOOM_STEP = 1.25;
+
+/**
+ * 기기별 카메라 기본값과 한계. 터치(폰·태블릿)는 화면이 작아 주변이 잘 안 보이므로 멀리·높이서 잡음
+ *  - PC: 거리 9, 높이각 0.45 (예전 그대로), 줌 4~18
+ *  - 터치 세로: 거리 15, 높이각 0.62 · 터치 가로: 거리 13, 높이각 0.55, 줌 5~24, 거의 내려다보는 각도(1.35)까지
+ */
+export function camDefaults({ touch = false, aspect = 1.6 } = {}) {
+  if (!touch) return { distance: 9, pitch: 0.45, min: 4, max: 18, pitchMax: 1.2 };
+  return aspect < 1 ? { distance: 15, pitch: 0.62, min: 5, max: 24, pitchMax: 1.35 } : { distance: 13, pitch: 0.55, min: 5, max: 24, pitchMax: 1.35 };
+}
+
+/** 줌 한 단계: dir > 0 이면 멀리, < 0 이면 가까이 (배율로 → 가까울수록 조금씩, 멀수록 크게), 한계 안으로 */
+export function zoomStep(distance, dir, { min = 4, max = 18 } = {}) {
+  const d = dir > 0 ? distance * ZOOM_STEP : distance / ZOOM_STEP;
+  return THREE.MathUtils.clamp(+d.toFixed(2), min, max);
+}
+
+/** 저장해 둔 카메라 값(거리·높이각)을 한계 안으로. 잘못된 값이면 null */
+export function savedCam(v, lim) {
+  if (!v || !Number.isFinite(+v.distance) || !Number.isFinite(+v.pitch)) return null;
+  return { distance: THREE.MathUtils.clamp(+v.distance, lim.min, lim.max), pitch: THREE.MathUtils.clamp(+v.pitch, 0.15, lim.pitchMax) };
+}
+
+/** 3인칭 추적 카메라 (드래그 회전 / 휠·두 손가락 줌 / 화면 버튼) */
 export class FollowCamera {
-  constructor(camera) {
+  /** @param opts { touch, aspect, saved: { distance, pitch } } — 터치 기기는 멀리서 시작, 저장한 값이 있으면 그 값 */
+  constructor(camera, opts = {}) {
     this.camera = camera;
     this.yaw = 0; // 카메라가 플레이어 남쪽(+Z)에서 북쪽(밭·장터 쪽)을 바라봄
-    this.pitch = 0.45;
-    this.distance = 9;
+    this.defaults = camDefaults(opts);
+    const sv = savedCam(opts.saved, this.defaults);
+    this.pitch = sv?.pitch ?? this.defaults.pitch;
+    this.distance = sv?.distance ?? this.defaults.distance;
     this.target = new THREE.Vector3();
     this.smooth = new THREE.Vector3();
     this.first = true;
@@ -45,9 +73,13 @@ export class FollowCamera {
 
   update(dt, input, targetPos) {
     if (input) {
-      this.yaw -= input.drag.dx * 0.005;
-      this.pitch = THREE.MathUtils.clamp(this.pitch + input.drag.dy * 0.004, 0.15, 1.2);
-      this.distance = THREE.MathUtils.clamp(this.distance + input.wheel * 0.01, 4, 18);
+      const L = this.defaults;
+      if (input.drag.dx || input.drag.dy || input.wheel) {
+        this.yaw -= input.drag.dx * 0.005;
+        this.pitch = THREE.MathUtils.clamp(this.pitch + input.drag.dy * 0.004, 0.15, L.pitchMax);
+        this.distance = THREE.MathUtils.clamp(this.distance + input.wheel * 0.01, L.min, L.max);
+        this._changed();
+      }
     }
     this.target.copy(targetPos);
     this.target.y += 1.1 + (this.lookOffsetY || 0);
@@ -65,6 +97,27 @@ export class FollowCamera {
     off.setLength(this.curDist);
     this.camera.position.copy(this.smooth).add(off);
     this.camera.lookAt(this.smooth);
+  }
+
+  /** ＋/－ 버튼: dir > 0 멀리, < 0 가까이 */
+  zoom(dir) {
+    this.distance = zoomStep(this.distance, dir, this.defaults);
+    this._changed();
+  }
+
+  /** 🎥 버튼: 기본 거리·높이각으로, 캐릭터 뒤에서 (facing = 캐릭터가 보는 방향) */
+  resetView(facing) {
+    this.distance = this.defaults.distance;
+    this.pitch = this.defaults.pitch;
+    if (Number.isFinite(facing)) this.yaw = facing + Math.PI;
+    this._changed();
+  }
+
+  /** 사람이 바꾼 거리·높이각을 저장하도록 알림 (onChange 는 main 이 연결, 1초에 한 번만) */
+  _changed() {
+    if (!this.onChange) return;
+    clearTimeout(this._saveT);
+    this._saveT = setTimeout(() => this.onChange({ distance: +this.distance.toFixed(2), pitch: +this.pitch.toFixed(3) }), 1000);
   }
 
   /** 카메라 기준 앞 방향(XZ) 과 오른쪽 */

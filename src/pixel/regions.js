@@ -312,7 +312,7 @@ export const RegionMethods = {
         const items = [];
         if (req.done && !req.claimed) items.push({ icon: 'star', label: `의뢰 보고: ${nameOf(req.fish)} ${req.min}cm 이상`, right: `+${req.reward}`, onPick: () => { const w = A.claim(this.day); if (!w) return; e.earn(w.money); e.addItem('bait', w.bait); this.report('lakereq'); this.audio.play('levelup'); this.ui.toast(`의뢰 보상 ${w.money}코인 + 떡밥 ${w.bait}개`, 'coin'); } });
         const n = A.nextRod, up = A.canUpgrade(e.money, this.level);
-        if (n) items.push({ icon: 'fish', label: `${n.name} (${n.desc})${n.level > this.level ? ` · Lv.${n.level}` : ''}`, right: `${n.price}`, disabled: !up.ok, onPick: () => { const u = A.canUpgrade(e.money, this.level); if (!u.ok) return; e.money -= u.price; e.stats.spent += u.price; A.upgrade(); this.audio.play('levelup'); this.ui.toast(`${A.rodInfo.name}로 바꿨어요!`, 'fish'); } });
+        if (n) items.push({ icon: 'fish', label: `${n.name} (${n.desc})${n.level > this.level ? ` · Lv.${n.level}` : ''}`, right: `${n.price}`, disabled: !up.ok, onPick: () => { const u = A.canUpgrade(e.money, this.level); if (!u.ok) return; e.spend(u.price); A.upgrade(); this.audio.play('levelup'); this.ui.toast(`${A.rodInfo.name}로 바꿨어요!`, 'fish'); } });
         items.push({ icon: 'seed', label: '떡밥 (입질↑ 희귀↑, 던질 때 1개)', right: `${ITEMS.bait.price} · 보유 ${e.inventory.items.bait || 0}`, disabled: e.money < ITEMS.bait.price, onPick: () => e.buyItem('bait') && this.audio.play('coin') });
         items.push({ icon: 'quest', label: `떡밥 자동 사용: ${A.useBait ? '켬' : '끔'}`, right: '', onPick: () => { A.useBait = !A.useBait; } });
         return { sub: `지금 낚싯대: ${A.rodInfo.name} · 오늘의 의뢰 ${nameOf(req.fish)} ${req.min}cm 이상 ${req.claimed ? '(완료)' : req.done ? '(보고 가능!)' : ''}`, items };
@@ -341,7 +341,7 @@ export const RegionMethods = {
         const s = T2.sites[i];
         if (s.state === 'building') {
           const cost = T2.rushCost(i);
-          return { sub: `${BUILDINGS[s.type].name} 공사 중 · 남은 ${Math.ceil(s.left)}초`, items: [{ icon: 'coin', label: '코인을 더 내고 바로 완성', right: `${cost}`, disabled: this.econ.money < cost, onPick: () => { if (this.econ.money < cost) return; this.econ.money -= cost; T2.rush(i); this.ui.closeMenu(); } }] };
+          return { sub: `${BUILDINGS[s.type].name} 공사 중 · 남은 ${Math.ceil(s.left)}초`, items: [{ icon: 'coin', label: '코인을 더 내고 바로 완성', right: `${cost}`, disabled: this.econ.money < cost, onPick: () => { if (!this.econ.spend(cost)) return; T2.rush(i); this.ui.closeMenu(); } }] };
         }
         if (s.state === 'done') return { sub: BUILDINGS[s.type].desc, items: [] };
         return {
@@ -350,7 +350,7 @@ export const RegionMethods = {
             const why = T2.whyNot(i, k, this.econ.money, this.level);
             return { icon: 'star', label: `${B.name} — ${B.desc}${why ? ` (${why})` : ''}`, right: `${B.price}`, disabled: !!why, onPick: () => {
               const cost = T2.build(i, k, this.econ.money, this.level); if (!cost) return;
-              this.econ.money -= cost; this.econ.stats.spent += cost; this.audio.play('coin'); this.report('build');
+              this.econ.spend(cost); this.audio.play('coin'); this.report('build');
               this.ui.closeMenu(); this.ui.toast(`${B.name} 공사 시작! (${B.time}초)`, 'star');
             } };
           }),
@@ -376,7 +376,7 @@ export const RegionMethods = {
     const r = Math.random();
     let msg;
     if (r < 0.45) { const n = 40 + Math.floor(Math.random() * 12) * 10; this.econ.earn(n); msg = `${n}코인`; this.popIcon('coin', CHESTS[i].x * T + 16, CHESTS[i].y * T); }
-    else if (r < 0.75) { const k = this.unlockedCrops()[Math.floor(Math.random() * this.unlockedCrops().length)]; this.econ.inventory.seeds[k] = (this.econ.inventory.seeds[k] || 0) + 3; msg = `${CROPS[k].name} 씨앗 3개`; }
+    else if (r < 0.75) { const k = this.unlockedCrops()[Math.floor(Math.random() * this.unlockedCrops().length)]; this.econ.addSeeds(k, 3); msg = `${CROPS[k].name} 씨앗 3개`; }
     else { const f = ['fruit_apple', 'fruit_peach', 'fruit_pear', 'fruit_persimmon'][Math.floor(Math.random() * 4)]; this.econ.addItem(f, 2); msg = `${nameOf(f)} 2개`; }
     this.audio.play('coin'); this.report('chest');
     this.ui.toast(`보물 상자: ${msg}!`, 'gift');

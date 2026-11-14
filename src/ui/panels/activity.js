@@ -11,8 +11,8 @@ export const ActivityUI = {
     const band = st ? `<div class="band" style="left:${(st.water[0] / WATER_MAX) * 100}%;width:${((st.water[1] - st.water[0]) / WATER_MAX) * 100}%"></div>` : '';
     const ok = !st || (s.water >= st.water[0] && s.water <= st.water[1]);
     const html = `<h3>🌾 ${names[s.state]}</h3>
-      <div class="gauge${ok ? '' : ' bad'}"><div class="lbl"><span>물 높이</span><span>${s.water.toFixed(1)}cm${st ? ` (적정 ${st.water[0]}~${st.water[1]})` : ''}</span></div><div class="track">${band}<div class="pin" style="left:calc(${(s.water / WATER_MAX) * 100}% - 3px)"></div></div></div>
-      ${s.state === 'growing' ? `<div class="gauge"><div class="lbl"><span>성장</span><span>${s.stage + 1}/4 단계 ${Math.round(s.progress * 100)}%</span></div><div class="track"><div class="band" style="left:0;width:${((s.stage + s.progress) / 4) * 100}%"></div></div></div>
+      <div class="gauge${ok ? '' : ' bad'}"><div class="lbl"><span>물 높이</span><span>${s.water.toFixed(1)}cm${st ? `<small class="opt"> (적정 ${st.water[0]}~${st.water[1]})</small>` : ''}</span></div><div class="track">${band}<div class="pin" style="left:calc(${(s.water / WATER_MAX) * 100}% - 3px)"></div></div></div>
+      ${s.state === 'growing' ? `<div class="gauge"><div class="lbl"><span>성장</span><span><small class="opt">${s.stage + 1}/4 단계 </small>${Math.round(s.progress * 100)}%</span></div><div class="track"><div class="band" style="left:0;width:${((s.stage + s.progress) / 4) * 100}%"></div></div></div>
       <div class="lbl-row">품질 ${Math.round(s.quality)} · 잡초 ${'🌿'.repeat(s.weeds) || '없음'}</div>` : ''}
       <div class="lbl-row">농사 숙련도 Lv.${sim.skillLevel}</div>`;
     if (html !== this.riceHtml) { this.ricePanel.innerHTML = html; this.riceHtml = html; }

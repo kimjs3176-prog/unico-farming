@@ -98,3 +98,7 @@
   .soc-reqs { left: calc(6px + var(--sal, 0px)); right: auto; transform: none; top: calc(var(--hud-b, 40px) + 64px); bottom: auto; align-items: flex-start; }
   .soc-req { max-width: min(calc(40vw / var(--ui-zoom, 1)), 340px); font-size: 12px; }
 }
+
+/* ---- 접근성: 글자 명암 대비 (WCAG 2.1 SC 1.4.3, scripts/a11y-check.mjs · docs/a11y) ---- */
+.panel h2 { background: linear-gradient(180deg, var(--teal-t-hi) 0%, var(--teal-t) 60%, var(--teal-t-d) 100%); }
+.row .pr { color: var(--teal-t); }   /* 청록 가격 4.5 → 5.7:1 */

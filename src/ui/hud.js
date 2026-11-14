@@ -25,6 +25,9 @@ export const HudUI = {
     this.btnHelp = h('button', 'ghost', '❔');
     this.btnSettings = h('button', 'ghost', '⚙️');
     this.btnSettings.title = '환경설정 (그래픽 품질)';
+    // 아이콘만 보이는 버튼(폰에서는 글자를 숨김)에도 읽을 이름 (WCAG SC 4.1.2)
+    for (const [b, n] of [[this.btnBag, '가방 (I)'], [this.btnQuest, '퀘스트 (Q)'], [this.btnHelp, '도움말'], [this.btnSettings, '환경설정']]) b.setAttribute('aria-label', n);
+    this.weatherChip.setAttribute('aria-label', '날씨');
     this.btnSettings.onclick = () => this.openSettings();
     this.btnBag.onclick = () => this.openInventory();
     this.btnQuest.onclick = () => this.openQuests();
@@ -43,6 +46,7 @@ export const HudUI = {
     this.weatherInfo = { w, svc };
     const place = svc.loc?.name ? ` <small>${esc(svc.loc.name)}</small>` : '';
     this.weatherChip.innerHTML = `${w.emoji} <span>${w.temperature != null ? Math.round(w.temperature) + '°' : ''} ${w.label}</span>${place}`;
+    this.weatherChip.setAttribute('aria-label', `날씨: ${w.temperature != null ? Math.round(w.temperature) + '도 ' : ''}${w.label}${svc.loc?.name ? ` (${svc.loc.name})` : ''}`);
     if (this.panel?.dataset.kind === 'weather') this.openWeather();
   },
 

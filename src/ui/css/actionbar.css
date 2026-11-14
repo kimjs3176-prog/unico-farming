@@ -54,3 +54,14 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
 @media (max-height: 500px) and (pointer: coarse) {
   .actionbar.has-fs { max-width: 620px; } /* 전체 화면 단추까지 11칸 */
 }
+/* 카메라 버튼 (터치 기기만): 오른쪽, E 버튼 위. ＋ 가까이 · － 멀리 · 🎥 처음 거리로 */
+.cam-pad { display: none; }
+@media (pointer: coarse) {
+  .cam-pad { display: flex; flex-direction: column; gap: 8px; position: absolute; right: calc(14px + var(--sar)); bottom: calc(82px + var(--sab)); }
+  .cam-pad button { width: 48px; height: 44px; padding: 0; border-radius: 14px; font-size: 22px; line-height: 1;
+    background: rgba(35,25,22,0.62); color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,0.3); text-shadow: none; }
+  .cam-pad button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,0.3); }
+}
+/* 태블릿: E 버튼이 행동 막대 위(110px)라 그 위로 */
+@media (pointer: coarse) and (min-width: 601px) and (min-height: 501px) { .cam-pad { bottom: 200px; } }
+

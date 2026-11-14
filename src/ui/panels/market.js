@@ -132,7 +132,7 @@ export const MarketPanel = {
             b.onclick = () => {
               const cost = cs.buy(c.id, { money: eco.money, level: g.quests.level, festival: !!eco.festival });
               if (!cost) return;
-              eco.money -= cost; eco.stats.spent += cost;
+              eco.spend(cost);
               cs.wear(c.id); g.applyLook();
               g.audio.play('levelup'); g.player.unico.playAction('cheer', 1.2);
               this.toast(`${c.icon} ${c.name}${josa(c.name, '을/를')} 샀어요! 바로 입었어요 · ${c.perkText}`);
@@ -153,12 +153,12 @@ export const MarketPanel = {
         const SPR = [400, 800, 1300];
         const sr = sim.sprinklerRows;
         const spr = h('div', 'row mk-row', `<span class="ic">💦</span><span class="nm">스프링클러 <span class="qty">${sr}/3줄</span><br><small>설치한 줄은 물이 마르면 자동으로 물을 줘요</small></span><span class="pr">${sr < 3 ? `${SPR[sr]}🪙` : '완료'}</span>`);
-        if (sr < 3) { const bt = h('button', 'gold', `${sr + 1}번째 줄 설치`); bt.disabled = eco.money < SPR[sr]; bt.onclick = () => { if (eco.money < SPR[sim.sprinklerRows]) return; eco.money -= SPR[sim.sprinklerRows]; eco.stats.spent += SPR[sim.sprinklerRows]; sim.sprinklerRows++; g.audio.play('levelup'); this.toast(`💦 밭 ${sim.sprinklerRows}번째 줄에 스프링클러를 설치했어요!`); g.onEvent('sprinkler', sim.sprinklerRows); saveSoon(); render(); }; spr.append(bt); }
+        if (sr < 3) { const bt = h('button', 'gold', `${sr + 1}번째 줄 설치`); bt.disabled = eco.money < SPR[sr]; bt.onclick = () => { if (eco.money < SPR[sim.sprinklerRows]) return; eco.spend(SPR[sim.sprinklerRows]); sim.sprinklerRows++; g.audio.play('levelup'); this.toast(`💦 밭 ${sim.sprinklerRows}번째 줄에 스프링클러를 설치했어요!`); g.onEvent('sprinkler', sim.sprinklerRows); saveSoon(); render(); }; spr.append(bt); }
         fac.append(spr);
         if (fc) {
           const jp = fc.proc.nextJarPrice;
           const jr = h('div', 'row mk-row', `<span class="ic">🏺</span><span class="nm">장독 추가 <span class="qty">${fc.proc.jars}/4개</span><br><small>밭 서쪽 장독대에서 김치·잼·주스를 동시에 더 담가요</small></span><span class="pr">${jp ? `${jp}🪙` : '완료'}</span>`);
-          if (jp) { const bt = h('button', 'gold', '장독 사기'); bt.disabled = eco.money < jp; bt.onclick = () => { if (eco.money < jp || !fc.proc.buyJar()) return; eco.money -= jp; eco.stats.spent += jp; g.audio.play('levelup'); this.toast('🏺 장독대에 장독을 하나 더 놓았어요!'); saveSoon(); render(); }; jr.append(bt); }
+          if (jp) { const bt = h('button', 'gold', '장독 사기'); bt.disabled = eco.money < jp; bt.onclick = () => { if (eco.money < jp || !fc.proc.buyJar()) return; eco.spend(jp); g.audio.play('levelup'); this.toast('🏺 장독대에 장독을 하나 더 놓았어요!'); saveSoon(); render(); }; jr.append(bt); }
           fac.append(jr);
         }
         body.append(fac);

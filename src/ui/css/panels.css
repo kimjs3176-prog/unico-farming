@@ -5,14 +5,14 @@
   overflow: auto; box-shadow: var(--shadow); color: var(--brown); animation: panelin 0.32s cubic-bezier(.3,1.45,.5,1);
   z-index: 10; /* 꾸미기 막대(5)보다 위, 대화창(30)·미니게임(40)보다 아래 */ }
 @keyframes panelin { from { opacity: 0; transform: translate(-50%, -46%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
-.panel h2 { margin: 0 0 10px; display: flex; align-items: center; gap: 8px; color: var(--teal-d); font-size: 24px; }
+.panel h2 { margin: 0 0 10px; display: flex; align-items: center; gap: 8px; color: var(--teal-t, #17736b); font-size: 24px; }
 .row { background: var(--cream) !important; }
 .panel h2 .close { margin-left: auto; }
 .panel h3 { margin: 12px 0 6px; font-size: 14px; color: #555; }
 .rows { display: flex; flex-direction: column; gap: 6px; }
 .row { display: flex; align-items: center; gap: 8px; background: #f7f7f7; border-radius: 12px; padding: 8px 10px; }
 .row .nm { font-weight: 700; flex: 1; }
-.row .pr { font-weight: 700; color: var(--teal-d); min-width: 80px; text-align: right; }
+.row .pr { font-weight: 700; color: var(--teal-t, #17736b); min-width: 80px; text-align: right; }
 .row .qty { color: #666; font-size: 13px; }
 .row button { padding: 6px 10px; font-size: 13px; }
 .room-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

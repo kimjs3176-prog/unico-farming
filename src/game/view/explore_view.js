@@ -97,7 +97,7 @@ export class ExploreView {
     else if (r < 0.78) {
       const crops = Object.keys(CROPS).filter((k) => CROPS[k].unlockLevel <= g.quests.level);
       const k = crops[Math.floor(Math.random() * crops.length)];
-      eco.inventory.seeds[k] = (eco.inventory.seeds[k] || 0) + 3;
+      eco.addSeeds(k, 3);
       text = `${CROPS[k].emoji} ${CROPS[k].name} 씨앗 3개`;
     } else {
       const k = ['fruit_apple', 'fruit_peach', 'fruit_pear', 'fruit_persimmon'][Math.floor(Math.random() * 4)];

@@ -534,7 +534,7 @@ export class HomeView {
     const g = this.game, eco = g.economy;
     const cost = this.sim.upgrade(eco.money, g.quests.level);
     if (!cost) return;
-    eco.money -= cost; eco.stats.spent += cost;
+    eco.spend(cost);
     g.ui.closePanel();
     this.build();
     if (this.inside) { const e = this.room.entry; g.player.position.set(IO.x + e.x, IO.y, IO.z + e.z); this.room.group.visible = true; g.followCam.distance = [9.5, 10.5, 12][this.sim.level]; }

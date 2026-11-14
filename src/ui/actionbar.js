@@ -63,9 +63,17 @@ export const ActionbarUI = {
     // 모바일: 행동 막대는 ☰ 버튼 하나로 접어 두고, 누르면 펼침 (버튼을 고르면 다시 접힘)
     this.barToggle = h('button', 'bar-toggle', '☰');
     this.barToggle.title = '메뉴';
+    this.barToggle.setAttribute('aria-label', '메뉴 열기');
     this.barToggle.onclick = () => this.setBarOpen(!this.root.classList.contains('bar-open'));
     root.append(this.barToggle);
     this.bar.addEventListener('click', (e) => { if (e.target.closest('button')) this.setBarOpen(false); });
+    // 터치 기기: 카메라 버튼 (＋ 가까이 · － 멀리 · 🎥 기본 거리로 캐릭터 뒤에서). 시점 돌리기는 오른쪽 화면 밀기
+    this.camPad = h('div', 'cam-pad');
+    const cb = (txt, label, fn) => { const b = h('button', '', txt); b.setAttribute('aria-label', label); b.title = label; b.onclick = (e) => { e.stopPropagation(); fn(); game.audio.play('click', 0.4); }; this.camPad.append(b); return b; };
+    cb('＋', '카메라 가까이', () => game.followCam.zoom(-1));
+    cb('－', '카메라 멀리', () => game.followCam.zoom(+1));
+    cb('🎥', '카메라 처음 거리로 (캐릭터 뒤에서)', () => game.followCam.resetView(game.player.unico.facing));
+    root.append(this.camPad);
     this.emoteMenu = null;
   },
 
@@ -130,6 +138,7 @@ export const ActionbarUI = {
   setBarOpen(open) {
     this.root.classList.toggle('bar-open', open);
     this.barToggle.textContent = open ? '✕' : '☰';
+    this.barToggle.setAttribute('aria-label', open ? '메뉴 닫기' : '메뉴 열기');
   },
 
   /** 오토플레이 상태 표시: text=null 이면 숨김 */

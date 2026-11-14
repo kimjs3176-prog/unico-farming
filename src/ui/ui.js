@@ -42,7 +42,7 @@ export class UI {
     this.game.input.enabled = false;
     this.game.player.frozen = true;
     const p = h('div', 'panel');
-    const head = h('h2', '', `${title} <button class="ghost close">✕</button>`);
+    const head = h('h2', '', `${title} <button class="ghost close" aria-label="닫기">✕</button>`);
     head.querySelector('.close').onclick = () => this.closePanel();
     p.append(head);
     this.root.append(p);
