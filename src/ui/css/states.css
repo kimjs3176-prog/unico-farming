@@ -3,6 +3,8 @@
 #ui.driving .touch-btn, #ui.driving .bar-toggle { display: none; }
 /* 카메라 버튼: 운전 버튼·펼친 행동 막대(E 버튼이 올라감)·컷신과 겹치지 않게 숨김 */
 #ui.driving .cam-pad, #ui.bar-open .cam-pad, body.cine .cam-pad { display: none; }
+/* 논 상태 띠(폰: 맨 아래)도 펼친 행동 막대·운전 버튼·컷신과 겹치지 않게 */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) { #ui.driving .rice-panel, #ui.bar-open .rice-panel, body.cine .rice-panel { display: none; } }
 /* 보여 주기만 하는 HUD 는 터치를 가로채지 않게 (아래 화면·버튼으로 통과) */
 .toasts, .event-banner, .herd-hud { pointer-events: none; }
 body.cine .hud-top, body.cine .actionbar, body.cine .chat, body.cine .minimap, body.cine .objective, body.cine .prompt, body.cine .fps-chip, body.cine .touch-btn { opacity: 0; pointer-events: none; transition: opacity 0.4s; }

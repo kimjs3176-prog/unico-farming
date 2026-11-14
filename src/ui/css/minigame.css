@@ -154,3 +154,20 @@
   /* 트랙터 운전 버튼: 화면 가운데를 덜 가리게 */
   .pad-btn { width: 64px; height: 64px; }
 }
+
+/* 논 상태 (폰 세로·가로): 화면을 가리지 않게 맨 아래 ☰ 와 E 사이에 작고 투명한 게이지 띠로 (누름은 통과) */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  .rice-panel { top: auto; bottom: calc(10px + var(--sab)); left: calc(64px + var(--sal)); right: calc(78px + var(--sar)); width: auto; max-width: 460px; max-height: none; overflow: visible;
+    padding: 5px 10px 6px; border-radius: 12px; background: rgba(35,25,22,0.5); box-shadow: none; pointer-events: none;
+    display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); gap: 0 8px; align-items: end; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+  .rice-panel h3 { margin: 0; font-size: 13px; color: #fff; align-self: center; white-space: nowrap; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; }
+  .rice-panel .gauge { margin: 0; min-width: 0; }
+  .rice-panel .gauge .lbl { font-size: 10px; font-weight: 600; gap: 4px; white-space: nowrap; }
+  .rice-panel .gauge .lbl span { overflow: hidden; text-overflow: ellipsis; }
+  .rice-panel .gauge .track { height: 6px; margin-top: 2px; background: rgba(255,255,255,0.28); border-radius: 3px; }
+  .rice-panel .gauge .band { background: rgba(155,224,123,0.85); }
+  .rice-panel .gauge .pin { width: 4px; background: #fff; }
+  .rice-panel .gauge.bad .pin { background: #ff8a7a; }
+  .rice-panel .opt, .rice-panel .lbl-row { display: none; }
+}
+
