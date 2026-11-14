@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { loadUnicoMesh } from './unico.js';
+import { loadUnicoMesh, prebuildTemplates } from './unico.js';
+import { SPECIES_IDS } from './species.js';
+import { loadSettings, resolveQuality } from './quality.js';
 import { enhanceMaterial, kindOf } from './surface.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -27,10 +29,41 @@ export const ENV_MODELS = [
  * q_nature: tree_1~5, pine_1~3, birch_1~3, willow_1~2, autumn_1~3, bush_1~2, rock_1~4, mossrock_1~4, stump, log ...
  */
 export const PACK_MODELS = ['q_farm', 'q_nature', 'k_props']; // k_props: KayKit 소품 (CC0, 건설 비계·자재·통·상자)
-/** 뼈대 애니메이션이 있는 CC0 동물 (walk/idle/eat/look/run/jump) */
-export const ANIMATED_MODELS = ['q_cow', 'q_sheep', 'q_wolf', 'q_fox', 'q_horse', 'q_donkey', 'q_alpaca', 'q_shiba'];
+/** 묶음 안에 있지만 게임에서 쓰지 않는 노드: 받은 뒤 바로 버림 (좌표 풀기·재질 손질·메모리 절약) */
+const UNUSED_PACK_NODE = /^(snowpine_\d|snowtree_\d|corn_\d|wheat|grass_short)$/;
+/** 뼈대 애니메이션이 있는 CC0 동물 (walk/idle/eat/look/run/jump) — 첫 화면에 필요한 것만 */
+export const ANIMATED_MODELS = ['q_cow', 'q_sheep', 'q_shiba'];
+/**
+ * 첫 화면에 필요 없는 동물: 입장 뒤 뒤에서 받음 (먼저 받은 순서대로 쓰임)
+ *  1) 목장 구경 동물(말·당나귀·알파카): ranch_view.js addVisitors() 가 도착한 것부터 풀어 놓음
+ *  2) 밤에만 나오는 늑대·여우: pests.js 가 assets.has() 로 확인
+ */
+export const DEFERRED_MODELS = [['q_horse', 'q_donkey', 'q_alpaca'], ['q_wolf', 'q_fox']];
+/** 뼈대 동물 컬링 구 여유 배율: 걷기·뛰기·풀 뜯기 동작이 기본 자세 구 밖으로 나가지 않게 */
+const SKIN_SPHERE_PAD = 1.5;
 
 const BASE = (import.meta.env?.BASE_URL || '/') + 'models/';
+
+// 캐릭터 몸 메시 받는 순서 (UNC2 bin): 첫 화면은 저해상도(LOD) 전부 + 주인공 + 인트로 화자(안내 강아지)·스폰 근처를 돌아다니는 꼬마 토끼 원본
+// 품질 낮음(휴대폰)은 주민이 9m 안에서만 원본 몸이라 따라가기 카메라에선 늘 저해상도 → 꼬마 토끼 원본도 나중에 (맨 먼저)
+const BLOCKING_FULL = ['puppy', 'rabbit'];
+const LATE_RABBIT = { file: 'villager_rabbit.bin', key: 'v_rabbit', x: -6, z: 5, first: true };
+/** 지금 품질이 낮음인지 (저장 설정·주소 ?quality=, 자동이면 기기 — Game 생성 전에 판단) */
+function lowQuality() {
+  try { return resolveQuality(loadSettings()).level === 'low'; } catch { return false; }
+}
+/** 나중에 받는 원본 (닉네임 고르는 동안, 플레이어 위치에서 가까운 순): 그 전에는 저해상도 몸으로 보이다가 화면 밖에서 바뀜 */
+const DEFERRED_SKINS = [
+  { file: 'villager_fox.bin', key: 'v_fox', x: 3.2, z: -8.4 },
+  { file: 'villager_raccoon.bin', key: 'v_raccoon', x: -14.5, z: -3.5 },
+  { file: 'villager_cat.bin', key: 'v_cat', x: -5.2, z: 27.4 },
+  { file: 'villager_bear.bin', key: 'v_bear', x: -9.6, z: -19.4 },
+  { file: 'unico_body.bin', key: 'quad', x: 25, z: -24 }, // KOAT 담당 유니콘 (네 발 원본)
+];
+/** 한가할 때까지 기다림 (풀기·색 만들기가 한 프레임에 몰리지 않게) */
+const idle = () => new Promise((r) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(() => r(), { timeout: 50 }) : setTimeout(r, 0)));
+/** 잠깐 쉼 (노드 테스트에서는 프로세스를 붙잡지 않게) */
+const pause = (ms) => new Promise((r) => { const t = setTimeout(r, ms); t?.unref?.(); });
 
 export class Assets {
   constructor() {
@@ -48,17 +81,23 @@ export class Assets {
 
   async loadAll(onProgress) {
     let done = 0;
-    const total = ENV_MODELS.length + PACK_MODELS.length + ANIMATED_MODELS.length + 2;
+    // 주민 동물: LOD 6종 + 원본 2종(낮음은 1종). 실패해도 게임은 계속 (그 주민은 예전 유니콘으로 대체)
+    this._lateRabbit = lowQuality();
+    const full = this._lateRabbit ? BLOCKING_FULL.filter((sp) => sp !== 'rabbit') : BLOCKING_FULL;
+    const villagers = [...SPECIES_IDS.map((sp) => [`villager_${sp}_lod.bin`, `v_${sp}_lod`]), ...full.map((sp) => [`villager_${sp}.bin`, `v_${sp}`])];
+    const total = ENV_MODELS.length + PACK_MODELS.length + ANIMATED_MODELS.length + 3 + villagers.length;
     const tick = () => { done++; onProgress?.(done / total); };
     await Promise.all([
-      loadUnicoMesh(`${BASE}unico_body.bin`, 'quad').then(tick),
+      // 네 발 유니콘(KOAT 담당) 원본은 나중에 (loadDeferred) — 그때까지 저해상도 몸
+      loadUnicoMesh(`${BASE}unico_body_lod.bin`, 'quad_lod').then(tick),
       loadUnicoMesh(`${BASE}unico_biped.bin`, 'biped').then(tick),
-      loadUnicoMesh(`${BASE}unico_body_lod.bin`, 'quad_lod').catch(() => {}),
-      loadUnicoMesh(`${BASE}unico_biped_lod.bin`, 'biped_lod').catch(() => {}),
+      loadUnicoMesh(`${BASE}unico_biped_lod.bin`, 'biped_lod').catch(() => {}).then(tick),
+      ...villagers.map(([f, key]) => loadUnicoMesh(BASE + f, key).catch((e) => console.warn('주민 메시 로드 실패 (유니콘으로 대체):', f, e?.message || e)).then(tick)),
       ...PACK_MODELS.map(async (n) => {
         try {
           const gltf = await this.loadGlb(n);
           for (const node of [...gltf.scene.children]) {
+            if (UNUSED_PACK_NODE.test(node.name)) continue;
             const g = new THREE.Group();
             g.name = node.name;
             node.position.set(0, 0, 0);
@@ -72,16 +111,7 @@ export class Assets {
         tick();
       }),
       ...ANIMATED_MODELS.map(async (n) => {
-        try {
-          const gltf = await this.loadGlb(n);
-          prepare(gltf.scene, { fur: true, spots: n === 'q_cow' ? 'Main' : null }); // 젖소: 얼룩무늬 (양은 털 질감)
-          this.scenes.set(n, gltf.scene);
-          this.anims.set(n, gltf.animations);
-        } catch (e) {
-          console.warn('동물 모델 로드 실패:', n, e?.message || e);
-          this.scenes.set(n, fallbackBox(n));
-          this.anims.set(n, []);
-        }
+        await this._loadAnimated(n, true);
         tick();
       }),
       ...ENV_MODELS.map(async (n) => {
@@ -100,12 +130,68 @@ export class Assets {
     ]);
   }
 
+  /**
+   * 첫 화면에 필요 없는 모델을 뒤에서 받기 (여러 번 불러도 한 번만, 묶음 순서대로). 끝나면 deferredDone = true.
+   * 실패한 모델은 has() 가 false 로 남아 쓰는 쪽이 건너뜀. DEFERRED_MODELS 는 이름 목록 또는 묶음([[...], [...]]) 목록 둘 다 받음.
+   * 캐릭터 원본 몸(주민·KOAT 네 발)은 따로 나란히 받음 — 동물 모델의 완료(deferredDone)·셰이더 준비를 늦추지 않게
+   * @param playerPos 저장된 위치 (없으면 스폰) — 캐릭터 원본 몸은 가까운 주민부터. 처음 부른 값이 쓰임
+   */
+  loadDeferred(playerPos) {
+    // 얼굴·옷 템플릿은 닉네임을 고르는 동안 한가할 때 미리 (입장 때 Game 생성자가 멈추지 않게) — 원본 몸을 받는 동안
+    this._deferredSkins ||= this._loadDeferredSkins(playerPos, prebuildTemplates(idle).catch(() => {})).catch(() => {});
+    this._deferred ||= (async () => {
+      const waves = DEFERRED_MODELS.some(Array.isArray) ? DEFERRED_MODELS : [DEFERRED_MODELS];
+      for (const wave of waves) await Promise.all(wave.map((n) => this._loadAnimated(n, false)));
+      this.deferredDone = true;
+    })();
+    return this._deferred;
+  }
+
+  /**
+   * 캐릭터 원본 몸: 받기는 한꺼번에 나란히 시작(파일마다 60~90KB, 닉네임 고르는 동안 망이 비어 있음),
+   * 풀기·색 만들기는 가까운 주민부터 하나씩 한가할 때 (한 프레임에 몰리지 않게). 실패하면 3초 뒤 한 번 더, 그래도 안 되면 저해상도 유지
+   */
+  async _loadDeferredSkins(playerPos, before = null) {
+    const at = playerPos && Number.isFinite(playerPos.x) && Number.isFinite(playerPos.z) ? playerPos : { x: 0, z: 9 };
+    const list = [...DEFERRED_SKINS, ...(this._lateRabbit ? [LATE_RABBIT] : [])]
+      .sort((a, b) => (b.first ? 1 : 0) - (a.first ? 1 : 0) || Math.hypot(a.x - at.x, a.z - at.z) - Math.hypot(b.x - at.x, b.z - at.z));
+    const got = list.map((s) => { const p = fetchModel(BASE + s.file); p.catch(() => {}); return p; });
+    await before; // 템플릿 미리 만들기가 먼저 (받는 동안)
+    for (let i = 0; i < list.length; i++) {
+      const s = list[i];
+      await idle();
+      try { await loadUnicoMesh(BASE + s.file, s.key, { yieldTo: idle, data: got[i] }); } catch {
+        await pause(3000);
+        try { await loadUnicoMesh(BASE + s.file, s.key, { yieldTo: idle }); } catch (e) { console.warn('캐릭터 원본 몸 로드 실패 (저해상도 유지):', s.file, e?.message || e); }
+      }
+    }
+    this.skinsDone = true;
+  }
+
+  async _loadAnimated(n, fallback) {
+    try {
+      const gltf = await this.loadGlb(n);
+      prepare(gltf.scene, { fur: true, spots: n === 'q_cow' ? 'Main' : null }); // 젖소: 얼룩무늬 (양은 털 질감)
+      skinSpheres(gltf.scene);
+      this.anims.set(n, gltf.animations);
+      this.scenes.set(n, gltf.scene);
+    } catch (e) {
+      console.warn('동물 모델 로드 실패:', n, e?.message || e);
+      if (!fallback) return;
+      this.anims.set(n, []);
+      this.scenes.set(n, fallbackBox(n));
+    }
+  }
+
   has(name) { return this.scenes.has(name); }
 
-  /** 뼈대 애니메이션 모델 복제 → { root, mixer, clips } */
+  /**
+   * 뼈대 애니메이션 모델 복제 → { root, mixer, clips }
+   * 화면·그림자 상자 밖이면 그리지 않음: 뼈대 메시는 받을 때 넉넉히 잡아 둔 컬링 구(skinSpheres)를 복제본이 그대로 씀
+   */
   cloneAnimated(name) {
     const root = SkeletonUtils.clone(this.scenes.get(name));
-    root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; o.frustumCulled = false; } });
+    root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; o.frustumCulled = !o.isSkinnedMesh || !!o.boundingSphere; } });
     const mixer = new THREE.AnimationMixer(root);
     const clips = Object.fromEntries((this.anims.get(name) || []).map((c) => [c.name, c]));
     return { root, mixer, clips };
@@ -132,6 +218,20 @@ export class Assets {
     c.traverse((o) => { if (o.isMesh) o.castShadow = false; }); // 작물은 작고 많아서 그림자 생략 (접지 AO 로 충분)
     return c;
   }
+}
+
+/**
+ * 뼈대 메시 컬링 구: 기본 자세로 정점 위치를 계산해 구를 잡고 SKIN_SPHERE_PAD 배 넓힘.
+ * three 는 뼈대 메시의 구를 지오메트리가 아니라 메시 객체(boundingSphere)에서 읽음. 뼈 행렬이 먼저 갱신돼야 함
+ */
+export function skinSpheres(scene, pad = SKIN_SPHERE_PAD) {
+  scene.updateMatrixWorld(true);
+  scene.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    o.skeleton.update();
+    o.computeBoundingSphere();
+    o.boundingSphere.radius *= pad;
+  });
 }
 
 function prepare(scene, { fur = false, spots = null } = {}) {
@@ -178,7 +278,9 @@ export function mergeSiblings(root, loose = false) {
         c.updateMatrix();
         let g = c.geometry.clone().applyMatrix4(c.matrix);
         for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
-        if (g.index) g = g.toNonIndexed();
+        // 인덱스는 그대로 둠 (공유 정점 재사용). 법선이 없으면 면마다 각진 법선, 인덱스가 없으면 순번 인덱스 (한 묶음 안 모두 인덱스여야 합쳐짐)
+        if (!g.attributes.normal) { if (g.index) g = g.toNonIndexed(); g.computeVertexNormals(); }
+        if (!g.index) g.setIndex(seqIndex(g.attributes.position.count));
         const col = c.material.color, n = g.attributes.position.count, arr = new Float32Array(n * 3);
         for (let i = 0; i < n; i++) { arr[i * 3] = col.r; arr[i * 3 + 1] = col.g; arr[i * 3 + 2] = col.b; }
         g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
@@ -198,6 +300,13 @@ export function mergeSiblings(root, loose = false) {
     }
   }
   return merged;
+}
+
+/** 0..n-1 순번 인덱스 */
+function seqIndex(n) {
+  const a = n > 65535 ? new Uint32Array(n) : new Uint16Array(n);
+  for (let i = 0; i < n; i++) a[i] = i;
+  return new THREE.BufferAttribute(a, 1);
 }
 
 /** meshopt 양자화(Int16 정규화) 속성을 Float32 로 풀기 — 정적 병합(applyMatrix4/merge)과 호환 */

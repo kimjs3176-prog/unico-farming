@@ -67,7 +67,7 @@ export const CraftMethods = {
           } });
         }
         const price = P.nextJarPrice;
-        if (price !== null) items.push({ icon: 'coin', label: `${slotName} 하나 더 들이기 (${P.jars} → ${P.jars + 1}개)`, right: `${price}`, disabled: e.money < price, onPick: () => { if (e.money < price || !P.buyJar()) return; e.money -= price; e.stats.spent += price; this.audio.play('coin'); } });
+        if (price !== null) items.push({ icon: 'coin', label: `${slotName} 하나 더 들이기 (${P.jars} → ${P.jars + 1}개)`, right: `${price}`, disabled: e.money < price, onPick: () => { if (e.money < price || !P.buyJar()) return; e.spend(price); this.audio.play('coin'); } });
         return {
           sub: `${ranch ? '목장' : '밭농사'} 숙련도 Lv.${lv} · ${slotName} ${P.jars}/${MAX_JARS}개 · 가공품은 재료보다 비싸게 팔려요${free < 0 ? ` · 빈 ${slotName}이 없어요` : ''}`,
           items,

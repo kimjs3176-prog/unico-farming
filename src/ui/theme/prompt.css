@@ -1,0 +1,11 @@
+/* 테마: 안내 말풍선·터치 E 버튼 */
+/* ---------------- 안내 · 알림 · 목표 ---------------- */
+.prompt { border-radius: 14px; background: linear-gradient(180deg, #3b2a22, #231916); box-shadow: 0 0 0 2px var(--wood-l), 0 5px 0 var(--wood-d), 0 10px 22px rgba(20,14,10,0.35); }
+.prompt kbd { background: linear-gradient(180deg, #ffe08a, var(--gold)); box-shadow: inset 0 -2px 0 var(--gold-d), 0 2px 0 #7a520c; border-radius: 7px; padding: 1px 8px 3px; }
+.prompt.clickable:hover { background: linear-gradient(180deg, #4a362c, #2c201b); }
+/* 모바일 터치 버튼: 손가락 크기, 같은 금화 소재 */
+.touch-btn { background: radial-gradient(circle at 50% 35%, #ffe9a8, var(--gold) 60%, #eaa91d); box-shadow: inset 0 3px 0 rgba(255,255,255,0.5), 0 5px 0 var(--gold-d), 0 10px 18px rgba(20,14,10,0.3); }
+/* 터치 화면: 눌렀다 뗀 뒤 :hover 가 남아 버튼이 커진 채로 있지 않게 (누르는 동안 효과는 그대로) */
+@media (hover: none) {
+  .prompt.clickable:hover { transform: translateX(-50%); }
+}

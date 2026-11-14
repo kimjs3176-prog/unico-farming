@@ -1,3 +1,5 @@
+import { touchUI } from '../../game/input.js';
+
 /**
  * 미니게임: 달걀 받기 (닭장)
  *  횃대 위 암탉들이 낳는 달걀을 바구니로 받기. 마우스/터치로 끌거나 ←→ / A·D 키.
@@ -7,6 +9,7 @@
 export function playEggCatch(game) {
   return new Promise((resolve) => {
     const W = 720, H = 460, DUR = 45;
+    const T = touchUI(); // 터치 화면: 캔버스 안내 글자에 키보드 안내 대신 손가락 안내
     const wrap = document.createElement('div');
     wrap.className = 'mg-wrap';
     wrap.innerHTML = `<div class="mg-box"><canvas width="${W}" height="${H}"></canvas><button class="mg-close">✕</button></div>`;
@@ -143,8 +146,8 @@ export function playEggCatch(game) {
       c.fillStyle = 'rgba(255,250,240,0.92)'; c.beginPath(); c.roundRect(W - 234, 12, 220, 46, 14); c.fill();
       c.fillStyle = '#e8d6b8'; c.fillRect(W - 220, 30, 150, 12); c.fillStyle = left < 10 ? '#e8495a' : '#30b6aa'; c.fillRect(W - 220, 30, 150 * left / DUR, 12);
       c.fillStyle = '#6b4a2e'; c.textAlign = 'right'; c.fillText(`${Math.ceil(left)}초`, W - 24, 43);
-      if (!st.started) panel('🥚 달걀 받기', ['암탉이 낳는 달걀을 바구니로 받으세요!', '마우스·터치로 끌거나 ← → 키', '🟡 황금 달걀 +5 · 🟢 썩은 달걀은 피하기', '10연속 ×2, 20연속 ×3', '움직이면 시작!'], `최고 기록 ${best}점`);
-      if (st.over) panel('🎉 끝!', [`점수 ${st.score}점 (최대 ${st.maxCombo} 연속)`, `보상: 달걀 ${Math.floor(st.score / 5)}개 + ${st.score * 2}🪙`, st.score > best ? '🏆 새 최고 기록!' : `최고 기록 ${best}점`], '클릭하거나 E 로 마치기');
+      if (!st.started) panel('🥚 달걀 받기', ['암탉이 낳는 달걀을 바구니로 받으세요!', T ? '화면을 손가락으로 끌어 바구니 옮기기' : '마우스·터치로 끌거나 ← → 키', '🟡 황금 달걀 +5 · 🟢 썩은 달걀은 피하기', '10연속 ×2, 20연속 ×3', '움직이면 시작!'], `최고 기록 ${best}점`);
+      if (st.over) panel('🎉 끝!', [`점수 ${st.score}점 (최대 ${st.maxCombo} 연속)`, `보상: 달걀 ${Math.floor(st.score / 5)}개 + ${st.score * 2}🪙`, st.score > best ? '🏆 새 최고 기록!' : `최고 기록 ${best}점`], T ? '화면을 눌러 마치기' : '클릭하거나 E 로 마치기');
     }
     function panel(title, lines, foot) {
       c.fillStyle = 'rgba(35,25,22,0.45)'; c.fillRect(0, 0, W, H);

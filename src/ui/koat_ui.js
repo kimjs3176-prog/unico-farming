@@ -3,11 +3,25 @@ import {
   DIVISIONS, PASS_SCORE, TOUR_REWARD, makeMatchRound, scoreMatch, makeStagesRound, SEED_KINDS,
   makeInspectRound, makeCarbonRound, scoreRun, scoreConveyor, makeConveyor,
 } from '../game/sim/koat.js';
+import { touchUI } from '../game/input.js';
 
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 
 /** UI 클래스에 KOAT 체험관 패널들을 추가 */
+/** 종자 정선 벨트: PC 창의 벨트 폭(px) */
+export const BELT_REF = 514;
+/**
+ * 벨트 속도 비율: 종자가 벨트 위에 머무는 시간을 PC 창과 같게 (지나가는 거리 = 폭 + 70px)
+ * 폭이 좁은 세로 폰에서 px/초를 그대로 두면 종자가 훨씬 빨리 지나감. 넓은 화면은 PC 그대로
+ */
+export const beltSpeedScale = (w) => Math.min(1, (Math.max(0, w) + 70) / (BELT_REF + 70));
+/** 세 줄(0·1·2) 위치: 벨트 높이 안에 가운데 맞춤 (낮은 벨트에서도 셋째 줄이 잘리지 않게) */
+export function beltLaneY(lane, beltH, seedH = 48) {
+  const gap = Math.max(0, Math.min(52, (beltH - seedH - 12) / 2));
+  return Math.round((beltH - (gap * 2 + seedH)) / 2 + lane * gap);
+}
+
 export function installKoatUI(UI) {
   /** 부스: 본부 소개 → 체험 시작 */
   UI.prototype.openKoatBooth = function (d) {
@@ -261,7 +275,7 @@ export function installKoatUI(UI) {
       const lane = Math.floor(Math.random() * 3);
       const b = h('button', `seed lane${lane}`, kind.emoji);
       belt.append(b);
-      const s = { b, kind, x: W() + 30, y: 18 + lane * 52, done: false };
+      const s = { b, kind, x: W() + 30, y: beltLaneY(lane, belt.clientHeight || 164, b.offsetHeight || 48), done: false };
       b.style.top = `${s.y}px`;
       b.onpointerdown = (e) => {
         e.preventDefault();
@@ -274,12 +288,14 @@ export function installKoatUI(UI) {
       };
       st.live.push(s);
     };
+    timer.innerHTML = '<span></span><i></i>';
+    const dom = { tSec: timer.firstChild, tBar: timer.lastChild, scEl: hud.querySelector('.sc'), cbEl: hud.querySelector('.combo') };
     let last = performance.now(), raf = 0;
     const step = (now) => {
       if (!p.isConnected) return;
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       st.t += dt;
-      const lvl = st.t / DUR, speed = 120 + lvl * 120;
+      const lvl = st.t / DUR, speed = (120 + lvl * 120) * beltSpeedScale(W());
       st.next -= dt;
       if (st.next <= 0 && st.t < DUR - 1.5) { spawn(); st.next = 0.75 - lvl * 0.35; }
       for (const s of st.live) {
@@ -289,10 +305,14 @@ export function installKoatUI(UI) {
       }
       st.live = st.live.filter((s) => s.b.isConnected);
       const left = Math.max(0, DUR - st.t);
-      timer.innerHTML = `⏱ ${left.toFixed(1)}초 <i style="width:${(left / DUR) * 100}%"></i>`;
-      timer.classList.toggle('warn', left <= 5);
-      hud.querySelector('.sc').textContent = `✔ 골라냄 ${st.hit} · ✖ 실수 ${st.wrong} · 놓침 ${st.miss}`;
-      hud.querySelector('.combo').innerHTML = st.combo >= 3 ? `🔥 ${st.combo} 연속!` : '';
+      // 글자·막대는 바뀔 때만 씀 (매 프레임 innerHTML 은 휴대폰에서 스타일 계산이 계속 일어남)
+      const tt = left.toFixed(1);
+      if (tt !== dom.tt) { dom.tt = tt; dom.tSec.textContent = `⏱ ${tt}초 `; dom.tBar.style.width = `${(left / DUR) * 100}%`; }
+      if ((left <= 5) !== dom.warn) { dom.warn = left <= 5; timer.classList.toggle('warn', dom.warn); }
+      const sc = `✔ 골라냄 ${st.hit} · ✖ 실수 ${st.wrong} · 놓침 ${st.miss}`;
+      if (sc !== dom.sc) { dom.sc = sc; dom.scEl.textContent = sc; }
+      const cb = st.combo >= 3 ? `🔥 ${st.combo} 연속!` : '';
+      if (cb !== dom.cb) { dom.cb = cb; dom.cbEl.textContent = cb; }
       belt.querySelector('.rollers').style.backgroundPositionX = `${-st.t * speed}px`;
       if (st.t >= DUR) {
         st.over = true;
@@ -302,7 +322,11 @@ export function installKoatUI(UI) {
       }
       raf = requestAnimationFrame(step);
     };
-    mgCountdown(g).then(() => { last = performance.now(); raf = requestAnimationFrame(step); });
+    mgCountdown(g).then(() => {
+      // 낮은 화면(가로 폰)에서 창이 잘리면 벨트가 보이게 창 안에서만 내림 (scrollIntoView 는 다른 조상까지 밀 수 있음)
+      if (p.isConnected && p.scrollHeight > p.clientHeight) p.scrollTop = p.scrollHeight;
+      last = performance.now(); raf = requestAnimationFrame(step);
+    });
     void raf;
   };
 
@@ -382,7 +406,7 @@ export function installKoatUI(UI) {
       };
       p.append(b);
     }
-    const go = h('div', 'koat-meta', '💡 부스 앞에서 E 를 누르거나 부스를 클릭하면 체험이 시작돼요. 출처: koat.or.kr 조직도·주요사업');
+    const go = h('div', 'koat-meta', `💡 ${touchUI() ? '부스를 누르면 걸어가서' : '부스 앞에서 E 를 누르거나 부스를 클릭하면'} 체험이 시작돼요. 출처: koat.or.kr 조직도·주요사업`);
     p.append(go);
   };
 }

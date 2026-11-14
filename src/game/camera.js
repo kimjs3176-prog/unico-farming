@@ -1,5 +1,34 @@
 import * as THREE from 'three';
 
+/** 카메라 기본 세로 시야각 (가로 화면·데스크톱) */
+export const BASE_FOV = 45;
+
+/** 세로 화면: 가로 시야가 너무 좁아지지 않게 세로 시야각을 넓힘 (가로·세로의 중간으로 타협, 가장자리 왜곡 막으려 상한 64°) */
+export function fovFor(aspect) {
+  if (!(aspect < 1)) return BASE_FOV;
+  const t = Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)) / Math.sqrt(aspect);
+  return THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(t)), BASE_FOV, 64);
+}
+
+/**
+ * 앱 전환 등으로 손 뗀 이벤트를 놓쳤을 때 눌린 채 남은 입력 정리
+ * (조이스틱이 계속 걷게 하거나, 남은 시점 터치가 카메라·트랙터 시점 복귀를 막지 않게)
+ */
+export function releaseInput(I) {
+  if (!I) return;
+  if (typeof I.reset === 'function') return I.reset();
+  I.keys?.clear(); I.pressed?.clear();
+  if (I.clicks) I.clicks.length = 0;
+  if (I.drag) { I.drag.active = false; I.drag.dx = I.drag.dy = 0; }
+  I.down = null; I.wheel = 0; I.interactTap = false;
+  I.touches?.clear(); I.tapStart?.clear(); I.pinch = null;
+  if (I.virtual) I.virtual.x = I.virtual.y = 0;
+  if (I.joy?.active || I.joy?.id != null) {
+    if (typeof I._joyOff === 'function') I._joyOff();
+    else { I.joy.active = false; I.joy.id = null; I.joy.x = I.joy.y = 0; I.onJoystick?.(false); }
+  }
+}
+
 /** 3인칭 추적 카메라 (드래그 회전 / 휠 줌) */
 export class FollowCamera {
   constructor(camera) {
@@ -11,6 +40,7 @@ export class FollowCamera {
     this.smooth = new THREE.Vector3();
     this.first = true;
     this.lockTarget = null;
+    this.lookOffsetY = 0; // 바라보는 높이 보정 (세로 폰 옷장: 유니코가 아래 창 위로 보이게 낮춤)
   }
 
   update(dt, input, targetPos) {
@@ -20,7 +50,7 @@ export class FollowCamera {
       this.distance = THREE.MathUtils.clamp(this.distance + input.wheel * 0.01, 4, 18);
     }
     this.target.copy(targetPos);
-    this.target.y += 1.1;
+    this.target.y += 1.1 + (this.lookOffsetY || 0);
     if (this.first) { this.smooth.copy(this.target); this.first = false; }
     this.smooth.lerp(this.target, 1 - Math.pow(0.001, dt));
     const off = (this._off ||= new THREE.Vector3()).set(

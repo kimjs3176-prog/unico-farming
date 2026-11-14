@@ -1,0 +1,33 @@
+/* 미니맵·큰 지도 (minimap.js) */
+/* 미니맵 */
+.minimap { position: absolute; right: 12px; top: calc(var(--hud-b, 52px) + 4px); width: 150px; height: 150px; border-radius: 16px; box-shadow: var(--shadow); border: 3px solid rgba(255,255,255,0.9); }
+@media (max-width: 600px) { .minimap { width: 100px; height: 100px; } }
+
+/* 큰 지도 (미니맵 클릭 / M) */
+.minimap { cursor: pointer; transition: transform 0.15s; }
+.minimap:hover { transform: scale(1.04); }
+.map-panel { width: min(calc(94vw / var(--ui-zoom, 1)), 500px); }
+.bigmap { display: block; width: 100%; height: auto; aspect-ratio: 1; border-radius: 20px; cursor: crosshair; border: 3px solid rgba(255,255,255,0.9); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05); }
+.map-places { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.map-places button { font-size: 14px; padding: 6px 10px; }
+.map-tip { margin: 8px 0 0; font-size: 13px; opacity: 0.75; text-align: center; }
+/* 창 높이가 낮으면 지도를 줄여 장소 버튼까지 스크롤 없이 보이게 (260px = 제목·버튼·안내·여백) */
+.bigmap { width: min(100%, max(200px, calc(86vh / var(--ui-zoom, 1) - 260px))); width: min(100%, max(200px, calc(86dvh / var(--ui-zoom, 1) - 260px))); margin: 0 auto; }
+/* 세로 폰: 제목 리본이 두 줄, 장소 버튼이 네 줄이라 덜어 낼 높이가 더 큼 (가로 폰은 뒤의 '.map-panel .bigmap' 이 이김) */
+@media (max-width: 600px) { .bigmap { width: min(100%, max(200px, calc(86vh / var(--ui-zoom, 1) - 330px))); width: min(100%, max(200px, calc(86dvh / var(--ui-zoom, 1) - 330px))); } }
+
+/* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  .minimap { right: calc(4px + var(--sar)); top: calc(var(--hud-b, 40px) + 4px); width: 76px; height: 76px; border-radius: 10px; border-width: 2px; }
+  .map-places button { min-height: 38px; }
+}
+/* ---------------- 낮은 창 (가로 폰 + 낮은 데스크톱 창) ---------------- */
+/* 큰 지도: 지도 왼쪽(보이는 높이에 맞춤), 장소 버튼·안내 오른쪽 — 창을 스크롤하지 않아도 다 보임 */
+@media (max-height: 500px) and (min-aspect-ratio: 4/3) {
+  .map-panel { width: min(calc(94vw / var(--ui-zoom, 1) - var(--sal) - var(--sar)), 760px); display: grid; grid-template-columns: auto 1fr; column-gap: 12px; align-items: start; }
+  .map-panel > h2 { grid-column: 1 / -1; }
+  .map-panel .bigmap { grid-column: 1; grid-row: 2 / span 2; margin: 0;
+    width: min(calc(86vh / var(--ui-zoom, 1) - 110px), calc(50vw / var(--ui-zoom, 1))); width: min(calc(86dvh / var(--ui-zoom, 1) - 110px), calc(50vw / var(--ui-zoom, 1))); }
+  .map-panel .map-places { grid-column: 2; grid-row: 2; margin-top: 0; align-content: start; }
+  .map-panel .map-tip { grid-column: 2; grid-row: 3; text-align: left; }
+}

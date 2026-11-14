@@ -12,6 +12,28 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { HorizontalTiltShiftShader } from 'three/addons/shaders/HorizontalTiltShiftShader.js';
 import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftShader.js';
 
+const ENV = new WeakMap(); // 장면 → 환경맵 렌더 타깃
+
+/**
+ * 고주사율(100Hz 이상) 모바일 화면 프레임 제한: 화면 갱신(vsync)의 정수 배로만 건너뛰어 고르게 그림
+ * 120Hz → 60, 144Hz → 72, 90Hz·60Hz 는 그대로. 그리기가 무거워 갱신 간격이 벌어지면 저절로 꺼짐
+ */
+export class FrameCap {
+  constructor() { this.iv = 0; this.reset(); }
+  /** 탭 숨김·복귀: 간격 측정과 마지막 그린 시각만 초기화 (화면 주사율 추정은 유지) */
+  reset() { this.prev = undefined; this.last = -1e9; }
+  /** rAF 시각(ms)을 받아 이번 갱신에 그릴지 */
+  tick(now) {
+    const d = now - (this.prev ?? now);
+    this.prev = now;
+    if (d > 0 && d < 50) this.iv = this.iv ? this.iv + (d - this.iv) * 0.05 : d;
+    const k = this.iv && this.iv < 10 ? Math.round(1000 / 60 / this.iv) : 1; // 몇 번에 한 번 그릴지
+    if (k > 1 && now - this.last < (k - 0.5) * this.iv) return false; // 시각 기준: 한 번 늦어져도 박자가 밀리지 않음
+    this.last = now;
+    return true;
+  }
+}
+
 /**
  * 후처리 파이프라인: 렌더 → 주변광 차폐(GTAO, 고사양) → 약한 블룸 → 톤매핑/sRGB 출력 → 색 보정
  *   → SMAA 안티앨리어싱 → 틸트시프트(화면 위·아래를 살짝 흐려 미니어처 디오라마 느낌) → 비네팅
@@ -30,13 +52,18 @@ export class PostFX {
       this.gtao.blendIntensity = 0.85;
       this.composer.addPass(this.gtao);
     }
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.09, 0.3, 1.6);
-    if (quality.bloom) this.composer.addPass(this.bloom);
+    // 꺼진 효과는 만들지 않음 (후처리를 끈 저사양에서 블룸·SMAA 객체와 이미지 디코딩을 아낌)
+    if (quality.bloom) {
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.09, 0.3, 1.6);
+      this.composer.addPass(this.bloom);
+    }
     this.composer.addPass(new OutputPass());
     this.grade = new ShaderPass(ColorGradeShader);
     this.composer.addPass(this.grade);
-    this.smaa = new SMAAPass();
-    if (quality.smaa) this.composer.addPass(this.smaa);
+    if (quality.smaa) {
+      this.smaa = new SMAAPass();
+      this.composer.addPass(this.smaa);
+    }
     if (quality.tiltShift) {
       this.tiltH = new ShaderPass(HorizontalTiltShiftShader);
       this.tiltV = new ShaderPass(VerticalTiltShiftShader);
@@ -48,14 +75,30 @@ export class PostFX {
     this.vignette.uniforms.offset.value = 1.05;
     this.vignette.uniforms.darkness.value = 0.95;
     this.composer.addPass(this.vignette);
-    // 환경맵
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = 0.32;
-    pmrem.dispose();
     this.enabled = true;
     this.scene = scene;
     this.camera = camera;
+    // 환경맵: 장면마다 한 번만 구워 다시 씀 (PostFX 를 다시 만들 때 새로 굽거나 새지 않게)
+    // quality.env === false 면 끔 (값이 없으면 지금처럼 켬)
+    this.envOn = quality.env !== false;
+    if (!this.envOn) { ENV.get(scene)?.dispose(); ENV.delete(scene); scene.environment = null; }
+    else if (ENV.has(scene)) scene.environment = ENV.get(scene).texture;
+    else this.rebuildEnvironment();
+    scene.environmentIntensity = 0.32;
+  }
+
+  /** 환경맵 굽기. WebGL 컨텍스트가 복구되면 렌더 타깃 내용이 비므로 다시 부름 */
+  rebuildEnvironment() {
+    const { renderer, scene } = this;
+    if (!this.envOn) return;
+    ENV.get(scene)?.dispose();
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    const rt = pmrem.fromScene(room, 0.04);
+    room.dispose();
+    pmrem.dispose();
+    ENV.set(scene, rt);
+    scene.environment = rt.texture;
   }
 
   setSize(w, h) {
@@ -65,10 +108,10 @@ export class PostFX {
     if (this.tiltH) { this.tiltH.uniforms.h.value = 1.6 / w; this.tiltV.uniforms.v.value = 1.6 / h; }
   }
 
+  /** 컴포저에 넣은 패스 전부 해제 (SMAA 렌더 타깃·셰이더 패스·출력 패스 포함). 환경맵은 다음 PostFX 가 다시 씀 */
   dispose() {
+    for (const p of new Set([...this.composer.passes, this.bloom, this.smaa])) p?.dispose?.();
     this.composer.dispose?.();
-    this.gtao?.dispose?.();
-    this.bloom?.dispose?.();
   }
 
   /** 시간대 색 보정 (world.tod): 흐린 날은 약하게 */

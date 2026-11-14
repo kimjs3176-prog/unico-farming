@@ -1,5 +1,6 @@
 // 상세창(패널) 글자 점검: 글자끼리 겹침 · 칸 밖으로 넘침 · 한국어 낱말 쪼개짐 · 창이 화면 밖 · 닫기 버튼 가려짐
-// 사용: VITE_WS_URL= npm run build && node scripts/check-panels.cjs <이름> <너비> <높이> [글자배율] [mobile]   (예: desk 1280 800 / mob 390 844 1 mobile / big 1100 740 1.3)
+// 사용: VITE_WS_URL= npm run build && node scripts/check-panels.cjs <이름> <너비> <높이> [글자배율] [mobile]   (예: desk 1280 800 / mob 390 844 1 mobile / big 1100 740 1.3 / land 844 390 1 mobile)
+//   UI·CSS 를 옮기거나 나눈 뒤에는 네 크기 모두 전·후 report.json 과 사진이 같은지 확인 (CSS 는 src/ui/css·theme 조각, 덮어쓰기 순서는 style.css·theme.css 목록 순서)
 // 결과: 창마다 스크린샷과 report.json (OUT_DIR 환경변수 또는 임시 폴더). Playwright Chromium(swiftshader) 필요
 const http = require('http'), fs = require('fs'), path = require('path'); const { chromium, devices } = require('playwright');
 const DIST = process.env.DIST_DIR ? path.resolve(process.env.DIST_DIR) : path.resolve(__dirname, '..', 'dist'); // 점검 중 다시 빌드해도 깨지지 않게 복사본을 쓸 수 있음
@@ -34,6 +35,8 @@ srv.listen(0, async () => {
   const audit = () => p.evaluate(() => {
     const panel = game.ui.panel || document.querySelector('.panel');
     if (!panel) return { missing: true };
+    // 창이 미끄러져 들어오는 중이면 끝난 자리로 잼 (느린 점검 환경에서 등장 애니메이션 중간을 화면 밖으로 잘못 잡지 않게)
+    for (const a of panel.getAnimations({ subtree: true })) { try { if (a.effect?.getTiming().iterations !== Infinity) a.finish(); } catch { /* 무한 반복은 그대로 */ } }
     const vw = innerWidth, vh = innerHeight, pr = panel.getBoundingClientRect();
     const issues = [];
     const label = (el) => (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 26) || el.className;
@@ -134,9 +137,9 @@ srv.listen(0, async () => {
     ['koat_desk', () => game.ui.openKoatDesk()],
     ['koat_booth', () => game.ui.openKoatBooth(game.koat.booths[1].d)],
     ['koat_result', () => game.ui.koatResult(game.koat.booths[4].d, 88, ['정확도 92% · 평균 2.1초', '🔥 최대 연속 6']) ],
-    ['mg_intro', () => game.tractor.begin()],
-    ['mg_result', () => { const t = game.tractor; t.mount(); t.counting = false; t.field.start(); t.field.score = 37; t.maxStreak = 12; t.dismount(true); }],
-    ['result', () => game.ui.result('🏅 도감 완성!', ['물고기 도감을 모두 채웠어요!', '보상 +500🪙'])],
+    ['mg_intro', () => game.smartfarm.begin()],
+    ['ride_pad', () => { game.ride.mount(game.ride.byId.tractor); }],
+    ['result', () => game.ride.dismount() || game.ui.result('🏅 도감 완성!', ['물고기 도감을 모두 채웠어요!', '보상 +500🪙'])],
     ['rooms', () => game.ui.openRooms()],
     ['wardrobe', () => { game.home.enter(); setTimeout(() => game.home.openWardrobe('cos'), 900); }],
     ['wardrobe_set', () => game.home.openWardrobe('set')],

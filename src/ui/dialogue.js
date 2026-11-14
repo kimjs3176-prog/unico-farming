@@ -22,7 +22,7 @@ export class Dialogue {
     this.closedAt = 0;
     this.el.addEventListener('pointerdown', (e) => { if (!e.target.closest('.dlg-choices')) { e.preventDefault(); this._advance(); } });
     window.addEventListener('keydown', (e) => {
-      if (!this.active || e.target?.tagName === 'INPUT') return;
+      if (!this.active || e.isComposing || e.target?.tagName === 'INPUT') return;
       if (['KeyE', 'Space', 'Enter'].includes(e.code)) { e.preventDefault(); e.stopPropagation(); this._advance(); }
       const n = +e.key;
       if (n >= 1 && n <= 9) this.el.querySelectorAll('.dlg-choices button')[n - 1]?.click(); // 선택지 번호 1~9
@@ -35,6 +35,9 @@ export class Dialogue {
   justClosed() { return performance.now() - this.closedAt < 350; }
 
   skipAll() { this._skip = true; this._advance(true); }
+
+  /** 다음으로 (글자 다 보이기 → 다음 줄). 키보드 E 와 같음: 화면 E 버튼·3D 화면 탭에서 부름 */
+  advance() { this._advance(); }
 
   /** 초상화: 말하는 유니코의 색·옷차림으로 2D 일러스트. portrait: 'dog' 이면 반려견 */
   _portrait(speaker, color, kind, emote) {
@@ -70,6 +73,7 @@ export class Dialogue {
       this.$('.dlg-choices').innerHTML = '';
       this.el.classList.toggle('has-choices', !!ln.choices);
       ln.speaker?.playAction?.(ln.emote || 'talk', Math.min(2.5, ln.text.length * 0.05));
+      ln.speaker?.speak?.(Math.min(6, [...ln.text].length / 38 + 0.2)); // 글자 나오는 동안 입 움직임 (초당 38자)
       result = await this._type(ln);
     }
     this.el.classList.add('hidden');
@@ -98,6 +102,7 @@ export class Dialogue {
         if (i < chars.length) return requestAnimationFrame(step);
         this.typing = false;
         this.el.classList.add('done');
+        ln.speaker?.speak?.(0); // 글자가 다 나오면 입 다묾
         if (ln.choices) this._showChoices(ln.choices, resolve);
         else this._next = () => { this._next = null; this.game.audio.play('click', 0.6); resolve(null); };
       };

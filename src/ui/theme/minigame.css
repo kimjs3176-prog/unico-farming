@@ -1,0 +1,3 @@
+/* 테마: KOAT 체험관 창 리본 */
+.panel.koat h2 { background: linear-gradient(180deg, color-mix(in srgb, var(--div, #30b6aa) 78%, white) 0%, var(--div, #30b6aa) 70%); color: #fff; }
+.panel.koat { border-top: 0; }

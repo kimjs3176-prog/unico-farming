@@ -1,0 +1,18 @@
+{
+  "name": "유니코 팜 - 농업 메타버스",
+  "short_name": "유니코 팜",
+  "description": "한국농업기술진흥원 마스코트 유니코와 함께하는 캐주얼 3D 농장 메타버스",
+  "lang": "ko",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "background_color": "#bfe4ff",
+  "theme_color": "#8fd0ff",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

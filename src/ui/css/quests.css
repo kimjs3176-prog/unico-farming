@@ -1,0 +1,7 @@
+/* 퀘스트 창 (panels/quests.js) */
+.quest { border-left: 5px solid #ddd; }
+.quest.done { border-left-color: var(--leaf); background: #eef9e6; }
+.quest .desc { font-size: 12px; color: #666; }
+.quest .bar { height: 6px; background: #e5e5e5; border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.quest .bar i { display: block; height: 100%; background: var(--teal); }
+.mg-records { margin-top: 6px; }

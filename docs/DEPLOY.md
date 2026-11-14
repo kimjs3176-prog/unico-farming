@@ -55,6 +55,20 @@ PORT=8787 MAX_PLAYERS_PER_ROOM=50 MAX_ROOMS=20 npm start
   - `CLOUDFLARE_ACCOUNT_ID`: 대시보드 Workers 화면 오른쪽의 Account ID
   - Actions 탭에서 **Run workflow** 로 직접 배포할 수도 있습니다.
 
+### 4단계(권장). 배포 전 확인 — CI·빌드 번호
+- **CI** (`.github/workflows/ci.yml`): 모든 브랜치 push 와 PR 마다 `npm ci` → `npm test`(단위 테스트, 약 10초) → `npm run build`. `docs/` 만 바뀐 push 는 건너뛰지만, PR 은 문서만 고쳐도 늘 돕니다 (필수 검사가 건너뛰어지면 '대기 중' 으로 남아 합칠 수 없게 되므로).
+  - 실패한 변경을 아예 못 합치게 하려면: GitHub 저장소 **Settings → Branches → Add branch ruleset**(또는 Branch protection rule) → 대상 브랜치(main 등) → **Require status checks to pass** 에 `test` 를 추가. 저장소 관리자만 바꿀 수 있는 설정이라 코드로는 켜지 않았습니다.
+  - Vercel 배포 자체도 테스트로 막고 싶다면(선택, 아직 적용 안 함): `vercel.json` 의 `"buildCommand"` 를 `"npm test && npm run build"` 로 바꾸면 테스트가 실패한 커밋은 배포되지 않습니다 (배포마다 약 10초 더 걸림).
+- **브라우저 연기 시험** (`scripts/smoke.mjs`): Actions 탭 → CI → **Run workflow** 로 실행하면 `test` 다음에 `smoke` 작업이 돕니다 (소프트웨어 WebGL 이라 몇 분). 휴대폰 크기(412x839, 낮음)로 입장 20초 동안 오류 없음, 게임 루프가 돎, 인트로 '건너뛰기' 가 5초 안에 풀림, 저장 → 새로 고침 → '저장된 농장을 불러왔어요', 낚시터·KOAT 체험관·우리 집으로 순간이동해도 컷신·대화가 5초 안에 풀림을 보고, 이어서 데스크톱(1280x800, 높음·화면 효과 켜짐)으로 따로 입장해 10초 동안 오류가 없는지 확인합니다. 바깥 주소(글꼴·날씨·릴레이 서버)는 모두 막고 돌립니다.
+  - 내 컴퓨터에서: `VITE_WS_URL= npm run build && npm i --no-save playwright && npx playwright install chromium && npm run smoke`
+- **빌드 번호**: 빌드한 `index.html`·`pixel.html` 에 `<meta name="unico-build" content="<커밋 앞 7자> <빌드 날짜>">` 가 들어갑니다 (Vercel 은 `VERCEL_GIT_COMMIT_SHA`, Actions 는 `GITHUB_SHA`, 그 밖에는 `git rev-parse`, 모두 없으면 `dev`). 오류 제보를 받으면 브라우저 콘솔에서 `document.querySelector('meta[name=unico-build]').content` 로 어느 배포인지 확인하세요. 아직은 게임 화면 어디에도 나오지 않습니다 — 설정 창 아래 작은 글씨(`빌드 1a2b3c4 · 2026-11-09`)와 오류 제보·진단 복사 문구가 이 meta 를 읽게 할 예정입니다. 그때도 빌드 상수 `__BUILD__` 대신 meta 를 읽습니다 (`__BUILD__` 를 JS 에서 쓰면 커밋마다 큰 main 청크 이름이 바뀌어 휴대폰이 다시 받음).
+- **생성물 검사** (`npm run check:gen`, `tests/gen/*.check.mjs`): 문서의 수치 표·아이콘 아틀라스처럼 콘텐츠를 바꿀 때마다 다시 만들어야 하는 것. CI 의 `gen-check` 작업에서 돌지만 실패해도 배포·합치기를 막지 않습니다 (규칙은 `tests/gen/README.md`). 어긋났다고 나오면 아래 명령으로 다시 만들어 커밋하세요. 지금은 검사가 하나도 없어 늘 통과하고, 아래 두 명령도 **아직 없습니다** (검사를 추가할 때 함께 생김).
+
+  | 생성물 | 다시 만드는 명령 | 검사 |
+  |---|---|---|
+  | `docs/BALANCE.md` 수치 표 | `node scripts/balance.mjs --md` — **아직 없음** (지금 `balance.mjs` 는 `--md` 를 모르고 콘솔 표만 출력) | 표 검사와 함께 추가 예정 |
+  | 아이템 아이콘·아틀라스 | `npm run bake:icons` — **아직 없음** (package.json 에 스크립트 없음) | 아이콘 굽기와 함께 추가 예정 |
+
 ### 내 컴퓨터에서 미리 시험하기
 ```bash
 cd deploy/cloudflare && npm run dev          # 로컬 서버 http://127.0.0.1:8787

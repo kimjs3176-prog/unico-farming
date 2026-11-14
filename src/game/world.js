@@ -3,9 +3,10 @@ import { heightAt, HILLS, CHESTS } from './terrain.js';
 import { Scenery } from './scenery.js';
 import { Precipitation } from './precip.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { enhanceMaterial } from './surface.js';
+import { enhanceMaterial, SURF, setSurfaceDetail } from './surface.js';
 import { timeOfDay } from './sim/tod.js';
 import { Birds } from './birds.js';
+import { whenFontReady } from './label.js';
 
 /** 월드 레이아웃 상수 (m). +X 동쪽, +Z 남쪽, 스폰 (0,0,9) */
 export const LAYOUT = {
@@ -22,8 +23,13 @@ export const LAYOUT = {
   sensor: { x: -17, z: -12.5 },
   field: { x0: 6, z0: 14, cols: 10, rows: 6, cell: 2 },
   tractorHome: { x: 28.5, z: 17, heading: -Math.PI / 2 },
-  // 트랙터 마당: 밭갈이 밭 + 트랙터 자리를 울타리로 둘러 트랙터가 밖으로 나가지 않게 (사람은 북쪽 문으로 드나듦)
-  tractorYard: { x0: 6.0, z0: 12.0, x1: 31.6, z1: 27.8, gate: { x: 8.2, w: 3.2 } }, // 문은 농장에서 오는 흙길 끝(북서쪽)
+  // 트랙터 마당: 밭갈이 밭 + 트랙터 자리를 울타리로 두름. 북서쪽 문은 트랙터도 드나들 만큼 넓게 (트랙터는 마을 탈것)
+  tractorYard: { x0: 6.0, z0: 12.0, x1: 31.6, z1: 27.8, gate: { x: 9.6, w: 6.0 } }, // 문은 농장에서 오는 흙길 끝(북서쪽)
+  // 자전거·농장 카트를 세워 두는 자리 후보 (막히지 않은 첫 자리)
+  rides: {
+    bike: [{ x: 3.6, z: 2.6, heading: Math.PI / 2 }, { x: -4.5, z: 3.6, heading: -Math.PI / 2 }],
+    cart: [{ x: 2.4, z: -16, heading: Math.PI }, { x: 1.8, z: -5.4, heading: Math.PI / 2 }],
+  },
   windmill: { x: -27, z: 15 },
   pond: { x: -12, z: 18, r: 4.5 },
   // 논 (3x2), 탈곡장, 허수아비
@@ -44,12 +50,12 @@ export const LAYOUT = {
     shop: { x: -2.9, z: 28.6, rot: -Math.PI / 2 }, board: { x: -2.8, z: 24.2 }, entry: { x: -12.5, z: 23.2 },
   },
   npcs: {
-    merchant: { x: 3.2, z: -8.4, pose: 'present', name: '장터 유니코' },
-    researcher: { x: -14.5, z: -3.5, pose: 'lab', name: '연구원 유니코' },
-    guide: { x: 4.5, z: 6.5, pose: 'megaphone', name: '안내 유니코' },
-    granny: { x: -9.6, z: -19.4, pose: 'think', name: '할머니 유니코' },
-    kid: { x: -6, z: 5, pose: 'cheer', name: '꼬마 유니코', wander: { x0: -12, z0: 3.5, x1: -3, z1: 8 } },
-    fisher: { x: -5.2, z: 27.4, pose: 'wave', name: '낚시꾼 유니코' },
+    merchant: { x: 3.2, z: -8.4, pose: 'present', species: 'fox', name: '장터 여우' },
+    researcher: { x: -14.5, z: -3.5, pose: 'lab', species: 'raccoon', name: '연구원 너구리' },
+    guide: { x: 4.5, z: 6.5, pose: 'megaphone', species: 'puppy', name: '안내 강아지' },
+    granny: { x: -9.6, z: -19.4, pose: 'think', species: 'bear', name: '곰 할머니' },
+    kid: { x: -6, z: 5, pose: 'cheer', species: 'rabbit', name: '꼬마 토끼', wander: { x0: -12, z0: 3.5, x1: -3, z1: 8 } },
+    fisher: { x: -5.2, z: 27.4, pose: 'wave', species: 'cat', name: '낚시꾼 고양이' },
   },
   // 흙길 (부드러운 곡선으로 지면에 칠함): [[x,z]...], 폭
   paths: [
@@ -125,11 +131,82 @@ export const LAYOUT = {
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
 // 애니메이션·상호작용이 있어 병합하면 안 되는 모델
 const DYNAMIC = new Set(['windmill', 'tower_windmill', 'drone', 'smartfarm', 'fruit_tree', 'thresher', 'tractor', 'hen', 'cloud']);
-const SKY_COL = { dayCol: new THREE.Color(0xbfe4ff), duskCol: new THREE.Color(0xf4b183), nightCol: new THREE.Color(0x1d2a4a) }; // 하늘(안개) 색, 읽기 전용
 const GREY = new THREE.Color(0x9aa4ae);
+const DAY_SKY = new THREE.Color(0xbfe4ff), DUSK_SKY = new THREE.Color(0xf4b183), NIGHT_SKY = new THREE.Color(0x1d2a4a);
+const WEATHER_KEYS = ['cloud', 'precip', 'fog', 'wind'];
+// 환경맵을 끈 저사양(quality.env === false): 주변광에 더할 값 = 이 배율 × 환경광 세기.
+// 같은 장면을 환경맵 켬/끔으로 찍어 화면 밝기를 맞춤: 켬 190.5·125.0·63.7 ↔ 끔(배율 5) 190.2·124.4·63.3 (낮·저녁·밤)
+export const ENV_OFF_AMBIENT = 5;
+const ORIGIN = { x: 0, z: 0 };
+// 정적 병합 칸: 삼각형이 많은 묶음만 20m 칸으로 나눠 화면(그림자 상자) 밖 칸은 그리지 않음
+const STATIC_CELL = 20, SPLIT_TRIS = 3000, MIN_CELL_TRIS = 400;
+// 그림자: 캐릭터 앞 34m·뒤 12m(멀리 당기면 카메라 발밑까지)를 덮는 상자를 카메라가 보는 쪽으로 밀어 둠 (화면 비율에 맞춰 크기)
+const SHADOW_AHEAD = 34, SHADOW_BEHIND = 12, SHADOW_BEHIND_MAX = 20, SUN_DIST = 100;
+// 가로 화면 기준 세로 시야 45°의 tan. 세로 화면은 세로 시야를 넓혀도 가로 시야는 대략 tan×√비율 이하라 그 값으로 덮음
+const TAN_HALF_FOV = Math.tan(THREE.MathUtils.degToRad(45 / 2));
+const INDOOR_Y = -50; // 이보다 아래면 땅속 실내 방 (view/home_interior.js IO.y = -200)
+const _c = new THREE.Vector3(), _dir = new THREE.Vector3(), _size = new THREE.Vector2(), _sr = new THREE.Vector3(), _su = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+
+/** 칸 이름 (x,z 를 size m 칸으로) */
+export function cellKey(x, z, size) { return `${Math.floor(x / size)},${Math.floor(z / size)}`; }
+
+/**
+ * 정적 병합 나누기 계획: 칸별 삼각형 수(Map) → 함께 합칠 칸 묶음 목록.
+ * 작은 묶음은 통째로 하나, 큰 묶음은 칸마다 하나 (아주 작은 칸들은 한데 모아 드로우콜을 아낌)
+ */
+export function planStaticGroups(cellTris, { splitTris = SPLIT_TRIS, minCellTris = MIN_CELL_TRIS } = {}) {
+  const keys = [...cellTris.keys()];
+  let total = 0;
+  for (const t of cellTris.values()) total += t;
+  if (total < splitTris || keys.length < 2) return keys.length ? [keys] : [];
+  const groups = [], rest = [];
+  for (const k of keys) (cellTris.get(k) >= minCellTris ? groups.push([k]) : rest.push(k));
+  if (rest.length) groups.push(rest);
+  return groups;
+}
+
+/**
+ * 그림자 상자 맞추기: 화면 가로세로비 → { r: 상자 반폭(m), a: 상자 중심을 캐릭터 앞으로 미는 거리(m) }.
+ * 앞쪽 끝(ahead)에서 화면 가로 반폭(카메라가 최대 camBack 뒤에 있을 때)과 앞뒤 길이를 모두 덮는 가장 작은 상자.
+ * max(품질 단계별 상한)에 걸려 다 못 덮으면 화면에 크게 보이는 뒤쪽(카메라 쪽)을 먼저 덮음
+ */
+export function shadowFit(aspect, { ahead = SHADOW_AHEAD, behind = SHADOW_BEHIND, camBack = 16, tanHalf = TAN_HALF_FOV, min = 16, max = 36 } = {}) {
+  const asp = Math.max(0.1, aspect || 1);
+  const halfW = (ahead + camBack) * Math.max(asp, Math.sqrt(asp)) * tanHalf;
+  const r = Math.min(max, Math.max(min, halfW, (ahead + behind) / 2));
+  return { r, a: Math.max(0, Math.min(ahead - r, r - behind)) };
+}
+
+/** 상자 뒤쪽 길이: 카메라까지 가로 거리(dl)+1m 까지 덮음 (최소 12m, 최대 20m, 1m 단위로 끊어 줌 바꿀 때만 크기가 바뀜) */
+export function shadowBehind(dl) {
+  return Math.max(SHADOW_BEHIND, Math.min(Math.ceil((dl || 0) + 1), SHADOW_BEHIND_MAX));
+}
+
+/**
+ * 그림자 상자 중심을 빛 공간 격자(그림자 맵 한 칸 = texel m)에 맞춤 → 캐릭터가 움직여도 그림자 가장자리가 떨리지 않음.
+ * dir: 빛이 오는 쪽 단위 벡터 (그림자 카메라 lookAt 과 같은 축). 빛 방향 성분은 그대로 둠
+ */
+export function snapToTexel(c, dir, texel, out = new THREE.Vector3()) {
+  const right = _sr.crossVectors(UP, dir);
+  if (right.lengthSq() < 1e-12 || !(texel > 0)) return out.copy(c);
+  right.normalize();
+  const upv = _su.crossVectors(dir, right);
+  const px = c.dot(right), py = c.dot(upv);
+  const sx = Math.round(px / texel) * texel - px, sy = Math.round(py / texel) * texel - py;
+  return out.copy(c).addScaledVector(right, sx).addScaledVector(upv, sy);
+}
+
+/** 0..n-1 순번 인덱스 */
+function seqIndex(n) {
+  const a = n > 65535 ? new Uint32Array(n) : new Uint16Array(n);
+  for (let i = 0; i < n; i++) a[i] = i;
+  return new THREE.BufferAttribute(a, 1);
+}
 
 export class World {
   constructor(assets, renderer, quality = { grass: 9000, shadowMap: 3072 }) {
+    setSurfaceDetail(!!quality.lowDetail); // 재질 노이즈 세밀도 (첫 렌더 전에)
     this.assets = assets;
     this.quality = quality;
     this.renderer = renderer;
@@ -176,7 +253,7 @@ export class World {
     this.sun.shadow.mapSize.set(this.quality.shadowMap, this.quality.shadowMap);
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.05;
-    this.sun.shadow.radius = 3;
+    this.sun.shadow.radius = 3; // BasicShadowMap 에서는 쓰이지 않음 (PCF 로 바꿀 때만 의미 있음)
     this.scene.add(this.sun, this.sun.target);
     this.ambient = new THREE.AmbientLight(0xffffff, 0.15);
     this.scene.add(this.ambient);
@@ -543,8 +620,8 @@ export class World {
         for (let z = b.z0 + (i ? 0.1 : 1.6); z <= b.z1; z += 2) beams.push(new THREE.CylinderGeometry(0.07, 0.08, 0.75, 8).translate(x, 0.1, z));
       }
     }
-    const deck = new THREE.Mesh(mergeGeometries(planks.map((g) => g.toNonIndexed())), wood);
-    const frame = new THREE.Mesh(mergeGeometries(beams.map((g) => g.index ? g.toNonIndexed() : g)), woodD);
+    const deck = new THREE.Mesh(mergeGeometries(planks), wood); // 상자·원기둥은 모두 인덱스가 있어 그대로 합침
+    const frame = new THREE.Mesh(mergeGeometries(beams), woodD);
     const pier = new THREE.Group();
     pier.add(deck, frame);
     this.scene.add(pier);
@@ -592,20 +669,26 @@ export class World {
   _batchStatic() {
     const buckets = new Map();
     const plain = (m) => m.isMeshStandardMaterial && !m.map && !m.transparent && !(m.emissive && m.emissive.r + m.emissive.g + m.emissive.b > 0.01);
+    const size = new THREE.Vector3();
     for (const o of this.staticObjs) {
       o.updateMatrixWorld(true);
+      const bb = new THREE.Box3().setFromObject(o);
+      // 키 작은 장식(풀·꽃·덤불·작은 돌·연잎)은 그림자를 드리우지 않는 묶음으로 → 그림자 패스 삼각형 감소
+      const small = (o.userData.h ??= bb.getSize(size).y) < 0.7;
+      // 칸은 물체 중심으로 정함 → 한 물체의 부품은 같은 칸에 (칸 경계에서 갈라지지 않게)
+      const cell = cellKey((bb.min.x + bb.max.x) / 2, (bb.min.z + bb.max.z) / 2, STATIC_CELL);
       o.traverse((m) => {
         if (!m.isMesh) return;
         const mat = m.material, vc = plain(mat);
-        // 키 작은 장식(풀·꽃·덤불·작은 돌·연잎)은 그림자를 드리우지 않는 묶음으로 → 그림자 패스 삼각형 감소
-        const small = (o.userData.h ??= new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y) < 0.7;
         const key = (small ? 'ns|' : '') + (vc ? `vc|${mat.userData.enhanced || 'none'}|${mat.roughness.toFixed(2)}|${mat.metalness.toFixed(2)}|${mat.side}|${mat.toneMapped}` : mat.uuid);
-        if (!buckets.has(key)) buckets.set(key, { mat, vc, geos: [], small });
+        let b = buckets.get(key);
+        if (!b) buckets.set(key, (b = { mat, vc, small, cells: new Map() }));
         let g = m.geometry.clone().applyMatrix4(m.matrixWorld);
         const src = mat.vertexColors ? g.attributes.color : null;
         for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'color'].includes(k)) g.deleteAttribute(k);
-        if (g.index) g = g.toNonIndexed();
-        if (!g.attributes.normal) g.computeVertexNormals();
+        // 인덱스는 그대로 둠 (공유 정점 재사용 → 정점 수·메모리 약 절반). 법선이 없으면 예전처럼 면마다 각진 법선
+        if (!g.attributes.normal) { if (g.index) g = g.toNonIndexed(); g.computeVertexNormals(); }
+        if (!g.index) g.setIndex(seqIndex(g.attributes.position.count)); // 한 묶음 안에서 모두 인덱스가 있어야 합칠 수 있음
         if (vc) { // 재질 색 × (있으면) 원래 정점 색
           const n = g.attributes.position.count, arr = new Float32Array(n * 3), c = mat.color;
           const sc = mat.vertexColors && g.attributes.color;
@@ -614,15 +697,16 @@ export class World {
           }
           g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
         } else if (!src) g.deleteAttribute('color');
-        buckets.get(key).geos.push(g);
+        let list = b.cells.get(cell);
+        if (!list) b.cells.set(cell, (list = { geos: [], tris: 0 }));
+        list.geos.push(g);
+        list.tris += g.index.count / 3;
       });
       this.scene.remove(o);
     }
     let n = 0;
-    for (const { mat, vc, geos, small } of buckets.values()) {
-      const merged = mergeGeometries(geos, false);
-      if (!merged) { console.warn('정적 병합 실패:', mat.name, geos.length); continue; }
-      let material = mat;
+    for (const { mat, vc, small, cells } of buckets.values()) {
+      let material = mat; // 재질은 묶음마다 하나 (칸 메시들이 공유 → 셰이더 전환·계절 잎 재질 수 그대로)
       if (vc) {
         material = mat.clone();
         material.color.set(0xffffff);
@@ -631,11 +715,18 @@ export class World {
         material.userData = {};
         if (kind) enhanceMaterial(material, kind);
       }
-      const mesh = new THREE.Mesh(merged, material);
-      mesh.castShadow = !small; mesh.receiveShadow = true;
-      mesh.matrixAutoUpdate = false;
-      this.scene.add(mesh);
-      n++;
+      const tris = new Map([...cells].map(([k, v]) => [k, v.tris]));
+      for (const keys of planStaticGroups(tris)) {
+        const geos = keys.flatMap((k) => cells.get(k).geos);
+        const merged = mergeGeometries(geos, false);
+        if (!merged) { console.warn('정적 병합 실패:', mat.name, geos.length); continue; }
+        merged.computeBoundingSphere();
+        const mesh = new THREE.Mesh(merged, material);
+        mesh.castShadow = !small; mesh.receiveShadow = true;
+        mesh.matrixAutoUpdate = false;
+        this.scene.add(mesh);
+        n++;
+      }
     }
     this.staticObjs = [];
     this.batchCount = n;
@@ -645,12 +736,17 @@ export class World {
   signText(m, title, sub) {
     const tex = (text, w, h, size, bg) => {
       const c = document.createElement('canvas'); c.width = w; c.height = h;
-      const g = c.getContext('2d');
-      g.fillStyle = bg; g.fillRect(0, 0, w, h);
-      g.fillStyle = '#4a2f1b'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.font = `900 ${size}px 'Unico Coin', Jua, "Noto Sans KR", sans-serif`;
-      g.fillText(text, w / 2, h / 2 + 2);
-      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+      const g = c.getContext('2d'), font = `900 ${size}px 'Unico Coin', Jua, "Noto Sans KR", sans-serif`;
+      const paint = () => {
+        g.fillStyle = bg; g.fillRect(0, 0, w, h);
+        g.fillStyle = '#4a2f1b'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.font = font;
+        g.fillText(text, w / 2, h / 2 + 2);
+      };
+      paint();
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+      whenFontReady(font, text, () => { paint(); t.needsUpdate = true; }); // 한글 조각이 늦게 오면 다시 칠함 (캔버스 크기는 그대로)
+      return t;
     };
     const mk = (text, w, h, y, rz, bg, size) => {
       const pl = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex(text, 512, Math.round(512 * h / w), size, bg), roughness: 0.9 }));
@@ -710,7 +806,7 @@ export class World {
     });
   }
 
-  /** 트랙터 마당 울타리: 북쪽(z0)에 사람이 드나드는 문, 나머지는 막힘 (트랙터는 tractor_view 에서 문까지 막음) */
+  /** 트랙터 마당 울타리: 북쪽(z0)에 사람이 드나드는 문, 나머지는 막힘 (문은 트랙터도 지나갈 만큼 넓음) */
   _fenceYard(Y) {
     const { x0, z0, x1, z1, gate } = Y, g0 = gate.x - gate.w / 2, g1 = gate.x + gate.w / 2, t = 0.25;
     for (let x = x0 + 1; x < x1; x += 2) {
@@ -821,21 +917,20 @@ export class World {
     this.frameNo = (this.frameNo || 0) + 1; // 프레임 번호 (연못 반사 갱신 주기 등)
     for (const a of this.animated) a.update(dt);
     if (this.groundTime) this.groundTime.value += dt;
-    if (focus) {
-      // 그림자 카메라를 플레이어 주변으로 이동
-      this.sun.target.position.set(focus.x, 0, focus.z);
-      this.cameraPos = focus;
-    }
+    if (focus) this.cameraPos = focus;
     this.time += dt / DAY_LENGTH;
     if (this.time >= 1) { this.time -= 1; this.day++; this.onNewDay?.(this.day); }
     const t = this.time;
     const sunA = (t - 0.25) * Math.PI * 2; // 06:00 일출, 18:00 일몰
     const elev = Math.sin(sunA);
     const fx = focus?.x || 0, fz = focus?.z || 0;
-    this.sun.position.set(fx + Math.cos(sunA) * 60, Math.max(elev, -0.2) * 80 + 12, fz + 35);
+    const indoor = !!focus && focus.y < INDOOR_Y;
+    // 해가 있는 쪽 (하늘·수면 반짝임은 바깥 기준 그대로) → 그림자 상자는 캐릭터·카메라를 따라감 (실내 방 포함)
+    const sunRel = (this._sunRel ||= new THREE.Vector3()).set(Math.cos(sunA) * 60, Math.max(elev, -0.2) * 80 + 12, 35);
+    this._fitShadow(focus, sunRel, indoor);
     // 날씨 값 부드럽게 보간 (약 4초)
     const W = this.weatherCur, WT = this.weatherTarget, k = Math.min(1, dt * 0.25);
-    for (const key of ['cloud', 'precip', 'fog', 'wind']) W[key] += (WT[key] - W[key]) * k;
+    for (const key of WEATHER_KEYS) W[key] += (WT[key] - W[key]) * k;
     W.kind = WT.kind;
     const overcast = W.cloud;
     const daylight = THREE.MathUtils.clamp(elev * 2.2 + 0.25, 0, 1) * (1 - overcast * 0.35);
@@ -847,21 +942,22 @@ export class World {
     const snowCover = Math.max(W.kind === 'snow' ? Math.min(1, W.precip * 1.2) : 0, this.seasonSnow || 0); // 겨울엔 눈이 안 와도 소복이
     this.snowCover = (this.snowCover || 0) + (snowCover - (this.snowCover || 0)) * Math.min(1, dt * 0.15);
     this.groundMat.emissive.setRGB(0.94, 0.97, 1).multiplyScalar(this.snowCover * 0.62 * (0.3 + daylight * 0.7)); // 눈 덮인 땅 (겨울·눈 오는 날)
-    const tod = this.tod = timeOfDay(t); // 시간대 빛 색 (부드럽게 이어짐)
+    const tod = this.tod = timeOfDay(t, this._tod ||= { sun: [0, 0, 0], tint: [0, 0, 0], warmth: 0, sat: 0 }); // 시간대 빛 색 (같은 객체를 다시 채움)
     this.sun.color.setRGB(tod.sun[0], tod.sun[1], tod.sun[2]);
     this.hemi.color.setHex(0xd8eeff).lerp(this.sun.color, 0.16).lerp(GREY, overcast * 0.6);
-    const { dayCol, duskCol, nightCol } = SKY_COL; // 매 프레임 새로 만들지 않음 (docs/perf)
     const sky = (this._sky ||= new THREE.Color());
-    if (elev > 0.25) sky.copy(dayCol);
-    else if (elev > -0.1) sky.copy(duskCol).lerp(dayCol, (elev + 0.1) / 0.35);
-    else sky.copy(nightCol).lerp(duskCol, Math.max(0, (elev + 0.35) / 0.25));
-    sky.lerp(GREY.clone().multiplyScalar(0.55 + daylight * 0.45), overcast * 0.6);
+    if (elev > 0.25) sky.copy(DAY_SKY);
+    else if (elev > -0.1) sky.copy(DUSK_SKY).lerp(DAY_SKY, (elev + 0.1) / 0.35);
+    else sky.copy(NIGHT_SKY).lerp(DUSK_SKY, Math.max(0, (elev + 0.35) / 0.25));
+    sky.lerp((this._grey ||= new THREE.Color()).copy(GREY).multiplyScalar(0.55 + daylight * 0.45), overcast * 0.6);
     this.scene.background.copy(sky);
     this.scene.fog.color.copy(sky);
     this.scene.fog.near = THREE.MathUtils.lerp(45, 6, W.fog);
     this.scene.fog.far = THREE.MathUtils.lerp(110, 38, W.fog);
+    const q = this.quality || {};
+    this.precip.density = indoor ? 0 : (q.precip ?? 1); // 저사양은 입자 일부만, 집 안은 계산하지 않음
     this.precip.set(W.kind, W.precip, W.wind);
-    this.precip.update(dt, focus || { x: 0, z: 0 });
+    this.precip.update(dt, focus || ORIGIN);
     const night = daylight < 0.4 ? 1 : 0;
     for (const m of this.lampMaterials) m.emissiveIntensity = 1 + night * 3;
     const dusk = THREE.MathUtils.clamp(1 - daylight * 1.6, 0, 1);
@@ -870,11 +966,35 @@ export class World {
     this.rim.position.set(fx - Math.cos(sunA) * 50, 25, fz - 35);
     this.rim.target.position.set(fx, 0, fz);
     this.rim.intensity = 0.25 + daylight * 0.45;
-    this.ambient.intensity = 0.03 + daylight * 0.12;
-    const sunDir = (this._sunDir ||= new THREE.Vector3()).set(this.sun.position.x - fx, this.sun.position.y, this.sun.position.z - fz); // = sun.position - (fx, 0, fz), 매 프레임 재사용
-    this.scenery?.update(dt, daylight, sunDir, W);
-    // 하늘을 가로지르는 새 떼 (낮·맑을 때)
-    (this.birds ||= new Birds(this.scene)).update(dt, focus, W.precip > 0.3 ? 0 : daylight);
+    // 환경맵(IBL)을 끈 저사양: 환경광이 주던 밝기를 흰 주변광으로 채움 (낮·저녁·밤 모두 예전 밝기와 맞춤)
+    this.ambient.intensity = 0.03 + daylight * 0.12 + (this.scene.environment ? 0 : ENV_OFF_AMBIENT * this.scene.environmentIntensity);
+    this.scenery?.update(dt, daylight, sunRel, W);
+    // 하늘을 가로지르는 새 떼 (낮·맑을 때). 품질 낮음·집 안에서는 새 무리를 만들지 않음 (날던 무리는 그대로 지나감)
+    const birdsOn = (q.birds ?? true) && !indoor;
+    (this.birds ||= new Birds(this.scene)).update(dt, focus, birdsOn && W.precip <= 0.3 ? daylight : 0);
+  }
+
+  /**
+   * 그림자 상자: 화면 비율에 맞춘 크기로 캐릭터 앞(카메라가 보는 쪽)을 덮고, 빛 공간 격자에 맞춰 떨림 없이 따라감.
+   * 카메라 방향은 main 루프가 넣어 둔 시야 구멍 값(SURF.seeCam → seeTarget, 지난 프레임)으로 앎
+   */
+  _fitShadow(focus, sunRel, indoor) {
+    const sh = this.sun.shadow, cam = sh.camera;
+    const cp = SURF.seeCam.value, tp = SURF.seeTarget.value;
+    const dx = tp.x - cp.x, dz = tp.z - cp.z, dl = Math.hypot(dx, dz);
+    const sz = this.renderer?.getSize ? this.renderer.getSize(_size) : null;
+    // 뒤쪽은 카메라 발밑까지 (멀리 당긴 세로 화면 아래쪽), 상한은 품질 단계별 (낮음은 작게 → 가로 폰 그림자 패스 가볍게)
+    const fit = shadowFit(sz && sz.y > 0 ? sz.x / sz.y : 1.6, { behind: shadowBehind(dl), max: this.quality?.shadowBoxMax ?? 36 });
+    if (cam.right !== fit.r) { cam.left = cam.bottom = -fit.r; cam.right = cam.top = fit.r; cam.updateProjectionMatrix(); }
+    const c = _c.set(focus?.x || 0, focus?.y || 0, focus?.z || 0);
+    if (dl > 1e-3) { c.x += (dx / dl) * fit.a; c.z += (dz / dl) * fit.a; } else c.z -= fit.a; // 기본 카메라는 북쪽(-z)을 봄
+    // 집 안(지붕 없는 단면 방): 해가 낮으면 옆벽 그림자가 방을 덮으므로 빛을 높게 세워 짧은 접지 그림자만
+    const dir = _dir.copy(sunRel);
+    if (indoor) dir.y = Math.max(dir.y, Math.hypot(dir.x, dir.z) * 2);
+    dir.normalize();
+    snapToTexel(c, dir, (2 * fit.r) / (sh.mapSize.x || 1024), c);
+    this.sun.target.position.copy(c);
+    this.sun.position.copy(c).addScaledVector(dir, SUN_DIST);
   }
 
   clockText() {

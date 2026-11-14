@@ -1,0 +1,156 @@
+/* 미니게임 HUD·운전 버튼·논·탈곡·스마트팜·양 몰이·낚시·미니게임 창 (panels/activity.js · minigame_frame.js) */
+/* 미니게임 HUD */
+.smart-panel { position: absolute; right: 12px; top: calc(var(--hud-b, 52px) + 166px); background: var(--panel); border-radius: 18px; padding: 14px; width: min(calc(92vw / var(--ui-zoom, 1)), 320px); box-shadow: var(--shadow); }
+.smart-panel h3 { margin: 0 0 8px; color: var(--teal-t, #17736b); }
+.gauge { margin-bottom: 8px; }
+.gauge .lbl { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; }
+.gauge .track { position: relative; height: 14px; background: #eee; border-radius: 7px; overflow: hidden; }
+.gauge .band { position: absolute; top: 0; bottom: 0; background: #c9efc0; }
+.gauge .pin { position: absolute; top: 0; bottom: 0; width: 6px; background: var(--ink); border-radius: 3px; transition: left 0.15s; }
+.gauge.bad .pin { background: #d9534f; }
+.smart-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.smart-timer { font-weight: 900; font-size: 18px; text-align: center; margin-top: 6px; }
+@media (max-width: 600px) { .smart-panel { top: calc(var(--hud-b, 96px) + 114px); right: 8px; } }
+
+/* 트랙터 운전 버튼 (마우스·터치) */
+.drive-pad { position: absolute; left: 0; right: 0; bottom: 18px; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 18px; pointer-events: none; }
+.drive-pad > * { pointer-events: auto; }
+.pad-steer, .pad-pedals { display: flex; gap: 10px; }
+.pad-pedals { flex-direction: column; }
+.pad-btn { width: 74px; height: 74px; border-radius: 22px; font-size: 26px; background: rgba(35,25,22,0.78); color: #fff; box-shadow: 0 4px 0 rgba(0,0,0,0.35); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; touch-action: none; user-select: none; }
+.pad-btn small { font-size: 11px; margin-top: 3px; }
+.pad-btn.gas { background: var(--teal); box-shadow: 0 4px 0 var(--teal-d); }
+.pad-btn.on { transform: translateY(3px); box-shadow: none; filter: brightness(1.15); }
+.pad-extra { display: flex; gap: 8px; margin-bottom: 6px; }
+.pad-small { padding: 10px 14px; }
+@media (max-width: 600px) { .pad-btn { width: 64px; height: 64px; } .drive-pad { bottom: 90px; } }
+/* 논 상태 패널 */
+.rice-panel { top: calc(var(--hud-b, 52px) + 166px); }
+.rice-panel .lbl-row { font-size: 12px; color: #555; font-weight: 700; margin-top: 4px; }
+/* 탈곡 */
+.thresh-panel { position: absolute; left: 50%; top: calc(var(--hud-b, 52px) + 18px); transform: translateX(-50%); background: var(--panel); border-radius: 18px; padding: 14px 18px; width: min(calc(92vw / var(--ui-zoom, 1)), 360px); box-shadow: var(--shadow); text-align: center; }
+.thresh-panel h3 { margin: 0 0 8px; color: var(--teal-t, #17736b); }
+.thresh-panel .track.big { height: 22px; background: #eee; border-radius: 11px; overflow: hidden; }
+.thresh-panel .fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), #e48e00); transition: width 0.08s; }
+.thresh-panel .t { font-weight: 800; margin: 6px 0; }
+.thresh-panel .mash { width: 100%; font-size: 22px; padding: 14px; touch-action: none; }
+@media (max-width: 600px) { .rice-panel { top: calc(var(--hud-b, 96px) + 114px); } }
+
+/* 미니게임 캔버스 창 */
+.mg-wrap { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(20,14,10,0.35); z-index: 40; animation: mgfade 0.3s; /* 투명도만: 화면 전체가 미끄러지면 처음 0.3초 동안 바구니 끌기가 어긋남 */
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+@keyframes mgfade { from { opacity: 0; } }
+.mg-box { position: relative; width: min(96vw, 760px); border: 5px solid var(--panel-edge); border-radius: 26px; overflow: hidden; box-shadow: var(--shadow); background: #fffaf0; }
+/* 달걀 받기 캔버스(720x460)가 낮은 화면(가로 폰)에서도 위아래가 잘리지 않게: 너비를 보이는 높이로도 제한 (34px = 여백 24 + 테두리 10) */
+.mg-box { width: min(96vw, 760px, calc((100vh - 34px) * 720 / 460 + 10px)); width: min(96vw, 760px, calc((100dvh - 34px) * 720 / 460 + 10px)); }
+.mg-box canvas { display: block; width: 100%; height: auto; touch-action: none; cursor: pointer; }
+.mg-close { position: absolute; right: 10px; top: 70px; }
+
+/* 양 몰이 진행 표시 */
+.herd-hud { position: absolute; left: 50%; top: calc(var(--hud-b, 52px) + 12px); transform: translateX(-50%); background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 18px; padding: 8px 18px; font-family: 'Unico Coin', Jua, sans-serif; font-size: 19px; color: var(--brown); box-shadow: var(--shadow); }
+.herd-hud.hidden { display: none; }
+.herd-hud b { color: var(--teal-t, #17736b); }
+.herd-hud b.warn { color: #e8495a; }
+
+/* 낚시터 힘겨루기 */
+.reel-hud { position: absolute; right: calc(18px + var(--sar)); bottom: 110px; width: min(calc(92vw / var(--ui-zoom, 1)), 380px); background: var(--panel); border: 4px solid var(--panel-edge); border-radius: 22px; padding: 10px 16px 12px; box-shadow: var(--shadow); color: var(--brown); font-family: 'Unico Coin', Jua, sans-serif; text-align: center; transition: transform 0.08s; }
+.reel-hud.hidden { display: none; }
+.reel-hud.surge { animation: reelshake 0.12s infinite; border-color: #e8495a; }
+@keyframes reelshake { 0% { transform: translateX(-3px); } 50% { transform: translateX(3px); } 100% { transform: none; } }
+@media (max-width: 700px) { .reel-hud { right: auto; left: 50%; margin-left: max(calc(-46vw / var(--ui-zoom, 1)), -190px); bottom: 150px; } }
+.reel-hud .rh-title { font-size: 20px; margin-bottom: 6px; }
+.reel-hud .rh-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 14px; }
+.reel-hud .rh-row > span { width: 52px; text-align: right; }
+.reel-hud .rh-bar { position: relative; flex: 1; height: 18px; border-radius: 10px; background: #e9e0cc; overflow: hidden; }
+.reel-hud .rh-bar.line { background: linear-gradient(90deg, #bfe6f5, #6fc3e8); overflow: visible; }
+.reel-hud .rh-bar.line i { position: absolute; top: -6px; font-style: normal; font-size: 22px; transition: left 0.1s linear; }
+.reel-hud .rh-bar.line .me { left: -6px; }
+.reel-hud .rh-bar.line .fish { transform: scaleX(-1); }
+.reel-hud .rh-bar.ten em { position: absolute; right: 0; top: 0; bottom: 0; width: 25%; background: repeating-linear-gradient(45deg, #f6b7bf 0 6px, #f19aa5 6px 12px); }
+.reel-hud .rh-bar.ten b { position: absolute; left: 0; top: 0; bottom: 0; background: #30b6aa; border-radius: 10px; transition: width 0.06s linear, background 0.2s; }
+.reel-hud .rh-bar.ten b.warm { background: #f2b233; }
+.reel-hud .rh-bar.ten b.hot { background: #e8495a; }
+.reel-hud .rh-tip { font-size: 13px; opacity: 0.85; margin: 6px 0 8px; }
+.reel-hud .rh-tip b { color: #e8495a; }
+.reel-hud .rh-hold { width: 100%; padding: 12px; font-size: 20px; border-radius: 16px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.reel-hud.reeling .rh-hold { transform: scale(0.97); filter: brightness(0.92); }
+
+/* ---------------- 미니게임 공통 연출 ---------------- */
+.mg-intro .mg-rules { display: grid; gap: 8px; margin: 6px 0 10px; }
+.mg-rule { display: flex; align-items: center; gap: 12px; background: #fff8e6; border-radius: 14px; padding: 9px 12px; }
+.mg-rule span { font-size: 26px; width: 36px; text-align: center; }
+.mg-rule p { margin: 0; font-size: 15px; line-height: 1.4; }
+.mg-keys { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 10px; }
+.mg-keys span { background: var(--ink, #231916); color: #fff; border-radius: 10px; padding: 4px 10px; font-size: 13px; font-family: 'Unico Coin', Jua, sans-serif; }
+.mg-goal { text-align: center; font-size: 14px; line-height: 1.8; margin-bottom: 10px; }
+.mg-go { width: 100%; font-size: 22px; padding: 14px; animation: mgpulse 1.4s ease-in-out infinite; }
+.mg-go small { font-size: 13px; opacity: 0.8; }
+@keyframes mgpulse { 50% { transform: scale(1.03); } }
+.mg-stars { letter-spacing: 1px; white-space: nowrap; }
+.mg-stars i { font-style: normal; color: #d8cfbd; }
+.mg-stars i.on { color: #fac03e; text-shadow: 0 0 6px rgba(250, 192, 62, 0.6); }
+.mg-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 30; }
+.mg-count span { font-family: 'Unico Coin', Jua, sans-serif; font-size: 150px; color: #fff; -webkit-text-stroke: 6px #231916; paint-order: stroke; text-shadow: 0 10px 0 rgba(0,0,0,0.18); opacity: 1; animation: mgcount 0.65s cubic-bezier(.2,1.6,.4,1); }
+.mg-count span.go { font-size: 110px; color: #fac03e; }
+@keyframes mgcount { 0% { transform: scale(1.8); opacity: 0.35; } 35% { transform: scale(0.92); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+.mg-result { text-align: center; overflow: hidden; }
+.mg-result .mg-score b { font-family: 'Unico Coin', Jua, sans-serif; font-size: 72px; color: var(--teal-t, #17736b); line-height: 1; }
+.mg-result .mg-score small { font-size: 22px; margin-left: 4px; }
+.mg-starrow { font-size: 44px; margin: 4px 0; }
+.mg-starrow i.pop { animation: mgstar 0.45s cubic-bezier(.2,1.8,.4,1); display: inline-block; }
+@keyframes mgstar { 0% { transform: scale(0.2) rotate(-60deg); } 100% { transform: scale(1) rotate(0); } }
+.mg-grade { font-family: 'Unico Coin', Jua, sans-serif; font-size: 24px; min-height: 30px; opacity: 0; transform: translateY(6px); transition: all 0.3s; }
+.mg-grade.show { opacity: 1; transform: none; }
+.mg-ribbon { display: inline-block; background: #e8495a; color: #fff; font-family: 'Unico Coin', Jua, sans-serif; padding: 5px 16px; border-radius: 999px; margin-bottom: 6px; animation: mgcount 0.6s both; }
+.mg-best { font-size: 13px; opacity: 0.75; margin: 8px 0; }
+.mg-btns { display: flex; gap: 8px; justify-content: center; }
+.mg-btns button { flex: 1; font-size: 18px; padding: 11px; }
+.mg-confetti { position: absolute; top: -10px; width: 9px; height: 14px; border-radius: 2px; pointer-events: none; animation: mgconf 1.9s ease-in forwards; }
+@keyframes mgconf { to { transform: translate(var(--dx), 620px) rotate(var(--rot)); opacity: 0.2; } }
+/* 남은 시간 경고 */
+.smart-timer.warn, .thresh-panel.warn .t b { color: #ff6b7a; animation: mgwarn 0.5s ease-in-out infinite alternate; }
+@keyframes mgwarn { to { transform: scale(1.15); } }
+.herd-hud.pulse { border-color: #e8495a; }
+.herd-hud .pips { color: #30b6aa; letter-spacing: 2px; font-size: 14px; }
+/* 탈곡: 초록 구간, 과열 */
+.thresh-panel .track { position: relative; }
+.thresh-panel .band { position: absolute; top: 0; bottom: 0; background: rgba(109, 187, 79, 0.35); border-left: 2px solid #4f9a33; border-right: 2px solid #4f9a33; }
+.thresh-panel .fill { position: relative; transition: width 0.06s linear, background 0.15s; }
+.thresh-panel .fill.ok { background: #6dbb4f; }
+.thresh-panel .fill.hot { background: #f2a33a; }
+.thresh-panel .fill.jam { background: #e8495a; }
+.thresh-panel.jam { animation: threshshake 0.12s infinite; }
+@keyframes threshshake { 0% { transform: translateX(calc(-50% - 4px)); } 50% { transform: translateX(calc(-50% + 4px)); } 100% { transform: translateX(-50%); } }
+.thresh-panel .drum { display: inline-block; }
+.thresh-panel .msg { font-size: 15px; color: #4f9a33; margin-left: 6px; }
+/* 스마트팜 돌발 상황 */
+.smart-ev { min-height: 0; max-height: 0; overflow: hidden; background: #fff1d6; color: #9a4a00; border-radius: 10px; font-family: 'Unico Coin', Jua, sans-serif; font-size: 15px; text-align: center; transition: all 0.25s; }
+.smart-ev.show { max-height: 60px; padding: 6px 10px; margin: 6px 0; animation: mgwarn 0.4s 3 alternate; }
+
+/* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  .herd-hud { font-size: 13px; padding: 4px 10px; border-width: 2px; border-radius: 12px; text-align: center; }
+  .herd-hud .pips { display: none; }
+  .drive-pad { bottom: calc(70px + var(--sab)); padding: 0 calc(18px + var(--sar)) 0 calc(18px + var(--sal)); }
+  #ui.driving > .drive-pad { bottom: calc(12px + var(--sab)); } /* E·☰ 를 숨겼으니 바닥 가까이 */
+}
+/* 세로 폰: 쟁기·내리기 글자가 두 줄로 쪼개지지 않게 */
+@media (max-width: 600px) {
+  .pad-small { padding: 8px 10px; font-size: 13px; white-space: nowrap; }
+}
+/* ---------------- 가로로 눕힌 폰 (낮은 화면 + 터치) ---------------- */
+@media (max-height: 500px) and (pointer: coarse) {
+  /* 스마트팜·논 패널: 미니맵 왼쪽 위에 붙이고 압축 (버튼 4개 한 줄, 스크롤 없이 화면 안) */
+  .smart-panel, .rice-panel { top: calc(var(--hud-b, 40px) + 4px); right: calc(88px + var(--sar)); width: min(340px, calc(100vw / var(--ui-zoom, 1) - 100px)); padding: 8px 10px; border-radius: 14px;
+    max-height: calc(100vh / var(--ui-zoom, 1) - var(--hud-b, 40px) - 12px); max-height: calc(100dvh / var(--ui-zoom, 1) - var(--hud-b, 40px) - 12px); overflow-y: auto; overscroll-behavior: contain; }
+  .smart-panel h3 { font-size: 15px; margin-bottom: 4px; }
+  .smart-panel .gauge { margin-bottom: 4px; }
+  .smart-panel .gauge .lbl { font-size: 12px; }
+  .smart-panel .gauge .track { height: 10px; }
+  .smart-actions { grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 6px; }
+  .smart-actions button { padding: 10px 2px; font-size: 13px; white-space: nowrap; }
+  .smart-timer { font-size: 14px; margin-top: 4px; }
+  .smart-ev.show { max-height: 44px; font-size: 13px; padding: 4px 8px; margin: 4px 0; }
+  /* 트랙터 운전 버튼: 화면 가운데를 덜 가리게 */
+  .pad-btn { width: 64px; height: 64px; }
+}

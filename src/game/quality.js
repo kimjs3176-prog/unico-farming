@@ -13,7 +13,7 @@ export const PRESETS = {
 export const LEVELS = ['low', 'medium', 'high'];
 export const PRESET_INFO = {
   auto: { name: '자동', desc: '기기에 맞춰 시작하고, 화면이 끊기면 알아서 한 단계씩 낮춰요' },
-  low: { name: '낮음', desc: '저사양 PC·오래된 노트북용. 해상도 75%, 가벼운 그림자, 후처리 끔' },
+  low: { name: '낮음', desc: '저사양 PC·오래된 노트북용. 해상도 75%, 가벼운 그림자, 후처리·환경 반사 끔' },
   medium: { name: '보통', desc: '일반 노트북용. 그림자·블룸·안티앨리어싱, 주변광 차폐 끔' },
   high: { name: '높음', desc: '게임용 PC용. 주변광 차폐·미니어처 초점까지 모든 효과' },
   custom: { name: '사용자 지정', desc: '세부 항목을 직접 고른 상태' },
@@ -77,7 +77,22 @@ export function resolveQuality(s, dpr = typeof devicePixelRatio === 'number' ? d
     pixelRatio: Math.max(0.5, Math.min(dpr, maxDpr) * d.scale),
     shadows: d.shadows, shadowMap: sh.size || 1024, shadowEvery: sh.every,
     grass: d.grass, post: d.post, bloom: d.post, smaa: d.post, ao: d.ao, tiltShift: d.tiltShift,
+    ...levelExtras(level),
   };
+}
+
+/**
+ * 단계별 덧붙임 (낮음만 가볍게, 보통·높음은 그대로)
+ *  precip: 비·눈 입자 비율 / birds: 새 떼 / grassFar: 풀을 그리는 거리(m, 0 = 끝까지)
+ *  grassLean: 풀 한 포기 잎 수 줄이기 / lowDetail: 재질 노이즈 옥타브 줄이기 (첫 렌더 전에만 반영)
+ *  shadowBoxMax: 그림자 상자 반폭 상한(m). 낮음은 26 (가로 폰에서 상자가 맵 대부분을 덮지 않게, 그 밖은 안개 속)
+ *  env: 환경맵(IBL) 반사·간접광. 낮음은 끔 (밝기는 world.js 가 주변광으로 채움, PostFX 를 다시 만들 때만 바뀜)
+ *       언제나 후처리(post)와 함께 바뀜: 후처리를 끄면 화면에 바로 그려 톤 매핑·색 공간 때문에 재질 셰이더를 어차피 다시 만듦
+ *       → 환경맵을 같이 꺼도 다시 컴파일이 더 생기지 않음 (tests/quality.test.js)
+ */
+export function levelExtras(level) {
+  const low = level === 'low';
+  return { precip: low ? 0.4 : 1, birds: !low, grassFar: low ? 40 : 0, grassLean: low, lowDetail: low, shadowBoxMax: low ? 26 : 36, env: !low };
 }
 
 /**

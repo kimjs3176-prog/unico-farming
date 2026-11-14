@@ -14,13 +14,24 @@ export const SURF = {
   seeCam: { value: new THREE.Vector3(0, 50, 0) }, seeTarget: { value: new THREE.Vector3() }, seeOn: { value: 1 },
 };
 
-const NOISE = /* glsl */ `
+/**
+ * 노이즈 세밀도: 옥타브 수 (기본 4, 저사양 2). 셰이더를 만들 때 읽으므로 첫 렌더 전에 한 번만 정함
+ * (게임 중에 품질을 바꿔도 재질 수십 개를 다시 컴파일하지 않도록 다음 접속부터 적용)
+ */
+export const SURF_DETAIL = { oct: 4 };
+export function setSurfaceDetail(low) { SURF_DETAIL.oct = low ? 2 : 4; }
+/** 빠진 옥타브의 평균(0.5 × 진폭 합)을 더해 밝기·얼룩 면적·눈 덮임 비율이 4옥타브와 같게 */
+export function fbmCompensation(oct) { let a = 0.5, s = 0; for (let i = 0; i < 4; i++) { if (i >= oct) s += a * 0.5; a *= 0.5; } return s; }
+
+const noise = (oct) => /* glsl */ `
+#define SURF_OCT ${oct}
+#define SURF_FBM_COMP ${fbmCompensation(oct).toFixed(5)}
 varying vec3 vSW; varying vec3 vSN;
 float sh31(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float svn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix(sh31(i), sh31(i + vec3(1,0,0)), f.x), mix(sh31(i + vec3(0,1,0)), sh31(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(sh31(i + vec3(0,0,1)), sh31(i + vec3(1,0,1)), f.x), mix(sh31(i + vec3(0,1,1)), sh31(i + vec3(1,1,1)), f.x), f.y), f.z); }
-float sfbm(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * svn(p); p *= 2.03; a *= 0.5; } return s; }
+float sfbm(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < SURF_OCT; i++) { s += a * svn(p); p *= 2.03; a *= 0.5; } return s + SURF_FBM_COMP; }
 `;
 
 const KIND_CODE = {
@@ -87,14 +98,8 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
       vSW = (modelMatrix * sw4).xyz;
       vOP = position; // 바인드 포즈 기준 좌표: 뼈대 애니메이션에도 무늬가 몸에 붙어 다님
       vSN = normalize(mat3(modelMatrix) * objectNormal);`);
-    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow; uniform float uSurfFloor; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn;\n' + NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-      ${KIND_CODE[kind] || KIND_CODE.base}
-      ${spots ? `float spt = smoothstep(0.5, 0.53, sfbm(vOP * ${spots.toFixed(2)} + vec3(3.7, 1.3, 8.1)));
-      #ifdef USE_COLOR
-        spt *= step(0.8, vColor.r) * step(0.8, vColor.g) * step(vColor.b, 0.95); // 흰 몸통에만 (눈·주둥이·발굽 제외)
-      #endif
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045, 0.04, 0.04), spt);` : ''}
-      ${kind !== 'fur' ? `// 시야 구멍: 카메라→캐릭터 선분 가까이에 있는 조각을 점묘(dither)로 버림
+    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow; uniform float uSurfFloor; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn;\n' + noise(SURF_DETAIL.oct) + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      ${kind !== 'fur' ? `// 시야 구멍: 카메라→캐릭터 선분 가까이에 있는 조각을 점묘(dither)로 버림 (노이즈 계산보다 먼저: 버릴 조각은 계산 생략)
       if (uSeeOn > 0.5 && vSW.y > 0.35) {
         vec3 seg = uSeeTarget - uSeeCam; float segL = length(seg); vec3 sd = seg / max(segL, 1e-3);
         float st = dot(vSW - uSeeCam, sd);
@@ -106,9 +111,17 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
           if (seeFade * 0.9 > ign) discard;
         }
       }` : ''}
-      ${kind !== 'fur' ? `// 눈 오는 날: 위를 향한 면에 서서히 눈이 쌓임
-      float snowCov = uSurfSnow * smoothstep(0.45, 0.85, vSN.y) * smoothstep(0.25, 0.6, sfbm(vSW * 1.7) + uSurfSnow * 0.35);
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 1.0), snowCov);` : ''}
+      ${KIND_CODE[kind] || KIND_CODE.base}
+      ${spots ? `float spt = smoothstep(0.5, 0.53, sfbm(vOP * ${spots.toFixed(2)} + vec3(3.7, 1.3, 8.1)));
+      #ifdef USE_COLOR
+        spt *= step(0.8, vColor.r) * step(0.8, vColor.g) * step(vColor.b, 0.95); // 흰 몸통에만 (눈·주둥이·발굽 제외)
+      #endif
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045, 0.04, 0.04), spt);` : ''}
+      ${kind !== 'fur' ? `// 눈 오는 날: 위를 향한 면에 서서히 눈이 쌓임 (눈이 없으면 노이즈 계산을 건너뜀, 유니폼 분기라 모든 조각이 같은 길)
+      if (uSurfSnow > 0.001) {
+        float snowCov = uSurfSnow * smoothstep(0.45, 0.85, vSN.y) * smoothstep(0.25, 0.6, sfbm(vSW * 1.7) + uSurfSnow * 0.35);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 1.0), snowCov);
+      }` : ''}
       ${contact ? 'k *= mix(0.62, 1.0, smoothstep(0.0, 0.32, vSW.y - uSurfFloor));' : ''}
       diffuseColor.rgb *= k;`);
     if (rim > 0) {
@@ -117,7 +130,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
         totalEmissiveRadiance += vec3(1.0, 0.97, 0.9) * fres * ${rim.toFixed(2)};`);
     }
   };
-  m.customProgramCacheKey = () => `surf-${kind}-${contact}-${rim}-${spots}`;
+  m.customProgramCacheKey = () => `surf-${kind}-${contact}-${rim}-${spots}-${SURF_DETAIL.oct}`;
   m.needsUpdate = true;
   return m;
 }

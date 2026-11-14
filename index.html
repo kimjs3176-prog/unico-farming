@@ -2,9 +2,17 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <!-- viewport-fit=cover: 노치 폰 가로 화면에서도 양옆까지 채움 (UI 는 CSS 의 안전 영역 값만큼 안쪽에) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>유니코 팜 - 농업 메타버스</title>
   <meta name="description" content="한국농업기술진흥원 마스코트 유니코와 함께하는 캐주얼 3D 농장 메타버스" />
+  <!-- 휴대폰: 주소창·상태 막대 색, 홈 화면에 추가하면 주소창 없이 전체 화면으로 -->
+  <meta name="theme-color" content="#8fd0ff" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="유니코 팜" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦄</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,18 +24,27 @@
   <canvas id="game"></canvas>
   <div id="ui"></div>
   <div id="loading">
-    <div class="sky-deco"><i class="cloud c1"></i><i class="cloud c2"></i><i class="cloud c3"></i><i class="hill h1"></i><i class="hill h2"></i></div>
-    <div class="loading-card">
-      <div class="loading-logo">🦄</div>
-      <h1>유니코 팜</h1>
-      <p class="tagline">한국농업기술진흥원과 함께하는 농업 메타버스</p>
-      <div class="feature-row"><span>🌾 논농사</span><span>🎣 낚시</span><span>🚜 트랙터</span><span>📡 스마트팜</span><span>🏢 KOAT 체험관</span></div>
-      <p id="loading-text">농장 준비 중…</p>
-      <div class="bar"><div id="loading-bar"></div></div>
-      <label class="name-row">닉네임 <input id="nickname" maxlength="12" placeholder="유니코" /></label>
-      <button id="start-btn" disabled>입장하기</button>
-      <p class="hint"><a href="./pixel.html" style="color:inherit;font-weight:bold">🎮 도트(2.5D) 버전으로 하기 →</a></p>
-      <p class="hint">키보드: WASD/방향키 이동 · E 상호작용<br/>마우스·터치: 클릭/탭으로 이동·상호작용 · 드래그로 시점 · 휠/두 손가락 줌</p>
+    <div class="sky-deco" aria-hidden="true">
+      <i class="sun"></i><i class="cloud c1"></i><i class="cloud c2"></i><i class="cloud c3"></i>
+      <i class="hill h3"></i><i class="hill h1"></i><i class="barn"></i><i class="hill h2"></i><i class="field"></i>
+      <i class="petal p1"></i><i class="petal p2"></i><i class="petal p3"></i><i class="petal p4"></i><i class="petal p5"></i>
+    </div>
+    <div class="title-wrap">
+      <div class="title-hero">
+        <div class="title-badge"><img src="./portraits/cheer.webp" alt="" width="256" height="256" /></div>
+        <h1 class="title-logo"><span class="tl-a">유니코</span><span class="tl-b">팜</span></h1>
+        <p class="title-ribbon"><span>한국농업기술진흥원과 함께하는 농업 메타버스</span></p>
+      </div>
+      <div class="loading-card">
+        <div class="feature-row"><span>🌾 논농사</span><span>🎣 낚시</span><span>🚜 트랙터</span><span>📡 스마트팜</span><span>🏢 KOAT 체험관</span></div>
+        <p id="loading-text">농장 준비 중…</p>
+        <div class="bar"><div id="loading-bar"></div></div>
+        <label class="name-row">닉네임 <input id="nickname" maxlength="12" placeholder="유니코" /></label>
+        <button id="start-btn" disabled>입장하기</button>
+        <p class="hint"><a href="./pixel.html" class="pixel-link">🎮 도트(2.5D) 버전으로 하기 →</a></p>
+        <p class="hint keys">키보드: WASD/방향키 이동 · E 상호작용<br/>마우스·터치: 클릭/탭으로 이동·상호작용 · 드래그로 시점 · 휠/두 손가락 줌</p>
+      </div>
+      <div class="title-friends" aria-hidden="true"></div>
     </div>
   </div>
   <script type="module" src="/src/main.js"></script>

@@ -23,7 +23,7 @@ test('이름표 글자색: 밝은 배경은 진한 글자, 어두운 배경은 �
 
 test('테마의 흰 글자용 청록은 그라데이션 가장 밝은 곳에서도 4.5:1 이상', async () => {
   const { readFileSync } = await import('node:fs');
-  const css = readFileSync(new URL('../src/ui/theme.css', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../src/ui/theme/base.css', import.meta.url), 'utf8');
   const hi = /--teal-t-hi:\s*(#[0-9a-f]{6})/i.exec(css)?.[1];
   assert.ok(hi, '--teal-t-hi 가 있어야 함');
   assert.ok(contrast('#ffffff', hi) >= 4.5, `흰 글자 / ${hi} = ${contrast('#ffffff', hi).toFixed(2)}`);

@@ -18,7 +18,6 @@ export const starsFor = (v, [a, b, c]) => (v >= c ? 3 : v >= b ? 2 : v >= a ? 1 
 export const GRADE = ['아쉬워요', '좋아요!', '훌륭해요!', '완벽해요!'];
 /** 미니게임 목록 (기록 화면용) */
 export const MINIGAMES = [
-  { id: 'tractor', icon: '🚜', title: '트랙터 밭갈이', unit: '칸', th: [15, 30, 45] },
   { id: 'thresh', icon: '⚙️', title: '탈곡', unit: '%', th: [40, 70, 90] },
   { id: 'smart', icon: '📱', title: '스마트팜 환경 제어', unit: '점', th: [50, 70, 90] },
   { id: 'herd', icon: '🐑', title: '양 몰이', unit: '마리', th: [3, 5, 6] },
@@ -43,7 +42,7 @@ export function mgIntro(g, o) {
   if (o.controls?.length) p.append(h('div', 'mg-keys', o.controls.map((c) => `<span>${c}</span>`).join('')));
   const best = bestOf(o.id);
   p.append(h('div', 'mg-goal', `${starsHtml(1)} ${o.th[0]}${o.unit} · ${starsHtml(2)} ${o.th[1]}${o.unit} · ${starsHtml(3)} ${o.th[2]}${o.unit}<br><b>내 최고 기록 ${best}${o.unit}</b> ${starsHtml(starsFor(best, o.th))}`));
-  const go = h('button', 'gold mg-go', '▶ 시작 <small>(E · 스페이스)</small>');
+  const go = h('button', 'gold mg-go', '▶ 시작 <small class="hint-kbd">(E · 스페이스)</small>'); // 터치 화면에서는 키 안내 숨김 (CSS)
   let started = false;
   const start = () => {
     if (started) return;

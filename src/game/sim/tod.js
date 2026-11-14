@@ -19,20 +19,25 @@ const K = [
   [24, 0x8ea6ff, [0.86, 0.92, 1.1], -0.02, 0.92],
 ];
 const rgb = (h) => [(h >> 16) & 255, (h >> 8) & 255, h & 255].map((v) => v / 255);
+const KS = K.map((k) => rgb(k[1])); // 햇빛 색은 미리 rgb 로 (매 프레임 배열을 새로 만들지 않게)
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (t) => t * t * (3 - 2 * t);
 
-/** time: 하루 중 위치 0..1 → { sun:[r,g,b], tint:[r,g,b], warmth, sat } */
-export function timeOfDay(time) {
+/**
+ * time: 하루 중 위치 0..1 → { sun:[r,g,b], tint:[r,g,b], warmth, sat }
+ * out 을 넘기면 그 객체를 채워 돌려줌 (매 프레임 호출용). 안 넘기면 호출마다 새 객체
+ */
+export function timeOfDay(time, out = { sun: [0, 0, 0], tint: [0, 0, 0], warmth: 0, sat: 0 }) {
   const h = (((time % 1) + 1) % 1) * 24;
   let i = 0;
   while (i < K.length - 2 && h >= K[i + 1][0]) i++;
   const a = K[i], b = K[i + 1], t = smooth((h - a[0]) / (b[0] - a[0] || 1));
-  const sa = rgb(a[1]), sb = rgb(b[1]);
-  return {
-    sun: sa.map((v, k) => lerp(v, sb[k], t)),
-    tint: a[2].map((v, k) => lerp(v, b[2][k], t)),
-    warmth: lerp(a[3], b[3], t),
-    sat: lerp(a[4], b[4], t),
-  };
+  const sa = KS[i], sb = KS[i + 1];
+  for (let k = 0; k < 3; k++) {
+    out.sun[k] = lerp(sa[k], sb[k], t);
+    out.tint[k] = lerp(a[2][k], b[2][k], t);
+  }
+  out.warmth = lerp(a[3], b[3], t);
+  out.sat = lerp(a[4], b[4], t);
+  return out;
 }

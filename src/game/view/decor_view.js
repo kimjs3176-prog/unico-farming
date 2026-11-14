@@ -4,12 +4,13 @@ import { heightAt } from '../terrain.js';
 import { LAYOUT } from '../world.js';
 import { DecorSim, DECOR, DECOR_BY_ID, DECOR_CATS, DECOR_MAX, outsideZones, snapAhead } from '../sim/decor.js';
 import { saveGame } from '../save.js';
+import { touchUI } from '../input.js';
 
 /**
  * 농장 꾸미기 화면 (규칙은 sim/decor.js)
  *  - 🪑 꾸미기 창에서 소품을 고르면 '놓기 모드': 유니코 앞 2.4m 에 반투명 미리보기 (초록 = 놓을 수 있음, 빨강 = 못 놓음)
  *    E/클릭 놓기 · R 돌리기(45°) · Esc 그만 — 화면 아래 버튼으로도 (마우스·터치)
- *  - '옮기기·치우기 모드': 앞에 있는 소품을 골라 치우거나(보관함) 옮김(무료)
+ *  - '옮기기·치우기 모드': 앞에 있는 소품을 골라(발밑 금색 링) 치우거나(보관함) 옮김(무료)
  *  - 놓을 수 없는 곳: 물·밭·논·목장·트랙터 마당·건설 부지·주민 자리·문 앞·다른 물건 위·큰 물건은 흙길 위
  */
 const OK_COL = new THREE.Color(0x4fd07a), BAD_COL = new THREE.Color(0xe35d5d);
@@ -37,6 +38,7 @@ export class DecorView {
     for (const n of Object.values(L.npcs || {})) if (!n.wander) z.push({ x: n.x, z: n.z, r: 1.6 });
     if (L.home?.door) z.push({ x: L.home.door.x, z: L.home.door.z, r: 2.2 });
     if (L.tractorHome) z.push({ x: L.tractorHome.x, z: L.tractorHome.z, r: 3 });
+    for (const list of Object.values(L.rides || {})) for (const p of list) z.push({ x: p.x, z: p.z, r: 2.4 }); // 자전거·카트 세워 두는 자리
     for (const r of L.reserved || []) if (r[4] !== 'trees') z.push([r[0], r[1], r[2], r[3]]);
     return z;
   }
@@ -63,6 +65,8 @@ export class DecorView {
 
   build() {
     const w = this.game.world;
+    this._highlight(-1);               // 목록을 다시 만들기 전에 표시 링 숨김
+    if (this.mode) this.mode.sel = -1; // 순번이 밀리므로 다음 update 에서 다시 고름
     for (const it of this.items) { this.group.remove(it.obj); if (it.obstacle) { const k = w.obstacles.indexOf(it.obstacle); if (k >= 0) w.obstacles.splice(k, 1); } }
     this.items = this.sim.placed.map((p) => {
       const d = DECOR_BY_ID[p.id], obj = this._model(p.id);
@@ -79,12 +83,15 @@ export class DecorView {
   start(id) {
     const g = this.game;
     if (g.home?.inside) return g.ui.toast('🏠 집 밖에서 꾸밀 수 있어요');
-    if (g.tractor?.driving) return;
+    if (g.ride?.driving) return;
     this.stop(true);
     g.ui.closePanel();
+    g.player.moveTarget = null; // 시작 전에 탭해 걷던 목표는 지움 (도착해서 그 대상이 실행되지 않게)
     this.mode = { id, rot: 0, ghost: id ? this._ghost(id) : null, sel: -1 };
     this._bar();
-    g.ui.toast(id ? `${DECOR_BY_ID[id].icon} 놓고 싶은 곳으로 걸어가서 E (R 돌리기 · Esc 그만)` : '✋ 옮기거나 치울 소품 앞으로 가서 E');
+    const T = touchUI();
+    g.ui.toast(id ? `${DECOR_BY_ID[id].icon} 놓고 싶은 곳으로 걸어가서 ${T ? 'E 버튼 (아래 ⟳ 돌리기 · ✖ 그만)' : 'E (R 돌리기 · Esc 그만)'}`
+      : `✋ 옮기거나 치울 소품 앞으로 가서 ${T ? '아래 🧺 치우기 · ↔ 옮기기' : 'E'}`);
   }
 
   stop(silent = false) {
@@ -112,8 +119,22 @@ export class DecorView {
     ghost.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (m.emissive) m.emissive.copy(ok ? OK_COL : BAD_COL); });
   }
 
+  /**
+   * 고른 소품 표시: 발밑 금색 링 하나만 옮겨 씀
+   * (재질은 같은 모델·맵 소품과 함께 쓰므로 색을 바꾸면 같은 모델이 다 빛나거나, 치운 뒤 맵 가로등·소품에 색이 남음)
+   */
   _highlight(i) {
-    this.items.forEach((it, k) => it.obj.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (m.emissive) { if (k === i) { m.userData.e0 ??= m.emissive.getHex(); m.emissive.setHex(0x8a6a10); } else if (m.userData.e0 !== undefined) { m.emissive.setHex(m.userData.e0); } } }));
+    const p = i >= 0 ? this.sim.placed[i] : null;
+    if (!p) { if (this.selRing) this.selRing.visible = false; return; }
+    if (!this.selRing) {
+      const geo = new THREE.RingGeometry(0.82, 1, 40).rotateX(-Math.PI / 2);
+      this.selRing = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffd34d, transparent: true, opacity: 0.85, depthWrite: false }));
+      this.selRing.renderOrder = 2;
+      this.game.world.scene.add(this.selRing);
+    }
+    this.selRing.scale.setScalar(Math.max(0.45, DECOR_BY_ID[p.id].r + 0.25)); // 꽃밭·양동이는 r = 0
+    this.selRing.position.set(p.x, heightAt(p.x, p.z) + 0.05, p.z);
+    this.selRing.visible = true;
   }
 
   /** 화면 아래 버튼 (마우스·터치) */
@@ -171,29 +192,33 @@ export class DecorView {
     this.build();
     g.audio.play('pop', 0.6);
     saveGame(g);
-    if (kind === 'move') { this.start(p.id); this.mode.rot = p.rot; this.mode.moving = true; g.ui.toast(`${DECOR_BY_ID[p.id].icon} 새 자리로 가서 E (무료)`); }
+    if (kind === 'move') { this.start(p.id); this.mode.rot = p.rot; this.mode.moving = true; g.ui.toast(`${DECOR_BY_ID[p.id].icon} 새 자리로 가서 ${touchUI() ? 'E 버튼' : 'E'} (무료)`); }
     else g.ui.toast(`🧺 ${DECOR_BY_ID[p.id].name}${josa(DECOR_BY_ID[p.id].name, '을/를')} 보관함에 넣었어요 · 다시 놓을 때는 무료`);
   }
 
   update(dt, pp) {
     const g = this.game, m = this.mode;
     if (!m) return null;
-    if (g.home?.inside || g.tractor?.driving) { this.stop(true); return null; }
+    if (g.home?.inside || g.ride?.driving) { this.stop(true); return null; }
     const input = g.input;
     if (input.justPressed('KeyR')) this.rotate();
     if (input.justPressed('Escape') && !g.ui.panel) { this.stop(); return null; }
-    const s = this.spot();
+    const s = this.spot(), T = touchUI();
     if (m.id) {
       const d = DECOR_BY_ID[m.id], why = this.whyNotHere(s.x, s.z, d.r);
       m.ghost.position.set(s.x, heightAt(s.x, s.z) + 0.02, s.z);
       m.ghost.rotation.y = (m.rot * Math.PI) / 4;
       this._tint(m.ghost, !why);
-      return { d: -1, label: why ? `🚫 ${why}` : `✔ E 여기에 ${d.name} 놓기 · R 돌리기 · Esc 그만`, key: 'decor', onInteract: () => this.confirm() };
+      // E 는 안내 말풍선이 앞에 붙여 줌. 터치에서는 돌리기·그만을 아래 버튼이 맡으므로 짧게
+      return { d: -1, label: why ? `🚫 ${why}` : T ? `✔ 여기에 ${d.name} 놓기` : `✔ 여기에 ${d.name} 놓기 · R 돌리기 · Esc 그만`, key: 'decor', onInteract: () => this.confirm() };
     }
     const i = this.sim.nearest(s.x, s.z, 1.8);
     if (i !== m.sel) { m.sel = i; this._highlight(i); }
+    if (this.selRing?.visible) this.selRing.material.opacity = 0.65 + Math.sin(performance.now() / 160) * 0.2;
     const d = i >= 0 ? DECOR_BY_ID[this.sim.placed[i].id] : null;
-    return { d: -1, label: d ? `✋ ${d.icon} ${d.name} · E 치우기 (보관함) · 아래 버튼으로 옮기기` : '✋ 옮기거나 치울 소품 앞으로 가세요 · Esc 그만', key: 'decor', onInteract: () => this.confirm('pick') };
+    const label = d ? (T ? `✋ ${d.icon} ${d.name} · 눌러서 치우기 (보관함) · ↔ 버튼으로 옮기기` : `✋ ${d.icon} ${d.name} · E 치우기 (보관함) · 아래 버튼으로 옮기기`)
+      : T ? '✋ 옮기거나 치울 소품 앞으로 가세요 · ✖ 그만' : '✋ 옮기거나 치울 소품 앞으로 가세요 · Esc 그만';
+    return { d: -1, label, key: 'decor', onInteract: () => this.confirm('pick') };
   }
 
   // ------------------------------------------------------------ 꾸미기 창
@@ -203,7 +228,7 @@ export class DecorView {
     const p = ui.openPanel('🪑 농장 꾸미기');
     p.classList.add('decor');
     const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
-    p.append(el('p', 'soc-sub', `놓은 소품 ${sim.count}/${DECOR_MAX} · 고르면 유니코 앞에 미리보기가 나와요. 걸어가서 E 로 놓아요`));
+    p.append(el('p', 'soc-sub', `놓은 소품 ${sim.count}/${DECOR_MAX} · 고르면 유니코 앞에 미리보기가 나와요. 걸어가서 ${touchUI() ? 'E 버튼으로' : 'E 로'} 놓아요`));
     p.append(el('p', 'mk-note', '🏡 집 주변과 빈 풀밭에 놓을 수 있어요 (밭·논·목장·트랙터 마당·낚시터·길목·문 앞은 비워 둬요)'));
     const tabs = el('div', 'mk-tabs');
     for (const [id, label] of DECOR_CATS) { const t = el('button', id === cat ? 'on' : '', label); t.onclick = () => this.open(id); tabs.append(t); }

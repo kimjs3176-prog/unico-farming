@@ -1,0 +1,23 @@
+/* 환경설정·도움말 (panels/settings.js) */
+.gfx-body h3 { margin: 12px 0 6px; font-size: 17px; color: var(--teal-t, #17736b); display: flex; align-items: center; gap: 8px; }
+.gfx-fps { margin-left: auto; font-size: 13px; color: var(--brown); opacity: 0.75; font-weight: normal; }
+.gfx-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.gfx-preset { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; background: var(--cream); color: var(--brown); border: 2px solid var(--panel-edge); }
+.gfx-preset small { font-size: 11px; opacity: 0.8; }
+.gfx-preset.on { background: var(--teal-t, #17736b); color: #fff; border-color: var(--teal-d); }
+.gfx-desc { margin: 6px 2px 0; font-size: 13px; opacity: 0.85; }
+.gfx-row { display: flex; align-items: center; gap: 10px; padding: 6px 2px; font-size: 15px; }
+.gfx-row input[type=range] { flex: 1; accent-color: var(--teal); }
+.gfx-row span { width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+.gfx-row select { margin-left: auto; font: inherit; padding: 4px 8px; border-radius: 10px; border: 2px solid var(--panel-edge); background: #fff; color: var(--brown); }
+.gfx-row.check { gap: 8px; }
+.gfx-row.check input { width: 24px; height: 24px; accent-color: var(--teal); }
+.gfx-tip { font-size: 13px; opacity: 0.8; margin: 10px 2px 0; }
+/* 도움말: 아이콘 | 제목(한 줄) | 설명 */
+.help-row { align-items: flex-start; }
+.help-row .ic { flex: 0 0 22px; text-align: center; }
+.help-row b { flex: 0 0 auto; min-width: 4.6em; white-space: nowrap; color: var(--teal-t, #17736b); }
+.help-row .ds { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 600px) { .help-row { flex-wrap: wrap; } .help-row .ds { flex-basis: 100%; padding-left: 30px; } }
+/* 환경설정 밀대: 손가락으로 잡기 쉬운 높이 (WCAG 2.2 SC 2.5.8) */
+.gfx-row input[type=range] { min-height: 30px; }

@@ -12,6 +12,7 @@ export class Audio {
   }
 
   _ctx() {
+    if (this.hold) return null; // 화면을 벗어난 동안: 효과음을 무시하고 저절로 다시 켜지 않음
     if (!this.ctx) {
       try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch { this.enabled = false; return null; }
       const c = this.ctx;
@@ -32,8 +33,46 @@ export class Audio {
       const nd = this.noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
       this.onReady?.();
     }
-    if (this.ctx.state === 'suspended') this.ctx.resume();
+    this._resume();
     return this.ctx;
+  }
+
+  /** 멈춘(suspended)·끊긴(iOS 'interrupted') 상태면 다시 켬. 거절돼도 조용히 넘어감 (다음 터치에서 다시 시도) */
+  _resume() {
+    const c = this.ctx, s = c?.state;
+    if (s === 'suspended' || s === 'interrupted') c.resume()?.catch?.(() => {});
+  }
+
+  /** 첫 탭 처리 안에서 바로 호출: 소리 장치를 만들고 무음 1샘플을 재생해 iOS 잠금을 풂 */
+  unlock() {
+    const c = this._ctx();
+    if (!c) return;
+    try {
+      const s = c.createBufferSource();
+      s.buffer = c.createBuffer(1, 1, c.sampleRate);
+      s.connect(c.destination);
+      s.start(0);
+    } catch { /* 잠금 해제용, 실패해도 무시 */ }
+  }
+
+  /** 화면을 벗어날 때: 소리 장치를 멈춰 배터리 절약 */
+  sleep() {
+    this.hold = true;
+    const c = this.ctx;
+    if (c?.state === 'running') c.suspend()?.catch?.(() => {});
+  }
+
+  /** 화면으로 돌아올 때 */
+  wake() {
+    this.hold = false;
+    this._resume();
+  }
+
+  /** 사용자 동작(손을 뗄 때·클릭·키)마다 멈춘 소리 장치를 다시 켬: iOS 는 동작 밖에서 resume 을 거절할 수 있음 */
+  wakeOnGesture(target = window) {
+    if (this._gestureWake) return;
+    this._gestureWake = () => { if (!this.hold) this._resume(); };
+    for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) target.addEventListener(ev, this._gestureWake, { capture: true, passive: true });
   }
 
   /** 소리 켜짐/음악 끔/모두 끔 순환 */

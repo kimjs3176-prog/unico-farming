@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { sph, ell, cap, rcone, rcyl, squashZ, smin } from './sdf.js';
 
 /**
  * 유니코 '한 덩어리' 메시 생성기
@@ -52,55 +54,7 @@ const B = new THREE.Vector3(0, BODY_Y, 0);
 const H = B.clone().add(HEAD_AT); // 머리 중심 (월드, 루트 기준)
 const T = B.clone().add(TAIL_AT);
 
-// ------------------------------------------------------------------ SDF 프리미티브
-const sph = (c, r) => (x, y, z) => Math.hypot(x - c[0], y - c[1], z - c[2]) - r;
-/** 회전 가능한 타원체 (근사 SDF) */
-function ell(c, rad, rotZ = 0, rotX = 0) {
-  const cz = Math.cos(-rotZ), sz = Math.sin(-rotZ), cx = Math.cos(-rotX), sx = Math.sin(-rotX);
-  return (x, y, z) => {
-    let px = x - c[0], py = y - c[1], pz = z - c[2];
-    const rx = px * cz - py * sz, ry = px * sz + py * cz; px = rx; py = ry; // z축 역회전
-    const ry2 = py * cx - pz * sx, rz2 = py * sx + pz * cx; py = ry2; pz = rz2; // x축 역회전
-    const k0 = Math.hypot(px / rad[0], py / rad[1], pz / rad[2]);
-    const k1 = Math.hypot(px / (rad[0] * rad[0]), py / (rad[1] * rad[1]), pz / (rad[2] * rad[2]));
-    return k1 === 0 ? -Math.min(...rad) : (k0 * (k0 - 1)) / k1;
-  };
-}
-function cap(a, b, r) {
-  const bax = b[0] - a[0], bay = b[1] - a[1], baz = b[2] - a[2];
-  const bb = bax * bax + bay * bay + baz * baz;
-  return (x, y, z) => {
-    const pax = x - a[0], pay = y - a[1], paz = z - a[2];
-    const h = Math.max(0, Math.min(1, (pax * bax + pay * bay + paz * baz) / bb));
-    return Math.hypot(pax - bax * h, pay - bay * h, paz - baz * h) - r;
-  };
-}
-/** 둥근 원뿔: a(반지름 r1) → b(반지름 r2) 로 매끈하게 가늘어지는 캡슐 (Inigo Quilez sdRoundCone) */
-function rcone(a, b, r1, r2) {
-  const ba = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-  const l2 = ba[0] * ba[0] + ba[1] * ba[1] + ba[2] * ba[2], rr = r1 - r2, a2 = l2 - rr * rr, il2 = 1 / l2;
-  return (x, y, z) => {
-    const pa = [x - a[0], y - a[1], z - a[2]];
-    const yy = pa[0] * ba[0] + pa[1] * ba[1] + pa[2] * ba[2], zz = yy - l2;
-    const xv = [pa[0] * l2 - ba[0] * yy, pa[1] * l2 - ba[1] * yy, pa[2] * l2 - ba[2] * yy];
-    const x2 = xv[0] * xv[0] + xv[1] * xv[1] + xv[2] * xv[2], y2 = yy * yy * l2, z2 = zz * zz * l2;
-    const k = Math.sign(rr) * rr * rr * x2;
-    if (Math.sign(zz) * a2 * z2 > k) return Math.sqrt(x2 + z2) * il2 - r2;
-    if (Math.sign(yy) * a2 * y2 < k) return Math.sqrt(x2 + y2) * il2 - r1;
-    return (Math.sqrt(x2 * a2 * il2) + yy * rr) * il2 - r1;
-  };
-}
-
-/** 둥근 원기둥 (발굽) */
-function rcyl(c, r, hh, round) {
-  return (x, y, z) => {
-    const dx = Math.hypot(x - c[0], z - c[2]) - r + round, dy = Math.abs(y - c[1]) - hh + round;
-    return Math.min(Math.max(dx, dy), 0) + Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) - round;
-  };
-}
 const add = (v, o) => [v.x + o[0], v.y + o[1], v.z + o[2]];
-/** 앞뒤(z)로 납작하게: 근사 SDF (s<1) */
-const squashZ = (f, s) => (x, y, z) => f(x, y, z / s) * s;
 
 /** 프리미티브 목록: f(SDF), k(녹이는 정도), slot(색), bone(뼈) */
 function primitives() {
@@ -172,30 +126,29 @@ function primitivesBiped() {
   return P;
 }
 
-const smin = (a, b, k) => {
-  if (k <= 0) return Math.min(a, b);
-  const h = Math.max(k - Math.abs(a - b), 0) / k;
-  return Math.min(a, b) - h * h * k * 0.25;
-};
-
-export function makeSDF(rig = 'quad') {
-  const P = rig === 'biped' ? primitivesBiped() : primitives();
-  const sdf = (x, y, z) => {
-    let d = P[0].f(x, y, z);
-    for (let i = 1; i < P.length; i++) { const k = P[i].k; d = smin(d, P[i].f(x, y, z), typeof k === 'function' ? k(x, y, z) : k); }
-    return d;
-  };
-  return { P, sdf };
-}
-
-/** 몸통만의 SDF (갈기·머리·팔다리 제외, 어깨 공 관절 포함) — 코스튬 옷 껍데기를 몸에 맞출 때 */
-export function makeBodySDF(rig = 'biped') {
-  const P = (rig === 'biped' ? primitivesBiped() : primitives()).filter((q) => q.bone === 'body' && q.slot === 'body');
+/** 프리미티브 목록을 스무스 유니온으로 합친 SDF */
+function unionSDF(P) {
   return (x, y, z) => {
     let d = P[0].f(x, y, z);
     for (let i = 1; i < P.length; i++) { const k = P[i].k; d = smin(d, P[i].f(x, y, z), typeof k === 'function' ? k(x, y, z) : k); }
     return d;
   };
+}
+
+/** 리그 이름 → 유니콘 몸 프리미티브. 주민 종(bin 의 meta 로 등록된 리그)은 모양을 굽기 때만 만들 수 있음 */
+function rigPrims(rig) {
+  if (RIGS[rig]?.species) throw new Error('종 SDF 는 굽기 전용 (scripts/lib/species_shapes.mjs)');
+  return rig === 'biped' ? primitivesBiped() : primitives();
+}
+
+export function makeSDF(rig = 'quad') {
+  const P = rigPrims(rig);
+  return { P, sdf: unionSDF(P) };
+}
+
+/** 몸통만의 SDF (갈기·머리·팔다리 제외, 어깨 공 관절 포함) — 코스튬 옷 껍데기를 몸에 맞출 때 */
+export function makeBodySDF(rig = 'biped') {
+  return unionSDF(rigPrims(rig).filter((q) => q.bone === 'body' && q.slot === 'body'));
 }
 
 /** 표면 위 점: 시작점에서 dir 방향으로 진행해 표면(0)을 찾음 */
@@ -215,18 +168,39 @@ export function normalAt(sdf, p, e = 0.004) {
   ).normalize();
 }
 
+/** LOD 에서만 두껍게 하는 얇은 부위의 뼈 (귀·꼬리) */
+export const THIN_BONES = new Set(['earL', 'earR', 'earL2', 'earR2', 'tail', 'tail2', 'tail3']);
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
 /**
  * Surface Nets 로 메시 추출 + 부드러운 법선(SDF 기울기) + 색 슬롯 가중치 + 스킨 가중치
- * @returns { geometry (position, normal, skinIndex, skinWeight, index), slotWeights: Float32Array(n*5), sdf }
+ * @param rig 'quad' | 'biped' (유니콘) 또는 모양 객체 { P, PAINT, bones, bounds, sigma, sdf } (주민 종, 굽기 전용)
+ * @param opts.thick 모양 객체일 때 귀·꼬리 뼈 프리미티브를 이만큼 두껍게 (LOD 전용)
+ * @returns { geometry (position, normal, skinIndex, skinWeight, index), slotWeights: Float32Array(n*5), sdf, stats }
  */
-export function buildUnicoGeometry(step = 0.022, rig = 'quad') {
-  const { P, sdf } = makeSDF(rig);
-  const [min, max] = RIGS[rig].bounds;
-  const boneNames = RIGS[rig].bones.map((b) => b[0]);
+export function buildUnicoGeometry(step = 0.022, rig = 'quad', { thick = 0 } = {}) {
+  const shape = typeof rig === 'string' ? null : rig;
+  let P, sdf, bounds, boneNames, sigma, PAINT = [];
+  if (!shape) {
+    ({ P, sdf } = makeSDF(rig));
+    bounds = RIGS[rig].bounds; boneNames = RIGS[rig].bones.map((b) => b[0]); sigma = SIGMA;
+  } else {
+    P = thick ? shape.P.map((q) => (THIN_BONES.has(q.bone) ? { ...q, f: ((f) => (x, y, z) => f(x, y, z) - thick)(q.f) } : q)) : shape.P;
+    sdf = thick || !shape.sdf ? unionSDF(P) : shape.sdf;
+    bounds = shape.bounds; boneNames = shape.bones.map((b) => b[0]); sigma = { ...SIGMA, ...(shape.sigma || {}) };
+    // 칠하기: 층 오름차순, 같은 층은 선언 순 (위 층이 아래 층을 덮음)
+    PAINT = (shape.PAINT || []).map((q, i) => ({ ...q, i, si: SLOTS.indexOf(q.slot) })).sort((a, b) => (a.layer ?? 1) - (b.layer ?? 1) || a.i - b.i);
+  }
+  const [min, max] = bounds;
   const nx = Math.ceil((max[0] - min[0]) / step) + 1, ny = Math.ceil((max[1] - min[1]) / step) + 1, nz = Math.ceil((max[2] - min[2]) / step) + 1;
   const field = new Float32Array(nx * ny * nz);
   const id = (i, j, k) => i + nx * (j + ny * k);
   for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) field[id(i, j, k)] = sdf(min[0] + i * step, min[1] + j * step, min[2] + k * step);
+  // 경계면에 모양이 닿으면(바닥 제외) 잘린 것 → 굽기 쪽에서 실패 처리
+  let clip = 0;
+  for (let k = 0; k < nz; k++) for (let j = 2; j < ny; j++) for (let i = 0; i < nx; i++) {
+    if ((i === 0 || k === 0 || i === nx - 1 || j === ny - 1 || k === nz - 1) && field[id(i, j, k)] < 0) clip++;
+  }
 
   // 셀마다 꼭짓점 1개 (부호가 바뀌는 모서리 교차점의 평균)
   const cellVert = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1);
@@ -293,9 +267,11 @@ export function buildUnicoGeometry(step = 0.022, rig = 'quad') {
   }
 
   // 색 슬롯 / 스킨 가중치
-  const slotW = new Float32Array(nV * SLOTS.length);
+  const S = SLOTS.length;
+  const slotW = new Float32Array(nV * S);
   const skinIndex = new Uint16Array(nV * 4), skinWeight = new Float32Array(nV * 4);
   const dist = new Float32Array(P.length);
+  const pSlot = P.map((q) => SLOTS.indexOf(q.slot)), pBone = P.map((q) => boneNames.indexOf(q.bone));
   const bw = new Float32Array(boneNames.length), bd = new Float32Array(boneNames.length);
   for (let i = 0; i < nV; i++) {
     const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
@@ -305,18 +281,25 @@ export function buildUnicoGeometry(step = 0.022, rig = 'quad') {
     let tot = 0;
     for (let q = 0; q < P.length; q++) {
       const w = Math.exp(-(dist[q] - dmin) / 0.01);
-      slotW[i * SLOTS.length + SLOTS.indexOf(P[q].slot)] += w;
+      slotW[i * S + pSlot[q]] += w;
       tot += w;
     }
-    for (let s = 0; s < SLOTS.length; s++) slotW[i * SLOTS.length + s] /= tot;
+    for (let s = 0; s < S; s++) slotW[i * S + s] /= tot;
+    // 칠하기 층: 안쪽(경계 ±0.01m 부드럽게, 층마다 w 로 넓힘)이면 그 슬롯으로 덮음 — 모양·스킨에는 영향 없음
+    for (const q of PAINT) {
+      const a = clamp01(0.5 - q.f(x, y, z) / (q.w || 0.02));
+      if (a <= 0) continue;
+      for (let s = 0; s < S; s++) slotW[i * S + s] *= 1 - a;
+      slotW[i * S + q.si] += a;
+    }
     // 스킨: 뼈마다 가장 가까운 프리미티브 거리로 가중치. 관절 경계 폭(σ)은 뼈 쌍 중 좁은 쪽을 사용
     //  → 팔을 들어도 어깨 옆 몸통 정점은 몸통에 남고(늘어남 없음), 팔은 팔만 돈다
     bd.fill(Infinity);
-    for (let q = 0; q < P.length; q++) { const bi = boneNames.indexOf(P[q].bone); if (dist[q] < bd[bi]) bd[bi] = dist[q]; }
+    for (let q = 0; q < P.length; q++) { const bi = pBone[q]; if (dist[q] < bd[bi]) bd[bi] = dist[q]; }
     let nb = 0;
     for (let k2 = 1; k2 < boneNames.length; k2++) if (bd[k2] < bd[nb]) nb = k2;
     for (let k2 = 0; k2 < boneNames.length; k2++) {
-      const sig = Math.min(SIGMA[boneNames[k2]] ?? 0.035, SIGMA[boneNames[nb]] ?? 0.035);
+      const sig = Math.min(sigma[boneNames[k2]] ?? 0.035, sigma[boneNames[nb]] ?? 0.035);
       bw[k2] = bd[k2] === Infinity ? 0 : Math.exp(-Math.max(0, bd[k2] - bd[nb]) / sig);
     }
     const order = [...bw.keys()].sort((a, b) => bw[b] - bw[a]).slice(0, 4);
@@ -331,26 +314,87 @@ export function buildUnicoGeometry(step = 0.022, rig = 'quad') {
   geo.setAttribute('skinWeight', new THREE.BufferAttribute(skinWeight, 4));
   geo.setIndex(idx);
   geo.computeBoundingSphere();
-  return { geometry: geo, slotWeights: slotW, sdf, stats: { verts: nV, tris: idx.length / 3, grid: [nx, ny, nz] } };
+  return { geometry: geo, slotWeights: slotW, sdf, stats: { verts: nV, tris: idx.length / 3, grid: [nx, ny, nz], clip } };
 }
 
-/** 팔레트 색으로 꼭짓점 색 속성 생성 (위치·인덱스는 공유) */
-export function colorAttribute(slotWeights, palette) {
-  const n = slotWeights.length / SLOTS.length;
+const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+
+/**
+ * 팔레트 색으로 꼭짓점 색 속성 생성 (위치·인덱스는 공유) → Uint16 정규화 ×3
+ * @param slotWeights Uint8Array(n*5, 합 ≈255) 또는 Float32Array(n*5, 합 1)
+ * @param opts.ao 가짜 AO (주민 종만): 아래를 향한 면을 살짝 어둡게. normals 는 법선 속성
+ * @param opts.sharp 슬롯 경계를 또렷하게 (주민 종만): 가중치를 2.2 제곱한 뒤 다시 정규화 → 가면·패치·턱받이 가장자리가 번진 얼룩처럼 안 보임 (용량 0)
+ */
+export function colorAttribute(slotWeights, palette, { normals = null, ao = false, sharp = false } = {}) {
+  const S = SLOTS.length, n = slotWeights.length / S;
   const cols = SLOTS.map((s) => new THREE.Color(palette[s]));
-  const arr = new Float32Array(n * 3);
+  const u8 = slotWeights instanceof Uint8Array;
+  const nrm = ao ? normals : null;
+  const arr = new Uint16Array(n * 3);
   for (let i = 0; i < n; i++) {
-    let r = 0, g = 0, b = 0;
-    for (let s = 0; s < SLOTS.length; s++) { const w = slotWeights[i * SLOTS.length + s]; r += cols[s].r * w; g += cols[s].g * w; b += cols[s].b * w; }
-    arr[i * 3] = r; arr[i * 3 + 1] = g; arr[i * 3 + 2] = b;
+    let r = 0, g = 0, b = 0, tot = 0;
+    for (let s = 0; s < S; s++) { let w = slotWeights[i * S + s]; if (sharp) w = (u8 ? w / 255 : w) ** 2.2; r += cols[s].r * w; g += cols[s].g * w; b += cols[s].b * w; tot += w; }
+    let k = u8 || sharp ? 1 / (tot || 1) : 1;
+    if (nrm) k *= 0.82 + 0.18 * smooth(-0.6, 0.6, nrm.getY(i));
+    arr[i * 3] = Math.round(clamp01(r * k) * 65535); arr[i * 3 + 1] = Math.round(clamp01(g * k) * 65535); arr[i * 3 + 2] = Math.round(clamp01(b * k) * 65535);
   }
-  return new THREE.BufferAttribute(arr, 3);
+  return new THREE.BufferAttribute(arr, 3, true);
 }
 
-/** build-unico-mesh.mjs 가 만든 바이너리 → { geometry, slotWeights } */
+// ------------------------------------------------------------------ 바이너리 읽기 (v1 'UNIC' / UNC2)
+export const UNC1_MAGIC = 0x554e4943, UNC2_MAGIC = 0x32434e55;
+let DECODER_OK = false;
+/** UNC2 를 풀기 전에 기다릴 것 (assets.js 의 GLTFLoader 와 같은 디코더 → 번들 증가 없음).
+ *  WebAssembly 가 없는 환경(일부 보안 모드)에서는 디코더에 ready 가 없음 → 바로 끝내고, 풀 때 알기 쉬운 오류 */
+export const unicoDecoderReady = MeshoptDecoder.supported ? MeshoptDecoder.ready.then(() => { DECODER_OK = true; }) : Promise.resolve();
+
+/**
+ * build-unico-mesh.mjs 가 만든 바이너리 → { geometry, slotWeights: Uint8Array(n*5), meta, shapeHash, lod }
+ *  v1('UNIC'): Float32 위치 그대로. UNC2: meshopt 정점 코덱 v0 + 14비트 위치 + 8면체 법선 (scripts/lib/unc2.mjs)
+ */
 export function parseUnicoBin(ab) {
   const dv = new DataView(ab);
-  if (dv.getUint32(0, true) !== 0x554e4943) throw new Error('bad unico mesh');
+  const magic = dv.getUint32(0, true);
+  if (magic === UNC1_MAGIC) return parseV1(ab, dv);
+  if (magic !== UNC2_MAGIC) throw new Error('bad unico mesh');
+  const ver = dv.getUint16(4, true);
+  if (ver !== 1) throw new Error('UNC2 버전 ' + ver + ' 은 읽을 수 없음');
+  if (!DECODER_OK) throw new Error(MeshoptDecoder.supported ? 'MeshoptDecoder.ready 를 먼저 기다리세요' : 'WebAssembly 가 없어 캐릭터 메시(UNC2)를 풀 수 없음');
+  const bits = dv.getUint16(6, true), n = dv.getUint32(8, true), ni = dv.getUint32(12, true);
+  const mn = [0, 1, 2].map((k) => dv.getFloat32(20 + k * 4, true)), mx = [0, 1, 2].map((k) => dv.getFloat32(32 + k * 4, true));
+  const len = [0, 1, 2, 3, 4, 5].map((k) => dv.getUint32(44 + k * 4, true));
+  const shapeHash = dv.getUint32(68, true), flags = dv.getUint32(72, true);
+  const u8 = new Uint8Array(ab);
+  let o = 80;
+  const take = (k) => { const s = u8.subarray(o, o + len[k]); o += (len[k] + 3) & ~3; return s; };
+  const q = new Uint16Array(n * 4); MeshoptDecoder.decodeVertexBuffer(new Uint8Array(q.buffer), n, 8, take(0));
+  const nr = new Int8Array(n * 4); MeshoptDecoder.decodeVertexBuffer(new Uint8Array(nr.buffer), n, 4, take(1), 'OCTAHEDRAL');
+  const sk = new Uint8Array(n * 8); MeshoptDecoder.decodeVertexBuffer(sk, n, 8, take(2));
+  const sl = new Uint8Array(n * 8); MeshoptDecoder.decodeVertexBuffer(sl, n, 8, take(3));
+  const index = n > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
+  MeshoptDecoder.decodeIndexBuffer(new Uint8Array(index.buffer), ni, index.BYTES_PER_ELEMENT, take(4));
+  const metaBytes = len[5] ? take(5) : null;
+  const Q = (1 << bits) - 1;
+  const sc = [0, 1, 2].map((k) => (mx[k] - mn[k]) / Q);
+  const pos = new Float32Array(n * 3), nor = new Int8Array(n * 3), si = new Uint8Array(n * 4), sw = new Uint8Array(n * 4), slot = new Uint8Array(n * SLOTS.length);
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < 3; k++) { pos[i * 3 + k] = mn[k] + q[i * 4 + k] * sc[k]; nor[i * 3 + k] = nr[i * 4 + k]; }
+    for (let k = 0; k < 4; k++) { si[i * 4 + k] = sk[i * 8 + k]; sw[i * 4 + k] = sk[i * 8 + 4 + k]; }
+    for (let s = 0; s < SLOTS.length; s++) slot[i * SLOTS.length + s] = sl[i * 8 + s];
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3, true));
+  geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+  geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4, true));
+  geo.setIndex(new THREE.BufferAttribute(index, 1));
+  geo.computeBoundingSphere();
+  const meta = metaBytes && flags & 2 ? JSON.parse(new TextDecoder().decode(metaBytes)) : null;
+  return { geometry: geo, slotWeights: slot, meta, shapeHash, lod: !!(flags & 1) };
+}
+
+/** 예전 형식(헤더 Uint32[4] + Float32 위치 …) — 옛 bin·개발용 */
+function parseV1(ab, dv) {
   const n = dv.getUint32(4, true), ni = dv.getUint32(8, true);
   let o = 16;
   const pos = new Float32Array(ab.slice(o, o + n * 12)); o += n * 12;
@@ -368,7 +412,11 @@ export function parseUnicoBin(ab) {
   geo.setAttribute('skinWeight', new THREE.BufferAttribute(new Uint8Array(sw), 4, true));
   geo.setIndex(new THREE.BufferAttribute(index, 1));
   geo.computeBoundingSphere();
-  const slotWeights = new Float32Array(sl.length);
-  for (let i = 0; i < sl.length; i++) slotWeights[i] = sl[i] / 255;
-  return { geometry: geo, slotWeights };
+  return { geometry: geo, slotWeights: new Uint8Array(sl), meta: null, shapeHash: 0, lod: false };
+}
+
+/** 주민 종 리그 등록: bin 의 meta(뼈대·앵커)로 RIGS[key] 를 만듦. 몸 모양 SDF 는 런타임에 없음 */
+export function registerRig(key, meta) {
+  RIGS[key] = { bones: meta.bones, legLen: meta.legLen, headR: meta.headR, bounds: meta.bounds, face: null, species: meta.species, meta };
+  return RIGS[key];
 }

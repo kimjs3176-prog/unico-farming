@@ -5,6 +5,7 @@ import { ITEMS, itemsOf } from '../sim/items.js';
 import { RODS } from '../sim/angling.js';
 import { makeFish } from '../fishmesh.js';
 import { signTexture, attachSign } from './koat_view.js';
+import { villagerName } from '../species.js';
 
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 
@@ -269,7 +270,7 @@ export class LakeView {
   intro() {
     const g = this.game, K = LAYOUT.lake;
     const fisher = g.npcs.list.find((e) => e.id === 'fisher')?.u;
-    const F = { speaker: fisher, name: '🎣 낚시꾼 유니코', color: '#3170c9', emote: 'wave' };
+    const F = { speaker: fisher, name: `🎣 ${g.npcs.list.find((e) => e.id === 'fisher')?.name ?? villagerName('fisher')}`, color: '#3170c9', emote: 'wave' };
     const pe = K.pier[1];
     g.cinema.play([
       { cam: [[K.x + 9, 7.5, K.z - 9], [K.x, 0, K.z + 1], 2.4] },

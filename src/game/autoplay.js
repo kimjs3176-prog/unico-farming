@@ -49,7 +49,7 @@ export class AutoPlay {
   /** 다른 일(창·대화·미니게임 등) 때문에 쉬어야 하나 */
   _busy() {
     const g = this.g;
-    return !!(g.home?.inside || g.ui.panel || g.dialogue.active || g.cinema.locked || g.tractor.driving || g.player.frozen || g.farm.job
+    return !!(g.home?.inside || g.ui.panel || g.dialogue.active || g.cinema.locked || g.ride.driving || g.player.frozen || g.farm.job
       || g.herding?.active || g.smartfarm?.active || g.decor?.mode || document.querySelector('.mg-count, .mg-wrap'));
   }
 
@@ -95,7 +95,7 @@ export class AutoPlay {
       for (const e of g.npcs.list) {
         const r = g.villagers.requestFor(e.id, day, pool);
         if (r.done || eco.count(r.item) < r.n) continue;
-        spot({ type: 'deliver', key: `deliver:${e.id}`, name: e.n.name, reach: 1.8, goal: () => e.u.group.position, valid: () => !r.done && eco.count(r.item) >= r.n, act: () => this._deliver(e, r) });
+        spot({ type: 'deliver', key: `deliver:${e.id}`, name: e.name ?? e.n.name, reach: 1.8, goal: () => e.u.group.position, valid: () => !r.done && eco.count(r.item) >= r.n, act: () => this._deliver(e, r) });
       }
     }
     // 논농사 (탈곡은 미니게임이라 사람이 직접)
@@ -141,7 +141,7 @@ export class AutoPlay {
     g.audio.play('coin');
     e.u.playAction('cheer', 1.2);
     g.npcs.applyRewards(e, rr);
-    g.ui.toast(`🤖📝 ${e.n.name}의 부탁을 들어줬어요! +${rr.reward}🪙 · 우정 +${rr.gained}`);
+    g.ui.toast(`🤖📝 ${e.name ?? e.n.name}의 부탁을 들어줬어요! +${rr.reward}🪙 · 우정 +${rr.gained}`);
   }
 
   _reach(t) { return t.reach ?? REACH[t.kind];

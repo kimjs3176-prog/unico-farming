@@ -1,0 +1,56 @@
+/* 아래 행동 막대·☰ 버튼·행동 메뉴·자동 진행 칩 (actionbar.js) */
+/* 하단 액션바 */
+.actionbar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 4px; background: rgba(35,25,22,0.82); padding: 6px; border-radius: 20px; box-shadow: var(--shadow); backdrop-filter: blur(6px); }
+.actionbar button { background: transparent; box-shadow: none; color: #fff; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 12px; font-size: 11px; font-weight: 600; border-radius: 14px; min-width: 56px; }
+.actionbar button span { font-size: 20px; }
+.actionbar button:hover { background: rgba(255,255,255,0.12); }
+.actionbar .sep { width: 1px; background: rgba(255,255,255,0.2); margin: 4px 2px; }
+.emote-menu { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); display: flex; gap: 6px; background: var(--panel); padding: 8px; border-radius: 16px; box-shadow: var(--shadow); }
+.emote-menu button { background: #fff; color: var(--ink); box-shadow: none; border: 2px solid #eee; font-size: 20px; padding: 6px 10px; }
+.emote-menu button small { display: block; font-size: 10px; }
+@media (max-width: 600px) { .actionbar { bottom: 130px; left: 8px; transform: none; } .actionbar button { min-width: 44px; padding: 4px 6px; } }
+
+/* 오토플레이 */
+.actionbar button.on { background: rgba(250,192,62,0.28); box-shadow: inset 0 0 0 2px #fac03e; }
+.actionbar button.on span { animation: autobob 1.2s ease-in-out infinite; }
+@keyframes autobob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.auto-chip { position: absolute; left: 50%; bottom: 172px; transform: translateX(-50%); background: rgba(48,182,170,0.94); color: #fff; padding: 6px 14px; border-radius: 18px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow); white-space: nowrap; max-width: calc(92vw / var(--ui-zoom, 1)); overflow: hidden; text-overflow: ellipsis; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.auto-chip b { background: #fff; color: #1f8a80; border-radius: 10px; padding: 1px 7px; font-size: 12px; }
+.auto-chip i { font-style: normal; opacity: 0.75; }
+.auto-chip.hidden { display: none; }
+@media (max-width: 600px) { .auto-chip { bottom: 236px; font-size: 12px; } }
+body.cine .auto-chip { opacity: 0; pointer-events: none; }
+/* 좁은 화면: 행동 막대 버튼 10개가 화면 안에 들어가게 (넘치면 오른쪽 버튼이 잘렸음) */
+@media (max-width: 600px) {
+  .actionbar { right: 8px; gap: 2px; padding: 4px; }
+  .actionbar button { min-width: 0; flex: 1 1 0; padding: 4px 1px; font-size: 10px; white-space: nowrap; overflow: hidden; }
+  .actionbar button span { font-size: 17px; }
+  .actionbar .sep { display: none; }
+}
+/* 메뉴 접기 버튼: 넓은 화면에서는 숨김 */
+.bar-toggle { display: none; }
+
+/* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  /* 아래: ☰ (왼쪽) · E (오른쪽) 만 늘 보임 */
+  .bar-toggle { display: block; position: absolute; left: calc(8px + var(--sal)); bottom: calc(8px + var(--sab)); width: 46px; height: 46px; padding: 0; border-radius: 50%; font-size: 20px; background: rgba(35,25,22,0.78); color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,0.3); }
+  .actionbar { display: none; left: calc(60px + var(--sal)); right: calc(8px + var(--sar)); bottom: calc(6px + var(--sab)); transform: none; gap: 0; padding: 3px; border-radius: 16px; justify-content: space-between; max-width: 560px; }
+  #ui.bar-open .actionbar { display: flex; }
+  .actionbar button { flex: 1 1 0; min-width: 0; min-height: 48px; padding: 4px 0; font-size: 11px; border-radius: 10px; white-space: nowrap; overflow: hidden; }
+  .actionbar button span { font-size: 16px; }
+  .actionbar .sep { display: none; }
+  .emote-menu { left: calc(8px + var(--sal)); bottom: calc(62px + var(--sab)); transform: none; max-width: calc(100vw / var(--ui-zoom, 1) - 16px - var(--sal) - var(--sar)); flex-wrap: wrap; }
+  .auto-chip { bottom: calc(126px + var(--sab)); font-size: 11px; padding: 4px 10px; z-index: 3; }
+}
+/* 세로 폰: 행동 막대를 5칸씩 두 줄로 (버튼 폭 약 60px, 글자 11px 이 잘리지 않게) */
+@media (max-width: 600px) {
+  .actionbar { flex-wrap: wrap; row-gap: 2px; }
+  .actionbar button { flex: 1 0 19%; }
+  /* 전체 화면 단추가 있는 폰(안드로이드): 11칸 → 6칸씩 두 줄 (막대 높이는 그대로) */
+  #ui.bar-open .actionbar.has-fs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  #ui.bar-open > .auto-chip { bottom: calc(180px + var(--sab)); max-width: calc(100vw / var(--ui-zoom, 1) - 152px); }
+}
+/* ---------------- 가로로 눕힌 폰 (낮은 화면 + 터치) ---------------- */
+@media (max-height: 500px) and (pointer: coarse) {
+  .actionbar.has-fs { max-width: 620px; } /* 전체 화면 단추까지 11칸 */
+}

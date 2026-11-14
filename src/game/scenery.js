@@ -1,16 +1,17 @@
 import * as THREE from 'three';
-import { LAYOUT } from './world.js';
+import { LAYOUT, cellKey } from './world.js';
 import { heightAt } from './terrain.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries as mergeGeo } from 'three/addons/utils/BufferGeometryUtils.js';
 
-/** 하늘 그라데이션 색 (읽기 전용) */
-const SKY = {
-  dayTop: new THREE.Color(0x4f9ff0), dayHz: new THREE.Color(0xd6eeff), duskTop: new THREE.Color(0x4a3f8a), duskHz: new THREE.Color(0xf7b27a),
-  nightTop: new THREE.Color(0x0a1230), nightHz: new THREE.Color(0x1f2c52), moteDusk: new THREE.Color(0xffb35a),
-};
-
 const RIPPLES = 16; // 동시에 퍼지는 파문 수
+const GRASS_CELL = 20; // 잔디 칸 크기(m): 칸마다 InstancedMesh 하나 → 화면 밖 칸은 그리지 않음 (맵 80m → 4×4)
+const GRASS_FADE = 8; // 풀 거리 제한(저사양)의 사라지는 폭(m)
+// 하늘·빛 먼지 색 (매 프레임 새로 만들지 않게)
+const DAY_TOP = new THREE.Color(0x4f9ff0), DAY_HZ = new THREE.Color(0xd6eeff);
+const DUSK_TOP = new THREE.Color(0x4a3f8a), DUSK_HZ = new THREE.Color(0xf7b27a);
+const NIGHT_TOP = new THREE.Color(0x0a1230), NIGHT_HZ = new THREE.Color(0x1f2c52);
+const MOTE_DUSK = new THREE.Color(0xffb35a);
 
 /** 하늘 돔(그라데이션), 구름, 지평선 언덕, 잔디 인스턴싱, 연못 물결 — 분위기 레이어 */
 export class Scenery {
@@ -82,10 +83,11 @@ export class Scenery {
     }
     // ---- 구름 ----
     this.clouds = [];
+    this.cloudMats = new Set(); // 구름은 재질을 공유 → 색은 재질마다 한 번만 바꿈
     const cloudSrc = world.assets.scenes.get('cloud');
     for (let i = 0; i < 9; i++) {
       const c = world.assets.clone('cloud');
-      c.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+      c.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; this.cloudMats.add(o.material); } });
       const s = 2.5 + rnd() * 3;
       c.scale.set(s, s * 0.8, s);
       c.position.set((rnd() - 0.5) * 220, 38 + rnd() * 18, (rnd() - 0.5) * 220);
@@ -121,15 +123,19 @@ export class Scenery {
       parts.push(g);
     }
     const geo = mergeGeometries(parts);
+    this.grassGeo = geo;
+    this.grassGeoLean = mergeGeometries([0, 2, 4, 6].map((i) => parts[i])); // 저사양: 잎 4장 (정점 -43%, 같은 잎을 골라 모양은 비슷)
     const mat = new THREE.MeshStandardMaterial({ color: 0x86d156, roughness: 1, side: THREE.DoubleSide });
     this.windUniform = { value: 0 };
+    this.grassFar = { value: new THREE.Vector3(0, 0, 0) }; // 저사양 풀 거리 제한 (x,z: 기준점, y: 거리, 0 = 끔)
     this.pushers = { value: [0, 1, 2, 3].map(() => new THREE.Vector3(9999, 0.01, 9999)) }; // (x, 반지름, z)
     this.windStrength = { value: 0.18 };
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this.windUniform;
       sh.uniforms.uWind = this.windStrength;
       sh.uniforms.uPush = this.pushers;
-      sh.vertexShader = 'uniform float uTime; uniform float uWind; uniform vec3 uPush[4]; varying float vGH;\n' + sh.vertexShader.replace('#include <begin_vertex>',
+      sh.uniforms.uGFar = this.grassFar;
+      sh.vertexShader = 'uniform float uTime; uniform float uWind; uniform vec3 uPush[4]; uniform vec3 uGFar; varying float vGH;\n' + sh.vertexShader.replace('#include <begin_vertex>',
         `#include <begin_vertex>
          vGH = clamp(position.y / 0.26, 0.0, 1.0);
          float sway = (sin(uTime * (1.4 + uWind * 3.0) + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.5) + uWind * 1.2) * (0.12 + uWind * 0.4) * position.y;
@@ -139,16 +145,17 @@ export class Scenery {
            vec2 dp = instanceMatrix[3].xz - uPush[k].xz; float dd = length(dp);
            float bend = (1.0 - smoothstep(0.0, uPush[k].y, dd)) * position.y * 0.9;
            transformed.xz += normalize(dp + 1e-4) * bend; transformed.y -= bend * 0.35;
-         }`);
+         }
+         // 거리 제한(저사양): 끝 ${GRASS_FADE}m 동안 포기가 밑동 쪽으로 줄어들며 사라짐 (칸이 툭 끊기지 않게)
+         if (uGFar.y > 0.0) transformed *= 1.0 - smoothstep(uGFar.y - ${GRASS_FADE.toFixed(1)}, uGFar.y, distance(instanceMatrix[3].xz, uGFar.xz));`);
       sh.fragmentShader = 'varying float vGH;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
          diffuseColor.rgb *= mix(0.42, 1.18, vGH);
          diffuseColor.rgb += vec3(0.06, 0.07, 0.0) * smoothstep(0.7, 1.0, vGH);`);
     };
-    const COUNT = 9000; // 최대치로 만들고 품질 설정에 따라 앞쪽 일부만 그림 (setDensity)
-    const mesh = new THREE.InstancedMesh(geo, mat, COUNT);
-    mesh.receiveShadow = true;
+    const COUNT = 9000; // 최대치로 위치를 뽑고 품질 설정에 따라 앞쪽 일부만 그림 (setDensity)
+    const mats = [], cols = [];
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-    const col = new THREE.Color();
+    const col = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
     let n = 0, tries = 0;
     const B = LAYOUT.bounds;
     while (n < COUNT && tries < COUNT * 6) {
@@ -160,20 +167,32 @@ export class Scenery {
       if (this.world.isBare(x, z) || this.world.isReserved(x, z, -0.5, true)) continue;
       if (this.world.isBlocked(x, z, 0.3)) continue;
       p.set(x, heightAt(x, z), z);
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * Math.PI * 2);
+      q.setFromAxisAngle(up, rnd() * Math.PI * 2);
       const sc = 0.6 + rnd() * 0.6;
       s.set(sc, sc * (0.8 + rnd() * 0.6), sc);
-      m.compose(p, q, s);
-      mesh.setMatrixAt(n, m);
+      mats.push(m.compose(p, q, s).clone());
       col.setHSL(0.26 + rnd() * 0.04, 0.5 + rnd() * 0.15, 0.38 + rnd() * 0.1);
-      mesh.setColorAt(n, col);
+      cols.push(col.clone());
       n++;
     }
-    mesh.count = n;
     this.grassTotal = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    this.world.scene.add(mesh);
-    this.grass = mesh;
+    // 칸별로 나눠 담음: 칸 안 순서도 전역 순서 그대로 → 밀도를 줄여도 예전과 똑같은 풀이 남음
+    const cells = groupByCell(n, (i) => mats[i].elements[12], (i) => mats[i].elements[14], GRASS_CELL);
+    const chunks = [];
+    for (const gids of cells.values()) {
+      const mesh = new THREE.InstancedMesh(geo, mat, gids.length);
+      mesh.receiveShadow = true;
+      const box = new THREE.Box2();
+      gids.forEach((g, k) => { mesh.setMatrixAt(k, mats[g]); mesh.setColorAt(k, cols[g]); box.expandByPoint(_v2.set(mats[g].elements[12], mats[g].elements[14])); });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere(); // 전부 그릴 때 기준으로 미리 (밀도를 바꿔도 컬링 구가 작아지지 않게)
+      mesh.boundingSphere.radius += 0.6; // 바람·발밑 눕힘 여유
+      mesh.userData.gids = gids;
+      mesh.userData.box = box;
+      chunks.push(mesh);
+    }
+    this.grass = new GrassField(chunks, n, mat);
+    this.world.scene.add(this.grass);
   }
 
   /** 들꽃: 꽃잎 5장 + 줄기, 색은 인스턴스별 (알록달록한 들판) */
@@ -227,7 +246,10 @@ export class Scenery {
   /** 풀·들꽃 밀도 (0~1). 인스턴스는 무작위 순서라 앞쪽 일부만 그려도 고르게 줄어듦 */
   setDensity(d) {
     this.density = d;
-    if (this.grass) this.grass.count = Math.round(this.grassTotal * d);
+    if (this.grass) {
+      this.grass.setVisibleCount(Math.round(this.grassTotal * d));
+      this.grass.setGeometry(this.world.quality?.grassLean ? this.grassGeoLean : this.grassGeo); // 품질 바뀔 때 (main.applyQuality → setDensity)
+    }
     if (this.flowers) this.flowers.count = Math.round(this.flowerTotal * Math.min(1, 0.25 + d * 0.75) * (this.seasonFlowers ?? 1)); // 계절: 겨울엔 들꽃 없음
   }
 
@@ -239,7 +261,11 @@ export class Scenery {
   }
 
   _water() {
-    if (this.water) { this.world.scene.remove(this.water); this.water.dispose?.(); this.water.geometry.dispose(); }
+    if (this.water) { // 품질이 바뀌어 다시 만들 때: 반사 수면은 dispose 가 재질·렌더 타깃까지, 저사양 수면은 재질을 따로 해제
+      this.world.scene.remove(this.water);
+      if (this.water.isReflector) this.water.dispose(); else this.water.material.dispose();
+      this.water.geometry.dispose();
+    }
     const L = LAYOUT.pond;
     this.waterUniform = { value: 0 };
     // 연못 + 낚시터 호수를 한 메시로: 같은 수면 높이라 반사(거울 카메라) 렌더 1번으로 둘 다 비춤.
@@ -385,14 +411,17 @@ export class Scenery {
         skip.forEach((o) => (o.visible = o.userData._rv));
       };
     }
-    // 연잎
-    const padMat = new THREE.MeshStandardMaterial({ color: 0x4e9a3f, roughness: 0.9, side: THREE.DoubleSide });
-    for (let i = 0; i < 6; i++) {
-      const pad = new THREE.Mesh(new THREE.CircleGeometry(0.35 + Math.random() * 0.25, 14, 0.3, 5.6), padMat);
-      pad.rotation.x = -Math.PI / 2;
-      const a = Math.random() * 6.28, r = Math.random() * (L.r - 1);
-      pad.position.set(L.x + Math.cos(a) * r, 0.06, L.z + Math.sin(a) * r);
-      this.world.scene.add(pad);
+    // 연잎: 수면 품질과 상관없으니 처음 한 번만 (품질을 바꿀 때마다 늘어나지 않게), 6장을 한 메시로 합쳐 한 번에 그림
+    if (!this.pads) {
+      const padMat = new THREE.MeshStandardMaterial({ color: 0x4e9a3f, roughness: 0.9, side: THREE.DoubleSide });
+      const geos = [];
+      for (let i = 0; i < 6; i++) {
+        const g = new THREE.CircleGeometry(0.35 + Math.random() * 0.25, 14, 0.3, 5.6).rotateX(-Math.PI / 2);
+        const a = Math.random() * 6.28, r = Math.random() * (L.r - 1);
+        geos.push(g.translate(L.x + Math.cos(a) * r, 0.06, L.z + Math.sin(a) * r));
+      }
+      this.pads = new THREE.Mesh(mergeGeo(geos), padMat);
+      this.world.scene.add(this.pads);
     }
   }
 
@@ -438,13 +467,20 @@ export class Scenery {
       if (this.sunU.value.y < 0.05) this.sunU.value.set(-0.3, 0.6, 0.5); // 밤: 달빛 방향 (약하게)
     }
     const visible = Math.round(3 + weather.cloud * (this.clouds.length - 3));
-    this.clouds.forEach((c, i) => {
+    for (let i = 0; i < this.clouds.length; i++) {
+      const c = this.clouds[i];
       c.visible = i < visible;
       c.position.x += c.userData.speed * (1 + weather.wind * 6) * dt;
       if (c.position.x > 130) c.position.x = -130;
-    });
+    }
+    // 풀 거리 제한 (저사양): 기준점은 캐릭터, 먼 칸은 아예 끄고 경계는 셰이더에서 부드럽게
+    const far = this.world.quality?.grassFar || 0, fp = this.world.focusPos;
+    if (this.grass) {
+      if (far > 0 && fp) this.grassFar.value.set(fp.x, far, fp.z); else this.grassFar.value.y = 0;
+      this.grass.cull(far > 0 && fp ? fp : null, far);
+    }
     const u = this.skyUniforms;
-    const { dayTop, dayHz, duskTop, duskHz, nightTop, nightHz } = SKY; // 매 프레임 새로 만들지 않음 (docs/perf)
+    const dayTop = DAY_TOP, dayHz = DAY_HZ, duskTop = DUSK_TOP, duskHz = DUSK_HZ, nightTop = NIGHT_TOP, nightHz = NIGHT_HZ;
     if (daylight > 0.6) { const k = (daylight - 0.6) / 0.4; u.top.value.copy(duskTop).lerp(dayTop, k); u.horizon.value.copy(duskHz).lerp(dayHz, k); }
     else { const k = daylight / 0.6; u.top.value.copy(nightTop).lerp(duskTop, k); u.horizon.value.copy(nightHz).lerp(duskHz, k); }
     const grey = (this._grey ||= new THREE.Color()).setHex(0x8d98a3).multiplyScalar(0.4 + daylight * 0.6);
@@ -463,7 +499,7 @@ export class Scenery {
     if (this.moteU) {
       this.moteU.uTime.value = this.t;
       const f = this.world.focusPos; if (f) this.moteU.uCenter.value.set(f.x, 0, f.z);
-      this.moteU.uColor.value.setHex(0xfff2c0).lerp(SKY.moteDusk, u.dusk.value);
+      this.moteU.uColor.value.setHex(0xfff2c0).lerp(MOTE_DUSK, u.dusk.value);
       this.moteU.uAlpha.value = (0.28 + u.dusk.value * 0.5) * (1 - u.night.value) * (1 - weather.precip) * (1 - weather.cloud * 0.6);
     }
     if (this.waterShared) this.waterShared.skyCol.value.copy(u.horizon.value).lerp(u.top.value, 0.4);
@@ -472,8 +508,70 @@ export class Scenery {
     const tint = (this._tint ||= new THREE.Color()).setHex(0xffffff).lerp(u.glow.value, u.dusk.value * 0.55);
     this.sky.position.copy(this.world.cameraPos || this.sky.position);
     const cloudShade = (0.5 + 0.5 * daylight) * (1 - weather.precip * 0.4);
-    for (const c of this.clouds) c.traverse((o) => { if (o.isMesh) o.material.color?.copy(tint).multiplyScalar(cloudShade); });
+    const cc = (this._cloudCol ||= new THREE.Color()).copy(tint).multiplyScalar(cloudShade);
+    for (const m of this.cloudMats) m.color?.copy(cc);
   }
+}
+
+/**
+ * 잔디 칸 묶음: 칸 InstancedMesh 들을 담은 그룹이지만, 예전 한 덩어리 잔디처럼 전역 번호로 다룰 수 있음
+ * (season_view 의 setColorAt(i)·instanceColor.needsUpdate·material, 반사 패스의 visible 토글 그대로)
+ */
+class GrassField extends THREE.Group {
+  constructor(chunks, total, material) {
+    super();
+    this.chunks = chunks;
+    this.total = total;
+    this.material = material;
+    this.chunkOf = new Uint16Array(total);
+    this.localOf = new Uint32Array(total);
+    chunks.forEach((c, ci) => c.userData.gids.forEach((g, k) => { this.chunkOf[g] = ci; this.localOf[g] = k; }));
+    for (const c of chunks) this.add(c);
+    const self = this;
+    this._colorFlag = { set needsUpdate(v) { for (const c of self.chunks) if (c.instanceColor) c.instanceColor.needsUpdate = v; } };
+    this.shown = total;
+  }
+
+  get instanceColor() { return this._colorFlag; }
+  get count() { return this.shown; }
+  setColorAt(i, color) { this.chunks[this.chunkOf[i]].setColorAt(this.localOf[i], color); }
+
+  /** 전역 앞쪽 n 포기만: 칸마다 전역 번호가 n 보다 작은 것까지 (칸 안은 오름차순) */
+  setVisibleCount(n) {
+    this.shown = n;
+    for (const c of this.chunks) { c.count = countBelow(c.userData.gids, n); c.visible = c.count > 0 && c.userData.near !== false; }
+  }
+
+  setGeometry(geo) { for (const c of this.chunks) c.geometry = geo; }
+
+  /** 거리 제한: center 에서 칸 상자까지 가장 가까운 거리가 far 보다 먼 칸은 끔 (center 없으면 모두 켬) */
+  cull(center, far) {
+    for (const c of this.chunks) {
+      const near = !center || c.userData.box.distanceToPoint(_v2.set(center.x, center.z)) < far;
+      c.userData.near = near;
+      c.visible = near && c.count > 0;
+    }
+  }
+}
+const _v2 = new THREE.Vector2();
+
+/** 0..n-1 번호를 (x,z) 칸으로 나눔 → Map(칸 → 오름차순 번호 배열) (순수 계산 → tests/world_batch.test.js) */
+export function groupByCell(n, getX, getZ, size) {
+  const cells = new Map();
+  for (let i = 0; i < n; i++) {
+    const k = cellKey(getX(i), getZ(i), size);
+    let a = cells.get(k);
+    if (!a) cells.set(k, (a = []));
+    a.push(i);
+  }
+  return cells;
+}
+
+/** 오름차순 배열에서 n 보다 작은 값의 개수 (이분 탐색) */
+export function countBelow(sorted, n) {
+  let lo = 0, hi = sorted.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < n) lo = mid + 1; else hi = mid; }
+  return lo;
 }
 
 function withIndex(g) {

@@ -1,0 +1,35 @@
+/* 채팅 (chat.js) */
+/* 채팅 */
+.chat { position: absolute; left: 12px; bottom: 12px; width: min(70vw, 320px); }
+/* 글자를 키웠는데 화면이 좁으면 채팅을 아래 행동 막대 위로 올림 */
+@media (max-width: 1500px) { body.ui-big .chat { bottom: 92px; width: min(60vw, 280px); } }
+/* 좁은 데스크톱 창·태블릿: 가운데 행동 막대(폭 약 641px)가 채팅 자리까지 넓어서 채팅을 막대 위로 (폰은 뒤의 모바일 블록이 이김) */
+@media (min-width: 601px) and (max-width: 1340px) { .chat { bottom: 112px; } body.ui-big .chat { bottom: 128px; }
+  /* 올린 채팅이 가운데 안내(E)를 덮지 않게: 입력 중이 아닐 때만 맨 아래 층 (안내를 올리면 스마트팜 창·운전 버튼을 덮음).
+     isolate: 채팅이 게임 화면 아래로 가지 않게 */
+  #ui { isolation: isolate; } .chat:not(:focus-within) { z-index: -1; }
+  /* 올린 채팅이 주민 대화창 아래에 깔리므로 대화하는 동안은 숨김 (대화가 끝나면 다시 보임) */
+  #ui:has(> .dlg:not(.hidden)) > .chat { visibility: hidden; } }
+.chat .log { max-height: 120px; overflow: auto; font-size: 13px; display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.chat .log div { background: rgba(255,255,255,0.8); border-radius: 10px; padding: 3px 8px; width: fit-content; max-width: 100%; }
+.chat input { width: 100%; font: inherit; padding: 8px 10px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.8); background: rgba(255,255,255,0.85); }
+.online { font-size: 12px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); margin-bottom: 4px; font-weight: 700; }
+@media (max-width: 600px) { .chat { width: 46vw; } .chat .log { max-height: 70px; } }
+@media (max-width: 600px) { .chat { bottom: 8px; } }
+
+/* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  .chat, body.ui-big .chat { left: calc(8px + var(--sal)); bottom: calc(60px + var(--sab)); width: min(calc(56vw / var(--ui-zoom, 1)), 220px); }
+  .online { display: none; }
+  .chat .log { max-height: 46px; font-size: 11px; margin-bottom: 2px; }
+  .chat .log div { background: rgba(255,255,255,0.7); padding: 1px 6px; }
+  /* 채팅 입력칸: 평소엔 숨김(포커스는 받을 수 있게), '말하기' 를 누르면 나타남 */
+  .chat:not(:focus-within) input { position: absolute; opacity: 0; pointer-events: none; height: 0; padding: 0; border: 0; }
+  .chat input { padding: 5px 8px; font-size: 14px; border-radius: 10px; }
+}
+/* ---------------- 터치 태블릿 (601px 넘는 터치 화면, 가로 폰은 제외) ----------------
+   가운데 행동 막대(바닥에서 약 102px)가 채팅·E 버튼 자리까지 넓으므로 둘을 막대 위로 올림 ('크게' 설정 값도 함께) */
+@media (pointer: coarse) and (min-width: 601px) and (min-height: 501px) {
+  .chat, body.ui-big .chat { bottom: 110px; }
+  .chat:not(:focus-within) input { position: absolute; opacity: 0; pointer-events: none; height: 0; padding: 0; border: 0; }
+}

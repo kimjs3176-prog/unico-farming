@@ -33,6 +33,7 @@ export class Precipitation {
     this.t = 0;
     this.flash = 0;
     this.nextThunder = 5;
+    this.density = 1; // 품질·실내에 따른 입자 비율 (world.update 가 매 프레임 정함, 0 이면 계산·업로드도 안 함)
   }
 
   set(kind, intensity, wind) {
@@ -44,18 +45,17 @@ export class Precipitation {
   update(dt, center) {
     this.t += dt;
     const { w, h, d } = this.box;
-    const isRain = (this.kind === 'rain' || this.kind === 'storm') && this.intensity > 0;
-    const isSnow = this.kind === 'snow' && this.intensity > 0;
+    const active = activeCount(this.N, this.intensity, this.density);
+    const isRain = (this.kind === 'rain' || this.kind === 'storm') && active > 0;
+    const isSnow = this.kind === 'snow' && active > 0;
     this.rain.visible = isRain;
     this.snow.visible = isSnow;
-    const active = Math.floor(this.N * this.intensity);
+    // 살아 있는 입자만 계산하고, 그만큼만 그리고 올림 (나머지는 그리기 범위 밖)
     if (isRain) {
       const pos = this.rainGeo.attributes.position.array;
-      const fall = 24, slant = this.wind * 6;
-      for (let i = 0; i < this.N; i++) {
+      const fall = 24, slant = this.wind * 6, sd = this.seeds;
+      for (let i = 0; i < active; i++) {
         const o = i * 6;
-        if (i >= active) { pos.fill(0, o, o + 6); pos[o + 1] = pos[o + 4] = -100; continue; }
-        const sd = this.seeds;
         let y = (sd[i * 4 + 1] * h - this.t * fall * (0.8 + sd[i * 4 + 3] * 0.05)) % h;
         if (y < 0) y += h;
         const x = center.x + (sd[i * 4] - 0.5) * w + (slant * y) / fall;
@@ -63,20 +63,21 @@ export class Precipitation {
         pos[o] = x; pos[o + 1] = y; pos[o + 2] = z;
         pos[o + 3] = x - slant * 0.04; pos[o + 4] = y + 0.9; pos[o + 5] = z;
       }
-      this.rainGeo.attributes.position.needsUpdate = true;
+      this.rainGeo.setDrawRange(0, active * 2);
+      uploadRange(this.rainGeo.attributes.position, active * 6);
     }
     if (isSnow) {
-      const pos = this.snowGeo.attributes.position.array;
-      for (let i = 0; i < this.N; i++) {
-        const o = i * 3, sd = this.seeds;
-        if (i >= active) { pos[o + 1] = -100; continue; }
+      const pos = this.snowGeo.attributes.position.array, sd = this.seeds;
+      for (let i = 0; i < active; i++) {
+        const o = i * 3;
         let y = (sd[i * 4 + 1] * h - this.t * 1.6) % h;
         if (y < 0) y += h;
         pos[o] = center.x + (sd[i * 4] - 0.5) * w + Math.sin(this.t * 0.8 + sd[i * 4 + 3]) * 0.6 + this.wind * y * 0.2;
         pos[o + 1] = y;
         pos[o + 2] = center.z + (sd[i * 4 + 2] - 0.5) * d + Math.cos(this.t * 0.6 + sd[i * 4 + 3]) * 0.6;
       }
-      this.snowGeo.attributes.position.needsUpdate = true;
+      this.snowGeo.setDrawRange(0, active);
+      uploadRange(this.snowGeo.attributes.position, active * 3);
     }
     // 번개
     this.flash = Math.max(0, this.flash - dt * 4);
@@ -85,6 +86,20 @@ export class Precipitation {
       if (this.nextThunder <= 0) { this.flash = 1; this.nextThunder = 6 + Math.random() * 10; this.onThunder?.(); }
     }
   }
+}
+
+/** 살아 있는 입자 수: 최대 N × 세기(0~1) × 품질 비율 (순수 계산 → tests/world_batch.test.js) */
+export function activeCount(N, intensity, density = 1) {
+  if (!(intensity > 0) || !(density > 0)) return 0;
+  return Math.min(N, Math.floor(N * Math.min(1, intensity) * Math.min(1, density)));
+}
+
+/** 앞쪽 count 개 값만 GPU 로 올림 (count 0 이면 올리지 않음: 길이 0 범위는 버퍼 전체 업로드가 되므로) */
+function uploadRange(attr, count) {
+  if (count <= 0) return;
+  attr.clearUpdateRanges();
+  attr.addUpdateRange(0, count);
+  attr.needsUpdate = true;
 }
 
 function dotTexture() {

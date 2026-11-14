@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /**
  * 유니코 집 실내 (단면 인형집 방식: 앞벽·천장 없이 위·앞에서 내려다보는 방)
@@ -22,10 +23,43 @@ const box = (w, h, d, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(new 
 const cyl = (r1, r2, h, m, x, y, z, seg = 12) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), m); o.position.set(x, y, z); return o; };
 const ball = (r, m, x, y, z) => { const o = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), m); o.position.set(x, y, z); return o; };
 
+/**
+ * 움직이지 않는 메시를 재질·가구 자리(userData.spot)별로 하나씩 합침 → 그리기 호출(그림자 포함) 줄이기
+ * 가구 자리 표시는 합친 메시에도 그대로 (누르면 그 가구). 합친 메시의 userData.mids 는 조각마다 [끝 삼각형 번호, 가운데 x, z]
+ * → 누른 곳이 어느 조각인지(맞힌 삼각형)로 예전처럼 그 조각의 가운데를 씀 (pointer.js pickInside)
+ * userData.keep 인 메시(일렁이는 불꽃)는 그대로 둠
+ */
+export function mergeRoomMeshes(g) {
+  const sets = new Map();
+  for (const o of g.children) {
+    if (!o.isMesh || o.userData.keep || Array.isArray(o.material)) continue;
+    const k = `${o.material.uuid}|${o.userData.spot || ''}`;
+    if (!sets.has(k)) sets.set(k, []);
+    sets.get(k).push(o);
+  }
+  for (const list of sets.values()) {
+    if (list.length < 2) continue;
+    const geos = list.map((o) => { o.updateMatrix(); return o.geometry.clone().applyMatrix4(o.matrix); });
+    const geo = mergeGeometries(geos, false);
+    for (const x of geos) x.dispose();
+    if (!geo) continue; // 속성이 달라 못 합치면 그대로
+    const m = new THREE.Mesh(geo, list[0].material);
+    let tri = 0;
+    m.userData.mids = list.map((o) => { tri += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; return [tri, o.position.x, o.position.z]; });
+    if (list[0].userData.spot) m.userData.spot = list[0].userData.spot;
+    for (const o of list) { g.remove(o); o.geometry.dispose(); }
+    g.add(m);
+  }
+  return g;
+}
+
 /** 방 하나 만들기 → { group, solids: [{x0,z0,x1,z1}], spots: [{key, x, z, label}], entry: {x,z}, door: {x,z}, glass, lampMat, fire } */
 export function buildRoom(level, mats) {
   const { w: W, d: D } = ROOM[level];
   const g = new THREE.Group(), solids = [], spots = [];
+  // 가구 메시에 자리 표시: 누르면 겹쳐 보이는 옆 가구가 아니라 그 가구로 (pointer.js pickInside)
+  const tag = (from, key) => { for (const o of g.children.slice(from)) o.userData.spot = key; };
+  let m0 = 0;
   const solid = (x, z, w, d) => solids.push({ x0: x - w / 2, z0: z - d / 2, x1: x + w / 2, z1: z + d / 2 });
   const H = 3.0;
   // 바닥 (널빤지 줄무늬) + 걸레받이
@@ -43,36 +77,46 @@ export function buildRoom(level, mats) {
   g.add(box(1.5, 0.08, 0.2, MAT.wood, wx, 1.2, -D / 2 + 0.12));
   // 🛏️ 침대 (왼쪽 뒤)
   const bx = -W / 2 + 1.0, bz = -D / 2 + 1.25;
+  m0 = g.children.length;
   g.add(box(1.5, 0.35, 2.3, MAT.wood, bx, 0.25, bz), box(1.4, 0.18, 2.15, MAT.sheet, bx, 0.5, bz), box(1.42, 0.12, 1.4, MAT.blanket, bx, 0.6, bz + 0.38));
   g.add(box(1.5, 0.9, 0.12, MAT.woodD, bx, 0.55, bz - 1.15), box(0.9, 0.18, 0.4, MAT.pillow, bx, 0.66, bz - 0.78));
+  tag(m0, 'bed');
   solid(bx, bz, 1.55, 2.35);
   spots.push({ key: 'bed', x: bx + 1.1, z: bz + 0.3, label: '🛏️ 침대 · 잠자기' });
   // 📅 달력 (뒤 벽, 창문 오른쪽)
   const cx = wx + 1.5;
+  m0 = g.children.length;
   g.add(box(0.6, 0.75, 0.04, MAT.white, cx, 1.85, -D / 2 + 0.04), box(0.6, 0.18, 0.05, MAT.red, cx, 2.15, -D / 2 + 0.05));
   for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) g.add(box(0.1, 0.08, 0.05, (r * 4 + c) % 5 ? MAT.gray : MAT.teal, cx - 0.2 + c * 0.13, 1.95 - r * 0.15, -D / 2 + 0.055));
+  tag(m0, 'calendar');
   // 📒 책상 + 의자 + 일기장
   const dx = cx + 1.1, dz = -D / 2 + 0.5;
+  m0 = g.children.length;
   g.add(box(1.3, 0.08, 0.65, MAT.wood, dx, 0.78, dz));
   for (const sx of [-1, 1]) g.add(box(0.07, 0.75, 0.6, MAT.woodD, dx + sx * 0.58, 0.38, dz));
   g.add(box(0.4, 0.05, 0.3, MAT.blanket, dx - 0.2, 0.84, dz), box(0.28, 0.32, 0.06, MAT.yellow, dx + 0.35, 0.98, dz - 0.15)); // 공책·작은 액자
   g.add(box(0.5, 0.06, 0.5, MAT.woodD, dx, 0.48, dz + 0.65), box(0.5, 0.55, 0.06, MAT.woodD, dx, 0.75, dz + 0.9)); // 의자
+  tag(m0, 'desk');
   solid(dx, dz, 1.35, 0.7);
   spots.push({ key: 'calendar', x: cx, z: -D / 2 + 1.0, label: '📅 달력 · 퀘스트 보기' });
   spots.push({ key: 'desk', x: dx, z: dz + 1.15, label: '📒 책상 · 집 일기 (집 넓히기)' });
   // 👗 옷장 (오른쪽 뒤)
   const ox = W / 2 - 0.75, oz = -D / 2 + 0.45;
+  m0 = g.children.length;
   g.add(box(1.3, 2.2, 0.75, MAT.wood, ox, 1.1, oz), box(0.03, 2.0, 0.05, MAT.woodD, ox, 1.1, oz + 0.38));
   g.add(ball(0.05, MAT.yellow, ox - 0.1, 1.1, oz + 0.4), ball(0.05, MAT.yellow, ox + 0.1, 1.1, oz + 0.4), box(1.36, 0.1, 0.8, MAT.woodD, ox, 2.25, oz));
+  tag(m0, 'wardrobe');
   solid(ox, oz, 1.3, 0.8);
   spots.push({ key: 'wardrobe', x: ox, z: oz + 1.05, label: '👗 옷장 · 옷 갈아입기' });
   // 📚 책장 (왼쪽 벽 가운데)
   const kx = -W / 2 + 0.33, kz = 0.9;
+  m0 = g.children.length;
   g.add(box(0.5, 2.0, 1.5, MAT.woodD, kx, 1.0, kz));
   for (let sh = 0; sh < 4; sh++) {
     g.add(box(0.46, 0.05, 1.42, MAT.wood, kx + 0.02, 0.25 + sh * 0.48, kz));
     for (let b = 0; b < 6; b++) g.add(box(0.3, 0.32 - (b % 3) * 0.04, 0.16, MAT.book[(b + sh) % 5], kx + 0.06, 0.44 + sh * 0.48 - (b % 3) * 0.02, kz - 0.55 + b * 0.22));
   }
+  tag(m0, 'books');
   solid(kx, kz, 0.55, 1.55);
   spots.push({ key: 'books', x: kx + 0.95, z: kz, label: '📚 책장 · 유니코 도감' });
   // 탁자 + 의자 둘 + 깔개 (가운데) — 꾸밈
@@ -105,7 +149,7 @@ export function buildRoom(level, mats) {
     const fx = W / 2 - 2.3, fz = -D / 2 + 0.35;
     g.add(box(1.4, 1.2, 0.6, MAT.stone, fx, 0.6, fz), box(1.6, 0.12, 0.7, MAT.woodD, fx, 1.25, fz), box(0.8, 0.55, 0.1, MAT.dark, fx, 0.4, fz + 0.26));
     fire = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.4, 6), new THREE.MeshStandardMaterial({ color: 0xffa340, emissive: 0xff7a1a, emissiveIntensity: 1.6 }));
-    fire.position.set(fx, 0.34, fz + 0.37); g.add(fire); // 화덕 입구 바로 앞 (돌 안쪽이면 가려짐)
+    fire.position.set(fx, 0.34, fz + 0.37); fire.userData.keep = true; g.add(fire); // 화덕 입구 바로 앞 (돌 안쪽이면 가려짐)
     g.add(box(0.5, 0.08, 0.14, MAT.woodD, fx, 0.1, fz + 0.38)); // 장작
     solid(fx, fz, 1.45, 0.65);
     for (let k = 0; k < 6; k++) g.add(box(0.9, 0.18, 0.4, MAT.wood, W / 2 - 0.55, 0.09 + k * 0.36, D / 2 - 0.6 - k * 0.38));
@@ -113,10 +157,13 @@ export function buildRoom(level, mats) {
   }
   // 🚪 문 (오른쪽 벽 앞쪽) — 나가기
   const doz = D / 2 - (level >= 2 ? 3.3 : 1.1);
+  m0 = g.children.length;
   g.add(box(0.1, 2.1, 1.0, MAT.wood, W / 2 - 0.02, 1.05, doz), box(0.12, 2.2, 1.12, MAT.woodD, W / 2 - 0.01, 1.1, doz));
   g.add(box(0.1, 2.0, 0.9, M(0xe58a3a), W / 2 - 0.05, 1.0, doz), ball(0.05, MAT.yellow, W / 2 - 0.12, 1.0, doz - 0.3));
-  g.add(box(0.7, 0.02, 1.0, MAT.rugB, W / 2 - 0.5, 0.012, doz)); // 현관 매트
+  tag(m0, 'door');
+  g.add(box(0.7, 0.02, 1.0, MAT.rugB, W / 2 - 0.5, 0.012, doz)); // 현관 매트 (바닥처럼: 문 자리 바로 위를 눌렀을 때만 나감)
   spots.push({ key: 'door', x: W / 2 - 0.7, z: doz, label: '🚪 문 · 밖으로 나가기' });
+  mergeRoomMeshes(g); // 약 110개 → 40개 안팎 (실내 그림자도 그리므로 두 배로 줄어듦)
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   return { group: g, solids, spots, entry: { x: W / 2 - 1.2, z: doz }, W, D, fire };
 }

@@ -3,6 +3,33 @@ import * as THREE from 'three';
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 /**
+ * 대화 구도 거리: 두 인물 사이 d(m), 카메라 세로 시야각·화면비
+ * 세로 폰처럼 가로 시야가 좁으면 두 인물(+몸 폭 여유)이 화면 안에 들도록 필요한 만큼만 물러남 (가로 화면은 기존 거리 그대로)
+ */
+export function talkDistance(d, fov, aspect = 1) {
+  const tanH = Math.tan(THREE.MathUtils.degToRad(fov) / 2) * aspect;
+  return Math.max(4.6 + d * 0.9, Math.min((d / 2 + 0.8) / Math.max(0.15, tanH), 10));
+}
+
+/** 아래쪽 대화창이 두 인물의 얼굴을 가리지 않게 시선을 낮춰 인물을 화면 위쪽에 둠 (가로 화면도 0.7 — 선택지까지 펼친 대화창이 화면 아래 약 58%) */
+export function talkLookDrop(aspect = 1) {
+  return aspect < 1 ? Math.min(1.7, Math.max(0.7, (1 - aspect) * 3.2)) : 0.7;
+}
+
+/** 두 인물을 담는 대화 구도 { pos, look }: 지금 카메라가 있는 쪽에서 어깨 너머 살짝 비스듬히 */
+export function talkShot(a, b, camPos, fov, aspect = 1) {
+  const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+  const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1;
+  const nx = -dz / d, nz = dx / d; // 두 사람을 잇는 선의 옆 방향
+  const side = (camPos.x - mx) * nx + (camPos.z - mz) * nz >= 0 ? 1 : -1;
+  const dist = talkDistance(d, fov, aspect);
+  return {
+    pos: [mx + nx * side * dist - (dx / d) * 1.2, 2.5, mz + nz * side * dist - (dz / d) * 1.2],
+    look: [mx, 1.1 - talkLookDrop(aspect), mz],
+  };
+}
+
+/**
  * 연출 카메라 + 컷신
  *  - 따라가기 카메라 위에 '연출 샷'을 섞어 씀(blend 0→1→0) → 대화·컷신 진입/종료가 부드럽게 이어짐
  *  - shot(): 지정 위치·시선으로 이징 이동, orbit 으로 천천히 도는 샷
@@ -42,13 +69,9 @@ export class Cinematics {
 
   /** 두 인물을 담는 대화 구도 (어깨 너머 살짝 비스듬히) */
   focusTalk(a, b) {
-    const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
-    const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1;
-    const nx = -dz / d, nz = dx / d; // 두 사람을 잇는 선의 옆 방향
-    const cam = this.game.camera.position;
-    const side = (cam.x - mx) * nx + (cam.z - mz) * nz >= 0 ? 1 : -1; // 지금 카메라가 있는 쪽에서
-    const dist = 4.6 + d * 0.9;
-    this.shot([mx + nx * side * dist - dx / d * 1.2, 2.5, mz + nz * side * dist - dz / d * 1.2], [mx, 1.1, mz], 0.7);
+    const camera = this.game.camera;
+    const { pos, look } = talkShot(a, b, camera.position, camera.fov, camera.aspect);
+    this.shot(pos, look, 0.7);
   }
 
   /** 대화 중 이름표·표시 숨길 캐릭터 (머리 위 이름표가 대화 구도를 가리지 않게) */

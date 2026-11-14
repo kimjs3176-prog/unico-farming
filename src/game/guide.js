@@ -14,7 +14,8 @@ function targetOf(id, g) {
   switch (id) {
     case 'till1': case 'plant3': case 'water3': case 'harvest5': return new THREE.Vector3(0, 0, 0);
     case 'sell10': return new THREE.Vector3(L.npcs.merchant.x, 0, L.npcs.merchant.z);
-    case 'tractor1': return new THREE.Vector3(g.tractor.vehicle.x, 0, g.tractor.vehicle.z);
+    case 'tractor1': case 'plow30': return g.ride.driving ? new THREE.Vector3(LAYOUT.field.x0 + 10, 0, LAYOUT.field.z0 + 6) : new THREE.Vector3(g.ride.tractor.vehicle.x, 0, g.ride.tractor.vehicle.z);
+    case 'ride5': { const b = g.ride.byId.bike || g.ride.tractor; return new THREE.Vector3(b.vehicle.x, 0, b.vehicle.z); }
     case 'smart1': return new THREE.Vector3(L.sensor.x, 0, L.sensor.z);
     case 'feed3': case 'collect5': return new THREE.Vector3(22, 0, 2);
     case 'rice1': return new THREE.Vector3(g.rice.paddies[0].x, 0, g.rice.paddies[0].z);
@@ -88,7 +89,7 @@ export class Guide {
     this.acc = 0;
     const cur = this.current();
     const tgt = cur && !cur.complete ? targetOf(cur.id, g) : null;
-    const pp = g.tractor.driving ? g.tractor.riderGroup.position : g.player.position;
+    const pp = g.ride.driving ? g.ride.riderGroup.position : g.player.position;
     let dist = null, ang = 0;
     if (tgt) {
       this.marker.position.set(tgt.x, 0, tgt.z);

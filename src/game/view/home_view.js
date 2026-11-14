@@ -1,5 +1,6 @@
 import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LAYOUT } from '../world.js';
 import { HomeSim, HOME_LEVELS, OUTFIT } from '../sim/home.js';
 import { COSTUMES, COSTUME } from '../sim/costume.js';
@@ -27,6 +28,24 @@ const MAT = {
 for (const [k, m] of Object.entries(MAT)) { m.name = `home_${k}`; enhanceMaterial(m); }
 const box = (w, h, d, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); return o; };
 const ball = (r, m, x, y, z) => { const o = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), m); o.position.set(x, y, z); return o; };
+/** 빛을 받는 재질 (장면의 불빛 개수가 바뀌면 셰이더를 새로 만듦) */
+const litMat = (m) => !!m && !!(m.isMeshStandardMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial || m.isMeshToonMaterial
+  || m.isShadowMaterial || (m.isShaderMaterial && m.lights));
+const litMesh = (o) => (Array.isArray(o.material) ? o.material.some(litMat) : litMat(o.material));
+const _sph = new THREE.Sphere();
+/** 화면 밖 판정에 쓰는 경계 구(월드 좌표)의 가장 낮은 높이 */
+function sphereBottom(o) {
+  let s = o.boundingSphere; // 묶음(인스턴스)·스킨 메시는 자기 경계 구
+  if (s === null && !o.isSkinnedMesh && o.computeBoundingSphere) { o.computeBoundingSphere(); s = o.boundingSphere; }
+  if (!s) {
+    const geo = o.geometry;
+    if (!geo?.attributes?.position) return Infinity;
+    if (!geo.boundingSphere) geo.computeBoundingSphere();
+    s = geo.boundingSphere;
+  }
+  _sph.copy(s).applyMatrix4(o.matrixWorld);
+  return _sph.center.y - _sph.radius;
+}
 
 /** 박공 지붕 (앞뒤로 기운 판 두 장 + 마룻대) */
 function roof(w, d, y, rise, mat = MAT.roof) {
@@ -46,6 +65,35 @@ function windowAt(x, y, z, w, h, glass) {
   g.add(box(w + 0.14, h + 0.14, 0.06, MAT.white, x, y, z));
   g.add(box(w, h, 0.07, glass, x, y, z + 0.01));
   g.add(box(0.05, h, 0.08, MAT.white, x, y, z + 0.02), box(w, 0.05, 0.08, MAT.white, x, y, z + 0.02));
+  return g;
+}
+
+/**
+ * 묶음 안의 메시를 재질별로 하나씩 합침 (집 약 30개 → 12개 안팎, 그림자 그리기도 같이 줆)
+ * 하위 묶음(지붕·창문)의 위치·회전까지 펴서 합치고, 묶음의 userData(굴뚝·지붕 높이)는 그대로
+ */
+export function mergeByMaterial(g) {
+  g.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), rel = new THREE.Matrix4();
+  const sets = new Map();
+  g.traverse((o) => {
+    if (!o.isMesh || Array.isArray(o.material)) return;
+    if (!sets.has(o.material)) sets.set(o.material, []);
+    sets.get(o.material).push(o);
+  });
+  const out = [];
+  for (const [mat, list] of sets) {
+    const geos = list.map((o) => o.geometry.clone().applyMatrix4(rel.multiplyMatrices(inv, o.matrixWorld)));
+    const geo = mergeGeometries(geos, false);
+    for (const x of geos) x.dispose();
+    if (!geo) return g; // 속성이 달라 못 합치면 그대로 둠
+    out.push(new THREE.Mesh(geo, mat));
+  }
+  const old = new Set();
+  g.traverse((o) => { if (o.isMesh) old.add(o.geometry); });
+  for (const x of old) x.dispose();
+  g.clear();
+  for (const m of out) g.add(m);
   return g;
 }
 
@@ -94,7 +142,7 @@ function buildHouse(level, glass) {
       [MAT.red, MAT.pink, MAT.yellow].forEach((m, k) => g.add(ball(0.09, m, x + (k - 1) * 0.22, 1.0, D / 2 + 0.16)));
     }
   }
-  return g;
+  return mergeByMaterial(g);
 }
 
 /** 마당: 꽃밭·우편함(1단계부터), 정원 등불(2단계) */
@@ -107,7 +155,7 @@ function buildYard(level, lampMat) {
     g.add(box(0.04, 0.22, 0.12, MAT.red, 2.1, 1.25, 3.1));                    // 깃발
   }
   if (level >= 2) for (const x of [-1.1, 1.1]) { g.add(box(0.08, 0.9, 0.08, MAT.woodD, x, 0.45, 3.4)); g.add(box(0.22, 0.22, 0.22, lampMat, x, 1.0, 3.4)); }
-  return g;
+  return mergeByMaterial(g);
 }
 
 export class HomeView {
@@ -124,7 +172,9 @@ export class HomeView {
     this.obstacle = { x: H.x, z: H.z + HOUSE_BACK, r: 2.8 };
     game.world.obstacles.push(this.obstacle);
     this.smokeT = 0;
-    // 실내 (맵 밖 IO 에 지어 둠). 불빛은 처음부터 장면에 넣어 두고(셰이더 다시 만들기 방지) 밖에서는 꺼 둠
+    // 실내 (맵 밖 IO 에 지어 둠). 불빛은 후처리를 안 쓰는 품질(낮음)에서는 밖에서 장면 계산에서 빼 둠 (바깥 조각마다 빛 계산 하나 덜 함)
+    // 그때 실내용 셰이더는 처음 들어갈 때 페이드 동안 한 번 준비 (_warmRoom), 그 뒤로는 드나들어도 다시 만들지 않음
+    // 후처리를 쓰는 품질은 예전처럼 꺼진 채(세기 0)로 늘 장면에 둠 → 들어갈 때 셰이더를 새로 만들 일이 없음
     this.inside = false;
     this.outPos = { x: LAYOUT.home.door.x, z: LAYOUT.home.door.z - 0.8 };
     this.outVec = new THREE.Vector3(this.outPos.x, 0, this.outPos.z);
@@ -132,13 +182,14 @@ export class HomeView {
     this.roomLampMat = new THREE.MeshStandardMaterial({ color: 0xfff1c4, emissive: 0xffc46b, emissiveIntensity: 0.2 });
     this.roomLight = new THREE.PointLight(0xffd6a0, 0, 16, 1.4);
     this.roomLight.position.set(IO.x, IO.y + 2.7, IO.z);
+    this.roomLight.visible = this._lightOutside();
     game.world.scene.add(this.roomLight);
     this.build();
   }
 
   /** 실내 방 다시 짓기 (집 단계가 바뀌면) */
   buildRoom() {
-    if (this.room) this.game.world.scene.remove(this.room.group);
+    if (this.room) { this.game.world.scene.remove(this.room.group); this.room.group.traverse((o) => o.geometry?.dispose()); }
     this.room = buildRoom(this.sim.level, { glass: this.roomGlass, lampMat: this.roomLampMat });
     this.room.group.position.set(IO.x, IO.y, IO.z);
     this.game.world.scene.add(this.room.group);
@@ -146,7 +197,7 @@ export class HomeView {
   }
 
   build() {
-    if (this.house) this.root.remove(this.house, this.yard);
+    if (this.house) { this.root.remove(this.house, this.yard); for (const o of [this.house, this.yard]) o.traverse((m) => m.geometry?.dispose()); }
     this.house = buildHouse(this.sim.level, this.glass);
     this.house.scale.setScalar(HOUSE_SCALE);
     this.house.position.z = -HOUSE_BACK;
@@ -156,9 +207,15 @@ export class HomeView {
     this.buildRoom();
   }
 
+  /** 밖에서도 방 불빛(세기 0)을 장면에 둘지: 후처리를 쓸 때만. 품질이 바뀌어 후처리가 켜지고 꺼질 때는
+   *  어차피 모든 셰이더가 다시 만들어지므로 그때 함께 바꿈 (update 가 매 프레임 맞춤) */
+  _lightOutside() { return !!this.game.postfx?.enabled; }
+
   update(dt, pp) {
     const g = this.game, w = g.world;
     if (this.inside) return this._updateInside(dt, pp);
+    const keep = this._lightOutside();
+    if (this.roomLight.visible !== keep) { this.roomLight.visible = keep; this.roomLight.intensity = 0; }
     // 밤엔 창문·등불에 불, 굴뚝 연기 (저녁·아침과 2층 집은 늘)
     const night = 1 - THREE.MathUtils.clamp(w.daylight * 2.2, 0, 1);
     this.glass.emissiveIntensity = night * 1.1;
@@ -180,25 +237,72 @@ export class HomeView {
   /** 비·눈 오는 날 코스튬 혜택 (노란 비옷: 걷기 +10%) */
   _wetMult() { return ['rain', 'storm', 'snow'].includes(this.game.world.weatherKind) ? (this.game.costume?.mult('speed_wet') ?? 1) : 1; }
 
-  /** 화면을 잠깐 어둡게 했다가 fn 실행 후 밝게 */
+  /** 화면을 잠깐 어둡게 했다가 fn 실행 후 밝게. 이미 페이드 중이면 무시 (false) */
   _fade(text, fn, ms = 450) {
+    if (this._fadeT) return false;
     const fade = document.createElement('div');
     fade.className = 'sleep-fade quick';
     fade.innerHTML = `<span>${text}</span>`;
     document.getElementById('ui').append(fade);
     requestAnimationFrame(() => fade.classList.add('on'));
-    setTimeout(() => { fn(); fade.classList.remove('on'); setTimeout(() => fade.remove(), 700); }, ms);
+    this._fadeEl = fade;
+    this._fadeT = setTimeout(() => {
+      this._fadeT = null; this._fadeEl = null;
+      try { fn(); } finally { fade.classList.remove('on'); setTimeout(() => fade.remove(), 700); }
+    }, ms);
+    return true;
+  }
+
+  /** 남은 페이드 취소 (지도 이동처럼 바로 처리해야 할 때) */
+  _cancelFade() {
+    if (!this._fadeT) return;
+    clearTimeout(this._fadeT);
+    this._fadeT = null;
+    const el = this._fadeEl;
+    this._fadeEl = null;
+    if (el) { el.classList.remove('on'); setTimeout(() => el.remove(), 700); }
+  }
+
+  /** 처음 들어갈 때 한 번 (밖에서 방 불빛을 빼 둔 경우만): 불빛을 켠 상태의 셰이더를 페이드 동안 미리 준비 (가능하면 병렬)
+   *  대상: 방·내 캐릭터 + 방 카메라에 잡힐 수 있는 빛 받는 메시
+   *   - 컬링을 끈 메시 (목장 동물·콩이 등 — 어디서나 그려짐)
+   *   - 경계 구가 방 높이까지 내려오는 큰 메시 (맵 전체를 묶은 지형·물·나무 묶음 등)
+   *     방 카메라는 IO.y+20 아래에서 내려다보고, 옷장 미리보기도 IO.y+6 아래에서 위로 7° 안이라 600m 안에서 IO.y+80 위는 화면에 없음
+   *  그리는 대상(화면)에 따라 톤매핑·색 공간이 달라 셰이더가 다르므로, 실제로 그릴 대상을 묶어 두고 준비 */
+  _warmRoom() {
+    const g = this.game, r = g.renderer;
+    if (this._warmed || !r?.compileAsync || this.roomLight.visible) return;
+    this._warmed = true;
+    const list = [this.room.group, g.player.unico.group], reach = IO.y + 80;
+    g.world.scene.traverseVisible((o) => {
+      if (o.isMesh && litMesh(o) && (o.frustumCulled === false || sphereBottom(o) < reach)) list.push(o);
+    });
+    // 부모를 바꾸지 않고 한 번에 준비 (자식 목록만 빌린 빈 묶음 → 장면 불빛 모으기도 한 번만)
+    const batch = new THREE.Object3D();
+    batch.children = list;
+    const prevRT = r.getRenderTarget?.() ?? null;
+    this.roomLight.visible = true;
+    try {
+      r.setRenderTarget?.(g.postfx?.enabled ? g.postfx.composer.readBuffer : null);
+      r.compileAsync(batch, g.camera, g.world.scene).catch(() => {}); // compile 자체는 바로 끝남 → 아래에서 되돌려도 됨
+    } catch { /* 첫 프레임에 준비 */ } finally {
+      r.setRenderTarget?.(prevRT);
+      this.roomLight.visible = this.inside || this._lightOutside();
+    }
   }
 
   /** 들어가기: 방으로 옮기고, 카메라를 위·앞에서 내려다보게, 바깥(하늘·비·안개)은 가림 */
   enter() {
     const g = this.game, cam = g.followCam;
-    if (this.inside || g.tractor.driving) return;
+    if (this.inside || this._fadeT || this._sleeping || g.ride.driving) return; // 페이드 중 E 를 또 눌러도 한 번만
     g.ui.closePanel();
     g.audio.play('click');
+    this._warmRoom();
     this._fade('🏠', () => {
+      if (this.inside) return;
       this.inside = true;
       this.room.group.visible = true;
+      this.roomLight.visible = true;
       this._cam = { yaw: cam.yaw, pitch: cam.pitch, distance: cam.distance };
       const e = this.room.entry;
       g.player.position.set(IO.x + e.x, IO.y, IO.z + e.z);
@@ -212,21 +316,27 @@ export class HomeView {
     });
   }
 
-  /** 나가기: 문 앞으로, 카메라·바깥 원래대로 */
+  /** 나가기: 문 앞으로, 카메라·바깥 원래대로. quick: 지도 이동 (남은 들어가기·나가기 페이드는 취소하고 바로) */
   leave(quick = false) {
     const g = this.game, cam = g.followCam;
+    if (quick) this._cancelFade();
     if (!this.inside) return;
+    if (!quick && (this._fadeT || this._sleeping)) return;
     const go = () => {
+      if (!this.inside) return;
       this.inside = false;
       this.room.group.visible = false;
       g.world.playerCollision = null;
       this.roomLight.intensity = 0;
+      this.roomLight.visible = this._lightOutside();
       g.player.unico.floorY = null;
       SURF.floor.value = 0;
       g.player.position.set(this.outPos.x, 0, this.outPos.z);
       g.player.moveTarget = null; g.player.vel?.set(0, 0, 0);
       g.player.unico.facing = Math.PI; // 북쪽(길)을 보고 나옴
       if (this._cam) Object.assign(cam, this._cam);
+      cam.lookOffsetY = 0; // 옷장 미리보기 중에 지도로 나가도 시점이 낮은 채 남지 않게
+      this._wdCam = null; this._wdPanel = null;
       cam.first = true;
       if (g.world.scenery?.sky) g.world.scenery.sky.visible = true;
     };
@@ -270,6 +380,8 @@ export class HomeView {
     cam.pitch = THREE.MathUtils.clamp(cam.pitch, 0.62, 1.2);
     cam.distance = THREE.MathUtils.clamp(cam.distance, 6, 15);
     g.player.speedMult = this.sim.speedMult(w.day) * this._wetMult();
+    // 잠드는 중(화면이 어두운 동안)에는 가구를 쓰지 않음 (상호작용 없는 안내로 다른 안내도 막음)
+    if (this._sleeping) return { d: 99, label: '💤 쿨쿨…', key: 'inside' };
     // 가장 가까운 가구
     let best = null, bd = 1.35;
     for (const sp of this.room.spots) { const d = Math.hypot(IO.x + sp.x - pp.x, IO.z + sp.z - pp.z); if (d < bd) { bd = d; best = sp; } }
@@ -279,6 +391,7 @@ export class HomeView {
 
   _use(key) {
     const g = this.game, ui = g.ui;
+    if (this._fadeT || this._sleeping) return;
     if (key === 'door') return this.leave();
     if (key === 'bed') { if (this.sim.canSleep(g.world.time)) return this.sleep(); return ui.toast(`🛏️ 아직 일러요 · 저녁 6시부터 잘 수 있어요 (지금 ${g.world.clockText().split(' ')[1]})`); }
     if (key === 'books') return ui.openBook();
@@ -294,9 +407,11 @@ export class HomeView {
     const p = ui.openPanel('👗 옷장');
     p.classList.add('wardrobe');
     // 미리보기 카메라 (창을 닫으면 _updateInside 가 되돌림)
-    if (!this._wdCam) this._wdCam = { yaw: cam.yaw, pitch: cam.pitch, distance: cam.distance };
+    if (!this._wdCam) this._wdCam = { yaw: cam.yaw, pitch: cam.pitch, distance: cam.distance, lookOffsetY: cam.lookOffsetY || 0 };
     this._wdPanel = p;
     cam.yaw = -0.35; cam.pitch = 0.28; cam.distance = 4.6;
+    // 세로 폰: 창이 화면 아래 절반을 덮으므로 조금 물러나 바라보는 점을 낮춤 → 유니코가 창 위쪽에 보임
+    if (typeof matchMedia !== 'undefined' && matchMedia('(max-width: 600px)').matches) { cam.distance = 6.5; cam.lookOffsetY = -1.25; }
     g.player.unico.facing = cam.yaw + 0.35;
     const body = el('div', 'wd');
     p.append(body);
@@ -431,11 +546,13 @@ export class HomeView {
     saveGame(g);
   }
 
-  /** 잠자기: 화면이 어두워졌다가 아침으로 */
+  /** 잠자기: 화면이 어두워졌다가 아침으로. 잠드는 1.3초 동안 다시 불러도 한 번만 (하루가 두 번 넘어가지 않게) */
   sleep() {
     const g = this.game, w = g.world;
+    if (this._sleeping || this._fadeT) return;
     const r = this.sim.sleep(w.time, w.day);
     if (!r) return;
+    this._sleeping = true;
     g.ui.closePanel();
     g.player.frozen = true;
     const fade = document.createElement('div');
@@ -445,16 +562,21 @@ export class HomeView {
     g.audio.play('pop', 0.4);
     requestAnimationFrame(() => fade.classList.add('on'));
     setTimeout(() => {
-      w.time = r.time;
-      if (r.newDay) { w.day = r.day; w.onNewDay?.(r.day); }
-      if (this.inside) { const b = this.room.spots.find((x) => x.key === 'bed'); if (b) g.player.position.set(IO.x + b.x, IO.y, IO.z + b.z); }
-      g.player.unico.playAction('cheer', 1.2);
-      fade.classList.remove('on');
-      setTimeout(() => fade.remove(), 900);
-      g.player.frozen = false;
-      g.ui.toast(`☀️ ${w.day}일차 아침! 푹 자서 개운해요 · 오늘 하루 걷는 속도 +15%`);
-      g.onEvent('sleep');
-      saveGame(g);
+      this._sleeping = false;
+      try {
+        w.time = r.time;
+        // 어두운 사이 자정이 지나 world 가 이미 날을 넘겼으면 다시 넘기지 않음 (우편함·임대 수입·시세가 두 번 처리되지 않게)
+        if (r.newDay && w.day < r.day) { w.day = r.day; w.onNewDay?.(r.day); }
+        if (this.inside) { const b = this.room.spots.find((x) => x.key === 'bed'); if (b) g.player.position.set(IO.x + b.x, IO.y, IO.z + b.z); }
+        g.player.unico.playAction('cheer', 1.2);
+        g.ui.toast(`☀️ ${w.day}일차 아침! 푹 자서 개운해요 · 오늘 하루 걷는 속도 +15%`);
+        g.onEvent('sleep');
+        saveGame(g);
+      } finally {
+        fade.classList.remove('on');
+        setTimeout(() => fade.remove(), 900);
+        g.player.frozen = false;
+      }
     }, 1300);
   }
 

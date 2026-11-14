@@ -5,6 +5,15 @@ import { playClip } from './ranch_view.js';
 import { makeLabel } from '../label.js';
 
 /**
+ * 뼈대 동물 복제본을 치울 때: 동작 캐시와 뼈 텍스처만 해제
+ * (지오메트리·재질은 SkeletonUtils.clone 이 원본 에셋과 공유하므로 해제하지 않음)
+ */
+export function releaseRig(r) {
+  if (r.mixer) { r.mixer.stopAllAction(); r.mixer.uncacheRoot(r.mixer.getRoot()); }
+  (r.root || r.m)?.traverse((o) => { if (o.isSkinnedMesh) o.skeleton?.dispose(); });
+}
+
+/**
  * 해로운 동물과 쫓아내기
  *  - 까마귀: 작물이 자라는 밭에 날아와 쪼아 먹음 (성장 진행이 뒤로 밀림, 다 익은 작물은 망가짐)
  *  - 여우·늑대: 밤에 숲 가장자리에서 목장으로 다가옴 (울타리에 붙으면 동물들이 겁먹어 생산 멈춤)
@@ -63,11 +72,11 @@ export class Pests {
     const start = new THREE.Vector3(Math.cos(a) * 38, 0, Math.sin(a) * 38);
     rig.root.position.copy(start);
     g.world.scene.add(rig.root);
-    const p = { kind: wolf ? 'wolf' : 'fox', name: wolf ? '늑대' : '여우', root: rig.root, mixer: rig.mixer, clips: rig.clips, state: 'approach', t: 0, target, home: start };
+    const p = { kind: wolf ? 'wolf' : 'fox', name: wolf ? '늑대' : '산여우', root: rig.root, mixer: rig.mixer, clips: rig.clips, state: 'approach', t: 0, target, home: start };
     playClip(p, 'walk', 0);
     this.list.push(p);
     g.audio.play(wolf ? 'howl' : 'caw', wolf ? 1 : 0.5);
-    this._warn(p, wolf ? '🐺 늑대가 목장 쪽으로 다가와요! 쫓아내세요' : '🦊 여우가 닭장을 노리고 있어요! 쫓아내세요');
+    this._warn(p, wolf ? '🐺 늑대가 목장 쪽으로 다가와요! 쫓아내세요' : '🦊 산여우가 닭장을 노리고 있어요! 쫓아내세요');
   }
 
   update(dt, pp) {
@@ -85,7 +94,7 @@ export class Pests {
     for (const p of [...this.list]) {
       p.t += dt;
       if (p.kind === 'crow') this._crow(p, dt); else this._predator(p, dt);
-      if (p.state === 'gone') { g.world.scene.remove(p.root); this.list.splice(this.list.indexOf(p), 1); continue; }
+      if (p.state === 'gone') { g.world.scene.remove(p.root); releaseRig(p); this.list.splice(this.list.indexOf(p), 1); continue; }
       if (p.state === 'flee') continue;
       const d = Math.hypot(p.root.position.x - pp.x, p.root.position.z - pp.z);
       if (d < 3.6 && (!best || d < best.d)) best = { d: -0.5 + d * 0.01, label: `👋 ${p.name} 쫓아내기`, key: 'shoo', onInteract: () => this.shoo(p) };

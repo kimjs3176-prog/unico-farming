@@ -1,0 +1,17 @@
+/* 여러 조각에 걸친 상태 규칙 (운전 중 E·☰ 숨김, 컷신 중 HUD 숨김, 누르는 메뉴 층 등) — style.css 안에서 마지막 (theme.css 는 그 뒤에 읽힘) */
+/* 트랙터 운전 중(#ui.driving): 운전 버튼과 겹치는 E·☰ 숨김 (내리기는 운전 버튼에 있음) */
+#ui.driving .touch-btn, #ui.driving .bar-toggle { display: none; }
+/* 보여 주기만 하는 HUD 는 터치를 가로채지 않게 (아래 화면·버튼으로 통과) */
+.toasts, .event-banner, .herd-hud { pointer-events: none; }
+body.cine .hud-top, body.cine .actionbar, body.cine .chat, body.cine .minimap, body.cine .objective, body.cine .prompt, body.cine .fps-chip, body.cine .touch-btn { opacity: 0; pointer-events: none; transition: opacity 0.4s; }
+
+/* 상세창 글자 배치: 한국어 낱말이 줄 끝에서 글자 단위로 쪼개지지 않게 (긴 영문·숫자 덩어리만 필요할 때 끊음) */
+.panel, .dlg, .toast, .prompt, .objective, .auto-chip { word-break: keep-all; overflow-wrap: anywhere; }
+
+/* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  /* 가운데 위 HUD(이벤트 배너·트랙터·양 몰이): 목표 칩 아래, 미니맵을 피한 가운데 띠에 */
+  .event-banner, .herd-hud { top: calc(var(--hud-b, 40px) + 38px); width: max-content; max-width: calc(100vw / var(--ui-zoom, 1) - 172px); }
+  /* 누르는 메뉴(펼친 행동 막대·행동 메뉴·입력 중인 채팅·운전 버튼)는 안내 말풍선·자동 칩(3) 위로 — 탭이 말풍선으로 새지 않게 (꾸미기 막대 5·창 10 보다는 아래) */
+  #ui.bar-open > .actionbar, .emote-menu, .chat:focus-within, .drive-pad { z-index: 4; }
+}

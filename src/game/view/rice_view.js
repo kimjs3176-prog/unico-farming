@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mgIntro, mgResult, mgTick } from '../../ui/minigame_frame.js';
+import { touchUI } from '../input.js';
 
 const THRESH_TIME = 6;
 const THRESH_BAND = [0.55, 0.9]; // 알맞은 드럼 속도
@@ -176,7 +177,7 @@ export class RiceView {
     mgIntro(this.game, {
       id: 'thresh', icon: '⚙️', title: '탈곡', unit: '%', th: [40, 70, 90],
       rules: [['👊', `${THRESH_TIME}초 동안 연타해서 탈곡기 드럼을 돌려요`], ['🟩', '게이지를 <b>초록 구간</b>에 오래 둘수록 낟알이 잘 떨어져요'], ['🔥', '끝까지 차면 과열! 잠깐 멈추니 조절하세요']],
-      controls: ['E · 스페이스 연타', '화면 버튼 연타'],
+      controls: touchUI() ? ['👊 연타! 버튼 연타', '화면을 눌러도 연타'] : ['E · 스페이스 연타', '화면 버튼 연타'],
       onStart: () => this.startThreshing(),
     });
   }
@@ -210,7 +211,8 @@ export class RiceView {
     if (ok) {
       th.inBand += dt;
       th.grain -= dt;
-      if (th.grain <= 0) { th.grain = 0.12; const T = LAYOUT.thresher; g.fx.burst(T.x + (Math.random() - 0.5), 1.0, T.z + (Math.random() - 0.5), 0xf2d16b, 3); }
+      // 낟알 튀기: 0.2초마다 2개 (0.12초·3개는 초당 약 25개라 휴대폰에서 재질이 너무 많이 생김)
+      if (th.grain <= 0) { th.grain = 0.2; const T = LAYOUT.thresher; g.fx.burst(T.x + (Math.random() - 0.5), 1.0, T.z + (Math.random() - 0.5), 0xf2d16b, 2); }
     }
     g.ui.updateThresh?.(th.gauge, THRESH_TIME - th.t, { ok, jam: th.jam > 0, eff: th.inBand / Math.max(0.01, th.t), warn: mgTick(g, THRESH_TIME - th.t, th.tick) });
     if (th.t >= THRESH_TIME) this.finishThreshing();

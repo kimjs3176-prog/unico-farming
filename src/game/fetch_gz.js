@@ -5,6 +5,17 @@
  *  - .gz 는 scripts/precompress-models.mjs 가 빌드 후 만듦
  */
 const USE_GZ = import.meta.env?.PROD && typeof DecompressionStream !== 'undefined';
+/**
+ * 빌드 때 넣은 모델 파일별 내용 해시 (vite.config.js define, 개발 서버·테스트에는 없음)
+ *  → 주소에 ?v=<해시> 를 붙이면 호스팅이 오래 캐시(vercel.json)하고, 바뀐 파일만 새로 받음
+ */
+const VER = typeof __MODEL_V__ !== 'undefined' ? __MODEL_V__ : {};
+
+/** 모델 주소 뒤에 붙일 버전 (모르는 파일이면 빈 문자열 → 예전처럼 매번 확인) */
+export function modelQuery(url, versions = VER) {
+  const h = versions[url.slice(url.lastIndexOf('/') + 1)];
+  return h ? `?v=${h}` : '';
+}
 
 async function inflate(buf) {
   const b = new Uint8Array(buf);
@@ -15,13 +26,14 @@ async function inflate(buf) {
 
 /** url 의 내용을 ArrayBuffer 로 (가능하면 .gz 로 받아 풂) */
 export async function fetchModel(url) {
+  const v = modelQuery(url);
   if (USE_GZ) {
     try {
-      const r = await fetch(`${url}.gz`);
+      const r = await fetch(`${url}.gz${v}`); // index.html 의 미리 받기(preload) 주소와 같아야 재사용됨
       if (r.ok) return await inflate(await r.arrayBuffer());
     } catch { /* 원본으로 */ }
   }
-  const r = await fetch(url);
+  const r = await fetch(url + v);
   if (!r.ok) throw new Error(`${url}: ${r.status}`);
   return r.arrayBuffer();
 }

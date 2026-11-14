@@ -52,6 +52,8 @@ export class SocialSim {
     return null;
   }
   noteGift() { this.gifts++; this.stats.giftsSent++; }
+  /** 선물이 전해지지 않았을 때(받는 사람이 나감 등): 오늘 보낸 횟수·누적 기록 되돌림 */
+  undoGift() { this.gifts = Math.max(0, this.gifts - 1); this.stats.giftsSent = Math.max(0, this.stats.giftsSent - 1); }
 
   toJSON() { return { friends: this.friends, day: this.day, gifts: this.gifts, fives: this.fives, stats: this.stats }; }
   load(d) {

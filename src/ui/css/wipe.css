@@ -1,0 +1,3 @@
+/* 장면 전환 — W3-D 가 채움 (wipe.js) */
+/* 주의: theme.css 가 이 파일 뒤에 읽혀 button(.gold·.ghost)·.panel·.panel h2(::after)·.panel h3 을 다시 칠함 → 같은 세기면 테마가 이김.
+   덮으려면 클래스 하나 더: .wipe button.gold, .panel.wipe h2 (.row 배경은 테마가 !important) */
