@@ -85,7 +85,7 @@ export function probeWebGL2(doc = document) {
 /** 부팅 오류 코드 → 로딩 카드 문구 */
 export const BOOT_ERR = {
   'E-GL': { text: '이 기기에서는 3D 화면을 켤 수 없어요', sub: '브라우저를 최신으로 바꾸면 3D로 즐길 수 있어요. 지금은 도트(2.5D) 버전으로 바로 놀 수 있어요.' },
-  'E-NET': { text: '농장 그림을 받지 못했어요', sub: '인터넷 연결을 확인한 뒤 다시 시도해 주세요.' },
+  'E-NET': { text: '농장을 불러오지 못했어요', sub: '인터넷 연결을 확인해 주세요. 연결되면 자동으로 다시 시도해요.', subOnline: '연결이 불안정해 받다가 멈췄어요. 잠시 뒤 다시 시도해 주세요.' },
   'E-BOOT': { text: '농장을 여는 중에 문제가 생겼어요', sub: '다시 시도하면 대부분 해결돼요. 농장 기록은 그대로예요.' },
   'E-START': { text: '농장을 만드는 중에 문제가 생겼어요', sub: '다시 시도하면 대부분 해결돼요. 농장 기록은 그대로예요.' },
 };
@@ -97,8 +97,12 @@ export function bootCode(e, stage = 'load') {
   return stage === 'start' ? 'E-START' : 'E-BOOT';
 }
 
+/** 줄 끝에서 쪼개지면 어색한 말 (도트(2.5D) 버전 등) */
+const NOWRAP = /도트\(2\.5D\) 버전/g;
+
 /**
- * 로딩 카드를 오류 안내로 바꿈: 진행 막대·닉네임을 숨기고 큰 단추는 [다시 시도](새로고침) — WebGL2 가 없으면 [도트(2.5D) 버전으로 하기]
+ * 로딩 카드를 오류 안내로 바꿈: 진행 막대·닉네임·기능 칩·조작 안내를 숨기고 큰 단추는 [다시 시도](새로고침) — WebGL2 가 없으면 [도트(2.5D) 버전으로 하기]
+ * E-NET 이면 망이 돌아올 때 저절로 새로고침 (카드를 거두면 그 듣기도 뗌)
  * @param opt.onTry3d 있으면 작은 [그래도 3D로 시도] 단추
  * @returns 카드를 원래대로 되돌리는 함수
  */
@@ -109,22 +113,39 @@ export function bootErrorCard(code, err, opt = {}) {
   const info = BOOT_ERR[code] || BOOT_ERR['E-BOOT'];
   const lt = document.getElementById('loading-text'), btn = document.getElementById('start-btn');
   const pixelHint = code === 'E-GL' ? card.querySelector('a[href="./pixel.html"]')?.closest('.hint') : null; // 큰 단추와 겹치는 작은 링크
-  const hidden = [card.querySelector('.bar'), card.querySelector('.name-row'), pixelHint].filter(Boolean);
-  const was = { text: lt?.textContent, css: lt?.style.cssText, label: btn?.textContent, onclick: btn?.onclick, disabled: btn?.disabled, disp: hidden.map((el) => el.style.display) };
+  // 오류 안내와 겨루는 첫 화면 꾸밈(기능 칩·조작 안내)도 숨김
+  const hidden = [card.querySelector('.bar'), card.querySelector('.name-row'), pixelHint, card.querySelector('.feature-row'), card.querySelector('.hint.keys')].filter(Boolean);
+  const was = { text: lt?.textContent, css: lt?.style.cssText, label: btn?.textContent, onclick: btn?.onclick, disabled: btn?.disabled, disp: hidden.map((el) => el.style.display), card: card.style.cssText };
   for (const el of hidden) el.style.display = 'none';
+  card.classList?.add('boot-error');
+  // 좁은 화면에서도 양옆 16px 여백 (기본 92vw + 안쪽 여백은 412px 화면에서 거의 끝까지 참)
+  card.style.boxSizing = 'border-box';
+  card.style.width = 'min(calc(100vw - 32px), 440px)';
+  if ((globalThis.innerWidth ?? 999) < 480) card.style.padding = '20px 18px';
   const add = [];
   const make = (tag, css, text) => { const n = document.createElement(tag); if (css) n.style.cssText = css; if (text != null) n.textContent = text; add.push(n); return n; };
+  let subEl = null;
   if (lt) {
     lt.textContent = info.text;
-    lt.style.cssText = 'font-family:var(--display);font-size:21px;color:var(--brown);margin:12px 0 6px';
-    const sub = make('p', 'margin:0 0 14px;font-size:13px;line-height:1.55;word-break:keep-all', `${info.sub} `);
+    lt.style.cssText = 'font-family:var(--display);font-size:21px;color:#c9671c;margin:12px 0 6px;word-break:keep-all;text-wrap:balance'; // 따뜻한 주황: 평소 로딩과 다르게 보이게
+    const sub = make('p', 'margin:0 0 14px;font-size:13px;line-height:1.55;word-break:keep-all;overflow-wrap:break-word;text-wrap:pretty');
     sub.className = 'hint';
-    const tag = document.createElement('span');
-    tag.style.whiteSpace = 'nowrap'; // 코드가 줄 끝에서 쪼개지지 않게
-    tag.textContent = `(오류 코드 ${code})`;
-    sub.append(tag);
+    // 망은 잡혀 있는데 받다가 멈춘 경우: 저절로 다시 하지 않으므로 그 말은 빼고
+    const text = info.subOnline && globalThis.navigator?.onLine !== false ? info.subOnline : info.sub;
+    let at = 0;
+    for (const m of text.matchAll(NOWRAP)) {
+      sub.append(text.slice(at, m.index));
+      const keep = document.createElement('span');
+      keep.style.whiteSpace = 'nowrap';
+      keep.textContent = m[0];
+      sub.append(keep);
+      at = m.index + m[0].length;
+    }
+    sub.append(text.slice(at));
     lt.after(sub);
+    subEl = sub;
   }
+  let wait = null;
   if (btn) {
     btn.disabled = false;
     if (code === 'E-GL') { btn.textContent = '🎮 도트(2.5D) 버전으로 하기'; btn.onclick = () => { location.href = './pixel.html'; }; }
@@ -142,12 +163,36 @@ export function bootErrorCard(code, err, opt = {}) {
     };
     if (opt.onTry3d) small('그래도 3D로 시도', () => opt.onTry3d());
     small('📋 진단 정보 복사', () => copyDiag(note, note));
-    btn.after(row, note);
+    // 오류 코드는 단추 아래 작은 회색 알약으로 (문장 속에 넣으면 딱딱해 보임)
+    const pill = make('p', 'margin:10px 0 0');
+    const tag = document.createElement('span');
+    tag.style.cssText = 'display:inline-block;font-size:11px;color:#8a7a66;background:rgba(138,122,102,0.12);border-radius:999px;padding:2px 9px;white-space:nowrap';
+    tag.textContent = `오류 코드 ${code}`;
+    pill.append(tag);
+    if (code === 'E-NET') {
+      wait = make('p', 'margin:8px 0 0;font-size:13px;color:#8a7a66', '📶 연결을 기다리는 중…');
+      wait.style.display = globalThis.navigator?.onLine === false ? '' : 'none';
+    }
+    btn.after(...[row, wait, pill, note].filter(Boolean));
   }
-  if (code === 'E-NET') window.addEventListener('online', () => location.reload(), { once: true }); // 망이 돌아오면 저절로 다시
+  // 망이 돌아오면 저절로 다시 (카드가 아직 떠 있을 때만)
+  let shown = true;
+  const onOnline = () => { if (shown) location.reload(); };
+  const onOffline = () => { if (wait) wait.style.display = ''; if (subEl && info.subOnline) subEl.textContent = info.sub; }; // 이제는 연결되면 저절로 다시
+  if (code === 'E-NET') {
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+  }
   return () => {
+    shown = false;
+    if (code === 'E-NET') {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    }
     for (const n of add) n.remove();
     hidden.forEach((el, i) => { el.style.display = was.disp[i]; });
+    card.classList?.remove('boot-error');
+    card.style.cssText = was.card;
     if (lt) { lt.textContent = was.text; lt.style.cssText = was.css; }
     if (btn) { btn.textContent = was.label; btn.onclick = was.onclick; btn.disabled = was.disabled; }
   };

@@ -10,14 +10,16 @@ globalThis.localStorage = {
   setItem: (k, v) => { const e = failSet?.(k); if (e) throw e; store.set(k, String(v)); },
   removeItem: (k) => store.delete(k),
 };
+const sstore = new Map();
+globalThis.sessionStorage = { getItem: (k) => sstore.get(k) ?? null, setItem: (k, v) => sstore.set(k, String(v)), removeItem: (k) => sstore.delete(k) };
 const listeners = {};
 globalThis.window = { addEventListener: (k, f) => { (listeners[k] ||= []).push(f); } };
 const quiet = console.warn;
 console.warn = () => {}; // 일부러 낸 오류의 경고는 숨김
 
 const S = await import('../src/game/save.js');
-const { GameSave } = await import('../src/game/game_save.js');
-const { SAVE_KEY, BAK_KEY, BROKEN_KEY, BROKEN_KEY2 } = S;
+const { GameSave, TAKEOVER_KEY } = await import('../src/game/game_save.js');
+const { SAVE_KEY, BAK_KEY, BROKEN_KEY, BROKEN_KEY2, CRASH_MARK, OWNER_KEY } = S;
 
 const quota = () => Object.assign(new Error('저장 공간 부족'), { name: 'QuotaExceededError' });
 
@@ -46,7 +48,7 @@ function showAll(t, g) {
   for (const fn of g.shownFns) fn();
   t.mock.timers.tick(5000);
 }
-const reset = () => { store.clear(); failSet = null; S.setReadOnly(false); };
+const reset = () => { store.clear(); sstore.clear(); failSet = null; S.setReadOnly(false); };
 const saved = (o = {}) => JSON.stringify({ v: 1, at: 1, name: '유니', economy: { money: 777 }, player: { x: 5, z: -3 }, world: { time: 0.4, day: 9 }, flags: { intro: true }, ...o });
 
 test('깨끗하게 불러오면 그 기록을 .bak 으로 (부팅마다 한 번) · 칸마다 불러옴', (t) => {
@@ -79,7 +81,8 @@ test('못 읽는 기록(잘린 JSON): 원본은 .broken 에 보관하고 .bak �
   assert.equal(g.economy.money, 500, '백업에서');
   assert.equal(g._introPending, undefined, '못 읽은 기록 위에서 인트로를 시작하지 않음');
   showAll(t, g);
-  assert.ok(g.toasts.some((x) => /최근 백업에서 농장을 불러왔어요/.test(x)), g.toasts.join());
+  assert.equal(g.toasts.length, 1, '불러왔어요 알림 없이 백업 안내만 (서로 엇갈려 보이지 않게)');
+  assert.match(g.toasts[0], /손상되어 최근 백업\(9일차\)에서 농장을 불러왔어요/, '얼마나 빠졌는지 알게 백업의 날짜');
   assert.equal(g.save(), true);
   assert.equal(JSON.parse(store.get(SAVE_KEY)).economy.money, 500);
   assert.equal(store.get(BROKEN_KEY), raw, '원본은 그대로');
@@ -234,6 +237,141 @@ test('초기화(clearSave): 기록과 백업을 지우고 떠날 때 저장을 �
   assert.equal(store.get(BROKEN_KEY), 'x');
   assert.equal(S.saveGame(g), false);
   assert.equal(S.loadSaveInfo().status, 'empty');
+});
+
+test('백업·일부 실패 안내는 닫을 때까지 남는 작은 창으로 (창을 열 수 있으면)', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  reset();
+  store.set(SAVE_KEY, '{"v":1');
+  store.set(BAK_KEY, saved({ world: { day: 5 } }));
+  const made = [];
+  const keepDoc = globalThis.document;
+  globalThis.document = { createElement: (tag) => ({ tag, dataset: {}, style: {}, textContent: '' }) };
+  try {
+    const panel = { dataset: {}, kids: [], append(...n) { this.kids.push(...n); } };
+    const g = makeGame();
+    g.ui = { toast: (x) => g.toasts.push(x), openPanel: (title) => { made.push(title); return panel; }, closePanel() { this.closed = true; } };
+    g.restore();
+    showAll(t, g);
+    assert.deepEqual(g.toasts, []);
+    assert.deepEqual(made, ['💾 백업에서 불러왔어요']);
+    assert.match(panel.kids[0].textContent, /최근 백업\(5일차\)/);
+    panel.kids[1].onclick();
+    assert.ok(g.ui.closed, '[확인] 으로 닫음');
+  } finally { globalThis.document = keepDoc; }
+});
+
+test('치명 오류 직전 저장 뒤 다음 부팅은 .bak(오류 전 기록)을 덮지 않음 · 한동안 오류 없이 놀면 표시를 지움', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_000_000 });
+  reset();
+  const good = saved({ economy: { money: 300 } });
+  store.set(SAVE_KEY, good);
+  const g = makeGame();
+  g.economy.money = 999;
+  assert.equal(S.saveGame(g, { crash: true }), true);
+  assert.equal(store.get(BAK_KEY), good);
+  assert.equal(store.get(CRASH_MARK), '1');
+  // 다음 부팅: 오류 직전 기록은 읽히지만 .bak 은 오류 전 기록 그대로
+  const g2 = makeGame();
+  g2.restore();
+  assert.equal(g2.economy.money, 999);
+  assert.equal(store.get(BAK_KEY), good, '오류 직전 기록이 백업을 덮지 않음');
+  assert.equal(g2.save(), true);
+  assert.equal(store.get(CRASH_MARK), '1', '바로 지우지 않음');
+  t.mock.timers.tick(30_000);
+  g2._lastBadAt = Date.now(); // 또 오류
+  t.mock.timers.tick(40_000);
+  g2.save();
+  assert.equal(store.get(CRASH_MARK), '1', '최근 60초 안에 오류가 있으면 그대로');
+  t.mock.timers.tick(61_000);
+  g2.save();
+  assert.equal(store.get(CRASH_MARK), undefined, '오류 없이 60초 놀았으면 지움');
+  // 그다음 부팅은 다시 깨끗한 기록을 백업으로
+  makeGame().restore();
+  assert.equal(store.get(BAK_KEY), store.get(SAVE_KEY));
+  // 초기화하면 표시도 지움
+  store.set(CRASH_MARK, '1');
+  S.clearSave();
+  assert.equal(store.get(CRASH_MARK), undefined);
+});
+
+test('인트로 전 저장은 하지 않으니 false (치명 오류 안내가 \'저장해 두었어요\' 라고 하지 않게)', () => {
+  reset();
+  const g = makeGame({ _introPending: true });
+  assert.equal(g.save(), false);
+  assert.equal(store.get(SAVE_KEY), undefined);
+  assert.deepEqual(g.toasts, [], '실패 알림도 없음');
+});
+
+test('저장 실패 알림은 까닭마다 한 번 (공간 부족 뒤 회복했다가 다른 까닭으로 실패해도 알림)', () => {
+  reset();
+  const g = makeGame();
+  failSet = (k) => (k === SAVE_KEY ? quota() : null);
+  g.save();
+  failSet = null;
+  g.save();
+  failSet = (k) => (k === SAVE_KEY ? Object.assign(new Error('막힘'), { name: 'SecurityError' }) : null);
+  g.save(); g.save();
+  failSet = (k) => (k === SAVE_KEY ? quota() : null);
+  g.save();
+  failSet = null;
+  g.save();
+  assert.deepEqual(g.toasts, [
+    '⚠️ 저장 공간이 부족해 농장을 저장하지 못했어요', '💾 이제 다시 저장돼요',
+    '⚠️ 이 브라우저 설정(사생활 보호 모드 등)에서는 농장을 저장할 수 없어요', '💾 이제 다시 저장돼요',
+  ]);
+});
+
+test('[여기서 이어 하기]: 표시를 남기고 새로고침 → 그 창은 넘겨받았다고 알려 다른 창을 먼저 멈춤 · 다른 창의 마지막 저장은 잠깐 무시', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 5_000_000 });
+  reset();
+  for (const k of Object.keys(listeners)) delete listeners[k];
+  const fire = (e) => (listeners.storage || []).forEach((f) => f(e));
+  const keep = [globalThis.location, globalThis.document];
+  let reloaded = 0;
+  globalThis.location = { reload: () => reloaded++ };
+  // 멈춘 창 A: [여기서 이어 하기]
+  const overlay = [];
+  const doc = { body: { append: (n) => overlay.push(n) }, getElementById: () => null, createElement: (tag) => ({ tag, style: {}, setAttribute() {}, append() {}, querySelector: () => null }) };
+  globalThis.document = doc;
+  try {
+    const stub = { input: { enabled: true }, renderer: { setAnimationLoop() {} } };
+    const a = makeGame(stub);
+    a.goStale('other');
+    // 단추를 찾아 누름: 만든 요소 중 onclick 이 있는 것
+    const made = [];
+    doc.createElement = (tag) => { const n = { tag, style: {}, setAttribute() {}, append() {}, querySelector: () => null }; made.push(n); return n; };
+    a._stale = false;
+    a.goStale('other');
+    const btn = made.find((n) => n.tag === 'button' && /여기서 이어 하기/.test(n.textContent));
+    btn.onclick();
+    assert.equal(sstore.get(TAKEOVER_KEY), '1');
+    assert.equal(reloaded, 1);
+    assert.ok(made.some((n) => n.textContent === '이 창은 닫아도 괜찮아요'), '닫아도 된다는 안내');
+    // 새로고침한 창 B: 불러오며 넘겨받음
+    S.setReadOnly(false);
+    store.set(SAVE_KEY, saved());
+    const b = makeGame(stub);
+    b.watchOtherTabs();
+    b.restore();
+    assert.equal(sstore.get(TAKEOVER_KEY), undefined, '표시는 한 번만');
+    assert.ok(store.get(OWNER_KEY), '넘겨받았다고 기록');
+    // A 가 멈추기 직전에 쓴 저장은 무시 (B 가 다시 멈추지 않게)
+    fire({ key: SAVE_KEY, newValue: saved() });
+    assert.notEqual(b._stale, true);
+    // 시간이 지나면 다시 다른 창 저장에 멈춤
+    t.mock.timers.tick(6000);
+    fire({ key: SAVE_KEY, newValue: saved() });
+    assert.equal(b._stale, true);
+    // 다른 창 C 가 넘겨받으면 (owner 키) 지금 창은 멈춤
+    S.setReadOnly(false);
+    const c = makeGame(stub);
+    c.watchOtherTabs();
+    listeners.storage.at(-1)({ key: OWNER_KEY, newValue: '{"id":"x"}' }); // C 의 듣기만
+    assert.equal(c._stale, true);
+  } finally {
+    [globalThis.location, globalThis.document] = keep;
+  }
 });
 
 test.after(() => { console.warn = quiet; });

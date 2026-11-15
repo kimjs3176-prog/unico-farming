@@ -268,14 +268,24 @@ test('부팅: WebGL2 확인이 모델 받기보다 먼저, 받기·입장 실패
 
 /** 아주 작은 가짜 DOM (부팅 오류 카드 시험용) */
 class El {
-  constructor(tag, attrs = {}) { Object.assign(this, { tag, attrs, children: [], parent: null, style: { cssText: '', display: '' }, textContent: '', className: attrs.class || '', onclick: null, disabled: false }); }
-  append(...ns) { for (const n of ns) { n.parent = this; this.children.push(n); } }
+  constructor(tag, attrs = {}) {
+    Object.assign(this, { tag, attrs, children: [], parent: null, style: { cssText: '', display: '' }, textContent: '', className: attrs.class || '', onclick: null, disabled: false });
+    const cls = new Set();
+    this.classList = { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) };
+  }
+  append(...ns) {
+    for (let n of ns) {
+      if (typeof n === 'string') { const t = new El('#text'); t.textContent = n; n = t; } // 글 조각
+      n.parent = this; this.children.push(n);
+    }
+  }
+  get text() { return this.tag === '#text' || !this.children.length ? this.textContent : this.children.map((c) => c.text).join(''); }
   after(...ns) { const s = this.parent.children; s.splice(s.indexOf(this) + 1, 0, ...ns); for (const n of ns) n.parent = this.parent; }
   remove() { const s = this.parent?.children; if (s) s.splice(s.indexOf(this), 1); this.parent = null; }
   closest(sel) { let n = this; while (n && !(sel === '.hint' && n.className === 'hint')) n = n.parent; return n; }
   all() { return [this, ...this.children.flatMap((c) => c.all())]; }
   querySelector(sel) {
-    const m = { '.bar': (n) => n.className === 'bar', '.name-row': (n) => n.className === 'name-row', 'a[href="./pixel.html"]': (n) => n.tag === 'a' && n.attrs.href === './pixel.html' }[sel];
+    const m = { '.bar': (n) => n.className === 'bar', '.name-row': (n) => n.className === 'name-row', '.feature-row': (n) => n.className === 'feature-row', '.hint.keys': (n) => n.className === 'hint keys', 'a[href="./pixel.html"]': (n) => n.tag === 'a' && n.attrs.href === './pixel.html' }[sel];
     return this.all().slice(1).find(m) || null;
   }
 }
@@ -288,12 +298,13 @@ function loadingCard() {
   btn.disabled = true;
   const hint = new El('p', { class: 'hint' });
   hint.append(new El('a', { href: './pixel.html' }));
-  card.append(lt, bar, row, btn, hint);
+  const chips = new El('div', { class: 'feature-row' }), keys = new El('p', { class: 'hint keys' });
+  card.append(chips, lt, bar, row, btn, hint, keys);
   const doc = { querySelector: (s) => (s === '#loading .loading-card' ? card : null), getElementById: (id) => ({ 'loading-text': lt, 'start-btn': btn })[id] || null, createElement: (t) => new El(t) };
-  return { card, lt, bar, row, btn, hint, doc };
+  return { card, lt, bar, row, btn, hint, chips, keys, doc };
 }
 
-test('부팅 오류 카드: E-GL 은 큰 [도트(2.5D)] 단추 + 겹치는 작은 도트 링크·막대·닉네임 숨김, 코드는 한 덩어리, 되돌리면 원래대로', async () => {
+test('부팅 오류 카드: E-GL 은 큰 [도트(2.5D)] 단추 + 겹치는 작은 도트 링크·막대·닉네임·기능 칩·조작 안내 숨김, 코드는 단추 아래 알약, 되돌리면 원래대로', async () => {
   const { bootErrorCard } = await import('../src/boot.js');
   const D = loadingCard();
   const keep = [globalThis.document, globalThis.location];
@@ -303,24 +314,33 @@ test('부팅 오류 카드: E-GL 은 큰 [도트(2.5D)] 단추 + 겹치는 작�
     let tried = 0;
     const undo = bootErrorCard('E-GL', new Error('Error creating WebGL context.'), { onTry3d: () => tried++ });
     assert.equal(D.lt.textContent, '이 기기에서는 3D 화면을 켤 수 없어요');
-    assert.deepEqual([D.bar, D.row, D.hint].map((e) => e.style.display), ['none', 'none', 'none']);
+    assert.deepEqual([D.bar, D.row, D.hint, D.chips, D.keys].map((e) => e.style.display), ['none', 'none', 'none', 'none', 'none']);
+    assert.ok(D.card.classList.contains('boot-error'));
+    assert.match(D.card.style.width, /100vw - 32px/, '좁은 화면도 양옆 16px');
     assert.equal(D.btn.textContent, '🎮 도트(2.5D) 버전으로 하기');
     assert.equal(D.btn.disabled, false);
     D.btn.onclick();
     assert.equal(location.href, './pixel.html');
-    const sub = D.card.children[1];
-    assert.equal(sub.children[0].textContent, '(오류 코드 E-GL)');
-    assert.equal(sub.children[0].style.whiteSpace, 'nowrap', '코드가 줄 끝에서 쪼개지지 않게');
+    const sub = D.card.children[2];
+    assert.equal(sub.text, BOOT_ERR['E-GL'].sub);
+    const nw = sub.children.find((n) => n.tag === 'span');
+    assert.equal(nw.textContent, '도트(2.5D) 버전');
+    assert.equal(nw.style.whiteSpace, 'nowrap', '도트(2.5D) 가 줄 끝에서 쪼개지지 않게');
+    const pill = D.card.all().find((n) => n.tag === 'span' && /^오류 코드/.test(n.textContent));
+    assert.equal(pill.textContent, '오류 코드 E-GL');
+    assert.ok(D.card.children.indexOf(pill.parent) > D.card.children.indexOf(D.btn), '코드는 단추 아래');
     const small = D.card.all().filter((n) => n.tag === 'button' && n.className === 'ghost');
     assert.deepEqual(small.map((b) => b.textContent), ['그래도 3D로 시도', '📋 진단 정보 복사']);
     small[0].onclick();
     assert.equal(tried, 1);
     undo();
     assert.equal(D.lt.textContent, '농장 준비 중…');
-    assert.deepEqual([D.bar, D.row, D.hint].map((e) => e.style.display), ['', '', '']);
+    assert.deepEqual([D.bar, D.row, D.hint, D.chips, D.keys].map((e) => e.style.display), ['', '', '', '', '']);
+    assert.ok(!D.card.classList.contains('boot-error'));
+    assert.equal(D.card.style.cssText, '');
     assert.equal(D.btn.textContent, '입장하기');
     assert.equal(D.btn.disabled, true);
-    assert.equal(D.card.children.length, 5, '더한 줄은 모두 지움');
+    assert.equal(D.card.children.length, 7, '더한 줄은 모두 지움');
     // 그 밖의 오류: [다시 시도] = 새로고침, 도트 링크는 그대로 둠, [그래도 3D] 없음
     const D2 = loadingCard();
     globalThis.document = D2.doc;
@@ -333,4 +353,64 @@ test('부팅 오류 카드: E-GL 은 큰 [도트(2.5D)] 단추 + 겹치는 작�
   } finally {
     [globalThis.document, globalThis.location] = keep;
   }
+});
+
+test('부팅 오류 카드 E-NET: 끊긴 동안 \'연결을 기다리는 중\' · 망이 돌아오면 새로고침 · 카드를 거두면(진행 재개) 듣기도 뗌', async () => {
+  const { bootErrorCard } = await import('../src/boot.js');
+  const D = loadingCard();
+  const on = {};
+  const keep = [globalThis.document, globalThis.location, globalThis.window, Object.getOwnPropertyDescriptor(globalThis, 'navigator')];
+  globalThis.document = D.doc;
+  globalThis.location = { reloads: 0, reload() { this.reloads++; } };
+  globalThis.window = { addEventListener: (k, f) => { (on[k] ||= new Set()).add(f); }, removeEventListener: (k, f) => on[k]?.delete(f) };
+  Object.defineProperty(globalThis, 'navigator', { value: { onLine: false, userAgent: 'test' }, configurable: true });
+  const fire = (k) => [...(on[k] || [])].forEach((f) => f());
+  try {
+    let undo = bootErrorCard('E-NET', Object.assign(new Error('x'), { code: 'E-NET' }));
+    assert.equal(D.lt.textContent, '농장을 불러오지 못했어요');
+    assert.equal(D.card.children[2].text, BOOT_ERR['E-NET'].sub, '끊긴 동안은 저절로 다시 한다고 알림');
+    const wait = D.card.all().find((n) => /연결을 기다리는 중/.test(n.textContent));
+    assert.equal(wait.style.display, '');
+    fire('online');
+    assert.equal(location.reloads, 1, '망이 돌아오면 저절로 다시');
+    // 잠깐 멈췄다가 다시 진행 → 카드를 거둠: 그 뒤 게임 중에 망이 끊겼다 돌아와도 새로고침하지 않음
+    undo();
+    assert.equal(on.online.size, 0);
+    fire('online');
+    assert.equal(location.reloads, 1);
+    // 망은 잡혀 있는데 받다가 멈춤: 저절로 다시 한다는 말은 빼고, 끊기면 그때 기다림 줄
+    navigator.onLine = true;
+    const D2 = loadingCard();
+    globalThis.document = D2.doc;
+    undo = bootErrorCard('E-NET', Object.assign(new Error('x'), { code: 'E-NET' }));
+    assert.equal(D2.card.children[2].text, BOOT_ERR['E-NET'].subOnline);
+    const wait2 = D2.card.all().find((n) => /연결을 기다리는 중/.test(n.textContent));
+    assert.equal(wait2.style.display, 'none');
+    fire('offline');
+    assert.equal(wait2.style.display, '');
+    undo();
+  } finally {
+    [globalThis.document, globalThis.location, globalThis.window] = keep;
+    if (keep[3]) Object.defineProperty(globalThis, 'navigator', keep[3]); else delete globalThis.navigator;
+  }
+});
+
+test('멈춘 창(다른 창·치명 오류)은 boot 가 startLoop 를 불러도 루프를 다시 켜지 않음', () => {
+  const startLoop = method('startLoop');
+  const set = [];
+  const g = { _stale: true, timer: { update() {} }, governor: { reset() {} }, renderer: { setAnimationLoop: (f) => set.push(f) } };
+  startLoop.call(g);
+  g._stale = false; g._crashed = true;
+  startLoop.call(g);
+  assert.deepEqual(set, []);
+  g._crashed = false;
+  startLoop.call(g);
+  assert.equal(set.length, 1);
+});
+
+test('치명 오류가 인트로 전(저장 안 함)이면 \'저장해 두었어요\' 라고 하지 않음', () => {
+  const shown = [];
+  const crashStop = method('crashStop', { showFatal: (k, o) => shown.push(o.saved) });
+  crashStop.call({ renderer: { setAnimationLoop() {} }, save: () => false });
+  assert.deepEqual(shown, [false]);
 });

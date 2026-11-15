@@ -77,6 +77,24 @@ test('응답 머리가 headMs 동안 안 오면 끊고 다시', async () => {
   assert.equal(calls.length, 2);
 });
 
+test('줄 선 요청: 다른 받기가 바이트를 받고 있으면 머리를 headMs 넘게 기다림 (한꺼번에 수십 개를 받을 때 끊지 않음)', async () => {
+  let i = 0;
+  // A: 30ms 마다 한 조각씩 약 240ms 동안 (멈춤 한도 40ms 안), B: 머리가 200ms 뒤에야 옴 (headMs 80ms 보다 늦음)
+  const slow = new ReadableStream({ async pull(c) { await new Promise((r) => setTimeout(r, 30)); if (i < 8) c.enqueue(BYTES.subarray(i, i + 1)); else c.close(); i++; } });
+  const calls = fake([
+    (u) => (u.includes('a.glb') ? new Response(slow) : new Promise((r) => setTimeout(() => r(ok()), 200))),
+  ]);
+  const [a, b] = await Promise.all([fetchModel('/models/a.glb'), new Promise((r) => setTimeout(r, 5)).then(() => fetchModel('/models/b.glb'))]);
+  same(a);
+  same(b);
+  assert.equal(calls.length, 2, '다시 받지 않음');
+  // 아무 받기도 진행이 없으면 예전처럼 headMs 뒤 끊음
+  await new Promise((r) => setTimeout(r, 60));
+  const c2 = fake([() => new Promise(() => {}), () => ok()]);
+  same(await fetchModel('/models/c.glb'));
+  assert.equal(c2.length, 2);
+});
+
 test('.gz: 받아서 풂 · .gz 가 404 면 원본 (쉬지 않음) · 망 오류면 .gz 를 다시 (마지막에만 원본)', async () => {
   const gz = gzipSync(Buffer.from(BYTES));
   let calls = fake([() => new Response(gz)]);

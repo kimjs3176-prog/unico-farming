@@ -5,6 +5,10 @@ export const BAK_KEY = `${KEY}.bak`;
 /** 읽지 못한 기록 원본 (처음 것은 그대로 두고, 그다음 것은 BROKEN_KEY2 에 덮어씀) — 새 농장이 덮어써도 남게 */
 export const BROKEN_KEY = `${KEY}.broken`;
 export const BROKEN_KEY2 = `${KEY}.broken2`;
+/** 치명 오류로 멈춘 뒤 표시: 다음 부팅이 오류 직전 기록을 .bak 으로 덮지 않게 (정상으로 한동안 놀면 지움) */
+export const CRASH_MARK = `${KEY}.crashed`;
+/** '여기서 이어 하기' 로 넘겨받은 창의 표시 (다른 창은 이 키가 바뀌면 멈춤) */
+export const OWNER_KEY = `${KEY}.owner`;
 let blocked = false; // 초기화(clearSave)·읽기 전용(새 버전 기록·다른 창) 뒤 저장 막음: 떠날 때 저장(숨김·pagehide)이 지운 농장을 되살리거나 덮어쓰지 않게
 let lastError = null; // 마지막 저장 실패 까닭: 'quota' | 'denied' | 'state' | 'other'
 let warned = false;
@@ -57,6 +61,7 @@ export function saveGame(game, opt = {}) {
       try { const cur = localStorage.getItem(KEY); if (cur && isObj(JSON.parse(cur))) localStorage.setItem(BAK_KEY, cur); } catch { /* 백업 없이 저장 */ }
     }
     localStorage.setItem(KEY, json);
+    if (opt.crash) { try { localStorage.setItem(CRASH_MARK, '1'); } catch { /* 표시 없이 */ } }
     lastError = null;
     return true;
   } catch (e) {
@@ -134,8 +139,22 @@ export function keepBroken(raw) {
   } catch { return false; }
 }
 
+/** 지난 접속이 치명 오류로 멈췄는지 */
+export function crashMarked() {
+  try { return localStorage.getItem(CRASH_MARK) === '1'; } catch { return false; }
+}
+/** 치명 오류 표시 지우기 (정상으로 놀았을 때) */
+export function clearCrashMark() {
+  try { localStorage.removeItem(CRASH_MARK); } catch { /* 무시 */ }
+}
+
+/** 이 창이 기록을 넘겨받았다고 알림 → 다른 창의 storage 이벤트로 그 창이 멈춤 */
+export function claimOwner(id) {
+  try { localStorage.setItem(OWNER_KEY, JSON.stringify({ id, t: Date.now() })); return true; } catch { return false; }
+}
+
 /** 초기화: 기록과 백업을 지움 (읽지 못한 원본 보관본은 남김) */
 export function clearSave() {
   blocked = true;
-  try { localStorage.removeItem(KEY); localStorage.removeItem(BAK_KEY); } catch {}
+  try { localStorage.removeItem(KEY); localStorage.removeItem(BAK_KEY); localStorage.removeItem(CRASH_MARK); } catch {}
 }

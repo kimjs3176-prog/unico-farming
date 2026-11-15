@@ -20,6 +20,12 @@ const VER = typeof __MODEL_V__ !== 'undefined' ? __MODEL_V__ : {};
 export const FETCH_RETRY = { waits: [1000, 3000], stallMs: 15000, headMs: 45000 };
 
 let retryCb = null;
+/**
+ * 어느 받기든 마지막으로 머리·바이트가 온 시각: 한꺼번에 수십 개를 받으면 뒤에 줄 선 요청은 연결을 기다리느라 늦게 시작함
+ * → 다른 받기가 아직 진행 중이면(stallMs 안에 바이트가 옴) 시계를 다시 맞춰 기다림
+ */
+let lastByteAt = 0;
+const nowMs = () => Date.now();
 /** 다시 받기 알림 받기 (부팅 화면의 '연결이 느려요…' 문구) — cb({ url, attempt, of, why }) */
 export function onFetchRetry(cb) { retryCb = cb; }
 
@@ -57,6 +63,8 @@ async function getOnce(u) {
   const arm = (ms, what) => {
     clearTimeout(timer);
     timer = setTimeout(() => {
+      const idle = nowMs() - lastByteAt;
+      if (idle < FETCH_RETRY.stallMs) { arm(FETCH_RETRY.stallMs - idle + 1, what); return; } // 다른 받기가 진행 중: 줄 서 있는 것일 수 있음
       kill(netError(`${u}: ${what}`));
       try { ac?.abort(); } catch { /* 무시 */ }
       try { reader?.cancel?.().catch?.(() => {}); } catch { /* 무시 */ }
@@ -68,6 +76,7 @@ async function getOnce(u) {
     let r;
     try { r = await Promise.race([fetch(u, ac ? { signal: ac.signal } : undefined), killed]); } // 주소·mode 는 그대로 (index.html 의 미리 받기 재사용)
     catch (e) { throw net(e); }
+    lastByteAt = nowMs();
     if (!r.ok) {
       try { r.body?.cancel?.().catch?.(() => {}); } catch { /* 무시 */ }
       if (r.status >= 500) throw netError(`${u}: ${r.status}`);
@@ -87,6 +96,7 @@ async function getOnce(u) {
       if (step.done) break;
       parts.push(step.value);
       size += step.value.byteLength;
+      lastByteAt = nowMs();
       arm(FETCH_RETRY.stallMs, '멈춤');
     }
     const one = parts[0];

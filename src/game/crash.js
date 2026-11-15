@@ -153,9 +153,12 @@ export async function copyDiag(note, box) {
   return false;
 }
 
+/** 안내 카드 그림: 첫 화면 배지와 같은 유니코 (못 불러오면 그림 글자) */
+export const OVERLAY_ICON = './portraits/cheer.webp';
+
 /**
  * 화면 전체 안내 카드 (순수 DOM, body 맨 위)
- * @param o { id, icon, title, body, actions: [{ label, run, ghost }] }
+ * @param o { id, iconSrc, icon(그림을 못 쓸 때), badge(오른쪽 아래 작은 글자), title, body, hint, actions: [{ label, run, link }] }
  */
 export function showOverlay(o) {
   const doc = globalThis.document;
@@ -171,19 +174,36 @@ export function showOverlay(o) {
   wrap.id = o.id;
   wrap.setAttribute('role', 'alertdialog');
   wrap.setAttribute('aria-modal', 'true');
-  const card = el('div', 'word-break:keep-all;overflow-wrap:anywhere;width:min(92vw,400px);max-height:calc(100% - 8px);overflow:auto;background:var(--panel,#fffaf0);border:4px solid var(--panel-edge,#ead9b8);border-radius:26px;padding:20px 22px;text-align:center;color:var(--ink,#231916);box-shadow:0 6px 0 rgba(107,74,46,0.18),0 12px 28px rgba(35,25,22,0.16)');
-  const title = el('h2', 'margin:2px 0 8px;font-size:23px;color:var(--teal-d,#299d93)', o.title);
+  // keep-all + break-word: 한글 낱말 가운데서 줄이 바뀌지 않게 (anywhere 는 글자 단위로 다시 끊음)
+  const card = el('div', 'word-break:keep-all;overflow-wrap:break-word;text-wrap:pretty;box-sizing:border-box;width:min(100%,400px);max-height:calc(100% - 8px);overflow:auto;background:var(--panel,#fffaf0);border:4px solid var(--panel-edge,#ead9b8);border-radius:26px;padding:20px 22px;text-align:center;color:var(--ink,#231916);box-shadow:0 6px 0 rgba(107,74,46,0.18),0 12px 28px rgba(35,25,22,0.16)');
+  const title = el('h2', 'margin:2px 0 8px;font-size:23px;line-height:1.3;color:var(--teal-d,#299d93);text-wrap:balance', o.title);
   title.id = `${o.id}-t`;
   wrap.setAttribute('aria-labelledby', title.id);
-  card.append(el('div', 'font-size:52px;line-height:1.1', o.icon || '🦄'), title);
+  // 동그란 크림색 틀 안의 유니코 + 작은 표시
+  const pic = el('div', 'position:relative;width:76px;height:76px;margin:0 auto 6px;border-radius:50%;background:var(--cream,#fff3d6);border:3px solid var(--panel-edge,#ead9b8);display:flex;align-items:center;justify-content:center;font-size:40px;line-height:1');
+  pic.setAttribute('aria-hidden', 'true');
+  const fallback = () => { pic.textContent = o.icon || '🦄'; if (badge) pic.append(badge); };
+  const badge = o.badge ? el('span', 'position:absolute;right:-6px;bottom:-4px;width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid var(--panel-edge,#ead9b8);display:flex;align-items:center;justify-content:center;font-size:17px', o.badge) : null;
+  if (o.iconSrc) {
+    const img = el('img', 'width:68px;height:68px;border-radius:50%;object-fit:cover');
+    img.alt = '';
+    img.onerror = fallback;
+    img.src = o.iconSrc;
+    pic.append(img);
+    if (badge) pic.append(badge);
+  } else fallback();
+  card.append(pic, title);
   if (o.body) card.append(el('p', 'margin:0 0 12px;color:var(--brown,#6b4a2e);line-height:1.55;font-size:15px', o.body));
   const note = el('p', 'margin:8px 0 0;color:#8a7a66;font-size:13px;line-height:1.5;min-height:0');
   for (const a of o.actions || []) {
-    const b = el('button', 'display:block;width:100%;margin-top:8px;font-size:17px;padding:11px', a.label);
-    if (a.ghost) b.className = 'ghost';
+    // link: 작은 글자 단추 (첫 화면의 점선 링크처럼) — 큰 단추 하나만 눈에 띄게
+    const b = a.link
+      ? el('button', 'display:inline-block;margin:10px auto 0;background:none;border:0;box-shadow:none;padding:6px 8px;font-size:13px;color:#8a7a66;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer', a.label)
+      : el('button', 'display:block;width:100%;margin-top:8px;font-size:17px;padding:11px', a.label);
     b.onclick = () => a.run(note, card);
     card.append(b);
   }
+  if (o.hint) card.append(el('p', 'margin:10px 0 0;color:#8a7a66;font-size:13px', o.hint));
   card.append(note);
   wrap.append(card);
   doc.body.append(wrap);
@@ -196,14 +216,16 @@ export function showFatal(kind = 'loop', { saved = true } = {}) {
   const boot = kind === 'boot';
   return showOverlay({
     id: 'unico-fatal',
-    icon: '🦄💦',
+    iconSrc: OVERLAY_ICON,
+    icon: '🦄',
+    badge: '💦',
     title: boot ? '앗, 농장을 여는 중에 문제가 생겼어요' : '앗, 문제가 생겼어요',
     body: boot ? '다시 시작하면 대부분 해결돼요. 농장 기록은 그대로예요.'
       : saved ? '농장은 저장해 두었어요. 다시 시작하면 이어서 할 수 있어요.'
         : '마지막 자동 저장까지의 농장은 남아 있어요. 다시 시작해 주세요.',
     actions: [
       { label: '🔄 다시 시작', run: () => globalThis.location.reload() },
-      { label: '📋 진단 정보 복사', ghost: true, run: (note, card) => copyDiag(note, card) },
+      { label: '📋 진단 정보 복사', link: true, run: (note, card) => copyDiag(note, card) },
     ],
   });
 }

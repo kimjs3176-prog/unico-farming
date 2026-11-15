@@ -189,7 +189,7 @@ class Game {
 
   /** 셰이더 미리 준비가 끝난 뒤 boot() 에서 시작: 로딩 화면 뒤에서 첫 렌더가 셰이더를 동기로 컴파일하거나 로직이 먼저 돌지 않게 */
   startLoop() {
-    if (this._looping) return;
+    if (this._looping || this._stale || this._crashed) return; // 멈춘 창(다른 창·오류)은 boot 가 불러도 다시 돌지 않음
     this._looping = true;
     this.timer.update(); // 첫 프레임 dt 에 로딩 시간이 들어가지 않게
     this.governor.reset();
@@ -315,6 +315,7 @@ class Game {
   /** 프레임 오류: 기록하고, 처음 보는 오류면 한 번 다시 알림 (콘솔·화면 점검이 보게) — 게임은 다음 프레임에 계속 */
   frameError(e, where) {
     this._bad = true;
+    this._lastBadAt = Date.now(); // 치명 오류 표시를 지울 때 (한동안 오류 없이 놀았는지)
     if (where === 'render') { try { this.renderer.setRenderTarget(null); } catch { /* 다음 프레임에 */ } } // 후처리 중간에 멈췄을 수 있음
     try { if (record(e, where)) rethrowLater(e); } catch { /* 기록 없이 계속 */ }
   }
@@ -326,7 +327,7 @@ class Game {
     try { this.renderer.setAnimationLoop(null); } catch { /* 이미 멈춤 */ }
     this._looping = false;
     let saved = false;
-    try { saved = this.save({ crash: true }) !== false; } catch { /* 저장 실패 */ }
+    try { saved = this.save({ crash: true }) === true; } catch { /* 저장 실패 */ } // 인트로 전(저장 안 함)은 false
     try { this.music?.pause?.(); this.audio?.sleep?.(); } catch { /* 소리 없이 */ }
     showFatal('loop', { saved });
   }
