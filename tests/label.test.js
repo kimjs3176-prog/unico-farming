@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { makeLabel, whenFontReady, LABELS, registerLabel, overlapFade, visibleLabels, declutterLabels, setHeroLabel, labelRect, LABEL_FADE } from '../src/game/label.js';
+import { makeLabel, whenFontReady, LABELS, registerLabel, overlapFade, visibleLabels, declutterLabels, setHeroLabel, labelRect, LABEL_FADE, LABEL_OCC, setLabelOccluders, segHitsBox } from '../src/game/label.js';
 
 // 가짜 캔버스: 글꼴을 받기 전에는 글자 폭이 좁고(대체 글꼴), 받은 뒤에는 넓어짐
 function fakeDom({ loaded = false, check = true } = {}) {
@@ -196,4 +196,71 @@ test('흐림 배율: 거리 때문에 거의 투명해진 이름표는 앞에 �
   for (let i = 0; i < 20; i++) declutterLabels([ghost, pet], cam, 1200, 800, 1 / 60);
   assert.ok(pet.userData.fadeMul < 0.36, '보이는 이름표가 앞을 가리면 흐려짐');
   ghost.userData.dispose(); pet.userData.dispose();
+});
+
+test('이름표 목록: dispose 없이 부모에서 떼어 버린 이름표(쫓겨난 까마귀의 ❗ 등)는 목록에서 빠지고, 다시 붙이면 다시 들어감', () => {
+  fakeDom({ loaded: true });
+  const n0 = LABELS.size, root = new THREE.Group();
+  for (let i = 0; i < 20; i++) { const m = makeLabel('❗'); root.add(m); root.remove(m); } // pests.js _flee 와 같은 모양
+  assert.equal(LABELS.size, n0, '떼어 버린 것이 쌓이지 않음');
+  const m = makeLabel('❗');
+  root.add(m); root.remove(m);
+  assert.ok(!LABELS.has(m));
+  root.add(m);
+  assert.ok(LABELS.has(m), '다시 붙이면 다시 그림 대상');
+  const c = registerLabel(m.clone());
+  root.add(c); root.remove(c);
+  assert.ok(!LABELS.has(c), '복제한 것도 떼면 빠짐 (userData 복사로 추적이 빠지지 않음)');
+  m.userData.dispose();
+  root.remove(m); root.add(m);
+  assert.ok(!LABELS.has(m), '치운 것은 다시 붙여도 들어가지 않음');
+  assert.equal(LABELS.size, n0);
+  delete globalThis.document;
+});
+
+test('건물 뒤 이름표: 카메라→이름표 선이 큰 건물 상자를 지나면 0.35 로 (0.2초마다 잼), 내 이름표·작은 소품·집 안 화면은 그대로', () => {
+  fakeDom({ loaded: true });
+  const cam = new THREE.PerspectiveCamera(45, 1.5, 0.1, 100);
+  cam.position.set(0, 3, 12); cam.lookAt(0, 2, 0); cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+  const scene = new THREE.Scene(), a = new THREE.Group(), b = new THREE.Group(), me = new THREE.Group();
+  scene.add(a, b, me);
+  const behind = makeLabel('🔬 연구원 너구리'), open = makeLabel('🛒 장터 여우'), hero = makeLabel('나');
+  a.add(behind); b.add(open); me.add(hero);
+  behind.position.set(0, 2.3, -4); open.position.set(6, 2.3, -4); hero.position.set(0, 2.3, 8);
+  scene.updateMatrixWorld(true);
+  // 집(4×4m, 높이 4m)이 카메라와 너구리 사이, 작은 상자(울타리)·낮은 상자는 셈하지 않음
+  setLabelOccluders([{ x: 0, z: 0, hx: 2, hz: 2, h: 4.5 }, { x: 6, z: 0, hx: 0.5, hz: 0.5, h: 3 }, { x: 6, z: 1, hx: 3, hz: 3, h: 1 }]);
+  setHeroLabel(hero);
+  for (let i = 0; i < 30; i++) declutterLabels([behind, open, hero], cam, 1200, 800, 1 / 60); // 재기(0.2초) + 흐려지기(150ms)
+  assert.ok(Math.abs(behind.userData.fadeMul - LABEL_OCC.mul) < 0.02, `가려진 이름표 ${behind.userData.fadeMul}`);
+  assert.ok(open.userData.fadeMul > 0.98, '트인 이름표는 또렷');
+  assert.equal(hero.userData.fadeMul ?? 1, 1, '내 이름표는 재지 않음');
+  // 너구리가 건물 앞으로 나오면 (다음 재기 때) 다시 또렷
+  behind.position.set(0, 2.3, 4); scene.updateMatrixWorld(true);
+  for (let i = 0; i < 30; i++) declutterLabels([behind, open, hero], cam, 1200, 800, 1 / 60);
+  assert.ok(behind.userData.fadeMul > 0.98);
+  // 카메라가 건물 안(집 안 화면)이면 가리지 않음
+  assert.equal(segHitsBox(0, 2, 0, 0, 2.3, -6, { x0: -2, x1: 2, z0: -2, z1: 2, h: 4 }), false);
+  assert.equal(segHitsBox(0, 2, 8, 0, 2.3, -6, { x0: -2, x1: 2, z0: -2, z1: 2, h: 4 }), true);
+  assert.equal(segHitsBox(0, 9, 8, 0, 2.3, -6, { x0: -2, x1: 2, z0: -2, z1: 2, h: 4 }), false, '지붕 위로 지나면 안 가림');
+  setLabelOccluders([]); setHeroLabel(null);
+  for (const l of [behind, open, hero]) l.userData.dispose();
+  delete globalThis.document;
+});
+
+test('겹침 정리: 사각형은 주어진 객체에 채우고, overlapFade 는 받은 배열을 그대로 돌려줌 (매 프레임 새 객체·배열을 만들지 않게)', () => {
+  fakeDom({ loaded: true });
+  const cam = new THREE.PerspectiveCamera(45, 1.5, 0.1, 100);
+  cam.position.set(0, 2, 8); cam.lookAt(0, 2, 0); cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+  const scene = new THREE.Scene(), ls = [];
+  for (let i = 0; i < 6; i++) { const g = new THREE.Group(), l = makeLabel(`주민 ${i}`); g.add(l); l.position.set(i * 0.4, 2.2, 0); scene.add(g); ls.push(l); }
+  scene.updateMatrixWorld(true);
+  const pool = ls.map(() => ({}));
+  const rects = ls.map((l, i) => labelRect(l, cam, 1200, 800, pool[i]));
+  rects.forEach((r, i) => { assert.equal(r, pool[i]); r.tag = true; r.pri = 0; r.group = i; });
+  assert.equal(overlapFade(rects), rects);
+  assert.ok(rects.some((r) => r.fade) && rects.some((r) => !r.fade));
+  for (let i = 0; i < 5; i++) declutterLabels(ls, cam, 1200, 800, 1 / 60);
+  for (const l of ls) l.userData.dispose();
+  delete globalThis.document;
 });

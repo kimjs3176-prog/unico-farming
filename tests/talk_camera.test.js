@@ -7,7 +7,7 @@ const ctx = new Proxy({ measureText: () => ({ width: 60 }), createRadialGradient
 const el = () => ({ className: '', innerHTML: '', style: {}, classList: { add() {}, remove() {}, contains: () => false }, querySelector: () => ({}), append() {}, getContext: () => ctx });
 globalThis.document ??= { createElement: el, getElementById: el, body: el() };
 globalThis.innerHeight ??= 800;
-const { NPCs } = await import('../src/game/view/npcs.js');
+const { NPCs, TALK_FRAME, talkBoxTop } = await import('../src/game/view/npcs.js');
 const { Cinematics, speakerShot, cheatYaw, facingAngle, liftFor, hudFrac, ndcX, talkShot } = await import('../src/game/cutscene.js');
 const { SPECIES, SPECIES_IDS } = await import('../src/game/species.js');
 const { fovFor } = await import('../src/game/camera.js');
@@ -58,6 +58,53 @@ test('앞모습 대화 구도: 주민 6종 × 다가온 방향 8곳 × 가로·�
     }
     assert.ok((1 - top.y) / 2 > hud - 0.04, `${tag}: 주민 머리 끝이 위 HUD 에 덜 가림 (${((1 - top.y) / 2).toFixed(2)})`);
     assert.ok(Math.abs(s.x - l.x) / 2 >= 0.15, `${tag}: 두 얼굴 간격 ${(Math.abs(s.x - l.x) / 2).toFixed(2)}`);
+  }
+});
+
+test('앞모습 구도 화면 검사: 주민 턱이 이름 칩보다 0.04 위, 내 몸은 좁고(가로 28%·세로 폰 40%) 화면 끝에 40% 넘게 잘리지 않음, 낮은 가로폰은 얼굴이 창 위로 12%', () => {
+  const H0 = globalThis.innerHeight;
+  try {
+    for (const sp of SPECIES_IDS) for (let k = 0; k < 8; k++) for (const [name, { aspect, h }] of Object.entries(ASPECTS)) {
+      globalThis.innerHeight = h;
+      const e = entry(sp, 2, -3), S = e.u.group.position, a = (k * 45 + 10) * DEG, sc = e.u.scale;
+      const L = { x: S.x + Math.sin(a) * 1.9, z: S.z + Math.cos(a) * 1.9 };
+      const camera = new THREE.PerspectiveCamera(fovFor(aspect), aspect, 0.1, 600);
+      camera.position.set(L.x + Math.sin(a + 0.5) * 8, 4.5, L.z + Math.cos(a + 0.5) * 8);
+      const shot = npcsWith(camera).talkCamera(L, S, e, { front: true });
+      const tag = `${sp} ${k * 45 + 10}° ${name} (${(shot.theta / DEG).toFixed(0)}° ${shot.dist.toFixed(1)}m)`;
+      assert.ok(shot.front && shot.fit, `${tag}: 검사를 통과한 앞모습`);
+      assert.ok(shot.dist <= 6.5 + 1e-9, `${tag}: 6.5m 안`);
+      // 렌즈 올림까지 넣은 실제 화면 (대화창 윗변은 선택지 5개 + 설명 줄일 때)
+      const box = talkBoxTop(aspect, h), cam = viewCam(shot, aspect, liftFor(box, hudFrac(h)));
+      const yFrac = (y) => (1 - proj(cam, S, y).y) / 2;
+      const chin = yFrac(1.3 * sc - 0.25 * sc);
+      assert.ok(chin <= box - TALK_FRAME.chip / h - 0.04 + 1e-9, `${tag}: 턱 ${chin.toFixed(3)} / 이름 칩 ${(box - TALK_FRAME.chip / h).toFixed(3)}`);
+      if (aspect > 1 && h <= 500) assert.ok(box - yFrac(1.3 * sc) >= 0.12 - 1e-9, `${tag}: 낮은 가로폰 얼굴 여유`);
+      // 내 몸 (가로 ±heroR, 높이 0.2~1.85m) 의 화면 가로 범위
+      const right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).setY(0).normalize().multiplyScalar(TALK_FRAME.heroR);
+      let x0 = Infinity, x1 = -Infinity;
+      for (const sgn of [-1, 1]) for (const y of [0.2, 1.85]) { const v = new THREE.Vector3(L.x + right.x * sgn, y, L.z + right.z * sgn).project(cam); x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x); }
+      const w = (x1 - x0) / 2, clip = (Math.max(0, x1 - 1) + Math.max(0, -1 - x0)) / (x1 - x0);
+      if (clip < 0.999) {
+        assert.ok(w <= (aspect < 1 ? 0.4 : 0.28) + 1e-9, `${tag}: 내 몸 너비 ${w.toFixed(2)}`);
+        assert.ok(clip <= 0.4 + 1e-9, `${tag}: 내 몸 잘림 ${clip.toFixed(2)}`);
+      }
+    }
+  } finally { globalThis.innerHeight = H0; }
+});
+
+test('앞모습 구도 화면 검사: 가까우면 턱이 대화창에 붙으므로 물러남 (가로 화면 큰 대화창), 검사를 통과한 후보가 가리면 통과 못 한 트인 후보', () => {
+  const camera = new THREE.PerspectiveCamera(45, 1.6, 0.1, 600);
+  camera.position.set(-3, 4, 10);
+  const e = entry('bear'), S = e.u.group.position, L = { x: 0, z: 1.9 };
+  const self = npcsWith(camera);
+  const near = speakerShot(L, S, -1, { theta: 35 * DEG, D: 3.2, maxD: 3.2, fov: 45, aspect: 1.6, faceS: 1.3, camY: 1.6, lookY: 1.265 });
+  const m = self.talkFrame(near, L, S, 1, 1.6, 45, 800);
+  assert.ok(m.chinGap < TALK_FRAME.room || m.heroW > TALK_FRAME.heroW, '3.2m 는 너무 가까움');
+  for (const s of self._frontShots(L, S, e)) {
+    const f = self.talkFrame(s, L, S, 1, 1.6, 45, 800);
+    assert.equal(s.fit, self._frameOk(f, 1.6, 800));
+    if (s.fit) assert.ok(f.chinGap >= TALK_FRAME.room && f.heroW <= TALK_FRAME.heroW);
   }
 });
 
@@ -212,4 +259,56 @@ test('주민과 대화: 앞모습 구도 + 렌즈 올림 + 몸 방향 살짝, �
   assert.equal(e.u.faceLock, null, '오류가 나도 풂');
   assert.equal(cin.want, 0);
   assert.equal(cin.liftWant, 0);
+});
+
+test('반려견 돌보기 구도: 앞 2m 안이나 시선에 나무·기둥이 걸리면 다른 각도(60°→75°→40°, 양쪽), 모두 가리면 가장 덜 가리는 것', async () => {
+  const { Pet, petShotBlock } = await import('../src/game/view/pet.js');
+  const camera = new THREE.PerspectiveCamera(45, 1.6, 0.1, 600);
+  const P = new THREE.Vector3(0, 0, 0), me = new THREE.Vector3(0, 0, 1.3);
+  camera.position.set(-3, 4, 8);
+  const world = { obstacles: [], boxes: [] };
+  const pet = Object.assign(Object.create(Pet.prototype), { game: { camera, world } });
+  const s0 = pet._careShot(me, P, -1);
+  assert.equal(s0.theta, 60 * DEG);
+  assert.equal(s0.block, 0);
+  // 첫 구도 카메라 앞 1.3m 오른쪽 가장자리에 나무 줄기 (스크린샷의 검은 줄기)
+  const fx = s0.look[0] - s0.pos[0], fz = s0.look[2] - s0.pos[2], fl = Math.hypot(fx, fz);
+  const ux = fx / fl, uz = fz / fl, tanH = Math.tan(22.5 * DEG) * 1.6;
+  world.obstacles.push({ x: s0.pos[0] + ux * 1.3 - uz * 0.8 * 1.3 * tanH, z: s0.pos[2] + uz * 1.3 + ux * 0.8 * 1.3 * tanH, r: 0.35 });
+  assert.ok(petShotBlock(s0, P, me, world, 45, 1.6) > 0, '줄기가 걸림');
+  const s1 = pet._careShot(me, P, -1);
+  assert.equal(s1.block, 0, '안 걸리는 후보');
+  assert.notDeepEqual(s1.pos, s0.pos);
+  // 콩이·내 곁(0.6m 안)의 물체는 셈하지 않음 (울타리 옆에서 돌보기)
+  world.obstacles.length = 0;
+  world.obstacles.push({ x: 0.3, z: 0.2, r: 0.2 });
+  assert.equal(pet._careShot(me, P, -1).block, 0);
+  // 사방이 막히면 가장 덜 막힌 것 (첫 순서 우선)
+  world.obstacles.length = 0;
+  world.boxes.push({ x0: -20, x1: 20, z0: -20, z1: -1.5 }, { x0: -20, x1: 20, z0: 2.8, z1: 20 }, { x0: -20, x1: -1.5, z0: -20, z1: 20 }, { x0: 1.5, x1: 20, z0: -20, z1: 20 });
+  const s3 = pet._careShot(me, P, -1);
+  assert.ok(s3.block > 0 && Number.isFinite(s3.pos[0]));
+});
+
+test('렌즈 올림: 올린 대화 바로 뒤 컷신 샷(올림 없음)은 남은 올림을 3배 빨리 걷음', () => {
+  const mk = () => {
+    const camera = new THREE.PerspectiveCamera(45, 1.6, 0.1, 600);
+    camera.position.set(0, 6, 10); camera.lookAt(0, 0, 0);
+    const cin = new Cinematics({ camera, followCam: { smooth: new THREE.Vector3() } }, { append() {} });
+    cin.shot([3, 1.6, 3], [0, 1.25, 0.5], 0.01, { lift: true });
+    for (let i = 0; i < 90; i++) cin.update(1 / 30);
+    return { cin, camera };
+  };
+  const off = (c) => (c.view?.enabled ? c.view.offsetY / c.view.fullHeight : 0);
+  const a = mk(), b = mk();
+  const v0 = off(a.camera);
+  assert.ok(v0 > 0.1);
+  a.cin.release(); a.cin.shot([3, 2, 3], [0, 1, 0], 0.5); // 대화 끝 → 바로 컷신
+  b.cin.shot([3, 1.6, 3], [0, 1.25, 0.5], 0.5, { lift: 0.0001 }); // 비교: 보통 빠르기로 줄어드는 것
+  b.cin._liftFast = false; b.cin.liftWant = 0;
+  for (let i = 0; i < 6; i++) { a.cin.update(1 / 30); b.cin.update(1 / 30); }
+  assert.ok(off(a.camera) < off(b.camera) * 0.5, `빨리 걷힘 ${off(a.camera).toFixed(3)} < ${off(b.camera).toFixed(3)}`);
+  for (let i = 0; i < 30; i++) a.cin.update(1 / 30);
+  assert.ok(!a.camera.view?.enabled, '다 걷히면 지움');
+  assert.equal(a.cin._liftFast, false);
 });

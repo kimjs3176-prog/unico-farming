@@ -14,6 +14,28 @@ import { speakerShot, cheatYaw } from '../cutscene.js';
  */
 const PET_SHOT = { theta: (60 * Math.PI) / 180, D: 2.4, maxD: 3.4, camY: 0.9, lookY: 0.45, lookMix: 0.15, faceS: 0.45, faceL: null };
 const PET_CHEAT = (50 * Math.PI) / 180, ME_CHEAT = (12 * Math.PI) / 180;
+/** 돌보기 구도 후보 각도: 60° 먼저 (지금 카메라 쪽 → 반대쪽), 그다음 75°·40°. 앞 2m 안 화면(3×3 칸)이나 카메라→콩이 선에 나무·기둥이 걸리면 다음 후보 */
+const PET_THETA = [60, 75, 40].map((d) => (d * Math.PI) / 180);
+const PET_NEAR = [0.6, 1.3, 2.0], PET_NEAR_X = [-0.85, 0, 0.85];
+
+/**
+ * 돌보기 구도가 얼마나 가리나 (0 = 깨끗): world.obstacles(원)·boxes(상자) 로 봄. 콩이·나 0.6m 안의 것은 셈하지 않음
+ *  - 카메라→콩이 얼굴 선(0.25m 마다)에 걸리면 칸마다 2, 카메라 앞 2m 안 화면 3×3 칸(깊이 3 × 가로 3)에 걸리면 1, 카메라가 안에 있으면 3
+ */
+export function petShotBlock(shot, dog, me, world, fov = 45, aspect = 1.6) {
+  if (!world) return 0;
+  const far = (o) => Math.hypot(o.x - dog.x, o.z - dog.z) > 0.6 + o.r && Math.hypot(o.x - me.x, o.z - me.z) > 0.6 + o.r;
+  const obs = (world.obstacles || []).filter(far), boxes = world.boxes || [];
+  const inside = (x, z, pad = 0.1) => obs.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + pad) || boxes.some((b) => x > b.x0 - pad && x < b.x1 + pad && z > b.z0 - pad && z < b.z1 + pad);
+  const [cx, , cz] = shot.pos;
+  let n = inside(cx, cz) ? 3 : 0;
+  const L = Math.hypot(dog.x - cx, dog.z - cz), steps = Math.max(2, Math.ceil((L * 0.9) / 0.25));
+  for (let i = 1; i <= steps; i++) { const t = (i / steps) * 0.9; if (inside(cx + (dog.x - cx) * t, cz + (dog.z - cz) * t)) n += 2; }
+  const fx = shot.look[0] - cx, fz = shot.look[2] - cz, fl = Math.hypot(fx, fz) || 1, ux = fx / fl, uz = fz / fl;
+  const tanH = Math.tan(((fov * Math.PI) / 180) / 2) * aspect;
+  for (const z of PET_NEAR) for (const u of PET_NEAR_X) if (inside(cx + ux * z - uz * u * z * tanH, cz + uz * z + ux * u * z * tanH, 0)) n++;
+  return n;
+}
 
 /**
  * 반려견 '콩이' (CC0 Quaternius 시바견, 뼈대 애니메이션)
@@ -184,6 +206,19 @@ export class Pet {
     this.sim.affection = Math.min(100, this.sim.affection + 2);
   }
 
+  /** 돌보기 구도: 후보(PET_THETA × 지금 쪽·반대쪽) 중 가림이 없는 첫 것, 모두 가리면 가장 덜 가리는 것 (같으면 앞 순서 = 60° 지금 쪽) */
+  _careShot(pp, p, here) {
+    const cam = this.game.camera;
+    let best = null;
+    for (const theta of PET_THETA) for (const side of [here, -here]) {
+      const s = speakerShot(pp, p, side, { ...PET_SHOT, theta, fov: cam.fov, aspect: cam.aspect });
+      s.block = petShotBlock(s, p, pp, this.game.world, cam.fov, cam.aspect);
+      if (!s.block) return s;
+      if (!best || s.block < best.block) best = s;
+    }
+    return best;
+  }
+
   /**
    * 돌보기 대화: 쓰다듬기 · 간식/작물 주기 · 재주(따로 고르는 목록) · 이름 짓기
    * 카메라는 콩이를 3/4 앞에서 낮게 (선택지를 줄여 대화창 위에 콩이가 보이게)
@@ -194,7 +229,7 @@ export class Pet {
     const p = this.e.m.position, pp = g.player.position, cam = g.camera;
     const fx = pp.x - p.x, fz = pp.z - p.z, d = Math.hypot(fx, fz) || 1;
     const side = (cam.position.x - p.x) * (-fz / d) + (cam.position.z - p.z) * (fx / d) >= 0 ? 1 : -1; // 지금 카메라 쪽
-    const shot = speakerShot(pp, p, side, { ...PET_SHOT, fov: cam.fov, aspect: cam.aspect });
+    const shot = this._careShot(pp, p, side);
     this.e.m.rotation.y = cheatYaw(p, pp, shot.pos, PET_CHEAT);
     g.player.unico.facing = cheatYaw(pp, p, shot.pos, ME_CHEAT);
     g.cinema.shot(shot.pos, shot.look, 0.8, { lift: true });

@@ -8,8 +8,19 @@ const FAMILY = `'Unico Coin', Jua, "Noto Sans KR", "Apple SD Gothic Neo", "Malgu
  * makeLabel 이 넣고 dispose 가 뺌. 이름표를 .clone() 한 것은 registerLabel 로 넣어야 함 (안 넣으면 화면 효과 안에서 그대로 그려짐)
  */
 export const LABELS = new Set();
+/**
+ * 목록에 넣고, 부모에서 떼면(remove) 빼고 다시 붙이면(add) 다시 넣음 → dispose 없이 떼어 버린 이름표가 목록에 남아 쌓이지 않음
+ * (조상째 떼면 그대로 남으므로 버릴 때는 userData.dispose 를 부르는 것이 맞음)
+ */
+const TRACKED = new WeakSet(), DEAD = new WeakSet(); // userData 는 .clone() 때 복사되므로 따로 둠
 export function registerLabel(sprite) {
+  if (DEAD.has(sprite)) return sprite;
   LABELS.add(sprite);
+  if (!TRACKED.has(sprite)) {
+    TRACKED.add(sprite);
+    sprite.addEventListener?.('removed', () => LABELS.delete(sprite));
+    sprite.addEventListener?.('added', () => { if (!DEAD.has(sprite)) LABELS.add(sprite); });
+  }
   return sprite;
 }
 
@@ -87,8 +98,8 @@ export function makeLabel(text, { color = '#ffffff', bg = 'rgba(35,25,22,0.75)',
   sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
   sprite.renderOrder = 999;
   sprite.userData.tag = !clear; // 배경 있는 이름표만 겹침 정리 대상
-  sprite.userData.dispose = () => { dead = true; LABELS.delete(sprite); tex.dispose(); mat.dispose(); };
-  LABELS.add(sprite);
+  sprite.userData.dispose = () => { dead = true; DEAD.add(sprite); LABELS.delete(sprite); tex.dispose(); mat.dispose(); };
+  registerLabel(sprite);
   whenFontReady(font, text, () => { if (!dead) draw(); }); // 한글 조각이 늦게 오면 받은 뒤 다시 그림
   return sprite;
 }
@@ -122,21 +133,28 @@ export const LABEL_FADE = { mul: 0.3, tau: 0.05, enter: 2, leave: 4 };
  * 이미 잡힌 자리에 겹치면 fade = true. 같은 캐릭터의 이름표·말풍선·아이콘끼리는 비교하지 않음 (group)
  * rects: [{ x0, y0, x1, y1, pri, depth, group, tag, fade }] (px) → 같은 배열 (fade 채움)
  */
+const _order = [], _placed = [];
+const byPri = (a, b) => b.pri - a.pri || a.depth - b.depth;
 export function overlapFade(rects, { enter = LABEL_FADE.enter, leave = LABEL_FADE.leave } = {}) {
-  const order = rects.filter((r) => r.tag).sort((a, b) => b.pri - a.pri || a.depth - b.depth);
-  const placed = [];
-  for (const r of rects) if (!r.tag) r.fade = false;
+  // 매 프레임 도는 것이라 새 배열을 만들지 않음 (저사양 폰 가비지 줄이기)
+  const order = _order, placed = _placed;
+  order.length = 0; placed.length = 0;
+  for (const r of rects) { if (r.tag) order.push(r); else r.fade = false; }
+  order.sort(byPri);
   for (const r of order) {
     const pad = r.fade ? leave : -enter;
-    r.fade = placed.some((p) => p.group !== r.group && r.x0 - pad < p.x1 && r.x1 + pad > p.x0 && r.y0 - pad < p.y1 && r.y1 + pad > p.y0);
-    if (!r.fade) placed.push(r);
+    let hit = false;
+    for (const p of placed) if (p.group !== r.group && r.x0 - pad < p.x1 && r.x1 + pad > p.x0 && r.y0 - pad < p.y1 && r.y1 + pad > p.y0) { hit = true; break; }
+    r.fade = hit;
+    if (!hit) placed.push(r);
   }
+  order.length = 0; placed.length = 0;
   return rects;
 }
 
 const _c = new THREE.Vector3(), _s = new THREE.Vector3(), _v = new THREE.Vector3();
-/** 스프라이트의 화면 사각형(px, 위가 0). 카메라 뒤면 null */
-export function labelRect(sprite, camera, W, H) {
+/** 스프라이트의 화면 사각형(px, 위가 0). 카메라 뒤면 null. out 을 주면 그 객체에 채움 */
+export function labelRect(sprite, camera, W, H, out = {}) {
   const e = sprite.matrixWorld.elements;
   _c.set(e[12], e[13], e[14]).applyMatrix4(camera.matrixWorldInverse);
   if (_c.z > -(camera.near || 0.1)) return null;
@@ -145,20 +163,67 @@ export function labelRect(sprite, camera, W, H) {
   _v.set(_c.x - hx, _c.y - hy, _c.z).applyMatrix4(camera.projectionMatrix);
   const x0 = (_v.x + 1) * W / 2, y1 = (1 - _v.y) * H / 2;
   _v.set(_c.x + hx, _c.y + hy, _c.z).applyMatrix4(camera.projectionMatrix);
-  return { x0, x1: (_v.x + 1) * W / 2, y0: (1 - _v.y) * H / 2, y1, depth: -_c.z };
+  out.x0 = x0; out.x1 = (_v.x + 1) * W / 2; out.y0 = (1 - _v.y) * H / 2; out.y1 = y1; out.depth = -_c.z;
+  return out;
+}
+
+/**
+ * 가림막: 건물처럼 큰 고정 물체의 상자 [{ x, z, hx, hz, h, y0? }] (world.placed 와 같은 모양, 바닥 y0(없으면 0) ~ 그 위 높이 h).
+ * 카메라→이름표 선이 이 상자를 지나면 그 이름표를 흐리게 (건물 뒤 주민 이름표가 건물 위에 떠 보이지 않게). npcs.js 가 한 번 알려 줌
+ */
+let OCCLUDERS = [];
+export function setLabelOccluders(list) {
+  OCCLUDERS = (list || []).filter((o) => o.collide !== false && o.h > 2 && Math.max(o.hx, o.hz) > 1.75)
+    .map((o) => ({ x0: o.x - o.hx + 0.2, x1: o.x + o.hx - 0.2, z0: o.z - o.hz + 0.2, z1: o.z + o.hz - 0.2, y0: o.y0 || 0, h: (o.y0 || 0) + o.h * 0.92 }));
+}
+/** 가림막에 가려 흐려질 때 불투명도 배율, 다시 재는 간격(초) */
+export const LABEL_OCC = { mul: 0.35, every: 0.2 };
+
+/** 선분 (ox,oy,oz)→(tx,ty,tz) 가 끝 3% 앞에서 상자를 지나나 (시작점이 상자 안이면 아님: 집 안에서 보는 화면) */
+export function segHitsBox(ox, oy, oz, tx, ty, tz, b) {
+  const y0 = b.y0 || 0;
+  if (ox > b.x0 && ox < b.x1 && oz > b.z0 && oz < b.z1 && oy < b.h && oy > y0) return false;
+  let t0 = 0, t1 = 0.97;
+  const d = [tx - ox, ty - oy, tz - oz], o = [ox, oy, oz], lo = [b.x0, y0, b.z0], hi = [b.x1, b.h, b.z1];
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(d[i]) < 1e-9) { if (o[i] < lo[i] || o[i] > hi[i]) return false; continue; }
+    let a = (lo[i] - o[i]) / d[i], z = (hi[i] - o[i]) / d[i];
+    if (a > z) { const t = a; a = z; z = t; }
+    if (a > t0) t0 = a;
+    if (z < t1) t1 = z;
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+let _occT = 0;
+/** 이름표마다 가림 여부(userData.occ)를 다시 잼 (내 이름표는 빼고) */
+function updateOcclusion(shown, camera) {
+  const p = camera.matrixWorld.elements, ox = p[12], oy = p[13], oz = p[14];
+  for (const s of shown) {
+    const u = s.userData;
+    if (s === HERO || !OCCLUDERS.length) { u.occ = false; continue; }
+    const e = s.matrixWorld.elements;
+    let hit = false;
+    for (const b of OCCLUDERS) if (segHitsBox(ox, oy, oz, e[12], e[13], e[14], b)) { hit = true; break; }
+    u.occ = hit;
+  }
 }
 
 /**
  * 화면에 보이는 이름표들의 흐림 배율(userData.fadeMul)을 맞춤: 다른 이름표(반려견·주민·다른 접속자)가 내 이름표나 더 가까운 이름표에
- * 겹치면 150ms 동안 0.3 으로, 비키면 다시 1. 내 이름표가 이미 흐리면(주민 뒤를 가릴 때, npcs.js) 자리를 잡지 않음
+ * 겹치면 150ms 동안 0.3 으로, 비키면 다시 1. 내 이름표가 이미 흐리면(주민 뒤를 가릴 때, npcs.js) 자리를 잡지 않음.
+ * 건물 같은 큰 고정 물체 뒤에 있는 이름표는 0.35 (0.2초마다 잼)
  */
+const _rects = [], _pool = [];
 export function declutterLabels(shown, camera, W, H, dt) {
-  const k = 1 - Math.exp(-Math.max(0, dt) / LABEL_FADE.tau), rects = [];
+  const k = 1 - Math.exp(-Math.max(0, dt) / LABEL_FADE.tau), rects = _rects;
+  rects.length = 0;
   camera.updateMatrixWorld?.();
+  if ((_occT -= Math.max(0, dt)) <= 0) { _occT = LABEL_OCC.every; updateOcclusion(shown, camera); }
   for (const s of shown) {
     // 거의 투명한 이름표(거리에 따라 사라지는 중)는 자리를 잡지 않음: 안 보이는 것이 보이는 이름표를 흐리게 하지 않게
     const u = s.userData, op = s.material?.opacity ?? 1;
-    const r = u.tag && (s === HERO || op >= 0.15) ? labelRect(s, camera, W, H) : null;
+    const r = u.tag && (s === HERO || op >= 0.15) ? labelRect(s, camera, W, H, _pool[rects.length] ||= {}) : null;
     if (r) {
       const hero = s === HERO;
       r.s = s; r.tag = !(hero && (s.material.opacity ?? 1) < 0.6); r.pri = hero ? 1 : 0; r.group = s.parent; r.fade = !!u.faded;
@@ -166,9 +231,10 @@ export function declutterLabels(shown, camera, W, H, dt) {
     } else u.faded = false;
   }
   overlapFade(rects);
-  for (const r of rects) r.s.userData.faded = r.fade && r.s !== HERO;
+  for (const r of rects) { r.s.userData.faded = r.fade && r.s !== HERO; r.s = null; r.group = null; }
+  rects.length = 0;
   for (const s of shown) {
-    const u = s.userData, want = u.faded ? LABEL_FADE.mul : 1, m = u.fadeMul ?? 1;
+    const u = s.userData, want = Math.min(u.faded ? LABEL_FADE.mul : 1, u.occ ? LABEL_OCC.mul : 1), m = u.fadeMul ?? 1;
     u.fadeMul = Math.abs(want - m) < 0.005 ? want : m + (want - m) * k;
   }
 }

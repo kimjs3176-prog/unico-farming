@@ -5,8 +5,9 @@ import { LAYOUT } from '../world.js';
 import { VILLAGERS } from '../sim/villagers.js';
 import { CROPS } from '../sim/crops.js';
 import { VILLAGER_SPECIES, villagerName } from '../species.js';
-import { talkShot, speakerShot, cheatYaw } from '../cutscene.js';
-import { setHeroLabel } from '../label.js';
+import { talkShot, speakerShot, cheatYaw, liftFor, hudFrac } from '../cutscene.js';
+import { setHeroLabel, setLabelOccluders } from '../label.js';
+import { heightAt } from '../terrain.js';
 
 const ROLE_ICON = { merchant: '🛒', researcher: '🔬', guide: '📣', granny: '🌾', kid: '🦋', fisher: '🎣' };
 /** 대화창 이름표 색 (역할별) */
@@ -55,6 +56,11 @@ const TALK_CLEAR = 1.2, TALK_HIDE = 6;
 /** 내 이름표 흐리게: 내 뒤(카메라에서 더 먼 쪽) 5m 안 주민이 카메라→내 이름표 방향 12° 안에 있고, 화면에서 그 얼굴·이름표가 내 이름표에 겹칠 때 */
 const PL_FADE_R = 5, PL_FADE_COS = Math.cos((12 * Math.PI) / 180), PL_FADE_A = 0.35;
 const _lv = new THREE.Vector3(), _nv = new THREE.Vector3();
+/** 대화 구도 화면 검사: 대화창 윗변 가정(선택지 5개 + 설명 줄, 화면 위에서 비율 — 가로 0.42 · 세로 0.46 · 낮은 가로폰 0.48),
+ *  이름 칩은 창 위로 28px, 주민 턱(얼굴 - 0.25m)은 그보다 0.04(NDC 0.08) 위, 내 몸 너비는 화면 28% 까지 (좁은 세로 폰은 40%), 화면 끝에 40% 넘게 잘리면 안 됨 */
+export const TALK_FRAME = { chip: 28, room: 0.04, heroW: 0.28, heroWTall: 0.4, heroClip: 0.4, heroR: 0.6, heroTop: 1.85, lowH: 500, lowRoom: 0.12 };
+export const talkBoxTop = (aspect, h) => (aspect < 1 ? 0.46 : h <= TALK_FRAME.lowH ? 0.48 : 0.42);
+const _fc = new THREE.PerspectiveCamera(), _fr = new THREE.Vector3(), _fp = new THREE.Vector3();
 
 /** 점 (px, pz) 에서 선분 (ax, az)–(bx, bz) 까지 거리 (바닥 평면) */
 function segDist(px, pz, ax, az, bx, bz) {
@@ -183,6 +189,8 @@ export class NPCs {
   _fadePlayerLabel(dt, pp) {
     const g = this.game, lb = g.player?.unico?.label, cam = g.followCam?.camera;
     setHeroLabel(lb); // 이름표 겹침 정리에서 내 이름표가 먼저 자리를 잡음 (label.js)
+    const placed = g.world?.placed; // 건물 뒤 이름표 흐리게 (label.js): 건물을 새로 지으면 다시 알려 줌
+    if (placed && placed.length !== this._occN) { this._occN = placed.length; setLabelOccluders(placed.map((o) => ({ ...o, y0: heightAt(o.x, o.z) }))); }
     if (!lb || !cam?.position) return;
     const c = cam.position, ly = (g.player.unico.group?.position.y ?? 0) + (g.player.unico.labelY ?? 2.3);
     const lx = pp.x - c.x, lyy = ly - c.y, lz = pp.z - c.z, ll = Math.hypot(lx, lyy, lz) || 1;
@@ -253,16 +261,58 @@ export class NPCs {
     return shots;
   }
 
-  /** 앞모습 대화 구도 후보 (cutscene.speakerShot): 말하는 주민 b 정면에서 35°·45°·25°·55° (지금 카메라 쪽 먼저), 두 얼굴이 너무 붙는 것은 뺌 */
+  /**
+   * 대화 구도가 화면에서 어떻게 보이나 (렌즈 올림까지): chinGap = 이름 칩 아래 여유 - 주민 턱 위치, head = 대화창 윗변 - 주민 얼굴,
+   * heroW = 내 몸 너비(화면 비율), heroClip = 내 몸이 화면 끝에 잘린 비율 (0 = 다 보임, 1 = 다 밖)
+   */
+  talkFrame(shot, a, b, sc, aspect, fov, h = typeof innerHeight === 'number' ? innerHeight : 800) {
+    const F = TALK_FRAME, box = talkBoxTop(aspect, h), cam = _fc;
+    cam.fov = fov; cam.aspect = aspect; cam.near = 0.1; cam.far = 600;
+    cam.position.set(...shot.pos); cam.lookAt(...shot.look);
+    if (shot.lift === true) cam.setViewOffset(aspect, 1, 0, liftFor(box, hudFrac(h)), aspect, 1); else cam.clearViewOffset();
+    cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+    const yf = (p, y) => (1 - _fp.set(p.x, y, p.z).project(cam).y) / 2;
+    const face = 1.3 * sc;
+    _fr.setFromMatrixColumn(cam.matrixWorld, 0).setY(0).normalize().multiplyScalar(F.heroR);
+    let x0 = Infinity, x1 = -Infinity;
+    for (const s of [-1, 1]) for (const y of [0.2, F.heroTop]) {
+      _fp.set(a.x + _fr.x * s, y, a.z + _fr.z * s).project(cam);
+      x0 = Math.min(x0, _fp.x); x1 = Math.max(x1, _fp.x);
+    }
+    const w = Math.max(1e-6, x1 - x0), out = Math.max(0, x1 - 1) + Math.max(0, -1 - x0);
+    return { chinGap: box - F.chip / h - yf(b, face - 0.25 * sc), head: box - yf(b, face), heroW: w / 2, heroClip: Math.min(1, out / w) };
+  }
+
+  /** 화면 검사 통과: 턱이 이름 칩 위, (낮은 가로폰은 얼굴이 창 위로 12% 이상), 내 몸은 좁고 다 보이거나 아예 밖 */
+  _frameOk(m, aspect, h) {
+    const F = TALK_FRAME;
+    if (m.chinGap < F.room) return false;
+    if (!(aspect < 1) && h <= F.lowH && m.head < F.lowRoom) return false;
+    if (m.heroClip >= 0.999) return true;
+    return m.heroW <= (aspect < 1 ? F.heroWTall : F.heroW) && m.heroClip <= F.heroClip;
+  }
+
+  /**
+   * 앞모습 대화 구도 후보 (cutscene.speakerShot): 말하는 주민 b 정면에서 35°·45°·25°·55° (지금 카메라 쪽 먼저), 두 얼굴이 너무 붙는 것은 뺌
+   * 각 각도에서 화면 검사(_frameOk)를 통과할 때까지 0.4m 씩 물러남 (6.5m 까지). 통과하면 fit = true
+   */
   _frontShots(a, b, e) {
-    const cam = this.game.camera, sc = e?.u?.scale ?? 1, face = 1.3 * sc;
+    const cam = this.game.camera, sc = e?.u?.scale ?? 1, face = 1.3 * sc, tall = cam.aspect < 1;
+    const h = typeof innerHeight === 'number' ? innerHeight : 800, lowLand = !tall && h <= TALK_FRAME.lowH;
     const fx = a.x - b.x, fz = a.z - b.z, d = Math.hypot(fx, fz) || 1;
     const here = (cam.position.x - b.x) * (-fz / d) + (cam.position.z - b.z) * (fx / d) >= 0 ? 1 : -1;
-    // 세로 폰은 조금 더 물러나 시작 (얼굴이 위 HUD 에 붙지 않고 내 몸이 화면을 덜 덮게)
-    const opts = { fov: cam.fov, aspect: cam.aspect, faceS: face, faceL: 1.35, camY: face + 0.3, lookY: face * 0.7 + 1.35 * 0.3 - 0.05, D: cam.aspect < 1 ? 5.4 : 4.8, fit: cam.aspect < 1 ? 0.75 : 0.8 };
+    // 세로 폰은 조금 더 물러나 시작 (얼굴이 위 HUD 에 붙지 않고 내 몸이 화면을 덜 덮게), 낮은 가로폰은 가깝고 낮게 (얼굴이 작지 않게)
+    const opts = { fov: cam.fov, aspect: cam.aspect, faceS: face, faceL: 1.35, camY: lowLand ? Math.min(1.3, face) : face + 0.3, lookY: face * 0.7 + 1.35 * 0.3 - 0.05, fit: tall ? 0.75 : 0.8, maxD: 6.5 };
+    const D0 = tall ? 5.4 : lowLand ? 4.0 : 5.2;
     const shots = [];
     for (const side of [here, -here]) for (const theta of FRONT_THETA) {
-      const s = speakerShot(a, b, side, { ...opts, theta });
+      let s = null;
+      for (let D = D0; ; D = Math.min(6.5, D + 0.4)) {
+        s = speakerShot(a, b, side, { ...opts, theta, D });
+        s.frame = this.talkFrame(s, a, b, sc, cam.aspect, cam.fov, h);
+        s.fit = this._frameOk(s.frame, cam.aspect, h);
+        if (s.fit || s.dist >= 6.5 - 1e-6) break;
+      }
       if (s.sep >= FRONT_SEP) shots.push({ ...s, front: true });
     }
     return shots;
@@ -287,7 +337,12 @@ export class NPCs {
       }
       return { best, ok: false };
     };
-    let r = front ? pass(this._frontShots(a, b, e)) : { best: null, ok: false };
+    let r = { best: null, ok: false };
+    if (front) { // 화면 검사를 통과한 것 먼저, 그것들이 모두 가리면 통과 못 한 것 중 트인 것
+      const fs = this._frontShots(a, b, e);
+      r = pass(fs.filter((s) => s.fit));
+      if (!r.ok) { const r2 = pass(fs); if (r2.ok || !r.best) r = r2; }
+    }
     if (!r.ok) {
       const side = pass(this._sideShots(a, b));
       const fb = r.best, sb = side.best; // 둘 다 조금씩 가리면: 덜 막힌 쪽, 같으면 앞모습 (옆 구도가 훨씬 트였을 때만 옆)

@@ -137,6 +137,7 @@ export class Cinematics {
     this.liftAuto = lift === true;
     this.liftWant = this.liftAuto ? liftFor(guessBoxTop(cam.aspect), hudFrac()) : Math.max(0, +lift || 0);
     this._liftT = 0; this._liftSeen = 0;
+    this._liftFast = !this.liftWant && !!this.lensOn; // 올린 대화 바로 뒤 컷신 샷: 남은 올림을 3배 빨리 걷음
   }
 
   /** 두 인물을 담는 대화 구도 (어깨 너머 살짝 비스듬히, 옛 구도 — 컷신용) */
@@ -183,7 +184,7 @@ export class Cinematics {
       const top = this._boxTop();
       if (top != null) this.liftWant = this._liftSeen = Math.max(this._liftSeen, liftFor(top, hudFrac()));
     }
-    this.lift = (this.lift || 0) + ((this.liftWant || 0) - (this.lift || 0)) * (1 - Math.exp(-dt * 6));
+    this.lift = (this.lift || 0) + ((this.liftWant || 0) - (this.lift || 0)) * (1 - Math.exp(-dt * (this._liftFast ? 18 : 6)));
     const v = this.lift * easeInOut(Math.min(1, this.blend)), cam = this.game.camera;
     if (v > 1e-4) {
       cam.setViewOffset(cam.aspect, 1, 0, v, cam.aspect, 1);
@@ -192,6 +193,7 @@ export class Cinematics {
       cam.clearViewOffset();
       this.lensOn = false;
       this.lift = 0;
+      this._liftFast = false;
     }
     // 시야 구멍(카메라→내 캐릭터 선 위를 점묘로 지움)은 따라가기 카메라용: 내 어깨 너머로 찍는 대화 구도에선 내 머리까지 지우므로 끔
     const seeOff = !!this.lensOn && this.blend > 0.5; // 처음엔 lensOn 이 없음 → 꼭 참/거짓으로 (아니면 아래에서 없는 값을 되돌리려다 멈춤)
