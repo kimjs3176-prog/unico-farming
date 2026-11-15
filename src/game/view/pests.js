@@ -158,7 +158,7 @@ export class Pests {
 
   _flee(p, byPlayer) {
     p.state = 'flee'; p.t = 0;
-    if (p.mark) { p.root.remove(p.mark); p.mark = null; }
+    if (p.mark) { p.root.remove(p.mark); p.mark.userData.dispose?.(); p.mark = null; } // 이름표 텍스처·재질도 놓아 줌
     if (p.kind === 'crow') {
       const away = new THREE.Vector3(p.root.position.x - this.game.player.position.x, 0, p.root.position.z - this.game.player.position.z).normalize();
       p.vel = new THREE.Vector3(away.x * 6, 3, away.z * 6);
