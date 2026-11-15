@@ -11,7 +11,7 @@ export const SEASONS = [
   {
     id: 'spring', name: '봄', icon: '🌸', crops: ['strawberry', 'cabbage'], growth: 1,
     desc: '꽃잎이 흩날려요. 딸기·양배추가 제철!',
-    look: { grass: [0.26, 0.6, 0.4], grassJitter: 0.04, leaf: [0xb4e07a, 0.22], leafAlt: [0xf6b6cf, 0.35], ground: [1.0, 1.02, 0.98], flowers: 1, snow: 0, fall: 'petal' },
+    look: { grass: [0.26, 0.6, 0.4], grassJitter: 0.04, leaf: [0xb4e07a, 0.22], leafAlt: null, ground: [1.0, 1.02, 0.98], flowers: 1, snow: 0, fall: 'petal' },
   },
   {
     id: 'summer', name: '여름', icon: '☀️', crops: ['tomato', 'corn'], growth: 1,
