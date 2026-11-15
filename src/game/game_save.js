@@ -1,45 +1,144 @@
-// Game 믹스인: 저장·불러오기·초기화
+// Game 믹스인: 저장·불러오기·초기화·다른 창 감지
 // main.js 에서 Object.assign(Game.prototype, …) 으로 붙임 (축약 메서드라 this 는 Game)
-import { saveGame, loadSave, clearSave } from './save.js';
+import { saveGame, loadSaveInfo, loadBackup, backupSave, keepBroken, clearSave, setReadOnly, saveBlocked, lastSaveError, SAVE_KEY } from './save.js';
+import { record, showOverlay } from './crash.js';
+
+/** 저장 실패 알림 (접속마다 한 번) */
+const SAVE_FAIL = {
+  quota: '⚠️ 저장 공간이 부족해 농장을 저장하지 못했어요',
+  denied: '⚠️ 이 브라우저 설정(사생활 보호 모드 등)에서는 농장을 저장할 수 없어요',
+  other: '⚠️ 농장을 저장하지 못했어요. 잠시 뒤 다시 저장해 볼게요',
+};
 
 export const GameSave = {
-  /** 지금 상태 저장 (초기화 중이면 save.js 가 막음) */
-  save() {
+  /** 지금 상태 저장 (초기화·읽기 전용이면 save.js 가 막음) → 실패하면 false */
+  save(opt) {
     this.saveTimer = 0;
-    if (this._introPending) return; // 첫 접속: 인트로 시작 전에는 저장하지 않음 (저장이 생기면 다음 접속에 인트로가 안 나옴)
-    saveGame(this);
+    if (this._introPending) return true; // 첫 접속: 인트로 시작 전에는 저장하지 않음 (저장이 생기면 다음 접속에 인트로가 안 나옴)
+    const ok = saveGame(this, opt);
+    try {
+      if (!ok && !saveBlocked() && !this._saveWarned) {
+        this._saveWarned = 1;
+        this.ui?.toast(SAVE_FAIL[lastSaveError()] || SAVE_FAIL.other);
+      } else if (ok && this._saveWarned === 1) {
+        this._saveWarned = 2;
+        this.ui?.toast('💾 이제 다시 저장돼요');
+      }
+    } catch { /* 알림 없이 계속 */ }
+    return ok;
   },
 
   restore() {
-    const s = loadSave();
-    if (!s) { this._introPending = true; this.whenShown(() => setTimeout(() => this.introCutscene(), 700)); return; }
-    this.flags = s.flags || {};
-    this.farm.sim.load(s.farm);
-    this.farm.refreshAll();
-    this.economy.load(s.economy);
-    this.quests.load(s.quests);
-    this.ranch.load(s.ranch);
-    this.rice.load(s.rice);
-    this.nature.load(s.nature);
-    this.villagers.load(s.villagers);
-    this.collection.load(s.collection);
-    this.koat.load(s.koat);
-    this.explore.load(s.explore);
-    this.bees.load(s.bees);
-    this.angling.load(s.angling);
-    this.farmcraft.load(s.farmcraft);
-    this.town.load(s.town);
-    this.home.load(s.home);
-    this.costume.load(s.costume);
-    this.social.load(s.social);
-    this.decor.load(s.decor);
-    this.applyLook(false);
-    if (this.pet.ok) this.pet.load(s.pet);
-    if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원');
-    if (s.world) { this.world.time = s.world.time; this.world.day = s.world.day; }
-    this.social.newDay(this.world.day);
-    if (s.player) this.player.position.set(s.player.x, 0, s.player.z);
+    const info = loadSaveInfo();
+    let s = info.data, note = null;
+    if (info.status === 'empty') return this.startNewFarm();
+    if (info.status === 'broken') {
+      // 못 읽은 기록: 원본을 따로 보관한 뒤 백업으로, 백업도 없으면 새 농장 (보관을 못 했으면 이번 접속은 저장하지 않음)
+      const kept = keepBroken(info.raw);
+      record(new Error('저장 기록을 읽지 못함'), 'load:broken');
+      const bak = loadBackup();
+      if (!bak) {
+        if (!kept) setReadOnly(true);
+        return this.startNewFarm(kept ? '⚠️ 저장 기록을 읽지 못해 새 농장을 시작해요 (이전 기록은 따로 보관해 두었어요)'
+          : '⚠️ 저장 기록을 읽지 못했어요. 이전 기록을 지키려고 이번에는 저장하지 않아요');
+      }
+      s = bak.data;
+      note = '💾 저장 기록을 읽지 못해 최근 백업에서 농장을 불러왔어요';
+    } else if (info.status === 'newer') {
+      setReadOnly(true); // 옛 판이 새 판 기록을 빠진 칸째로 덮어쓰지 않게
+      note = '🆕 새 버전으로 저장된 농장이에요. 새로고침하면 이어서 저장돼요';
+    }
+    const failed = this.loadSections(s);
+    if (failed.length) {
+      if (info.status !== 'newer') keepBroken(info.raw); // 기본값으로 돌린 칸을 다음 자동 저장이 덮어쓰기 전에 원본 보관
+      note = '⚠️ 일부 기록을 불러오지 못했어요 (원래 기록은 따로 보관해 두었어요)';
+    } else if (info.status === 'ok') backupSave(info.raw); // 마지막으로 깨끗하게 불러온 기록 (부팅마다 한 번)
     this.ui.toast('💾 저장된 농장을 불러왔어요');
+    if (note) this.whenShown(() => setTimeout(() => this.ui.toast(note), 900)); // 로딩 화면이 걷힌 뒤에 보이게
+  },
+
+  /** 처음 접속(또는 읽지 못한 기록): 로딩 화면이 걷히면 인트로 */
+  startNewFarm(note) {
+    this._introPending = true;
+    this.whenShown(() => setTimeout(() => this.introCutscene(), 700));
+    if (note) this.whenShown(() => setTimeout(() => this.ui.toast(note), 400));
+  },
+
+  /** 칸마다 따로 불러오기: 한 칸이 오류를 내도 그 칸만 기본값으로 두고 나머지는 계속 → 실패한 칸 이름 목록 */
+  loadSections(s) {
+    const failed = [];
+    const step = (name, fn) => {
+      try { fn(); } catch (e) {
+        failed.push(name);
+        console.warn('기록 불러오기 실패 (기본값으로):', name, e);
+        record(e, `load:${name}`);
+      }
+    };
+    const num = (v) => typeof v === 'number' && Number.isFinite(v);
+    step('flags', () => { this.flags = s.flags && typeof s.flags === 'object' ? s.flags : {}; });
+    step('farm', () => this.farm.sim.load(s.farm));
+    step('farmView', () => this.farm.refreshAll());
+    step('economy', () => this.economy.load(s.economy));
+    step('quests', () => this.quests.load(s.quests));
+    step('ranch', () => this.ranch.load(s.ranch));
+    step('rice', () => this.rice.load(s.rice));
+    step('nature', () => this.nature.load(s.nature));
+    step('villagers', () => this.villagers.load(s.villagers));
+    step('collection', () => this.collection.load(s.collection));
+    step('koat', () => this.koat.load(s.koat));
+    step('explore', () => this.explore.load(s.explore));
+    step('bees', () => this.bees.load(s.bees));
+    step('angling', () => this.angling.load(s.angling));
+    step('farmcraft', () => this.farmcraft.load(s.farmcraft));
+    step('town', () => this.town.load(s.town));
+    step('home', () => this.home.load(s.home));
+    step('costume', () => this.costume.load(s.costume));
+    step('social', () => this.social.load(s.social));
+    step('decor', () => this.decor.load(s.decor));
+    step('look', () => this.applyLook(false));
+    step('pet', () => { if (this.pet.ok) this.pet.load(s.pet); });
+    step('title', () => { if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원'); });
+    step('world', () => {
+      if (num(s.world?.time)) this.world.time = s.world.time;
+      if (num(s.world?.day)) this.world.day = s.world.day;
+    });
+    step('socialDay', () => this.social.newDay(this.world.day));
+    step('player', () => { if (num(s.player?.x) && num(s.player?.z)) this.player.position.set(s.player.x, 0, s.player.z); });
+    return failed;
+  },
+
+  /** 다른 창(탭)에서 같은 농장을 저장·초기화하면 이 창은 멈춤: 늦게 저장해 다른 창의 진행을 되돌리지 않게 (storage 이벤트는 다른 창의 쓰기에만 옴) */
+  watchOtherTabs() {
+    window.addEventListener('storage', (e) => {
+      if (e.key !== SAVE_KEY && e.key !== null) return; // null: 다른 창에서 저장소 전체를 비움
+      if (e.storageArea && typeof localStorage !== 'undefined' && e.storageArea !== localStorage) return;
+      this.goStale(e.newValue == null ? 'reset' : 'other');
+    });
+  },
+
+  /** 이 창 멈춤: 저장 막기 · 입력 멈춤 · 루프·소리 멈춤 · [여기서 이어 하기] = 새로고침 (다른 창의 최신 기록을 불러옴) */
+  goStale(why = 'other') {
+    if (this._stale) return;
+    this._stale = true;
+    setReadOnly(true);
+    try {
+      this.input.reset?.();
+      this.input.enabled = false;
+      this.renderer.setAnimationLoop(null);
+      this._looping = false;
+      this.music?.pause?.();
+      this.audio?.sleep?.();
+      // 같은 사람이 두 번 보이지 않게 접속도 끊음 (화면으로 돌아와도 다시 붙지 않게)
+      const n = this.net;
+      if (n) { n.connect = n.wake = () => {}; n.detach?.(); }
+    } catch { /* 안내는 띄움 */ }
+    showOverlay({
+      id: 'unico-stale',
+      icon: '🪟',
+      title: why === 'reset' ? '다른 창에서 농장을 초기화했어요' : '다른 창에서 플레이 중이에요',
+      body: '두 창이 서로의 기록을 덮어쓰지 않게 이 창은 잠시 멈췄어요. 여기서 이어 하면 가장 최근 기록을 불러와요.',
+      actions: [{ label: '🔄 여기서 이어 하기', run: () => location.reload() }],
+    });
   },
 
   resetSave() { clearSave(); location.reload(); }, // clearSave 뒤에는 떠날 때 저장이 막힘 (지운 농장이 되살아나지 않게)

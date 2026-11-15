@@ -1,10 +1,12 @@
-// 부팅: 모델·글꼴 받기 → 닉네임 입력 → 입장(게임 만들기·셰이더 미리 준비·로딩 화면 걷기)
-// main.js 가 boot(Game) 으로 부름 (Game 클래스는 main.js)
+// 부팅: WebGL2 확인 → 모델·글꼴 받기 → 닉네임 입력 → 입장(게임 만들기·셰이더 미리 준비·로딩 화면 걷기)
+// main.js 가 boot(Game) 으로 부름 (Game 클래스는 main.js). 어느 단계든 실패하면 로딩 카드가 오류 안내로 바뀜 (멈춘 채 두지 않음)
 import { Assets } from './game/assets.js';
 import { LAYOUT } from './game/world.js';
 import { isSubmitEnter } from './game/input.js';
 import { Audio } from './game/audio.js';
-import { loadSave } from './game/save.js';
+import { loadSaveInfo, loadBackup } from './game/save.js';
+import { record, copyDiag } from './game/crash.js';
+import { onFetchRetry } from './game/fetch_gz.js';
 import { randomName } from './game/names.js';
 import { isMobileDevice } from './game/quality.js';
 import { joinQrBox } from './ui/join_qr.js';
@@ -64,21 +66,152 @@ function titleButterfly() {
   requestAnimationFrame(step);
 }
 
+/**
+ * WebGL2 를 켤 수 있는지: 버리는 캔버스로 확인하고 바로 놓음 (모델 3MB 를 받기 전에)
+ * #game 에 먼저 부르면 그 캔버스의 설정이 굳어 three 의 antialias 요청이 무시되므로 따로 만든 캔버스로
+ */
+export function probeWebGL2(doc = document) {
+  let why = '';
+  try {
+    const c = doc.createElement('canvas');
+    c.addEventListener?.('webglcontextcreationerror', (e) => { why = e?.statusMessage || why; });
+    const gl = c.getContext('webgl2');
+    if (!gl) return { ok: false, why };
+    gl.getExtension?.('WEBGL_lose_context')?.loseContext();
+    return { ok: true, why: '' };
+  } catch (e) { return { ok: false, why: e?.message || String(e) }; }
+}
+
+/** 부팅 오류 코드 → 로딩 카드 문구 */
+export const BOOT_ERR = {
+  'E-GL': { text: '이 기기에서는 3D 화면을 켤 수 없어요', sub: '브라우저를 최신으로 바꾸면 3D로 즐길 수 있어요. 지금은 도트(2.5D) 버전으로 바로 놀 수 있어요.' },
+  'E-NET': { text: '농장 그림을 받지 못했어요', sub: '인터넷 연결을 확인한 뒤 다시 시도해 주세요.' },
+  'E-BOOT': { text: '농장을 여는 중에 문제가 생겼어요', sub: '다시 시도하면 대부분 해결돼요. 농장 기록은 그대로예요.' },
+  'E-START': { text: '농장을 만드는 중에 문제가 생겼어요', sub: '다시 시도하면 대부분 해결돼요. 농장 기록은 그대로예요.' },
+};
+
+/** 실패 → 오류 코드 (망 끊김 · WebGL · 그 밖) */
+export function bootCode(e, stage = 'load') {
+  if (e?.code === 'E-NET' || globalThis.navigator?.onLine === false) return 'E-NET';
+  if (/WebGL/i.test(String(e?.message || ''))) return 'E-GL';
+  return stage === 'start' ? 'E-START' : 'E-BOOT';
+}
+
+/**
+ * 로딩 카드를 오류 안내로 바꿈: 진행 막대·닉네임을 숨기고 큰 단추는 [다시 시도](새로고침) — WebGL2 가 없으면 [도트(2.5D) 버전으로 하기]
+ * @param opt.onTry3d 있으면 작은 [그래도 3D로 시도] 단추
+ * @returns 카드를 원래대로 되돌리는 함수
+ */
+export function bootErrorCard(code, err, opt = {}) {
+  record(err ?? code, `boot:${code}`);
+  const card = document.querySelector('#loading .loading-card');
+  if (!card) return () => {};
+  const info = BOOT_ERR[code] || BOOT_ERR['E-BOOT'];
+  const lt = document.getElementById('loading-text'), btn = document.getElementById('start-btn');
+  const pixelHint = code === 'E-GL' ? card.querySelector('a[href="./pixel.html"]')?.closest('.hint') : null; // 큰 단추와 겹치는 작은 링크
+  const hidden = [card.querySelector('.bar'), card.querySelector('.name-row'), pixelHint].filter(Boolean);
+  const was = { text: lt?.textContent, css: lt?.style.cssText, label: btn?.textContent, onclick: btn?.onclick, disabled: btn?.disabled, disp: hidden.map((el) => el.style.display) };
+  for (const el of hidden) el.style.display = 'none';
+  const add = [];
+  const make = (tag, css, text) => { const n = document.createElement(tag); if (css) n.style.cssText = css; if (text != null) n.textContent = text; add.push(n); return n; };
+  if (lt) {
+    lt.textContent = info.text;
+    lt.style.cssText = 'font-family:var(--display);font-size:21px;color:var(--brown);margin:12px 0 6px';
+    const sub = make('p', 'margin:0 0 14px;font-size:13px;line-height:1.55;word-break:keep-all', `${info.sub} `);
+    sub.className = 'hint';
+    const tag = document.createElement('span');
+    tag.style.whiteSpace = 'nowrap'; // 코드가 줄 끝에서 쪼개지지 않게
+    tag.textContent = `(오류 코드 ${code})`;
+    sub.append(tag);
+    lt.after(sub);
+  }
+  if (btn) {
+    btn.disabled = false;
+    if (code === 'E-GL') { btn.textContent = '🎮 도트(2.5D) 버전으로 하기'; btn.onclick = () => { location.href = './pixel.html'; }; }
+    else { btn.textContent = '🔄 다시 시도'; btn.onclick = () => location.reload(); }
+    const row = make('div', 'display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px');
+    const note = make('p', 'margin:6px 0 0');
+    note.className = 'hint';
+    const small = (label, run) => {
+      const b = document.createElement('button');
+      b.className = 'ghost';
+      b.style.cssText = 'font-size:14px;padding:7px 12px';
+      b.textContent = label;
+      b.onclick = run;
+      row.append(b);
+    };
+    if (opt.onTry3d) small('그래도 3D로 시도', () => opt.onTry3d());
+    small('📋 진단 정보 복사', () => copyDiag(note, note));
+    btn.after(row, note);
+  }
+  if (code === 'E-NET') window.addEventListener('online', () => location.reload(), { once: true }); // 망이 돌아오면 저절로 다시
+  return () => {
+    for (const n of add) n.remove();
+    hidden.forEach((el, i) => { el.style.display = was.disp[i]; });
+    if (lt) { lt.textContent = was.text; lt.style.cssText = was.css; }
+    if (btn) { btn.textContent = was.label; btn.onclick = was.onclick; btn.disabled = was.disabled; }
+  };
+}
+
 export async function boot(Game) {
+  window.__unicoBooted = true; // crash.js: 이제부터 부팅 오류는 여기서 안내
   const canvas = document.getElementById('game');
   const bar = document.getElementById('loading-bar');
   const btn = document.getElementById('start-btn');
   const nick = document.getElementById('nickname');
-  const saved = loadSave();
-  nick.value = saved?.name || randomName();
   titleFriends();
   titleButterfly();
-  const assets = new Assets();
-  // 글자를 넘겨야 그 글자가 든 한글 조각을 받음 (글자 없이 부르면 라틴 조각만 받아 이름표가 대체 글꼴로 구워짐)
-  const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua', `${LABEL_TEXT} ${nick.value}`), document.fonts?.load?.("20px 'Unico Coin'", '🪙')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
-  await Promise.all([assets.loadAll((p) => (bar.style.width = Math.round(p * 100) + '%')), fontReady]);
-  assets.loadDeferred(saved?.player).catch(() => {}); // 첫 화면에 필요 없는 모델(늑대·산여우·주민 원본 몸·KOAT 네 발 원본)은 닉네임을 고르는 동안 뒤에서, 원본 몸은 저장 위치에서 가까운 주민부터
   const lt = document.getElementById('loading-text');
+  // 단계: load(받는 중) → ready(닉네임 고르는 중) → start(입장 중) → done(화면이 보임)
+  let stage = 'load', ticks = 0, undo = null, soft = false;
+  const fail = (code, err, opt) => { if (!undo) undo = bootErrorCard(code, err, opt); };
+  const unfail = () => { const u = undo; undo = null; soft = false; u?.(); };
+  const bump = () => { ticks++; if (soft) unfail(); }; // 잠깐 멈췄다가 다시 진행되면 안내를 거둠
+  // 놓친 오류(기다리던 약속이 영영 안 끝나는 경우): 오류 뒤 12초 동안 진행이 없으면 안내 (닉네임 고르는 동안·화면이 보인 뒤에는 안 띄움)
+  const onEarly = (ev) => {
+    if (undo || stage === 'ready' || stage === 'done') return;
+    const at = ticks, err = ev?.error ?? ev?.reason ?? ev?.message;
+    setTimeout(() => {
+      if (ticks !== at || undo || stage === 'ready' || stage === 'done' || document.hidden) return;
+      fail(bootCode(err, stage), err);
+      soft = true;
+    }, 12000);
+  };
+  window.addEventListener('error', onEarly);
+  window.addEventListener('unhandledrejection', onEarly);
+  // 느린 망: 모델을 다시 받으면 '연결이 느려요…' (파일 50개가 한꺼번에 알려도 문구는 가끔만, 8초 조용하면 원래대로)
+  let slowT = 0, slowAt = 0;
+  onFetchRetry(() => {
+    if (stage !== 'load' || undo || !lt) return;
+    clearTimeout(slowT);
+    slowT = setTimeout(() => { if (stage === 'load' && !undo) lt.textContent = '농장 준비 중…'; }, 8000);
+    if (Date.now() - slowAt < 1500) return;
+    slowAt = Date.now();
+    lt.textContent = '📶 연결이 느려요… 다시 받는 중';
+  });
+
+  let assets, saved;
+  try {
+    const gl = probeWebGL2();
+    if (!gl.ok) {
+      // WebGL2 없음: 도트 판을 권하고, 그래도 3D 를 고르면 이어서 받음
+      await new Promise((resolve) => fail('E-GL', new Error(`WebGL2 를 만들 수 없음${gl.why ? `: ${gl.why}` : ''}`), { onTry3d: resolve }));
+      unfail();
+    }
+    const info = loadSaveInfo();
+    saved = info.data ?? (info.status === 'broken' ? loadBackup()?.data : null); // 못 읽은 기록이면 백업의 이름·위치
+    nick.value = saved?.name || randomName();
+    assets = new Assets();
+    // 글자를 넘겨야 그 글자가 든 한글 조각을 받음 (글자 없이 부르면 라틴 조각만 받아 이름표가 대체 글꼴로 구워짐)
+    const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua', `${LABEL_TEXT} ${nick.value}`), document.fonts?.load?.("20px 'Unico Coin'", '🪙')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
+    await Promise.all([assets.loadAll((p) => { bump(); bar.style.width = Math.round(p * 100) + '%'; }), fontReady]);
+  } catch (e) {
+    fail(bootCode(e, 'load'), e);
+    return;
+  }
+  stage = 'ready';
+  clearTimeout(slowT);
+  assets.loadDeferred(saved?.player).catch(() => {}); // 첫 화면에 필요 없는 모델(늑대·산여우·주민 원본 몸·KOAT 네 발 원본)은 닉네임을 고르는 동안 뒤에서, 원본 몸은 저장 위치에서 가까운 주민부터
   if (lt) lt.textContent = '준비 완료! 닉네임을 정하고 입장하세요';
   // 로그인 화면 접속 QR (휴대폰으로 같은 게임에 바로 들어오기, 좁은 화면·터치 기기에서는 숨김)
   try { const q = joinQrBox(); q.classList.add('login-qr'); document.getElementById('loading')?.append(q); } catch { /* QR 없이도 입장 가능 */ }
@@ -86,34 +219,49 @@ export async function boot(Game) {
   btn.textContent = '입장하기';
   let started = false;
   const start = async () => {
-    if (started) return;
+    if (started || undo) return;
     started = true;
-    // iOS: 소리 장치는 탭 처리 안에서(첫 await 전에) 만들고 켜야 함
-    const audio = new Audio();
-    audio.unlock();
-    if (isMobileDevice()) pushBackGuard(); // 뒤로 가기 기록도 탭 처리 안에서 (사용자 동작 없이 넣은 기록은 브라우저가 건너뜀)
-    const name = (nick.value.trim() || randomName()).slice(0, 12);
+    stage = 'start';
+    bump();
     const ld = document.getElementById('loading');
-    btn.disabled = true;
-    if (lt) lt.textContent = '농장을 만드는 중…';
-    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); // 문구가 먼저 그려지게 (월드 만들기는 한 번에 실행돼 화면이 잠시 멈춤)
-    await Promise.race([Promise.resolve(document.fonts?.load?.('40px Jua', name)).catch(() => {}), new Promise((r) => setTimeout(r, 800))]); // 바꾼 닉네임 글자
-    window.game = new Game(canvas, assets, name, audio);
-    window.game.audio.play('click'); // 입장 소리 (소리 장치는 위에서 탭 처리 안에 이미 켬)
-    window.game.music.start();
-    // 첫 화면 끊김 방지: 로딩 화면 뒤에서 셰이더를 미리 컴파일(가능하면 병렬)하고 두 프레임 그린 뒤 보여 줌
-    if (lt) lt.textContent = '화면 준비 중…';
-    await new Promise((r) => requestAnimationFrame(r)); // '화면 준비 중' 문구가 먼저 보이게
-    // 셰이더 미리 준비: 지원 브라우저(KHR_parallel_shader_compile)는 병렬로, 화면을 멈추지 않고 기다림.
-    // 일부 환경에서 compileAsync 가 끝나지 않는 일이 있어 최대 5초만 기다림 (남은 것은 첫 프레임에)
-    // 닉네임을 고르는 동안 받아 둔 동물도 여기서 함께 (로딩 화면이 사라지는 순간에 컴파일이 몰리지 않게)
-    const R = window.game.renderer, sc = window.game.world.scene, cm = window.game.camera;
     try {
-      try { await Promise.race([Promise.all([R.compileAsync(sc, cm), window.game.warmDeferred()]), new Promise((r) => setTimeout(r, 5000))]); }
-      catch { try { R.compile(sc, cm); } catch { /* 첫 프레임에 컴파일 */ } }
-      window.game.warmUp?.();
-    } finally { window.game.startLoop(); } // 이제부터 루프: 아래 두 프레임은 로딩 화면 뒤에서 실제로 그려짐
-    await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), new Promise((r) => setTimeout(r, 1500))]);
+      // iOS: 소리 장치는 탭 처리 안에서(첫 await 전에) 만들고 켜야 함
+      const audio = new Audio();
+      audio.unlock();
+      if (isMobileDevice()) pushBackGuard(); // 뒤로 가기 기록도 탭 처리 안에서 (사용자 동작 없이 넣은 기록은 브라우저가 건너뜀)
+      const name = (nick.value.trim() || randomName()).slice(0, 12);
+      btn.disabled = true;
+      if (lt) lt.textContent = '농장을 만드는 중…';
+      await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); // 문구가 먼저 그려지게 (월드 만들기는 한 번에 실행돼 화면이 잠시 멈춤)
+      await Promise.race([Promise.resolve(document.fonts?.load?.('40px Jua', name)).catch(() => {}), new Promise((r) => setTimeout(r, 800))]); // 바꾼 닉네임 글자
+      window.game = new Game(canvas, assets, name, audio);
+      bump();
+      window.game.audio.play('click'); // 입장 소리 (소리 장치는 위에서 탭 처리 안에 이미 켬)
+      window.game.music.start();
+      // 첫 화면 끊김 방지: 로딩 화면 뒤에서 셰이더를 미리 컴파일(가능하면 병렬)하고 두 프레임 그린 뒤 보여 줌
+      if (lt) lt.textContent = '화면 준비 중…';
+      await new Promise((r) => requestAnimationFrame(r)); // '화면 준비 중' 문구가 먼저 보이게
+      // 셰이더 미리 준비: 지원 브라우저(KHR_parallel_shader_compile)는 병렬로, 화면을 멈추지 않고 기다림.
+      // 일부 환경에서 compileAsync 가 끝나지 않는 일이 있어 최대 5초만 기다림 (남은 것은 첫 프레임에)
+      // 닉네임을 고르는 동안 받아 둔 동물도 여기서 함께 (로딩 화면이 사라지는 순간에 컴파일이 몰리지 않게)
+      const R = window.game.renderer, sc = window.game.world.scene, cm = window.game.camera;
+      try {
+        try { await Promise.race([Promise.all([R.compileAsync(sc, cm), window.game.warmDeferred()]), new Promise((r) => setTimeout(r, 5000))]); }
+        catch { try { R.compile(sc, cm); } catch { /* 첫 프레임에 컴파일 */ } }
+        window.game.warmUp?.();
+      } finally { window.game.startLoop(); } // 이제부터 루프: 아래 두 프레임은 로딩 화면 뒤에서 실제로 그려짐
+      bump();
+      await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), new Promise((r) => setTimeout(r, 1500))]);
+    } catch (e) {
+      // 게임을 만들다 실패 (WebGL 컨텍스트 등): 멈춘 '농장을 만드는 중…' 대신 안내, 다시 시도는 새로고침 (반쯤 만든 게임을 다시 쓰지 않음)
+      started = false;
+      btn.disabled = false;
+      fail(bootCode(e, 'start'), e);
+      return;
+    }
+    stage = 'done';
+    window.removeEventListener('error', onEarly);
+    window.removeEventListener('unhandledrejection', onEarly);
     ld.classList.add('out');
     setTimeout(() => ld.remove(), 650);
     window.game.shown();

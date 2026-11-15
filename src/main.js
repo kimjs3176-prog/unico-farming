@@ -1,5 +1,6 @@
 // 3D 판 진입점: class Game (생성자·startLoop·loop·생명주기·뒤로 가기·컨텍스트 손실·옷차림·whenShown/shown)
 // 나머지 메서드는 src/game/game_*.js 믹스인 — gfx(그래픽·화면 크기) · save(저장) · story(컷신) · travel(이동) · progress(퀘스트 진행), 부팅은 src/boot.js
+import { record, rethrowLater, showFatal, setCrashContext, FailGate } from './game/crash.js'; // 맨 먼저: 다른 모듈을 읽는 중의 오류부터 기록
 import { josa } from './game/sim/josa.js';
 import { HomeView } from './game/view/home_view.js';
 import { TownView } from './game/view/town_view.js';
@@ -99,7 +100,7 @@ class Game {
     this.flags = {};
     this.fx = new FX(this.world.scene, this.quality);
     this.waterfx = new WaterFX(this.world.scene, this.world.scenery, this.quality);
-    this.player.unico.onStep = (x, z) => this.fx.dust(x, z);
+    this.player.unico.onStep = (x, z, r) => { if (r === undefined || r > 0.5) this.fx.dust(x, z); }; // r: 달리기 섞임 (주는 쪽이 있으면 걸을 때는 먼지 없음)
     this.farm = new FarmView(this);
     this.ranch = new RanchView(this);
     this.ride = new RideView(this); // 마을 탈것 (트랙터·자전거·농장 카트)
@@ -146,6 +147,7 @@ class Game {
     this.applyQuality(this.quality, { rebuildPost: false });
     window.addEventListener('resize', () => this.resize());
     this.watchLifecycle();
+    this.watchOtherTabs();
     this.restore();
     this.net.connect();
     // 현재 위치 실시간 날씨
@@ -167,7 +169,22 @@ class Game {
     this.timer = new THREE.Timer();
     this.timer.connect?.(document);
     this.frameCap = isMobileDevice() ? new FrameCap() : null; // 고주사율 폰은 화면 갱신 정수 배로 건너뛰어 약 60fps
+    this.failGate = new FailGate(); // 프레임 오류: 가끔은 넘기고, 10초에 5번이면 저장하고 멈춤
+    setCrashContext(() => ({ q: this.quality?.level }));
+    this.armCrashTest();
     this.armBackGuard();
+  }
+
+  /** 시험용 ?crashtest=N: 꿀벌 갱신이 처음 N번(기본 1번) 오류를 던짐 → 루프가 멈추지 않고 이어 가는지 (5번 이상이면 오류 안내) */
+  armCrashTest() {
+    const m = /[?&]crashtest(?:=(\d+))?/.exec(location.search);
+    if (!m) return;
+    let left = Number(m[1] || 1);
+    const bees = this.bees, orig = bees.update;
+    bees.update = function crashTest(...a) {
+      if (left > 0) { left--; throw new Error('crashtest: bees.update'); }
+      return orig.apply(this, a);
+    };
   }
 
   /** 셰이더 미리 준비가 끝난 뒤 boot() 에서 시작: 로딩 화면 뒤에서 첫 렌더가 셰이더를 동기로 컴파일하거나 로직이 먼저 돌지 않게 */
@@ -189,7 +206,7 @@ class Game {
         releaseInput(this.input); // 손을 뗀 이벤트를 못 받아 눌린 채 남은 조이스틱·시점 터치·키
         if (this.nature) this.nature.holdBtn = false;
         if (isMobileDevice()) { this.audio.sleep(); this.music.pause(); } // 데스크톱은 지금처럼 배경에서도 재생
-      } else if (this.audio.hold) {
+      } else if (this.audio.hold && !this._stale && !this._crashed) { // 멈춘 창(다른 창·오류)은 소리를 다시 켜지 않음
         this.audio.wake();
         this.music.resume();
       }
@@ -272,6 +289,10 @@ class Game {
     if (send) this.net?.sendLook();
   }
 
+  /**
+   * 한 프레임: 로직·그리기를 따로 감싸 한 시스템의 오류가 화면·자동 저장·입력 정리까지 멈추지 않게
+   * (three 는 이 함수가 끝나야 다음 프레임을 예약 → 오류가 밖으로 나가면 게임이 영영 멈춤)
+   */
   loop(now = performance.now()) {
     // 고주사율(100Hz 이상) 모바일 화면: 건너뛴 시간은 다음 프레임 dt 에 그대로 들어가고 입력도 남음
     if (this.frameCap && !this.frameCap.tick(now)) return;
@@ -279,6 +300,39 @@ class Game {
     const rawDt = Math.max(0, this.timer.getDelta());
     const dt = Math.min(0.05, rawDt);
     this.fpsDt = rawDt;
+    this._bad = false;
+    try {
+      try { this.stepLogic(dt, rawDt); } catch (e) { this.frameError(e, 'logic'); }
+      try { this.stepRender(); } catch (e) { this.frameError(e, 'render'); }
+    } finally {
+      this.saveTimer += dt;
+      if (this.saveTimer > 10) this.save();
+      this.input.endFrame();
+    }
+    if ((this._bad || this.failGate.run) && this.failGate.frame(this._bad, now)) this.crashStop();
+  }
+
+  /** 프레임 오류: 기록하고, 처음 보는 오류면 한 번 다시 알림 (콘솔·화면 점검이 보게) — 게임은 다음 프레임에 계속 */
+  frameError(e, where) {
+    this._bad = true;
+    if (where === 'render') { try { this.renderer.setRenderTarget(null); } catch { /* 다음 프레임에 */ } } // 후처리 중간에 멈췄을 수 있음
+    try { if (record(e, where)) rethrowLater(e); } catch { /* 기록 없이 계속 */ }
+  }
+
+  /** 오류가 계속되면: 루프를 멈추고 (지금 기록은 .bak 으로 옮긴 뒤) 저장하고 [다시 시작] 안내 */
+  crashStop() {
+    if (this._crashed) return;
+    this._crashed = true;
+    try { this.renderer.setAnimationLoop(null); } catch { /* 이미 멈춤 */ }
+    this._looping = false;
+    let saved = false;
+    try { saved = this.save({ crash: true }) !== false; } catch { /* 저장 실패 */ }
+    try { this.music?.pause?.(); this.audio?.sleep?.(); } catch { /* 소리 없이 */ }
+    showFatal('loop', { saved });
+  }
+
+  /** 로직: 품질 자동 조절·단축키·월드·시스템 갱신·카메라·HUD */
+  stepLogic(dt, rawDt) {
     // 자동 품질: 화면이 계속 끊기면 한 단계 낮춤 (탭을 숨겼다 돌아온 공백은 visibilitychange 에서 측정 초기화)
     // 컷신 중에는 측정하지 않음: 전경 샷은 평소보다 1.5배 무거워 화질이 중간에 바뀌며(화면 재구성) 더 끊김
     if (rawDt < 3 && !this.cinema.locked && this.governor.tick(rawDt)) {
@@ -412,8 +466,10 @@ class Game {
       this.rainAcc += dt;
       if (this.rainAcc > 3) { this.rainAcc = 0; this.farm.sim.rain(); }
     }
-    this.saveTimer += dt;
-    if (this.saveTimer > 10) this.save();
+  }
+
+  /** 그리기: 그림자 갱신 주기·시간대 색·후처리 */
+  stepRender() {
     // 그림자 맵 갱신 주기 (높음: 매 프레임, 보통: 2프레임, 낮음: 3프레임마다 — 정적 장면이 대부분이라 체감 차이 작음)
     // 자동 갱신은 끄고 프레임마다 한 번만 요청 → 한 프레임 안의 여러 render(GTAO·반사 연못)가 그림자를 다시 그리지 않음
     const shBase = this.quality.shadowEvery;
@@ -425,7 +481,6 @@ class Game {
     if (shEvery > 0 && (this.frameNo % Math.max(1, shEvery) === 0 || (moving && this.quality.level !== 'low'))) this.renderer.shadowMap.needsUpdate = true;
     this.postfx.setGrade(this.home?.inside ? null : this.world.tod, this.world.weatherCur?.cloud || 0); // 시간대 색 (집 안은 그대로)
     this.postfx.render();
-    input.endFrame();
   }
 }
 
