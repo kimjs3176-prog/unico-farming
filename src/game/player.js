@@ -1,8 +1,27 @@
 import * as THREE from 'three';
 import { Unico } from './unico.js';
+import { DEADZONE, runBand } from './input.js';
 
-const SPEED = 4.6;
-const SWIM_SPEED = 2.4;
+// 걷기·달리기 속도(m/s, 속도 배율 전). 짧은 다리라 걷기는 종종걸음, 달리기는 발이 공중에 뜨는 뜀박질 (unico.js bipedGait)
+export const WALK_SPEED = 1.9, RUN_SPEED = 4.6, SWIM_SPEED = 2.4;
+/** 탭·클릭 이동: 남은 거리가 이만큼 안이면 걷기 속도까지 줄이며 다가감 (가까운 곳은 걸어서) */
+export const ARRIVE_WALK = 2.5;
+
+/**
+ * 이동 막대 기울기 m(0..1) → { run, speed } (속도 배율 전)
+ * 데드존 안은 0, 반쯤 기울이면 걷기, 끝까지(0.6 이상) 기울이면 달리기 — 달리다가는 0.45 아래로 내려야 걷기. walkKey(Shift)면 늘 걷기
+ */
+export function stickSpeed(m, wasRun = false, walkKey = false) {
+  if (!(m >= DEADZONE)) return { run: !!wasRun, speed: 0 };
+  const run = runBand(m, wasRun) && !walkKey;
+  return { run, speed: run ? RUN_SPEED : WALK_SPEED };
+}
+
+/** 탭·클릭 이동의 남은 거리 rem(m) → 목표 속도: 2.5m 밖은 달리기, 0.5m 안은 걷기, 그 사이는 서서히 */
+export function arriveSpeed(rem) {
+  const k = Math.min(1, Math.max(0, (rem - 0.5) / (ARRIVE_WALK - 0.5)));
+  return WALK_SPEED + (RUN_SPEED - WALK_SPEED) * k;
+}
 
 /** 로컬 플레이어 컨트롤러 */
 export class Player {
@@ -49,14 +68,20 @@ export class Player {
    * key: 누른 대상의 안내 종류 (문자열 또는 배열) → 도착하면 arrivedKey 로 알려 그 대상만 실행 (옆 안내가 대신 실행되지 않게)
    */
   goTo(pos, stop = 0.2, interact = false, key = null) {
-    this.moveTarget = { pos, stop, interact, key, stuck: 0 };
+    // arrive: 누른 대상·땅으로 가는 이동이면 끝에서 걷기로 (자동 진행의 중간 경유점(멈춤 거리 0.35, 상호작용 없음)은 달린 채로 이어 감)
+    this.moveTarget = { pos, stop, interact, key, stuck: 0, arrive: interact || stop < 0.3 };
   }
 
   update(dt, input, followCam) {
     const ax = this.frozen ? { x: 0, y: 0 } : input.axis();
     const { fwd, right } = followCam.basis();
-    const dir = (this._dir ||= new THREE.Vector3()).set(0, 0, 0).addScaledVector(fwd, -ax.y).addScaledVector(right, ax.x);
-    if (dir.lengthSq() > 0.0001 || this.frozen) this.moveTarget = null; // 키보드/조이스틱 입력이 우선
+    // 기울기(0..1)는 방향을 맞추기 전에 따로 둠: 조이스틱을 반쯤 기울이면 걷고 끝까지 기울이면 달림 (키보드는 달리기, Shift = 걷기)
+    const m = Math.min(1, Math.hypot(ax.x, ax.y));
+    const st = stickSpeed(m, this.running, !!input.walkHeld?.());
+    const dir = (this._dir ||= new THREE.Vector3()).set(0, 0, 0);
+    if (st.speed > 0) { dir.addScaledVector(fwd, -ax.y).addScaledVector(right, ax.x); this.running = st.run; }
+    let speed = st.speed || RUN_SPEED;
+    if (st.speed > 0 || this.frozen) this.moveTarget = null; // 키보드/조이스틱 입력이 우선
     else if (this.moveTarget) {
       const t = this.moveTarget, goal = t.pos();
       const d = new THREE.Vector3(goal.x - this.position.x, 0, goal.z - this.position.z);
@@ -69,8 +94,10 @@ export class Player {
         if (t.interact && dist > 0.01) this.unico.facing = Math.atan2(d.x, d.z);
       } else {
         dir.copy(d.normalize());
-        // 장애물에 막혀 거의 못 움직이면 포기 (상호작용 대상 근처면 도착 처리)
-        t.stuck = (t.lastDist !== undefined && t.lastDist - dist < SPEED * dt * 0.25) ? t.stuck + dt : 0;
+        // 누른 곳이 가까워지면 걷기 속도까지 줄이며 다가감
+        speed = t.arrive ? arriveSpeed(dist - t.stop) : RUN_SPEED;
+        // 장애물에 막혀 거의 못 움직이면 포기 (상호작용 대상 근처면 도착 처리) — 기준은 지금 목표 속도 (걸어서 다가갈 때 막힘으로 오해하지 않게)
+        t.stuck = (t.lastDist !== undefined && t.lastDist - dist < speed * this.speedMult * dt * 0.25) ? t.stuck + dt : 0;
         t.lastDist = dist;
         if (t.stuck > 0.6) {
           if (t.interact && dist < t.stop + 1.5) { this.arrivedInteract = true; this.arrivedKey = t.key ?? null; this.arrivedTarget = t; }
@@ -85,7 +112,9 @@ export class Player {
     }
     // 가감속: 약 0.12초 만에 최고 속도, 손을 떼면 짧게 미끄러지듯 멈춤 (급출발·급정지 방지)
     const vel = (this.vel ||= new THREE.Vector3());
-    const want = dir.multiplyScalar(wants ? (this.swimming ? SWIM_SPEED : SPEED) * this.speedMult : 0);
+    // 헤엄은 걷기 기울기면 조금 느리게
+    this.targetSpeed = wants ? (this.swimming ? SWIM_SPEED * (speed >= RUN_SPEED ? 1 : 0.7) : speed) * this.speedMult : 0;
+    const want = dir.multiplyScalar(this.targetSpeed);
     vel.lerp(want, 1 - Math.exp(-dt * (wants ? 16 : 20)));
     if (!wants && vel.lengthSq() < 0.01) vel.set(0, 0, 0);
     if (vel.lengthSq() > 0) {

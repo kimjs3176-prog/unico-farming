@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Input, isPinchStart, PINCH_MS } from '../src/game/input.js';
+import { Input, isPinchStart, PINCH_MS, DEADZONE, runBand } from '../src/game/input.js';
 
 // 브라우저 없이: window·canvas 는 이벤트 등록만 받는 가짜
 const W = 400, H = 800;
@@ -133,4 +133,34 @@ test('세로 폰(390px): 양손 엄지가 거의 함께 닿아도 조이스틱 +
   } finally {
     globalThis.window.innerWidth = keepW;
   }
+});
+
+test('조이스틱 기울기 그대로(아날로그): 반쯤 = 걷기, 끝까지 = 달리기, 작은 떨림은 데드존', () => {
+  const r = rig();
+  r.start(0, T(1, 100, 600));
+  r.move(T(1, 100, 594));                      // 6px: 데드존 안
+  assert.ok(Math.hypot(r.inp.axis().x, r.inp.axis().y) < DEADZONE);
+  assert.equal(r.inp.manual(), false);
+  r.move(T(1, 100, 576));                      // 24px = 0.4
+  const half = Math.hypot(r.inp.axis().x, r.inp.axis().y);
+  assert.ok(Math.abs(half - 0.4) < 1e-9, '기울인 만큼 (정규화하지 않음)');
+  assert.equal(runBand(half, false), false, '걷기');
+  r.move(T(1, 100, 520));                      // 80px → 60px 에서 끝 = 1
+  const full = Math.hypot(r.inp.axis().x, r.inp.axis().y);
+  assert.ok(Math.abs(full - 1) < 1e-9);
+  assert.equal(runBand(full, false), true, '달리기');
+  // 달리다 조금 덜 기울여도(0.5) 계속 달림, 0.45 아래로 내려야 걷기
+  r.move(T(1, 100, 570));
+  assert.equal(runBand(Math.hypot(r.inp.axis().x, r.inp.axis().y), true), true);
+  r.move(T(1, 100, 576));
+  assert.equal(runBand(Math.hypot(r.inp.axis().x, r.inp.axis().y), true), false);
+});
+
+test('키보드: 늘 끝까지 기울인 것과 같고(대각선도 1), Shift 를 누르는 동안 걷기', () => {
+  const inp = new Input(canvas);
+  inp.keys.add('KeyW'); inp.keys.add('KeyD');
+  assert.ok(Math.abs(Math.hypot(inp.axis().x, inp.axis().y) - 1) < 1e-9);
+  assert.equal(inp.walkHeld(), false);
+  inp.keys.add('ShiftLeft');
+  assert.equal(inp.walkHeld(), true);
 });

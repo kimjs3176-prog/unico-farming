@@ -4,6 +4,11 @@ export const TAP_MOVE = 12;   // 이만큼(px) 안 움직이고 뗀 터치는 �
 export const TAP_MS = 300;
 export const PINCH_MS = 150;  // 두 번째 손가락이 이 시간 안에 닿으면 핀치 시작으로 봄
 
+// 이동 막대(조이스틱) 기울기 0..1: 데드존 안은 안 움직임, 0.6 이상이면 달리기, 달리다가 0.45 아래로 내려야 걷기 (경계에서 깜빡이지 않게)
+export const DEADZONE = 0.12, RUN_ON = 0.6, RUN_OFF = 0.45;
+/** 기울기 m 으로 달리는지 (wasRun: 지난 프레임에 달렸나) */
+export const runBand = (m, wasRun) => m >= (wasRun ? RUN_OFF : RUN_ON);
+
 let coarseMq = null;
 /** 터치 화면인가 (CSS 의 .hint-kbd 숨김과 같은 조건) — 안내 문구를 기기에 맞게 고를 때 */
 export const touchUI = () => typeof matchMedia !== 'undefined' && (coarseMq ||= matchMedia('(pointer: coarse)')).matches;
@@ -197,7 +202,10 @@ export class Input {
   isDown(code) { return this.enabled && this.keys.has(code); }
   justPressed(code) { return this.enabled && this.pressed.has(code); }
 
-  /** 이동 입력 (-1..1), x: 좌우, y: 앞뒤(앞 = -1) */
+  /** 걷기 키(Shift)를 누르고 있나 — 키보드는 늘 끝까지 기울인 것과 같아 기본은 달리기, Shift 를 누르는 동안 걷기 */
+  walkHeld() { return this.isDown('ShiftLeft') || this.isDown('ShiftRight'); }
+
+  /** 이동 입력 (-1..1, 조이스틱은 기울인 만큼), x: 좌우, y: 앞뒤(앞 = -1) */
   axis() {
     let x = 0, y = 0;
     if (this.enabled) {
@@ -222,7 +230,7 @@ export class Input {
   /** 키보드/조이스틱으로 직접 움직이는 중인지 (클릭 이동 취소용) */
   manual() {
     const a = this.axis();
-    return Math.abs(a.x) + Math.abs(a.y) > 0.05;
+    return Math.hypot(a.x, a.y) >= DEADZONE;
   }
 
   /** 화면을 벗어날 때(앱 전환 등): 손 뗀 이벤트를 놓쳐 눌린 채 남은 키·조이스틱·시점 터치 정리 */

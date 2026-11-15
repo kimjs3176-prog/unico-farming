@@ -95,7 +95,15 @@ function bundle(parts) {
   // 그룹은 머티리얼별로 정렬해 드로우콜 최소화
   const order = geos.map((g, k) => [parts[k][0].userData.mi, g]).sort((a, b) => a[0] - b[0]);
   const merged = mergeGeometries(order.map(([, g]) => g), true);
-  merged.groups.forEach((gr, k) => (gr.materialIndex = order[k][0]));
+  // 정렬 뒤 같은 재질로 이어진 그룹은 하나로 합침 (그룹마다 그리기 1번 → 머리 10→5번, 눈 6→2번)
+  const gs = [];
+  merged.groups.forEach((gr, k) => {
+    const mi = order[k][0], last = gs[gs.length - 1];
+    if (last && last.materialIndex === mi && last.start + last.count === gr.start) last.count += gr.count;
+    else gs.push({ start: gr.start, count: gr.count, materialIndex: mi });
+  });
+  merged.clearGroups();
+  for (const g of gs) merged.addGroup(g.start, g.count, g.materialIndex);
   merged.computeBoundingSphere();
   return { geo: merged, mats };
 }
@@ -236,13 +244,16 @@ function buildTemplate(rig = 'quad') {
     head.push([sph(0.05, { s: [0.75, 1.9, 0.35], r: [0.25, 0, sx * -0.45], p: ear }, 12), C.earIn()]);
   }
   // 미소: 주둥이 아래쪽 앞면을 따라 그린 곡선
+  // 입 방향 (주둥이 표면 위 점을 찾는 방향): t 0..1 가로, d 0(입꼬리 선)..1(미소 선) — 벌린 입도 같은 식으로 만들어 미소 선이 테두리가 됨
+  const mouthAt = (t, d, inset) => {
+    const x = -0.11 + 0.22 * t, s = Math.sin(t * Math.PI);
+    return FACE ? onFrom(SN, V(x * 2.2, -0.32 - s * 0.12 * d, 1), inset) : onFace(V(x, -0.37 - s * 0.03 * d, 0.92), inset);
+  };
   const smile = [];
-  for (let i = 0; i <= 8; i++) {
-    const t = i / 8, x = -0.11 + 0.22 * t, y = -0.32 - Math.sin(t * Math.PI) * 0.12;
-    smile.push((FACE ? onFrom(SN, V(x * 2.2, y, 1), -0.004) : onFace(V(x, -0.37 + Math.sin(t * Math.PI) * -0.03, 0.92), -0.004)).p);
-  }
+  for (let i = 0; i <= 8; i++) smile.push(mouthAt(i / 8, 1, -0.004).p);
   const curve = new THREE.CatmullRomCurve3(smile);
   head.push([new THREE.TubeGeometry(curve, 16, 0.011, 6, false), C.eye()]);
+  T.mouthOpen = openMouthGeo(mouthAt, !FACE);
   // 뿔 (앞으로 기울어진 금색 원뿔 + 주황 띠 2개), 뿌리를 정수리 표면에 박음
   const tilt = 0.32, axis = V(0, Math.cos(tilt), Math.sin(tilt));
   const hornBase = onFace(FACE ? V(...FACE.horn) : V(0, 1, 0.38), 0.03).p;
@@ -255,15 +266,26 @@ function buildTemplate(rig = 'quad') {
   T.head = bundle(head);
 
   // ---- 눈 (깜빡임용): 주둥이 위 이마 쪽에 양옆으로, 표면에 살짝 박힘 ----
-  const eyes = [];
+  const eyes = [], happy = [], eyeC = V(0, 0, 0);
   for (const sx of [-1, 1]) {
     const e = onFace(FACE ? V(sx * FACE.eye[0], FACE.eye[1], FACE.eye[2]) : V(sx * 0.42, 0.05, 0.9), 0.016);
     const ey = FACE ? 0.075 : 0.088;
     eyes.push([sph(ey, { s: [0.85, 1.2, 0.42], q: outward(e.n), p: e.p.toArray() }, 20), C.eye()]);
     eyes.push([sph(0.024, { p: e.p.clone().addScaledVector(e.n, 0.03).add(V(sx * -0.012 + 0.018, 0.032, 0)).toArray() }, 10), C.shine()]);
     eyes.push([sph(0.011, { p: e.p.clone().addScaledVector(e.n, 0.029).add(V(sx * 0.018 - 0.009, -0.03, 0)).toArray() }, 8), C.shine()]);
+    eyeC.addScaledVector(e.p, 0.5);
+    // 웃는 눈 (^^): 눈 자리에 위로 굽은 호 (주민 얼굴과 같은 식, 눈이 세로로 길어 조금 더 높게)
+    const f = frame(e.n), arc = [];
+    for (let i = 0; i <= 6; i++) { const t = i / 3 - 1; arc.push(e.p.clone().addScaledVector(f.r, t * ey * 0.95).addScaledVector(f.u, ey * 0.7 * (1 - t * t) - ey * 0.15).addScaledVector(f.n, ey * 0.42 * 0.6)); }
+    happy.push([tube(arc, ey * 0.17), C.eye()]);
   }
   T.eyes = bundle(eyes);
+  T.happy = bundleVC(happy);
+  // 눈 묶음을 두 눈의 가운데 높이·깊이로 옮겨 둠 → 깜빡임·놀란 눈이 제자리에서 접히고 커짐
+  eyeC.x = 0;
+  T.eyes.geo.translate(-eyeC.x, -eyeC.y, -eyeC.z);
+  T.happy.geo.translate(-eyeC.x, -eyeC.y, -eyeC.z);
+  T.eyeAt = eyeC;
 
   // ---- 소품 (머리/몸통 기준) ----
   T.sprout = bundle([
@@ -573,6 +595,40 @@ function faceViews(closed, face, open) {
   return { geo: shut, open: wide, mats: b.mats };
 }
 
+/**
+ * 유니콘 벌린 입 (말할 때·웃을 때): 미소 선을 테두리로 한 'D' 모양 입속 + 혀. 주둥이 표면을 따라 격자로 붙여(안쪽 2mm 위) 굴곡에도 묻히지 않음.
+ * mouthAt(t, d, inset): t 가로 0..1, d 0 = 입꼬리를 이은 선, 1 = 미소 선. 두 발은 입꼬리 선~미소 선, 네 발은 미소 선이 얕아 그 아래로 더 내림.
+ * 정점 색 재질 하나라 그리기 1번 (주민 얼굴과 같은 재질)
+ */
+function openMouthGeo(mouthAt, quad) {
+  const [dTop, dBot] = quad ? [1, 3.4] : [-0.4, 1.05];
+  const NX = 10, NY = 4;
+  const sheet = (d0, d1, t0, t1, inset, round = 0) => {
+    const P = [], idx = [];
+    for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) {
+      const tt = i / NX, t = t0 + (t1 - t0) * tt;
+      // round: 혀 윗선을 둥글게 (가운데가 가장 높음)
+      const top = d0 + (d1 - d0) * round * (1 - Math.sin(tt * Math.PI));
+      P.push(mouthAt(t, top + (d1 - top) * (j / NY), inset).p);
+    }
+    for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const a = j * (NX + 1) + i, b = a + NX + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+    const g = new THREE.BufferGeometry().setFromPoints(P);
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    // 바깥(카메라 쪽 +z)을 보게
+    const N = g.attributes.normal;
+    let nz = 0;
+    for (let i = 0; i < N.count; i++) nz += N.getZ(i);
+    if (nz < 0) { for (let q = 0; q < idx.length; q += 3) { const s = idx[q + 1]; idx[q + 1] = idx[q + 2]; idx[q + 2] = s; } g.setIndex(idx); g.computeVertexNormals(); }
+    return g;
+  };
+  const tongueTop = quad ? dTop + (dBot - dTop) * 0.5 : 0.5;
+  return bundleVC([
+    [sheet(dTop, dBot, 0, 1, -0.002), 0x5a2a2a, 0.55],
+    [sheet(tongueTop, dBot * 0.98, 0.3, 0.7, -0.0028, 1), 0xf27c8c, 0.45],
+  ]);
+}
+
 function buildSpeciesTemplate(rig, sp) {
   const M = RIGS[rig].meta, A = M.anchors, L = M.lines, F = sp.face, pal = sp.palette;
   const v = (a) => V(a[0], a[1], a[2]);
@@ -835,9 +891,48 @@ const GAITS = {
   tiptoe: { ...NO_GAIT, bob: 0.6, amp: 0.9, steady: 0.8 }, // 고양이: 사뿐사뿐
   hop: { ...NO_GAIT, hop: true, cadMin: 2.0, cadMax: 2.8 }, // 토끼: 두 발 모아 깡충
 };
+// ---- 두 발 유니콘 걸음 (주인공·접속자): 디딘 발이 땅에 붙어 미끄러지지 않는 걷기/달리기 ----
+/** 달리다 멈출 때 제동 자세 길이(초) */
+const SKID = 0.3;
+export const GAIT = { walkBeta: 0.5, runBeta: 0.36, runA: 0.8, cadMin: 1.5, cadMax: 3.8, maxSin: 0.95, runFrom: 2.6, runTo: 3.6 };
+const smooth01 = (a, b, x) => { const k = Math.min(1, Math.max(0, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
+/** 달리기 섞임 0..1 (걸러 낸 속도 기준): 2.6m/s 아래는 걷기, 3.6m/s 위는 달리기 */
+export const runBlend = (v) => smooth01(GAIT.runFrom, GAIT.runTo, v);
+
+/**
+ * 걸음 모양 (순수 함수): v 땅 위 속도(m/s), L 다리 길이(m, 배율 적용), r 달리기 섞임 0..1
+ * → { A: 다리 최대 각(rad), beta: 한 주기 중 발이 땅에 닿아 있는 비율, cad: 초당 걸음 주기 }
+ * 디딘 동안 발이 몸 아래를 지나가는 거리(2·L·sinA)를 몸이 같은 시간에 가는 거리(v·beta/cad)와 같게 → 발이 미끄러지지 않음.
+ * 주기는 1.5~3.8Hz 안 (짧은 다리를 너무 빨리 휘젓지 않게), 그 밖이면 주기를 묶고 각도를 다시 구함 (sinA 최대 0.95)
+ */
+export function bipedGait(v, L, r = 0) {
+  const beta = GAIT.walkBeta + (GAIT.runBeta - GAIT.walkBeta) * r;
+  const A0 = (0.42 + 0.3 * Math.min(1, v / 4.6)) * (1 - r) + GAIT.runA * r;
+  let A = A0, cad = (v * beta) / (2 * L * Math.sin(A0));
+  if (!(cad >= GAIT.cadMin && cad <= GAIT.cadMax)) {
+    cad = Math.min(GAIT.cadMax, Math.max(GAIT.cadMin, cad || 0));
+    A = Math.asin(Math.min(GAIT.maxSin, (v * beta) / (2 * L * cad)));
+  }
+  return { A, beta, cad };
+}
+
+/**
+ * 한 다리의 각도 (순수 함수, + = 발이 뒤로): u 그 다리의 걸음 위상 0..1
+ * 디딤(u < beta): 앞(-A)에서 뒤(+A)로, sin 이 시간에 비례 → 발이 몸 아래를 같은 빠르기로 지나감 (땅에 붙음)
+ * 듦(u ≥ beta): 뒤에서 앞으로, 처음에 빨리 들어 올리고 디딜 때는 부드럽게
+ */
+export function legAngle(u, beta, A) {
+  if (u < beta) return Math.asin(Math.sin(A) * ((2 * u) / beta - 1));
+  const w = (u - beta) / (1 - beta);
+  return A - 2 * A * (1 - (1 - w) * (1 - w));
+}
+
 /** 행복 ^^ 눈이 되는 동작, 입을 벌리는 동작, 강아지가 반가워 꼬리를 세게 흔드는 동작 */
 const HAPPY = new Set(['cheer', 'heart', 'rub', 'groom', 'backpat', 'wag']);
 const OPEN_MOUTH = new Set(['cheer', 'heart', 'wag']);
+// 유니콘(주인공·KOAT 담당·접속자): ^^ 눈이 되는 동작, 입을 벌리는 동작
+const HERO_HAPPY = new Set(['cheer', 'heart', 'wave', 'lift']);
+const HERO_OPEN = new Set(['cheer', 'heart', 'wave', 'lift', 'megaphone']);
 const WAG_GLAD = new Set(['talk', 'heart', 'cheer', 'wave']);
 
 const BLOB_GEO = new THREE.CircleGeometry(0.62, 28);
@@ -992,6 +1087,8 @@ export class Unico {
     this.root = new THREE.Group(); // 회전(진행 방향)
     if (sp) this.root.scale.setScalar(this.scale); // 이름표는 group 에 있어 글자 크기 그대로
     this.group.add(this.root);
+    // 팝(juice.pop)은 몸(root)만 찌그러뜨림 — 이름표·내 표시 링·화살표가 있는 group 은 그대로
+    this.group.userData.popTarget = this.root;
     // 뼈대 (리그 정의대로): 몸통 → 머리 / 다리 / (두 발이면 팔) / 꼬리
     const boneMap = {};
     for (const [n, parent, p] of R.bones) {
@@ -1045,10 +1142,22 @@ export class Unico {
     this.acc = {};
     if (sp) this._buildSpeciesParts(TPL, boneMap); // 주민 동물: 얼굴·종별 옷 (유니콘 소품·코스튬 없음)
     else {
-      // 얼굴 부품 (머리 뼈에 붙음)
-      this.headG.add(meshOf(TPL.head));
+      // 얼굴 부품 (머리 뼈에 붙음): faceG 하나로 묶어 먼 거리에서 한 번에 끔 (숨겨 둔 ^^ 눈·벌린 입은 그대로 숨김)
+      this.faceG = new THREE.Group();
+      this.headG.add(this.faceG);
+      this.faceG.add(meshOf(TPL.head));
       this.eyesG = meshOf(TPL.eyes);
-      this.headG.add(this.eyesG);
+      this.eyesG.position.copy(TPL.eyeAt);
+      this._eyeAt = TPL.eyeAt;
+      this.faceG.add(this.eyesG);
+      this.eyesHappy = meshOf(TPL.happy);
+      this.eyesHappy.position.copy(TPL.eyeAt);
+      this.eyesHappy.visible = false;
+      this.faceG.add(this.eyesHappy);
+      this.mouthOpenM = meshOf(TPL.mouthOpen);
+      this.mouthOpenM.visible = false;
+      this.faceG.add(this.mouthOpenM);
+      this.mouthOpenNow = false;
       // 소품
       const addAcc = (key, parent) => { const m = meshOf(TPL[key]); m.visible = false; parent.add(m); this.acc[key] = m; };
       // 머리 소품은 머리 크기에 맞춰 축소
@@ -1309,6 +1418,32 @@ export class Unico {
   }
 
   /**
+   * 표정 (유니콘: 주인공·KOAT 담당·다른 접속자): ^^ 눈·놀란 눈·생각할 때 올려다보기·말할 때 입.
+   * 보이기 상태는 바뀔 때만 건드림. 웃는 눈과 보통 눈은 둘 중 하나만 그려짐 (그리기 수 그대로)
+   */
+  _expressHero(dt, blink) {
+    const t = this.t, act = this.action;
+    const happy = HERO_HAPPY.has(act) || t < this.happyUntil;
+    if (happy !== !!this._heroHappy) { this._heroHappy = happy; this.eyesG.visible = !happy; this.eyesHappy.visible = happy; }
+    // 놀람: 0.4초 동안 눈을 크게 (눈 묶음 가운데 기준이라 제자리에서)
+    const startle = act === 'startle' && this.actionT < 0.4;
+    this.eyesG.scale.set(startle ? 1.06 : 1, blink * (startle ? 1.2 : 1), 1);
+    // 생각: 눈을 살짝 위로 (올려다보기)
+    const upT = act === 'think' ? 0.012 : 0;
+    this._eyeUp = (this._eyeUp ?? 0) + (upT - (this._eyeUp ?? 0)) * (1 - Math.exp(-dt * 10));
+    this.eyesG.position.y = this._eyeAt.y + this._eyeUp;
+    // 입: 말하는 동안 8Hz 로 열고 닫기, 아니면 만세·하트·인사·확성기·번쩍 들기·놀람(헉) 때 벌림
+    const mo = t < this._speakUntil ? Math.sin(t * TWO_PI * 8) > 0
+      : HERO_OPEN.has(act) || t < this.happyUntil || (startle && this.actionT > 0.05);
+    if (mo !== this.mouthOpenNow) { this.mouthOpenNow = mo; this.mouthOpenM.visible = mo; }
+  }
+
+  /** 잠깐 멈칫(히트스톱): s 초 동안 동작 시간(actionT)만 0.05배로 — 위치·걷기·다른 캐릭터는 그대로 */
+  hitStop(s = 0.035) {
+    this.hitStopUntil = Math.max(this.hitStopUntil || 0, this.t + s);
+  }
+
+  /**
    * 주민 동물 2차 동작: 귀 스프링(서 있는 귀·처진 귀·두 마디 귀) + 종별 꼬리 (쓸기·낮게·흔들기·물결·짧은·솜방울)
    * 회전 규칙: 귀 rotation.x + = 귀 끝 앞으로, − = 뒤로 젖힘 / z = 바깥으로(out) / y = 돌림(고양이). 매 프레임 새 객체 만들지 않음
    */
@@ -1483,7 +1618,7 @@ export class Unico {
       const faceOn = d < (this.faceOff ? 36 : 40);
       if (faceOn === !!this.faceOff) {
         this.faceOff = !faceOn;
-        if (this.faceG) this.faceG.visible = faceOn; // 주민 동물: 얼굴 묶음 하나로 (숨긴 ^^ 눈·벌린 입은 그대로)
+        if (this.faceG) this.faceG.visible = faceOn; // 얼굴 묶음 하나로 (숨긴 ^^ 눈·벌린 입은 그대로)
         else for (const c of this.headG.children) if (c.isMesh) c.visible = faceOn;
       }
       // 카메라 바로 앞(3m 안)에서는 이름표·감정 아이콘이 화면을 가리지 않게 흐리게
@@ -1548,60 +1683,115 @@ export class Unico {
     const walking = this.moving || speed > 0.3;
     this.walkBlend += ((walking ? 1 : 0) - this.walkBlend) * (1 - Math.exp(-dt * 10)); // 프레임 속도와 무관한 감쇠
     const LEG_LEN = this.legLen, BODY_Y = this.bodyY, bp = this.biped, G = this._gait, sp = this.species;
-    // 이등신 종종걸음: 다리가 짧아 보폭만큼 정확히 디디면 초당 7번 넘게 다리를 휘저어 떨려 보이므로
-    // 걸음 수(케이던스)를 초당 1.5~3회로 제한하고, 빠를수록 다리를 크게 벌림 (발이 약간 미끄러지는 대신 자연스러운 리듬)
-    const sp01 = Math.min(1, speed / 4.6);
-    const ampT = (bp ? 0.38 + 0.32 * sp01 : 0.42 + 0.18 * sp01) * G.amp; // 다리 최대 각도(rad)
-    this.walkAmp = (this.walkAmp ?? ampT) + (ampT - (this.walkAmp ?? ampT)) * (1 - Math.exp(-dt * 6));
-    const AMP = this.walkAmp;
-    const stride = 2 * LEG_LEN * this.scale * Math.sin(AMP); // 반주기 동안 디딘 발이 미는 거리 (땅 위)
-    const cadence = THREE.MathUtils.clamp(Math.max(speed, 1.2) / (2 * stride), G.cadMin ?? 1.5, G.cadMax ?? (bp ? 3.0 : 3.2)); // 초당 걸음 주기
-    if (walking) this.walkPhase += TWO_PI * cadence * dt;
-    else if (this.walkBlend > 0.02) { const tgt = Math.ceil(this.walkPhase / Math.PI - 0.15) * Math.PI; this.walkPhase += (tgt - this.walkPhase) * (1 - Math.exp(-dt * 9)); }
-    const w = this.walkBlend, ph = this.walkPhase;
-    const sw = Math.sin(ph) * AMP * w;
     const legs = this.legs, arms = this.arms;
-    const lift = 0, lift2 = 0; // 다리 길이를 줄였다 늘리지 않음 (고무처럼 보임)
-    for (const l of legs) l.rotation.set(0, 0, 0);
-    if (bp) {
-      // 두 발: 좌우 다리 교차, 팔은 반대로 흔들기
-      const [L, Rl] = legs;
-      L.rotation.x = sw; Rl.rotation.x = -sw;
-      L.scale.y = 1 - lift; Rl.scale.y = 1 - lift2;
+    const w = this.walkBlend;
+    // 걸러 낸 속도 (원격 접속자의 위치 떨림·프레임 흔들림에 달리기 섞임이 깜빡이지 않게)
+    this._vF = (this._vF ?? speed) + (speed - (this._vF ?? speed)) * (1 - Math.exp(-dt * 8));
+    // 두 발 유니콘(주인공·접속자): 디딘 발이 땅에 붙는 걷기/달리기. 주민 동물·네 발은 예전 걸음 (종별 걸음 맛)
+    const hero = bp && !sp;
+    let sp01, ph, bob, r = 0, air = 0;
+    if (hero) {
+      const vF = this._vF;
+      sp01 = Math.min(1, vF / 4.6);
+      // 달리기 섞임: 수영·탑승·동작 중·멈춤이면 0
+      r = walking && !this.swimming && !this.riding && !this.action ? runBlend(vF) : 0;
+      const g = (this.gaitNow = bipedGait(vF, LEG_LEN * this.scale, r));
+      // 위상은 이번 프레임의 실제 속도로 진행 (걸러 낸 속도와의 비 → 가속·감속 중에도 디딘 발이 붙어 있게)
+      const u0 = this._gaitU ?? 0;
+      let u = u0;
+      if (walking) u += g.cad * (vF > 0.2 ? THREE.MathUtils.clamp(speed / vF, 0.5, 1.5) : 1) * dt;
+      const stepL = Math.floor(u) > Math.floor(u0), stepR = Math.floor(u - 0.5) > Math.floor(u0 - 0.5); // 디딤 시작
+      u -= Math.floor(u);
+      this._gaitU = u;
+      const uL = u, uR = (u + 0.5) % 1, A = g.A;
+      ph = TWO_PI * (uL - g.beta / 2); // 꾸밈용 위상 (sin > 0 이면 왼발이 뒤로)
+      const thL = legAngle(uL, g.beta, A) * w, thR = legAngle(uR, g.beta, A) * w;
+      const stL = uL < g.beta, stR = uR < g.beta;
+      // 몸 높이: 디딘 다리가 기운 만큼 내려 발을 땅에 붙임 (달리면 절반만 → 덜 출렁, 발끝이 살짝 뜸)
+      // 두 발이 다 뜬 순간(달리기)은 작게 떠오름
+      let drop = LEG_LEN * (1 - Math.cos(stL ? thL : stR ? thR : A * w)) * (1 - 0.5 * r), fly = 0;
+      if (!stL && !stR) fly = Math.sin(Math.PI * THREE.MathUtils.clamp(((uL % 0.5) - g.beta) / (0.5 - g.beta), 0, 1)) * 0.025 * r * w;
+      bob = -drop + fly;
+      const [Ll, Rl] = legs;
+      Ll.rotation.set(thL, 0, 0); Rl.rotation.set(thR, 0, 0);
+      // 드는 발: 땅을 긁지 않게 다리를 살짝 접음 (무릎 대신 길이, 디딜 때는 원래 길이)
+      const hip = LEG_LEN - drop + fly, clr = (0.025 + 0.025 * r) * w;
+      const swing = (th, uu) => THREE.MathUtils.clamp((hip - clr * Math.sin(Math.PI * (uu - g.beta) / (1 - g.beta))) / (LEG_LEN * Math.cos(th)), 0.72, 1);
+      const own = this.action || this.swimming || this.riding; // 동작·수영·탑승이 다리를 정함
+      Ll.scale.y = stL || own ? 1 : swing(thL, uL);
+      Rl.scale.y = stR || own ? 1 : swing(thR, uR);
+      // 팔: 반대쪽 다리와 함께 흔들기, 달리면 크게 펌프하고 옆으로 벌림
       const [AL, AR] = arms;
-      const armK = 0.55 + 0.4 * sp01; AL.rotation.set(-sw * armK, 0, -(0.14 + 0.05 * sp01) * w); AR.rotation.set(sw * armK, 0, (0.14 + 0.05 * sp01) * w);
-      // 대기: 팔이 숨쉬듯 살짝
+      const armK = (0.55 + 0.4 * sp01) * (1 - r) + 1.1 * r, asw = Math.sin(ph) * A * w, open = (0.14 + 0.05 * sp01 + 0.3 * r) * w;
+      AL.rotation.set(-asw * armK, 0, -open); AR.rotation.set(asw * armK, 0, open);
       if (w < 0.5) { const br = Math.sin(this.t * 2.1) * 0.04; AL.rotation.z -= br; AR.rotation.z += br; }
+      // 발소리·먼지: 발이 땅에 닿는 순간, 그 발 자리에서 (세 번째 값 = 달리기 섞임)
+      if (walking && !this.swimming && (stepL || stepR)) {
+        const f = LEG_LEN * this.scale * Math.sin(A) * w, sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
+        for (const [hit, leg] of [[stepL, Ll], [stepR, Rl]]) {
+          if (!hit) continue;
+          const hx = leg.position.x * this.scale;
+          this.onStep?.(pos.x + sy * f + cy * hx, pos.z + cy * f - sy * hx, r);
+        }
+      }
+      this.walkPhase = ph;
     } else {
-      const [FL, FR, BL, BR] = legs;
-      FL.rotation.x = BR.rotation.x = sw;
-      FR.rotation.x = BL.rotation.x = -sw;
-      FL.scale.y = BR.scale.y = 1 - lift;
-      FR.scale.y = BL.scale.y = 1 - lift2;
+      // 이등신 종종걸음: 다리가 짧아 보폭만큼 정확히 디디면 초당 7번 넘게 다리를 휘저어 떨려 보이므로
+      // 걸음 수(케이던스)를 초당 1.5~3회로 제한하고, 빠를수록 다리를 크게 벌림 (발이 약간 미끄러지는 대신 자연스러운 리듬)
+      sp01 = Math.min(1, speed / 4.6);
+      const ampT = (bp ? 0.38 + 0.32 * sp01 : 0.42 + 0.18 * sp01) * G.amp; // 다리 최대 각도(rad)
+      this.walkAmp = (this.walkAmp ?? ampT) + (ampT - (this.walkAmp ?? ampT)) * (1 - Math.exp(-dt * 6));
+      const AMP = this.walkAmp;
+      const stride = 2 * LEG_LEN * this.scale * Math.sin(AMP); // 반주기 동안 디딘 발이 미는 거리 (땅 위)
+      const cadence = THREE.MathUtils.clamp(Math.max(speed, 1.2) / (2 * stride), G.cadMin ?? 1.5, G.cadMax ?? (bp ? 3.0 : 3.2)); // 초당 걸음 주기
+      if (walking) this.walkPhase += TWO_PI * cadence * dt;
+      else if (this.walkBlend > 0.02) { const tgt = Math.ceil(this.walkPhase / Math.PI - 0.15) * Math.PI; this.walkPhase += (tgt - this.walkPhase) * (1 - Math.exp(-dt * 9)); }
+      ph = this.walkPhase;
+      const sw = Math.sin(ph) * AMP * w;
+      const lift = 0, lift2 = 0; // 다리 길이를 줄였다 늘리지 않음 (고무처럼 보임)
+      for (const l of legs) l.rotation.set(0, 0, 0);
+      if (bp) {
+        // 두 발: 좌우 다리 교차, 팔은 반대로 흔들기
+        const [L, Rl] = legs;
+        L.rotation.x = sw; Rl.rotation.x = -sw;
+        L.scale.y = 1 - lift; Rl.scale.y = 1 - lift2;
+        const [AL, AR] = arms;
+        const armK = 0.55 + 0.4 * sp01; AL.rotation.set(-sw * armK, 0, -(0.14 + 0.05 * sp01) * w); AR.rotation.set(sw * armK, 0, (0.14 + 0.05 * sp01) * w);
+        // 대기: 팔이 숨쉬듯 살짝
+        if (w < 0.5) { const br = Math.sin(this.t * 2.1) * 0.04; AL.rotation.z -= br; AR.rotation.z += br; }
+      } else {
+        const [FL, FR, BL, BR] = legs;
+        FL.rotation.x = BR.rotation.x = sw;
+        FR.rotation.x = BL.rotation.x = -sw;
+        FL.scale.y = BR.scale.y = 1 - lift;
+        FR.scale.y = BL.scale.y = 1 - lift2;
+      }
+      // 토끼 깡충: 두 다리 같은 위상, 공중에서 다리를 접고 팔을 벌림
+      if (G.hop) {
+        air = Math.max(0, Math.sin(ph));
+        const lx = (-0.45 * air + 0.25 * (1 - air)) * w;
+        legs[0].rotation.x = legs[1].rotation.x = lx;
+        arms[0].rotation.z -= 0.5 * air * w; arms[1].rotation.z += 0.5 * air * w;
+      }
+      this._air = air * w;
+      // 다리가 기울면 발끝 높이가 L(1-cosθ) 만큼 올라가므로 그만큼 몸을 내려 발을 땅에 붙임
+      // 다리를 벌리면 골반이 내려가고(발이 땅에 붙게), 한 발로 디디는 중간에는 살짝 튀어 오름 → 걸음마다 통통
+      bob = G.hop ? 0 : (-LEG_LEN * (1 - Math.cos(sw)) * (bp ? 0.65 : 1) + (bp ? Math.abs(Math.cos(ph)) * 0.018 * w * (0.5 + sp01) : 0)) * G.bob;
+      const s = Math.sin(ph);
+      // 발소리: 걸음은 다리가 엇갈릴 때마다, 깡충은 착지 때만 (+ 착지 찌그러짐)
+      const stepNow = G.hop ? this.lastSin > 0 && s <= 0 : Math.sign(s) !== Math.sign(this.lastSin);
+      if (walking && !this.swimming && stepNow) { this.onStep?.(pos.x, pos.z, 0); if (G.hop) { this._squash = 0.08; this._landed = true; } }
+      this.lastSin = s;
     }
-    // 토끼 깡충: 두 다리 같은 위상, 공중에서 다리를 접고 팔을 벌림
-    let air = 0;
-    if (G.hop) {
-      air = Math.max(0, Math.sin(ph));
-      const lx = (-0.45 * air + 0.25 * (1 - air)) * w;
-      legs[0].rotation.x = legs[1].rotation.x = lx;
-      arms[0].rotation.z -= 0.5 * air * w; arms[1].rotation.z += 0.5 * air * w;
-    }
-    this._air = air * w;
-    // 다리가 기울면 발끝 높이가 L(1-cosθ) 만큼 올라가므로 그만큼 몸을 내려 발을 땅에 붙임
-    // 다리를 벌리면 골반이 내려가고(발이 땅에 붙게), 한 발로 디디는 중간에는 살짝 튀어 오름 → 걸음마다 통통
-    const bob = G.hop ? 0 : (-LEG_LEN * (1 - Math.cos(sw)) * (bp ? 0.65 : 1) + (bp ? Math.abs(Math.cos(ph)) * 0.018 * w * (0.5 + sp01) : 0)) * G.bob;
-    const s = Math.sin(ph);
-    // 발소리: 걸음은 다리가 엇갈릴 때마다, 깡충은 착지 때만 (+ 착지 찌그러짐)
-    const stepNow = G.hop ? this.lastSin > 0 && s <= 0 : Math.sign(s) !== Math.sign(this.lastSin);
-    if (walking && !this.swimming && stepNow) { this.onStep?.(pos.x, pos.z); if (G.hop) { this._squash = 0.08; this._landed = true; } }
-    this.lastSin = s;
+    this.runBlend = r;
 
     // 몸: 빠를수록 앞으로 기울고, 디딘 발 쪽으로 살짝 기우뚱. 머리는 몸의 흔들림을 반쯤 상쇄(시선 안정)
     let bodyY = BODY_Y + bob, bodyPitch = Math.sin(ph * 2) * 0.025 * w + (bp ? (0.04 + 0.06 * sp01) * w : 0), bodyRoll = bp ? Math.sin(ph) * 0.045 * w * G.roll : 0;
     let headPitch = -Math.sin(ph * 2) * 0.02 * w - (bp ? 0.04 * sp01 * w : 0), headRoll = -bodyRoll * 0.5 * (G.steady ?? 1);
     const breath = Math.sin(this.t * 2.1 * (G.breathF ?? 1)) * 0.012 * (G.breathA ?? 1) * (1 - w); // 숨쉬기: 가슴이 살짝 오르내림
     bodyY += breath;
+    // 달리기 자세: 몸을 앞으로 숙이고 고개는 들어 시선 유지, 좌우 기우뚱은 줄임
+    if (hero) { bodyPitch += 0.15 * r * w; headPitch -= 0.08 * r * w; bodyRoll *= 1 - 0.4 * r; }
     // 종별 걸음 맛 (여우 턱 들기, 너구리 뒤뚱, 강아지 머리 까딱, 토끼 깡충 높이, 곰 굽은 허리, 강아지 꼬리 따라 엉덩이)
     let bodySY = 1;
     if (sp) {
@@ -1620,9 +1810,23 @@ export class Unico {
     this._acc = (this._acc ?? 0) + (THREE.MathUtils.clamp(accel, -25, 25) - (this._acc ?? 0)) * (1 - Math.exp(-dt * 8));
     if (bp && !this.swimming && !this.riding) bodyPitch += THREE.MathUtils.clamp(this._acc * 0.006, -0.07, 0.08);
     // 멈추는 순간: 무게가 실리며 살짝 주저앉았다 돌아옴
-    if (this._wasWalking && !walking) this._settle = 0.38;
+    // 달리다 멈추거나 반대로 돌아서면(1.5초에 한 번까지) 뒤로 버티며 미끄러지듯 제동 + 먼지 두 번
+    const ranHard = hero && (this._rPrev ?? 0) > 0.8 && !this.action && !this.swimming && !this.riding && this.t - (this._skidAt ?? -9) > 1.5;
+    const reversed = walking && Math.abs(wrap(this.facing - (this._facingPrev ?? this.facing))) > 2;
+    if (ranHard && ((this._wasWalking && !walking) || reversed)) { this._skid = SKID; this._skidAt = this.t; this._skidPuff = 2; this._settle = 0; }
+    else if (this._wasWalking && !walking && !(this._skid > 0)) this._settle = 0.38;
     this._wasWalking = walking;
+    this._rPrev = r;
+    this._facingPrev = this.facing;
     if (this._settle > 0) { this._settle = Math.max(0, this._settle - dt); const k = 1 - this._settle / 0.38; bodyY -= Math.sin(k * Math.PI) * 0.035 * (bp ? 1 : 0.6); bodyPitch -= Math.sin(k * Math.PI) * 0.03; }
+    let skidK = 0;
+    if (this._skid > 0) {
+      this._skid = Math.max(0, this._skid - dt);
+      const u = 1 - this._skid / SKID;
+      skidK = Math.sin(Math.min(1, u * 1.6) * Math.PI * 0.5) * (u > 0.6 ? 1 - (u - 0.6) / 0.4 : 1);
+      bodyPitch -= 0.24 * skidK; bodyY -= 0.035 * skidK; headPitch += 0.06 * skidK;
+      if (this._skidPuff > 0 && u >= (2 - this._skidPuff) * 0.4) { this._skidPuff--; this.onStep?.(pos.x + Math.sin(this.yaw) * 0.25, pos.z + Math.cos(this.yaw) * 0.25, 1); }
+    }
     // 대기 중 두리번
     if (!this.moving && !this.action) {
       this.lookYaw += (Math.sin(this.t * 0.45) * 0.35 - this.lookYaw) * (1 - Math.exp(-dt * 2));
@@ -1635,7 +1839,10 @@ export class Unico {
 
     // ---- 감정표현 ----
     if (this.action) {
-      this.actionT += dt;
+      // 히트스톱 중에는 동작 시간만 아주 느리게 (멈칫한 만큼 동작이 늦게 끝남 → 손맛 순간이 잘리지 않게)
+      const hs = this.t < (this.hitStopUntil || 0) ? 0.05 : 1;
+      if (hs < 1 && Number.isFinite(this.actionUntil)) this.actionUntil += dt * (1 - hs);
+      this.actionT += dt * hs;
       const a = this.actionT;
       const [AL, AR] = arms;
       switch (this.action) {
@@ -1732,6 +1939,8 @@ export class Unico {
           const k = Math.min(1, a / 0.35), y = a < 0.35 ? 0 : Math.min(1, (a - 0.35) / 0.18);
           bodyPitch = 0.5 * k * (1 - y) - 0.22 * y; bodyY += y * 0.1 * Math.max(0, 1 - (a - 0.53) * 3); headPitch = 0.45 * (1 - y) - 0.25 * y;
           if (bp) { const ax = -0.65 * (1 - y) - 2.3 * y; AR.rotation.set(ax, 0, 0.15 * y); AL.rotation.set(ax, 0, -0.15 * y); legs[0].rotation.x = 0.3 * (1 - y); legs[1].rotation.x = -0.3 * (1 - y); }
+          // 쑥 뽑히는 순간 (팔을 들어 올리는 중간, 동작 시간 기준이라 히트스톱이면 같이 늦어짐): 작물 튀어나오기 등
+          if (a >= 0.42 && this._hitCyc !== -4) { this._hitCyc = -4; this.onHit?.('pull'); }
           break;
         }
         case 'push': { // 나무 흔들기: 두 손으로 줄기를 밀었다 당겼다
@@ -1896,6 +2105,17 @@ export class Unico {
         tailBase = 0.6;
       }
     }
+    if (hero && !this.action && !this.swimming && !this.riding) {
+      // 몸을 숙이고 기우뚱한 만큼 다리 각도를 되돌려, 땅 기준 다리 각이 걸음 계산 그대로 (디딘 발이 몸짓 때문에 밀리지 않게)
+      for (const l of legs) { l.rotation.x -= bodyPitch * w; l.rotation.z -= bodyRoll * w; }
+      // 제동: 앞발로 버티고 뒷발은 살짝 뒤로, 팔은 벌려 균형
+      if (skidK > 0) {
+        legs[0].rotation.x += (-0.42 - legs[0].rotation.x) * skidK; legs[1].rotation.x += (0.12 - legs[1].rotation.x) * skidK;
+        legs[0].scale.y += (1 - legs[0].scale.y) * skidK; legs[1].scale.y += (1 - legs[1].scale.y) * skidK;
+        arms[0].rotation.set(arms[0].rotation.x * (1 - skidK) + 0.35 * skidK, 0, arms[0].rotation.z * (1 - skidK) - 0.75 * skidK);
+        arms[1].rotation.set(arms[1].rotation.x * (1 - skidK) + 0.35 * skidK, 0, arms[1].rotation.z * (1 - skidK) + 0.75 * skidK);
+      }
+    }
     this.bodyG.position.y = bodyY;
     this.bodyG.rotation.set(bodyPitch, 0, bodyRoll);
     if (sp) this.bodyG.scale.y = bodySY;
@@ -1923,7 +2143,7 @@ export class Unico {
     if (this.nextBlink < (sp?.motion.blinkHold ?? 0.12)) blink = 0.12;
     if (this.nextBlink <= 0) this.nextBlink = 2.5 + Math.random() * 3.5;
     if (sp) this._express(dt, blink, w);
-    else this.eyesG.scale.y = blink;
+    else this._expressHero(dt, blink);
     // 그림자: 점프하면 작고 옅어짐, 발굽 그림자는 발 위치를 따라감
     const up = Math.max(0, bodyY - this.bodyY);
     const shs = Math.max(0.45, 1 - up * 1.8);

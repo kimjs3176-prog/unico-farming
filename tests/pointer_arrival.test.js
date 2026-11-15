@@ -84,6 +84,56 @@ test('플레이어: 탭한 대상의 종류를 도착할 때 알려 줌 (막혀�
   assert.deepEqual(b.arrivedKey, ['build', 'rush', 'building']);
 });
 
+test('플레이어: 막힘 판정은 지금 목표 속도 기준 — 걸어서 다가가며 벽을 비스듬히 미끄러져도 포기하지 않고, 완전히 막히면 포기', () => {
+  // 땅을 탭해 가까운 곳으로: 벽에 비스듬히 막혀 시도한 만큼의 70%만 나아감 (걷기 속도에서 약 0.7m/s — 달리기 기준 1.15m/s 보다 느려 예전에는 0.6초 뒤 포기)
+  const p = fakePlayer();
+  p.world.resolveCollision = (next) => { next.lerp(p._from, 0.3); };
+  const goal = new THREE.Vector3(0, 0, -2.2);
+  p.goTo(() => goal, 0.15, false);
+  const speeds = [];
+  for (let i = 0; i < 600 && p.moveTarget; i++) { p.update(1 / 60, still, cam); speeds.push(p.targetSpeed); }
+  assert.ok(p.position.distanceTo(goal) <= 0.15 + 1e-6, `누른 곳까지 감 (남은 거리 ${p.position.distanceTo(goal).toFixed(2)}m)`);
+  assert.ok(Math.max(...speeds) < 4.6, '가까운 곳은 달리지 않고 다가감');
+  assert.ok(Math.min(...speeds.filter((s) => s > 0)) <= 1.9 + 1e-9, '끝에서는 걷기 속도');
+  // 완전히 막힘 → 포기 (도착 아님: 대상에서 멀리)
+  const b = fakePlayer(true);
+  b.goTo(() => new THREE.Vector3(0, 0, -6), 0.2, true, 'npc');
+  for (let i = 0; i < 60 && b.moveTarget; i++) b.update(0.05, still, cam);
+  assert.equal(b.moveTarget, null);
+  assert.equal(b.arrivedInteract, undefined);
+});
+
+test('플레이어: 멀리 누르면 달려가다 끝에서 걷기로, 자동 진행의 중간 경유점(멈춤 0.35·상호작용 없음)은 달린 채로', () => {
+  const far = fakePlayer();
+  far.goTo(() => new THREE.Vector3(0, 0, -12), 0.15, false);
+  const sp = [];
+  for (let i = 0; i < 600 && far.moveTarget; i++) { far.update(1 / 60, still, cam); sp.push(far.targetSpeed); }
+  assert.equal(sp[5], 4.6, '처음은 달리기');
+  assert.ok(sp.at(-1) < 2.2, '도착 직전은 걷기');
+  const wp = fakePlayer();
+  wp.goTo(() => new THREE.Vector3(0, 0, -1.5), 0.35, false);
+  wp.update(1 / 60, still, cam);
+  assert.equal(wp.targetSpeed, 4.6);
+});
+
+test('플레이어: 조이스틱 반쯤 = 걷기 1.9, 끝까지 = 달리기 4.6 (푹 잔 날은 배율), Shift = 걷기', () => {
+  const p = fakePlayer();
+  const stick = (y, shift = false) => ({ axis: () => ({ x: 0, y }), walkHeld: () => shift });
+  p.update(1 / 60, stick(-0.4), cam);
+  assert.equal(p.targetSpeed, 1.9);
+  p.update(1 / 60, stick(-1), cam);
+  assert.equal(p.targetSpeed, 4.6);
+  p.update(1 / 60, stick(-0.5), cam);
+  assert.equal(p.targetSpeed, 4.6, '달리다 조금 덜 기울여도 계속 달림');
+  p.update(1 / 60, stick(-1, true), cam);
+  assert.equal(p.targetSpeed, 1.9);
+  p.speedMult = 1.15;
+  p.update(1 / 60, stick(-1), cam);
+  assert.ok(Math.abs(p.targetSpeed - 4.6 * 1.15) < 1e-9);
+  p.update(1 / 60, stick(-0.05), cam);
+  assert.equal(p.targetSpeed, 0, '데드존');
+});
+
 test('도착 처리: 주문서 쪽에서 퇴비통을 누르면, 주문서가 더 가까워도 한 번 더 다가가 퇴비통을 엶', () => {
   // 퇴비통·주문서처럼 가까이 붙은 시설: 화면 안내는 둘 중 가까운 하나만 나옴 (farmcraft_view 와 같음)
   const C = { compost: { x: -9.7, z: -2.3 }, orders: { x: -10.3, z: -4.6 } };
