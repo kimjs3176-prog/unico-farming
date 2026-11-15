@@ -24,6 +24,7 @@
   .prompt.hidden, .prompt.clickable.hidden { translate: none; transition: opacity 0.08s ease-in, visibility 0s linear 0.08s; }
 }
 .prompt .tapme { animation: tap 1s infinite; display: inline-block; }
+.prompt.hidden .tapme { animation: none; } /* 숨은 동안은 손가락 까딱임을 멈춤 (계속 도는 애니메이션 없음) */
 @keyframes tap { 0%,100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
 
 /* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */

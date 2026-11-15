@@ -1,6 +1,6 @@
 // 한 번만 뜨는 팁 카드: ui.tip(id, text)
 //  - 처음 한 번만 (본 기록은 game.flags.tips[id], 저장에 함께 들어감). 이미 봤으면 false
-//  - 컷신·대화·창·미니게임·오토플레이·낚시·스마트팜·꾸미기 중에는 기다렸다가 (기다리는 팁은 하나, 새 팁이 오면 바꿈)
+//  - 컷신·대화·창·미니게임·오토플레이·낚시·스마트팜·꾸미기 중에는 기다렸다가 (기다리는 팁은 3개까지 차례로, 넘치면 가장 오래된 것을 버림)
 //  - 띄우는 순간 본 것으로 적고, 15초 보이면 저절로 닫힘 ('알겠어요' 로 바로 닫기). 바쁜 동안엔 잠깐 숨고 시간도 멈춤
 //  - 카드만 누를 수 있음 (화면 나머지는 그대로 조작)
 import { h } from './dom.js';
@@ -8,6 +8,7 @@ import { h } from './dom.js';
 export const TIP_MS = 15000; // 보이는 시간
 export const TIP_DELAY_MS = 700; // 부탁받고 조금 뒤에 (같은 순간의 알림·효과가 먼저 보이게)
 export const TIP_WAIT_MS = 120000; // 이만큼 못 띄우면 버림 (본 것으로 적지 않으니 다음에 다시)
+export const TIP_PENDING_MAX = 3; // 기다릴 수 있는 팁 수
 /** 예전에 따로 두던 '봤음' 표시 → tips 의 이름 */
 export const LEGACY_TIPS = { quality: 'qualityTip', swim: 'swimTip' };
 
@@ -29,14 +30,20 @@ export function tipBusy(g) {
 /** 화면 없이 도는 팁 차례 (시험용으로 따로) */
 export class TipQueue {
   /** @param {() => object} flags 지금 저장 표시 (불러오기로 바뀌어도 늘 새 것) */
-  constructor(flags) { this.flags = flags; this.cur = null; this.pending = null; }
+  constructor(flags) { this.flags = flags; this.cur = null; this.queue = []; }
+
+  /** 다음에 띄울 팁 (없으면 null) */
+  get pending() { return this.queue[0] || null; }
 
   seen(id) { return !!tipStore(this.flags())[id]; }
 
-  /** 띄워 달라는 부탁: 받아들이면 true */
+  /** 띄워 달라는 부탁: 받아들이면 true. 같은 팁이 이미 기다리면 글만 새로 (차례 그대로) */
   request(id, text) {
     if (!id || this.seen(id) || this.cur?.id === id) return false;
-    this.pending = { id, text: String(text), wait: 0 };
+    const old = this.queue.find((p) => p.id === id);
+    if (old) { old.text = String(text); return true; }
+    this.queue.push({ id, text: String(text), wait: 0 });
+    if (this.queue.length > TIP_PENDING_MAX) this.queue.shift();
     return true;
   }
 
@@ -49,14 +56,15 @@ export class TipQueue {
       c.left -= dt;
       if (c.left > 0) return null;
       this.cur = null;
+      this._gap();
       return 'hide';
     }
-    const p = this.pending;
-    if (!p) return null;
-    p.wait += dt;
-    if (p.wait > TIP_WAIT_MS) { this.pending = null; return null; }
-    if (busy || p.wait < TIP_DELAY_MS) return null;
-    this.pending = null;
+    if (!this.queue.length) return null;
+    for (const x of this.queue) x.wait += dt;
+    this.queue = this.queue.filter((x) => x.wait <= TIP_WAIT_MS);
+    const p = this.queue[0];
+    if (!p || busy || p.wait < TIP_DELAY_MS) return null;
+    this.queue.shift();
     this.cur = { id: p.id, text: p.text, left: TIP_MS, away: false };
     const flags = this.flags();
     tipStore(flags)[p.id] = true;
@@ -65,13 +73,16 @@ export class TipQueue {
   }
 
   /** '알겠어요' */
-  dismiss() { const had = !!this.cur; this.cur = null; return had; }
+  dismiss() { const had = !!this.cur; this.cur = null; if (had) this._gap(); return had; }
+
+  /** 다음 팁은 앞 카드가 닫히고 조금 뒤에 */
+  _gap() { if (this.queue[0]) this.queue[0].wait = 0; }
 }
 
-/** 글 맨 앞의 그림 글자를 카드 머리 그림으로 (없으면 💡) */
-export function splitIcon(text) {
+/** 글 맨 앞의 그림 글자를 카드 머리 그림으로 (없으면 fallback, 기본 💡) — 같은 그림이 두 번 보이지 않게 글에서는 뗌 */
+export function splitIcon(text, fallback = '💡') {
   const m = /^(\p{Extended_Pictographic}️?(?:‍\p{Extended_Pictographic}️?)*)\s*/u.exec(text);
-  return m ? { icon: m[1], body: text.slice(m[0].length) } : { icon: '💡', body: text };
+  return m ? { icon: m[1], body: text.slice(m[0].length) } : { icon: fallback, body: text };
 }
 
 /** 팁 카드 메서드 (toast.js 를 거쳐 UI.prototype 에 합쳐짐) */
@@ -133,5 +144,6 @@ export const TipUI = {
     }
     this.root.style.setProperty('--tip-h', v);
     this.root.classList.toggle('tip-on', on);
+    if (on) this._toastFit?.(); // 좁은 화면: 팁 카드 + 알림 2장까지
   },
 };

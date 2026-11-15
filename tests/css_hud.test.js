@@ -12,7 +12,9 @@ test('테마(theme.css)가 모바일 압축 값을 다시 덮지 않음', () => 
     assert.equal(value(env, '.chip .xpbar', 'display'), 'none');
     assert.equal(value(env, '.chip .xp', 'display'), 'none');
     assert.equal(value(env, '.lv-chip .lv-ring', 'display'), 'inline-grid');
-    assert.match(value(env, '.lv-chip .lv-ring', 'background'), /conic-gradient\(var\(--leaf\) calc\(var\(--xp, 0\) \* 1%\)/);
+    assert.match(value(env, '.lv-chip .lv-ring', 'background'), /conic-gradient\(var\(--leaf\) max\(4deg, calc\(var\(--xp, 0\) \* 1%\)\), rgba\(139,94,52,0\.32\) 0\)/, '0 XP 에도 바탕 고리 + 4도');
+    assert.equal(value(env, '.weather-chip .w-l', 'display'), 'none', '휴대폰 날씨: 그림 + 기온');
+    assert.equal(value(env, '.weather-chip .w-t', 'display'), undefined);
     assert.equal(value(env, '.actionbar', 'padding'), '3px');
     assert.equal(value(env, '.minimap', 'border-width'), '2px');
   }
@@ -68,7 +70,7 @@ function chipRow(env, big) {
     chipW(env, big, '.chip', [{ text: '🪙' }, { text: '12,345', fs: px(value(env, '.chip .money', 'font-size')) }]),
     chipW(env, big, '.chip', [{ text: '🕒', sel: '.clock-chip .ico' }, { text: '3일차', sel: '.clock-chip .day' }, { text: '10:04' }]),
     chipW(env, big, '.chip', [{ text: '🌸 봄 1/7' }]),
-    chipW(env, big, '.weather-chip', [{ text: '☀️' }, { text: '22° 맑음', sel: '.weather-chip > span' }]),
+    chipW(env, big, '.weather-chip', [{ text: '☀️' }, { text: '22°', sel: '.weather-chip .w-t' }, { text: '맑음', sel: '.weather-chip .w-l' }]),
     chipW(env, big, '.chip', [{ text: 'Lv.', sel: '.lv-chip .lv-t' }, { text: '1' }].map((p) => (p.text === '1' && ring ? { w: ring } : p))),
   ];
   const gap = px((big && value(env, 'body.ui-big .hud-top', 'gap')) || value(env, '.hud-top', 'gap'));
@@ -112,4 +114,31 @@ test('HUD 에 개발용 글이 없음: 오프라인 모드·기본 위치 글은
   // 날씨 칩은 지명을 넣지 않음 (날씨 창에서만 '(기본 위치)')
   const setWeather = hud.slice(hud.indexOf('setWeather('), hud.indexOf('openWeather('));
   assert.doesNotMatch(setWeather, /loc/);
+});
+
+test('setOnline: 붙어 있다가 끊기면 2.5초 뒤 알림 한 번, 바로 다시 붙으면(방 이동) 조용히, 끊긴 뒤 다시 붙으면 알림', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const { HudUI, NET_LOST_MS } = await import('../src/ui/hud.js');
+    const toasts = [];
+    const ui = { ...HudUI, online: null, toast: (s, o) => toasts.push([s, o?.key]) };
+    ui.setOnline(0, '');
+    t.mock.timers.tick(NET_LOST_MS + 10);
+    assert.deepEqual(toasts, [], '처음부터 혼자·서버 없음이면 조용히');
+    ui.setOnline(2, '1번 농장');
+    ui.setOnline(0, '');
+    ui.setOnline(3, '2번 농장'); // 방 이동
+    t.mock.timers.tick(NET_LOST_MS + 10);
+    assert.deepEqual(toasts, [], '바로 다시 붙으면 알림 없음');
+    ui.setOnline(0, '');
+    t.mock.timers.tick(NET_LOST_MS + 10);
+    assert.equal(toasts.length, 1);
+    assert.match(toasts[0][0], /연결이 끊겼어요/);
+    assert.equal(toasts[0][1], 'net');
+    ui.setOnline(0, '');
+    t.mock.timers.tick(NET_LOST_MS + 10);
+    assert.equal(toasts.length, 1, '끊긴 동안 거듭 불려도 한 번');
+    ui.setOnline(1, '1번 농장');
+    assert.match(toasts[1][0], /다시 연결됐어요/);
+  } finally { t.mock.timers.reset(); }
 });

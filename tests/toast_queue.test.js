@@ -48,7 +48,7 @@ test('같은 열쇠는 한 장으로: 같은 글은 ×N, 금액은 합계, 시�
   assert.equal(r.entry.ms, toastMs('씨앗이 없어요 ×2'));
 });
 
-test('넘치면 오래된 보통·보상 알림부터 밀려나고, 경고·팁은 다른 것이 없을 때만', () => {
+test('넘치면 보통 < 보상 < 경고·팁 차례로, 같은 단계면 오래된 것부터 밀려남', () => {
   const q = new ToastQueue();
   const warn = q.push('⚠️ 방이 가득 찼어요', { type: 'warn' }).entry;
   const tip = q.push('💡 팁', { type: 'tip' }).entry;
@@ -58,7 +58,14 @@ test('넘치면 오래된 보통·보상 알림부터 밀려나고, 경고·팁�
   assert.deepEqual(r.evicted, [i1], '가장 오래된 보통 알림');
   assert.ok(q.live.includes(warn) && q.live.includes(tip));
   const r2 = q.push('보통 3');
-  assert.deepEqual(r2.evicted, [r1]);
+  assert.equal(r2.evicted[0].base, '보통 2', '보상보다 보통 알림이 먼저 (오래된 보통)');
+  assert.ok(q.live.includes(r1));
+  // 보통이 방금 온 것뿐이면: 보상을 지키고 방금 온 보통이 밀려남
+  const q5 = new ToastQueue();
+  const keep = ['보상 a', '보상 b', '보상 c', '보상 d'].map((t) => q5.push(t, { type: 'reward' }).entry);
+  const lone = q5.push('보통');
+  assert.deepEqual(lone.evicted, [lone.entry]);
+  assert.ok(keep.every((e) => q5.live.includes(e)));
   // 합친 장은 방금 온 것으로 → 밀려날 차례가 뒤로
   const q3 = new ToastQueue();
   const a = q3.push('가').entry; q3.push('나'); q3.push('다'); q3.push('라');
@@ -96,6 +103,11 @@ test('좁은 화면은 3장: 10개를 한꺼번에 띄워도 3장 이하, 같은
   q.push('⭐ 농사 기술이 2레벨이 됐어요', {}, opt);
   assert.ok(q.live.length <= 3);
   assert.ok(q.live.some((e) => e.type === 'warn'), '경고는 남음');
+  assert.ok(q.live.some((e) => e.text === '💰 +360 코인'), '합친 판매 코인(보상)은 나중에 온 보통 알림보다 오래 남음');
+  assert.ok(!q.live.some((e) => e.base.startsWith('⭐')), '보통 알림(기술 레벨)이 먼저 비킴');
+  // 좁은 화면에 팁 카드가 떠 있으면 2장
+  assert.equal(toastCap(true, true), 2);
+  assert.equal(toastCap(false, true), 4);
   // 합친 장은 밀려나기 전까지 ×N·합계로 보였음
   const q2 = new ToastQueue();
   for (let i = 0; i < 4; i++) q2.push('🥕 당근을 수확했어요', { type: 'reward', key: 'harvest' }, opt);
@@ -147,7 +159,8 @@ test('ui.toast(글) 은 예전처럼 동작하고, 시간이 다 되면 .out 을
     assert.equal(ui.toasts.children.length, 1);
     const el = ui.toasts.children[0];
     assert.equal(el.className, 'toast info');
-    assert.equal(el.firstChild.textContent, msg);
+    assert.equal(el.children[0].textContent, '🥕', '맨 앞 그림은 그림 칸으로');
+    assert.equal(el.children[1].textContent, msg.slice('🥕 '.length));
     ui.toast(msg);
     assert.equal(ui.toasts.children.length, 1, '같은 글은 한 장');
     assert.equal(el.lastChild.textContent, ' ×2');
@@ -165,7 +178,11 @@ test('ui.toast(글) 은 예전처럼 동작하고, 시간이 다 되면 .out 을
     ui.toast('💰 +30 코인', { type: 'reward', key: 'sell', amount: 30 });
     const s = ui.toasts.children.at(-1);
     assert.equal(s.className, 'toast reward');
-    assert.equal(s.firstChild.textContent, '💰 +150 코인');
+    assert.equal(s.children[0].textContent, '💰');
+    assert.equal(s.children[1].textContent, '+150 코인');
+    // 그림이 없는 글은 종류별 그림
+    ui.toast('씨앗이 없어요');
+    assert.equal(ui.toasts.children.at(-1).children[0].textContent, '🔔');
     assert.equal(s.lastChild.textContent, '');
   } finally {
     globalThis.document = origDoc;
@@ -179,4 +196,23 @@ test('toast.css: 3.2초 고정 애니메이션이 없고, 들어오기 0.22초·
   const out = RULES.find((r) => r.sel === '.toast.out').decls.find(([p]) => p === 'animation');
   assert.match(out[1], /^toast-out 0\.26s/);
   assert.ok(!RULES.some((r) => r.decls.some(([p, v]) => p === 'animation' && /3\.2s/.test(v))));
+});
+
+test('알림 자리: 데스크톱·가로 폰은 오른쪽 미니맵 아래(캐릭터를 가리지 않음), 세로 폰은 목표 칩 아래 가운데, 장마다 같은 폭', async () => {
+  const { value, PHONE, LAND, DESK } = await import('./lib/css_env.js');
+  assert.match(value(DESK, '.toasts', 'top'), /\+ 176px\)$/);
+  assert.match(value(DESK, '.toasts', 'right'), /12px/);
+  assert.equal(value(DESK, '.toasts', 'align-items'), 'flex-end');
+  assert.equal(value(DESK, '.toasts', 'transform'), undefined);
+  assert.equal(value(LAND, '.toasts', 'align-items'), 'flex-end');
+  assert.match(value(LAND, '.toasts', 'top'), /^max\(/, '팁 카드가 떠 있으면 그 아래로');
+  assert.match(value(LAND, '.toasts', 'max-height'), /40d?vh/);
+  assert.equal(value(PHONE, '.toasts', 'align-items'), 'center');
+  assert.equal(value(PHONE, '.toasts', 'left'), '50%');
+  for (const env of [DESK, PHONE, LAND]) {
+    assert.match(value(env, '.toast', 'min-width'), /^min\(/, '같은 폭');
+    assert.equal(value(env, '.toast', 'text-align'), 'left');
+  }
+  assert.equal(value(DESK, '.toast .ic', 'flex'), 'none');
+  assert.equal(value(DESK, '.tip-tx', 'text-wrap'), 'pretty', '끝줄에 낱말 하나만 남지 않게');
 });

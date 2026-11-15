@@ -3,6 +3,9 @@ import { h, esc, LEVEL_PREV } from './dom.js';
 import { QUESTS } from '../game/sim/quests.js';
 import { PRESET_INFO } from '../game/quality.js';
 
+/** 끊긴 뒤 이만큼 다시 붙지 못하면 알림 */
+export const NET_LOST_MS = 2500;
+
 /** 위쪽 HUD 메서드 (UI.prototype 에 합쳐짐) */
 export const HudUI = {
   /** 위쪽 HUD 만들기 (FPS 칩 → 위쪽 막대 → 이벤트 배너 순서로 붙임) */
@@ -41,10 +44,11 @@ export const HudUI = {
     root.append(this.banner);
   },
 
-  // 칩에는 날씨만 (지명·기본 위치 여부는 날씨 창에서)
+  // 칩에는 날씨만 (지명·기본 위치 여부는 날씨 창에서). 기온(.w-t)·날씨 이름(.w-l)을 따로 → 휴대폰은 그림 + 기온
   setWeather(w, svc) {
     this.weatherInfo = { w, svc };
-    this.weatherChip.innerHTML = `${w.emoji} <span>${w.temperature != null ? Math.round(w.temperature) + '°' : ''} ${esc(w.label)}</span>`;
+    const t = w.temperature != null ? `<span class="w-t">${Math.round(w.temperature)}°</span>` : '';
+    this.weatherChip.innerHTML = `${w.emoji}${t}<span class="w-l">${esc(w.label)}</span>`;
     if (this.panel?.dataset.kind === 'weather') this.openWeather();
   },
 
@@ -146,7 +150,9 @@ export const HudUI = {
     const prev = q.level > 1 ? (q.nextXp === q.xp ? q.xp : LEVEL_PREV(q)) : 0;
     const pct = Math.min(100, Math.round(((q.xp - prev) / Math.max(1, q.nextXp - prev)) * 100));
     put('bar', el.bar, 'width', pct + '%');
+    const hadXp = this._hv?.xpv;
     put('xpv', this.levelChip, '--xp', String(pct));
+    if (hadXp !== undefined && hadXp !== String(pct)) this.pulseXp();
     put('xp', el.xp, 'text', `${q.xp}/${q.nextXp}`);
     put('lvTitle', this.levelChip, 'title', `레벨 ${q.level} · 경험치 ${q.xp}/${q.nextXp}`);
     const bl = g.smartfarm.boostLeft;
@@ -162,8 +168,28 @@ export const HudUI = {
     if (n !== this._qn) { this._qn = n; this.btnQuest.innerHTML = `📜<span class="lbl"> 퀘스트</span>${n ? ` <b style="color:#d9534f">(${n})</b>` : ''} <span class="hint-kbd">(Q)</span>`; }
   },
 
-  /** 함께 있는 사람 수: 나 말고 누가 있을 때만 작은 '👥 N' (혼자·서버 없음이면 숨김) */
+  /** 경험치가 바뀌면 휴대폰 레벨 고리를 살짝 톡 */
+  pulseXp() {
+    const ring = this.levelChip.querySelector('.lv-ring');
+    if (!ring) return;
+    ring.classList.remove('pulse');
+    void ring.offsetWidth; // 처음부터 다시
+    ring.classList.add('pulse');
+    clearTimeout(this._xpPulse);
+    this._xpPulse = setTimeout(() => ring.classList.remove('pulse'), 500);
+  },
+
+  /** 함께 있는 사람 수: 나 말고 누가 있을 때만 작은 '👥 N' (혼자·서버 없음이면 숨김)
+   *  붙어 있다가 끊겨 2.5초 안에 다시 붙지 못하면 알림 한 번, 그 뒤 다시 붙으면 알림 한 번 (방 이동처럼 바로 다시 붙으면 조용히) */
   setOnline(count, room) {
+    const prev = this._onlineN;
+    this._onlineN = count;
+    if (prev > 0 && count === 0 && !this._netDrop) {
+      this._netDrop = setTimeout(() => { this._netDrop = 0; this._netLost = true; this.toast?.('📴 연결이 끊겼어요. 다시 연결해 볼게요', { type: 'warn', key: 'net' }); }, NET_LOST_MS);
+    } else if (count > 0) {
+      clearTimeout(this._netDrop); this._netDrop = 0;
+      if (this._netLost) { this._netLost = false; this.toast?.('📶 다시 연결됐어요', { type: 'info', key: 'net' }); }
+    }
     const el = this.online;
     if (!el) return;
     this._onlineSet = true;

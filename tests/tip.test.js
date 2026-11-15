@@ -37,11 +37,20 @@ test('바쁜 동안(컷신·대화·창·미니게임·오토플레이·낚시·
   assert.deepEqual(run(q, 5000, true), [], '바쁠 때는 안 띄움');
   assert.equal(flags.tips?.quality, undefined, '안 띄웠으니 본 것도 아님');
   assert.deepEqual(run(q, 500, false), ['show']);
-  // 기다리는 팁은 하나: 새 부탁이 오면 바꿈
+  // 기다리는 팁은 차례로 (먼저 온 팁이 밀려 사라지지 않음), 3개 넘으면 가장 오래된 것을 버림
   const q2 = new TipQueue(() => ({}));
   q2.request('a', 'A'); q2.request('b', 'B');
   run(q2, 1000, false);
+  assert.equal(q2.cur.id, 'a');
+  assert.equal(q2.pending.id, 'b');
+  q2.dismiss();
+  assert.deepEqual(run(q2, TIP_DELAY_MS - 300, false), [], '앞 카드가 닫히고 조금 뒤에');
+  assert.deepEqual(run(q2, 500, false), ['show']);
   assert.equal(q2.cur.id, 'b');
+  const q5 = new TipQueue(() => ({}));
+  for (const id of ['a', 'b', 'c', 'd']) q5.request(id, id);
+  assert.equal(q5.request('c', 'C2'), true, '같은 팁은 글만 새로');
+  assert.deepEqual(q5.queue.map((x) => x.id + x.text), ['bb', 'cC2', 'dd']);
   // 2분 넘게 못 띄우면 버림 (본 것으로 적지 않으니 다음 기회에 다시)
   const f3 = {};
   const q3 = new TipQueue(() => f3);

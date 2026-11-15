@@ -7,7 +7,7 @@
 //    ms  : 보여 줄 시간을 직접 (없으면 글 길이로)
 //    sfx : 소리 이름 (지금은 toastSfx 고리만, 소리는 나중에)
 import { h } from './dom.js';
-import { TipUI } from './tip.js';
+import { TipUI, splitIcon } from './tip.js';
 
 export const TOAST_TYPES = ['info', 'reward', 'warn', 'tip'];
 export const TOAST_IN_MS = 220;
@@ -31,14 +31,21 @@ export function toastMs(text, { type = 'info', ms, autoplay = false } = {}) {
   return Math.min(7000, Math.max(2800, 2200 + 55 * [...String(text)].length));
 }
 
-/** 한 번에 떠 있을 수 있는 장 수 */
-export const toastCap = (narrow) => (narrow ? 3 : 4);
+/** 한 번에 떠 있을 수 있는 장 수 (좁은 화면에 팁 카드까지 떠 있으면 2장) */
+export const toastCap = (narrow, tipOn = false) => (narrow ? (tipOn ? 2 : 3) : 4);
 
-/** 밀려날 차례: 보통·보상 알림 중 가장 오래된 것 → 없으면 방금 온 보통·보상 → 그래도 없으면 가장 오래된 경고·팁 */
+/** 종류별 기본 그림 (글 맨 앞에 그림이 없을 때 머리 그림 칸) */
+export const TOAST_ICONS = { info: '🔔', reward: '🎁', warn: '⚠️', tip: '💡' };
+
+/** 밀려날 차례: 보통 < 보상 < 경고·팁, 같은 단계면 오래된 것부터 (방금 온·방금 합친 장은 가장 새것) */
+const RANK = { info: 0, reward: 1, warn: 2, tip: 2 };
 function victim(live, fresh) {
-  const soft = (e) => e.type === 'info' || e.type === 'reward';
-  const oldest = (list) => list.reduce((a, e) => (!a || e.t < a.t ? e : a), null);
-  return oldest(live.filter((e) => e !== fresh && soft(e))) || (soft(fresh) ? fresh : null) || oldest(live.filter((e) => e !== fresh));
+  let v = null;
+  for (const e of live) {
+    const r = RANK[e.type] ?? 0, t = e === fresh ? Infinity : e.t;
+    if (!v || r < v.r || (r === v.r && t < v.t)) v = { e, r, t };
+  }
+  return v.e;
 }
 
 /** 화면 없이 도는 알림 목록 (시험용으로 따로): 합치기·밀어내기·시간만 정함 */
@@ -69,13 +76,18 @@ export class ToastQueue {
     e.msg = msg; e.n = n;
     e.text = n > 1 ? `${msg} ×${n}` : msg;
     e.ms = toastMs(e.text, { type, ms: opts.ms, autoplay });
+    return { entry: e, merged, evicted: this.trim(cap, e) };
+  }
+
+  /** cap 장이 넘치면 밀려날 차례대로 빼냄 → 빠진 장 목록 */
+  trim(cap, fresh = null) {
     const evicted = [];
     while (this.live.length > cap) {
-      const v = victim(this.live, e);
+      const v = victim(this.live, fresh);
       this.remove(v);
       evicted.push(v);
     }
-    return { entry: e, merged, evicted };
+    return evicted;
   }
 
   remove(e) { const i = this.live.indexOf(e); if (i >= 0) this.live.splice(i, 1); }
@@ -87,6 +99,12 @@ export function toastText(e) {
     try { return { msg: String(e.fmt({ count: e.count, amount: e.amount, text: e.base })), n: 1 }; } catch { /* 아래로 */ }
   }
   return { msg: e.base, n: e.same };
+}
+
+/** 알림 글 → { icon, body }: 맨 앞 그림을 떼어 그림 칸으로 */
+export function toastIcon(msg, type) {
+  const { icon, body } = splitIcon(String(msg), '');
+  return icon ? { icon, body } : { icon: TOAST_ICONS[type] || TOAST_ICONS.info, body };
 }
 
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -104,23 +122,37 @@ export const ToastUI = {
 
   toast(text, opts = {}) {
     const q = (this._toastQ ||= new ToastQueue());
-    const narrow = typeof matchMedia === 'function' && matchMedia(NARROW_Q).matches;
-    const { entry: e, merged, evicted } = q.push(text, opts || {}, { cap: toastCap(narrow), autoplay: !!this.game?.autoplay?.on });
+    const { entry: e, merged, evicted } = q.push(text, opts || {}, { cap: this._toastCap(), autoplay: !!this.game?.autoplay?.on });
     for (const v of evicted) this._toastLeave(v);
     if (!q.live.includes(e)) return; // 방금 온 것이 바로 밀려남 (경고·팁만 가득)
     let el = e.el;
     if (!el) {
       el = e.el = h('div', 'toast');
-      el.append(h('span', 'msg'), h('b', 'cnt'));
+      el.append(h('span', 'ic'), h('span', 'msg'), h('b', 'cnt'));
       this.toasts.append(el);
     }
     el.className = `toast ${e.type}`;
-    el.firstChild.textContent = e.msg; // 다른 플레이어 이름·방 이름·지명이 섞여도 HTML 로 해석하지 않음
+    // 맨 앞 그림은 왼쪽 그림 칸으로 (장마다 같은 줄에 섬), 없으면 종류별 그림
+    const { icon, body } = toastIcon(e.msg, e.type);
+    el.children[0].textContent = icon;
+    el.children[1].textContent = body; // 다른 플레이어 이름·방 이름·지명이 섞여도 HTML 로 해석하지 않음
     el.lastChild.textContent = e.n > 1 ? ` ×${e.n}` : '';
     if (merged && el.animate && !reduced()) el.animate([{ scale: '1' }, { scale: '1.07' }, { scale: '1' }], { duration: 240, easing: 'cubic-bezier(.3,1.6,.5,1)' });
     clearTimeout(e.timer);
     e.timer = setTimeout(() => { q.remove(e); this._toastLeave(e); }, e.ms);
     this.toastSfx?.(e);
+  },
+
+  /** 지금 떠 있을 수 있는 장 수 */
+  _toastCap() {
+    const narrow = typeof matchMedia === 'function' && matchMedia(NARROW_Q).matches;
+    return toastCap(narrow, !!this.root?.classList?.contains?.('tip-on'));
+  },
+
+  /** 팁 카드가 뜨면 좁은 화면에서 넘치는 알림을 정리 (tip.js 가 부름) */
+  _toastFit() {
+    const q = this._toastQ;
+    if (q) for (const v of q.trim(this._toastCap())) this._toastLeave(v);
   },
 
   /** 나가는 알림: 살짝 떠오르며 흐려진 뒤 지움 (애니메이션이 안 끝나도 잠시 뒤 지움) */

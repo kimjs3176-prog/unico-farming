@@ -4,6 +4,8 @@
 .chip { background: var(--panel); border: 3px solid var(--panel-edge); border-radius: 16px; padding: 6px 12px; box-shadow: 0 4px 0 rgba(107,74,46,0.15); display: flex; align-items: center; gap: 6px; font-size: 15px; color: var(--brown); }
 .chip .money { color: #b7791f; font-size: 17px; display: inline-block; }
 .chip .money.bump { animation: bump 0.4s cubic-bezier(.3,1.8,.5,1); }
+@keyframes lv-pulse { 0% { transform: scale(1); } 45% { transform: scale(1.22); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .lv-chip .lv-ring.pulse { animation: none; } }
 @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
 .hud-right button.bump { animation: bump 0.4s cubic-bezier(.3,1.8,.5,1); }
 .chip small { font-weight: 500; color: #7a5536; }
@@ -22,9 +24,8 @@
 /* 가방으로 날아가는 아이템 */
 .fly { position: fixed; z-index: 40; font-size: 30px; pointer-events: none; transition: transform 0.75s cubic-bezier(.5,-0.4,.7,1), opacity 0.75s; filter: drop-shadow(0 3px 2px rgba(0,0,0,0.25)); }
 
-/* 초당 프레임 표시 (환경설정에서 켜기) */
-.fps-chip { position: absolute; right: 12px; top: calc(var(--hud-b, 52px) + 162px); background: rgba(35,25,22,0.7); color: #fff; font-size: 12px; padding: 3px 9px; border-radius: 10px; display: none; pointer-events: none; font-variant-numeric: tabular-nums; }
-@media (max-width: 600px) { .fps-chip { top: 206px; } }
+/* 초당 프레임 표시 (환경설정에서 켜기): 오른쪽 아래 (미니맵 아래는 알림 자리) */
+.fps-chip { position: absolute; right: calc(12px + var(--sar)); bottom: calc(12px + var(--sab)); background: rgba(35,25,22,0.7); color: #fff; font-size: 12px; padding: 3px 9px; border-radius: 10px; display: none; pointer-events: none; font-variant-numeric: tabular-nums; }
 .hud-right .lbl { display: inline; }
 
 /* ---------------- 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) ----------------
@@ -40,8 +41,10 @@
   .clock-chip .day, .boost-chip .lbl { display: none; }
   .chip .xpbar, .chip .xp { display: none; }
   .lv-chip .lv-ring { display: inline-grid; place-items: center; width: 21px; height: 21px; margin: -2px 0; border-radius: 50%; line-height: 1;
-    background: radial-gradient(closest-side, #fffdf7 74%, transparent 77%), conic-gradient(var(--leaf) calc(var(--xp, 0) * 1%), #e2d3b8 0); }
-  .weather-chip > span { display: none; }
+    background: radial-gradient(closest-side, #fffdf7 74%, transparent 77%), conic-gradient(var(--leaf) max(4deg, calc(var(--xp, 0) * 1%)), rgba(139,94,52,0.32) 0);
+    box-shadow: 0 0 0 1px rgba(139,94,52,0.25); } /* 0 XP 에도 진행 고리로 보이게: 나무색 바탕 고리 + 잎색 4도 */
+  .lv-chip .lv-ring.pulse { animation: lv-pulse 0.45s cubic-bezier(.3,1.6,.5,1); }
+  .weather-chip .w-l { display: none; } /* 날씨는 그림 + 기온만 */
   /* 누르는 칸: 날씨 칩·위 버튼은 보이는 모양보다 조금 넓게 (좌우는 간격의 절반까지만 → 옆 칸과 안 겹침) */
   .weather-chip { position: relative; min-width: 30px; min-height: 26px; justify-content: center; }
   .weather-chip::after { content: ''; position: absolute; inset: -5px -1px -2px; }
@@ -51,13 +54,13 @@
   .hud-right .lbl { display: none; }
   .hud-right b { font-size: 13px; }
   .online.online-pill { display: none; } /* 휴대폰은 채팅 줄을 접어 두므로 (자리는 W2 에서) */
-  .fps-chip { right: calc(4px + var(--sar)); top: calc(var(--hud-b, 40px) + 84px); }
+  .fps-chip { right: calc(84px + var(--sar)); bottom: auto; top: calc(var(--hud-b, 40px) + 4px); } /* 미니맵 왼쪽 (아래는 알림 자리, 오른쪽 아래는 E 버튼) */
 }
 /* 아주 좁은 폰·글자를 키운 세로 폰: 칩 줄이 넘치지 않게 시계 그림·'Lv.' 글을 뺌 (시각·숫자 고리만) */
 @media (max-width: 340px) {
-  .clock-chip .ico, .lv-chip .lv-t { display: none; }
+  .clock-chip .ico, .lv-chip .lv-t, .weather-chip .w-t { display: none; }
 }
 @media (max-width: 440px) {
-  body.ui-big .clock-chip .ico, body.ui-big .lv-chip .lv-t { display: none; }
+  body.ui-big .clock-chip .ico, body.ui-big .lv-chip .lv-t, body.ui-big .weather-chip .w-t { display: none; }
   body.ui-big .hud-top { gap: 2px; }
 }

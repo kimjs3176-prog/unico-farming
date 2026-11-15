@@ -1,6 +1,12 @@
 // 안내 말풍선·조이스틱·터치 E 버튼
 import { h, esc, blurTextInput } from './dom.js';
 
+/** 안내 대상 열쇠: p.key 가 없으면 글에서 숫자·%·점을 뺀 것 (진행률만 바뀌면 같은 대상) */
+export function promptKey(p) {
+  if (p.key != null) return `k:${p.key}`;
+  return `l:${String(p.label ?? '').replace(/[\d%.]+/g, '').trim()}`;
+}
+
 /** 안내·조이스틱·E 버튼 메서드 (UI.prototype 에 합쳐짐) */
 export const PromptUI = {
   /** 안내 말풍선 → 조이스틱 → 터치 E 버튼 만들기 */
@@ -42,9 +48,9 @@ export const PromptUI = {
     el.classList.toggle('clickable', !!p.onInteract);
     const html = (p.onInteract ? '<kbd>E</kbd> ' : '') + esc(p.label) + (p.onInteract ? ' <span class="tapme">👆</span>' : ''); // 동물·반려견 이름 등 사용자가 정한 글자
     if (html !== this.promptHtml) { el.innerHTML = html; this.promptHtml = html; }
-    const key = p.key ?? null;
+    const key = promptKey(p);
     if (key !== this._promptKey) {
-      const swap = !wasOff && this._promptKey != null && key != null; // 보이던 안내가 다른 대상으로 바뀜 (나타날 때는 CSS 가 올려 줌)
+      const swap = !wasOff && this._promptKey != null; // 보이던 안내가 다른 대상으로 바뀜 (나타날 때는 CSS 가 올려 줌)
       this._promptKey = key;
       if (swap && el.animate && !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
         el.animate([{ scale: '0.94', opacity: 0.7 }, { scale: '1', opacity: 1 }], { duration: 150, easing: 'cubic-bezier(.3,1.4,.5,1)' });

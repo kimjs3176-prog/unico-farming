@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RULES, mediaMatches, value, PHONE, LAND, DESK } from './lib/css_env.js';
-import { PromptUI } from '../src/ui/prompt.js';
+import { PromptUI, promptKey } from '../src/ui/prompt.js';
 
 test('세로 폰: ☰ 를 펼치면 안내 말풍선·자동 칩이 두 줄 막대 위로, 올라간 E 버튼을 비킴', () => {
   assert.match(value(PHONE, '#ui.bar-open > .prompt', 'bottom'), /^calc\(124px/);
@@ -52,6 +52,11 @@ test('숨김은 display:none 이 아니라 흐려짐: 글은 남기고, 누를 �
   assert.equal(value(DESK, 'body.cine .prompt', 'opacity'), '0');
 });
 
+test('숨은 안내의 손가락 까딱임은 멈춤 (보일 때만 돎)', () => {
+  for (const env of [DESK, PHONE]) assert.equal(value(env, '.prompt.hidden .tapme', 'animation'), 'none');
+  assert.match(value(DESK, '.prompt .tapme', 'animation'), /^tap /);
+});
+
 test('움직임 줄이기: 안내 말풍선은 흐려지기만 (움직이지 않음)', () => {
   for (const sel of ['.prompt.hidden', '.prompt.clickable.hidden']) {
     assert.equal(value(REDUCED, sel, 'translate'), 'none');
@@ -81,4 +86,12 @@ test('setPrompt: 숨길 때 글을 지우지 않고, 대상 종류(key)가 바�
   for (let i = 0; i < 5; i++) ui.setPrompt({ label: `🍯 벌통 꿀 ${i * 10}%`, key: 'pet' });
   assert.deepEqual(anims, [150], '진행률처럼 글만 바뀌면 톡 없음');
   assert.ok(!cls.has('clickable'));
+  // 열쇠가 없는 안내: 글에서 숫자·% 를 뺀 것으로 대상을 가림
+  ui.setPrompt({ label: '🌱 자라는 중 10%' });
+  anims.length = 0;
+  ui.setPrompt({ label: '🌱 자라는 중 35%' });
+  assert.deepEqual(anims, [], '열쇠 없이 진행률만 바뀌면 톡 없음');
+  ui.setPrompt({ label: '🐶 콩이 쓰다듬기', onInteract() {} });
+  assert.deepEqual(anims, [150], '열쇠 없이 다른 대상으로 바뀌면 톡');
+  assert.equal(promptKey({ label: '꿀 12.5%' }), promptKey({ label: '꿀 80%' }));
 });
