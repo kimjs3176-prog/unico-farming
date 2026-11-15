@@ -70,9 +70,10 @@ export class FX {
     }
   }
 
-  pop(x, z, text) {
+  /** 떠오르는 글자. fly:false 면 가방으로 날아가지 않음 (수확 별처럼 보여 주기만) */
+  pop(x, z, text, { fly = true } = {}) {
     this.burst(x, 1.0, z);
-    this.onPop?.(text, new THREE.Vector3(x, 1.2, z));
+    if (fly) this.onPop?.(text, new THREE.Vector3(x, 1.2, z));
     const s = makeLabel(text, { bg: 'rgba(0,0,0,0)', size: 56, scale: 0.012 });
     s.position.set(x, 1.2, z);
     this.scene.add(s);

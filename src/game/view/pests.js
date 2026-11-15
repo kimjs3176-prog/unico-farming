@@ -85,7 +85,7 @@ export class Pests {
     const night = g.world.daylight < 0.35;
     // 등장 타이밍
     if (!g.cinema.locked) {
-      this.crowTimer -= dt;
+      if (!g.farm?.grace) this.crowTimer -= dt; // 첫 수확 전에는 까마귀가 오지 않음
       if (this.crowTimer <= 0) { this.crowTimer = 55 + Math.random() * 50; if (this.list.filter((p) => p.kind === 'crow').length < 2) this.spawnCrow(); }
       this.predTimer -= dt;
       if (this.predTimer <= 0) { this.predTimer = 80 + Math.random() * 60; if (night && !this.list.some((p) => p.kind !== 'crow')) this.spawnPredator(); }
