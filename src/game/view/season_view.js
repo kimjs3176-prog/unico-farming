@@ -69,7 +69,8 @@ export class SeasonView {
     // 꽃잎·낙엽 (작은 모양 하나를 여러 개 그림: 그리기 1번)
     this.petalGeo = petalGeometry();
     this.leafGeo = leafGeometry();
-    const mat = new THREE.MeshLambertMaterial({ color: 0xe6e6e6, vertexColors: true, side: THREE.DoubleSide });
+    // 흰 재질 × 분홍 정점 색 + 아주 약한 스스로 빛: 안개·그늘에서도 잿빛이 아니라 분홍으로
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x221018, vertexColors: true, side: THREE.DoubleSide });
     this.fall = new THREE.InstancedMesh(this.petalGeo, mat, FALL_N);
     this.fall.frustumCulled = false;
     this.fall.castShadow = false;
@@ -123,12 +124,14 @@ export class SeasonView {
     if (sc) { sc.seasonFlowers = L.flowers; sc.setDensity(sc.density ?? 1); }
     // 나무 잎: 모든 잎 셰이더가 함께 쓰는 유니폼만 바꿈 (재질 색을 건드리지 않아 언제 놓은 나무든 같은 계절 색)
     const lv = L.leaves;
-    SURF.leafA.value.setHex(lv.a); SURF.leafB.value.setHex(lv.b); SURF.leafR.value.setHex(lv.red);
+    SURF.leafA.value.setHex(lv.a); SURF.leafB.value.setHex(lv.b); SURF.leafR.value.setHex(lv.red); SURF.leafR2.value.setHex(lv.red2 ?? lv.red);
     SURF.leafAmt.value.set(...lv.amt);
     SURF.blossom.value = lv.blossom;
     // 땅 색·눈 덮임
     const gm = w.groundMat;
     if (gm) { gm.userData.baseColor ||= gm.color.clone(); gm.color.copy(gm.userData.baseColor).multiply(new THREE.Color(...L.ground)); }
+    // 잔디 둑·테두리 (userData.seasonLawn 표시한 재질): 풀처럼 계절 색으로, 겨울엔 눈 색 쪽으로
+    this.tintLawns(L);
     w.seasonSnow = L.snow;
     if (!announce) { w.snowCover = Math.max(w.snowCover || 0, L.snow); SURF.snow.value = Math.max(SURF.snow.value, L.snow * 0.85); } // 겨울에 접속하면 처음부터 눈이 쌓인 채로
     // 꽃잎·낙엽: 모양과 색
@@ -146,6 +149,21 @@ export class SeasonView {
       g.audio.play('levelup', 0.6);
       g.onEvent('season', s.index);
     }
+  }
+
+  /** 계절 잔디색: 원래 색 × 땅 배율을 풀 색(HSL) 쪽으로, 눈이 쌓이면 눈 색으로 */
+  tintLawns(L) {
+    const tmp = new THREE.Color(), snow = new THREE.Color(0.86, 0.9, 0.95);
+    this.game.world.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of [].concat(o.material)) {
+        if (!m?.userData?.seasonLawn || !m.color) continue;
+        m.userData.baseColor ||= m.color.clone();
+        const [h, sa, l] = L.grass;
+        m.color.copy(m.userData.baseColor).lerp(tmp.setHSL(h, sa * 0.9, Math.min(0.55, l + 0.08)), 0.5);
+        if (L.snow > 0) m.color.lerp(snow, Math.min(1, L.snow));
+      }
+    });
   }
 
   updateFall(dt) {

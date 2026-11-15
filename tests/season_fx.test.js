@@ -48,7 +48,11 @@ test('잎 재질 복제: 소나무와 활엽수가 같은 원본 잎 재질을 �
   assert.equal(leafOf(pine).userData.leafRole, LEAF_ROLE.conifer);
   assert.equal(leafOf(tree).userData.enhanced, 'foliage', '복제본에도 셰이더 다시 입힘');
   assert.equal(cache.size, 2);
-  assert.notEqual(leafOf(pine).customProgramCacheKey(), leafOf(tree).customProgramCacheKey());
+  // 역할은 유니폼: 역할이 달라도 셰이더 프로그램은 하나 (첫 화면 컴파일 끊김 줄임)
+  assert.equal(leafOf(pine).customProgramCacheKey(), leafOf(tree).customProgramCacheKey());
+  const roleOf = (m) => { const sh = { uniforms: {}, vertexShader: '#include <begin_vertex>', fragmentShader: '#include <color_fragment>' }; m.onBeforeCompile(sh); return sh.uniforms.uLeafRole.value; };
+  assert.equal(roleOf(leafOf(pine)), LEAF_ROLE.conifer);
+  assert.equal(roleOf(leafOf(tree)), LEAF_ROLE.canopy);
 });
 
 test('정적 병합 잎 값: 역할은 정수 부분, 나무 난수는 0~0.5 (나무 하나가 한 색)', () => {
@@ -74,6 +78,47 @@ test('계절 잎 유니폼: 봄 꽃송이, 가을 활엽수 주황(침엽수는 
   sv.apply(winter, false);
   assert.ok(SURF.leafAmt.value.x >= 0.5 && SURF.leafAmt.value.z <= 0.15);
   for (const s of SEASONS) assert.equal(s.look.leaves.amt.length, 4, s.id);
+});
+
+test('단풍나무(원래 주황)는 봄·여름엔 초록, 가을엔 그대로', () => {
+  const g = (hex) => { const h = {}; new THREE.Color(hex).getHSL(h); return h; };
+  for (const id of ['spring', 'summer']) {
+    const lv = SEASONS.find((s) => s.id === id).look.leaves;
+    assert.ok(lv.amt[1] > 0.7, `${id} 단풍나무 섞는 양 ${lv.amt[1]}`);
+    for (const hex of [lv.a, lv.b]) assert.ok(g(hex).h > 70 / 360 && g(hex).h < 140 / 360, `${id} 초록`);
+  }
+  assert.equal(autumn.look.leaves.amt[1], 0);
+});
+
+test('가을: 빨강·녹슨 색 활엽수, 따뜻하고 덜 푸른 땅·풀 / 겨울: 잿빛 서리 잎', () => {
+  const lv = autumn.look.leaves, h = {};
+  assert.notEqual(lv.red2, lv.red);
+  new THREE.Color(lv.red2).getHSL(h);
+  assert.ok(h.h < 25 / 360, '녹슨 색');
+  const [r, , b] = autumn.look.ground;
+  assert.ok(r >= 1.08 && b <= 0.8, '땅이 따뜻하게');
+  assert.ok(autumn.look.grass[0] <= 0.1, '풀 색상이 주황 쪽');
+  const wv = winter.look.leaves;
+  assert.ok(wv.amt[0] >= 0.85);
+  new THREE.Color(wv.a).getHSL(h);
+  assert.ok(h.s < 0.15 && h.l > 0.5, `겨울 잎은 잿빛 서리 (s ${h.s.toFixed(2)})`);
+  const sv = new SeasonView(seasonGame());
+  sv.apply(autumn, false);
+  assert.equal(SURF.leafR2.value.getHex(), lv.red2);
+});
+
+test('잔디 둑(seasonLawn): 겨울엔 눈 색, 봄엔 다시 초록', () => {
+  const g = seasonGame(), sv = new SeasonView(g);
+  const m = new THREE.MeshStandardMaterial({ color: 0x7fae4e });
+  m.userData.seasonLawn = true;
+  g.world.scene.add(meshOf(m));
+  const h = {};
+  sv.apply(winter, false);
+  m.color.getHSL(h);
+  assert.ok(h.l > 0.75 && h.s < 0.35, `겨울 둑 (l ${h.l.toFixed(2)}, s ${h.s.toFixed(2)})`);
+  sv.apply(spring, false);
+  m.color.getHSL(h);
+  assert.ok(h.h > 70 / 360 && h.h < 140 / 360 && h.s > 0.3, '봄 둑은 초록');
 });
 
 test('꽃잎·낙엽: document 없이 만들고 계절마다 모양을 바꿈, 그리기 1번', () => {
@@ -148,4 +193,34 @@ test('FX: 카메라에서 먼 작은 반짝임은 만들지 않고, 큰 효과(�
   assert.equal(fx.items.length, 0);
   fx.burst(10, 1, 10, 0xbfe8ff, 16);
   assert.equal(fx.items.length, 16);
+});
+
+test('꽃잎 재질: 흰 바탕 + 아주 약한 분홍 빛 (안개에 잿빛으로 죽지 않게)', () => {
+  const sv = new SeasonView(seasonGame());
+  assert.equal(sv.fall.material.color.getHex(), 0xffffff);
+  const e = sv.fall.material.emissive;
+  assert.ok(e.r > e.b && e.r > 0 && e.r < 0.2);
+});
+
+test('정적 병합: 질감 있는 잎도 나무마다 aLeaf (합친 메시 원점 하나로 모든 나무가 같은 색이 되지 않게)', async () => {
+  const { World } = await import('../src/game/world.js');
+  const tex = new THREE.MeshStandardMaterial({ name: 'leaf', map: new THREE.Texture() });
+  tex.userData.leafRole = LEAF_ROLE.canopy;
+  enhanceMaterial(tex, 'foliage');
+  const fake = { scene: new THREE.Scene(), staticObjs: [] };
+  for (const [x, z] of [[0.3, 0.2], [7.6, -3.1]]) {
+    const o = new THREE.Group(); o.add(meshOf(tex)); o.position.set(x, 1, z);
+    fake.scene.add(o); fake.staticObjs.push(o);
+  }
+  World.prototype._batchStatic.call(fake);
+  const merged = fake.scene.children.filter((o) => o.isMesh);
+  assert.ok(merged.length >= 1);
+  const vals = new Set();
+  for (const m of merged) {
+    assert.equal(m.material.userData.leafAttr, true, '정점 속성을 읽는 재질');
+    assert.notEqual(m.material, tex);
+    for (const v of m.geometry.attributes.aLeaf.array) vals.add(v);
+  }
+  assert.equal(vals.size, 2, '나무 두 그루 → 값 두 개');
+  for (const v of vals) assert.equal(Math.floor(v + 0.001), LEAF_ROLE.canopy);
 });

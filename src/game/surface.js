@@ -12,10 +12,10 @@ export const SURF = {
   floor: { value: 0 }, // 바닥 높이 (실내처럼 땅속 방에서는 그 방바닥 → 발치 접지 음영 기준)
   // 시야 구멍: 카메라와 캐릭터 사이를 가리는 물체를 캐릭터 둘레만 점묘로 투명하게 (카메라를 당기지 않음)
   seeCam: { value: new THREE.Vector3(0, 50, 0) }, seeTarget: { value: new THREE.Vector3() }, seeOn: { value: 1 },
-  // 계절 잎 색 (view/season_view.js 가 계절마다 채움): 나무마다 a/b 반반, 드문 나무는 red
-  leafA: { value: new THREE.Color(0x3f9a35) }, leafB: { value: new THREE.Color(0x3f9a35) }, leafR: { value: new THREE.Color(0x3f9a35) },
+  // 계절 잎 색 (view/season_view.js 가 계절마다 채움): 나무마다 a/b 반반, 활엽수 일부는 red/red2(녹슨 색)
+  leafA: { value: new THREE.Color(0x3f9a35) }, leafB: { value: new THREE.Color(0x3f9a35) }, leafR: { value: new THREE.Color(0x3f9a35) }, leafR2: { value: new THREE.Color(0x3f9a35) },
   leafAmt: { value: new THREE.Vector4() }, // [활엽수, 단풍나무, 침엽수, 덤불]
-  blossom: { value: 0 }, bloomA: { value: new THREE.Color(0xf490b6) }, bloomB: { value: new THREE.Color(0xffc0d6) },
+  blossom: { value: 0 }, bloomA: { value: new THREE.Color(0xf27fae) }, bloomB: { value: new THREE.Color(0xffb6d2) },
 };
 
 /** 계절 잎 역할 (셰이더 번호): 0 없음(작물·꽃·화분·실내 등은 물들지 않음) */
@@ -87,10 +87,11 @@ export function kindOf(name = '') {
 }
 
 /**
- * 계절 잎 색 (foliage 이고 역할이 있을 때만 끼움, 이미 계산한 잎 노이즈 f 를 다시 씀 → 노이즈 추가 없음)
- *  - 밝기를 지키며 계절 색으로: 초록에 분홍을 반쯤 섞어 잿빛이 되는 일 없음
- *  - 봄 꽃송이: 과수원 + 활엽수 30% 의 위를 향한 잎 덩어리만 온전히 분홍
- *  - 눈 쌓임 배율: 활엽수 1.4, 침엽수 1.2
+ * 계절 잎 색 (foliage 이고 역할이 있을 때만 끼움)
+ *  - 밝기를 지키며 계절 색으로 (너무 어두워지지 않게 하한 0.8: 노랑이 올리브색이 되지 않게)
+ *  - 활엽수 30% 는 red, 그중 절반은 red2 (가을: 빨강·녹슨 색)
+ *  - 봄 꽃송이: 과수원(약 절반) + 활엽수 30%(약 1/4)에 잘게 흩어진 분홍 송이
+ *  - 눈 쌓임 배율: 활엽수 1.6, 침엽수 1.2
  */
 const LEAF_SEASON = `
   float lr = vLeaf.x, tid = vLeaf.y;
@@ -100,15 +101,25 @@ const LEAF_SEASON = `
   float lamt = dot(uLeafAmt, vec4(isCan, isAut, isCon, isShr));
   if (lamt > 0.001) {
     float llum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-    vec3 lt = mix(mix(uLeafA, uLeafB, step(0.5, tid)), uLeafR, step(0.85, tid) * isCan * (1.0 - isOrc));
-    lt *= clamp(llum / max(dot(lt, vec3(0.2126, 0.7152, 0.0722)), 1e-3), 0.6, 1.5);
+    float redT = step(0.7, tid) * isCan * (1.0 - isOrc);
+    vec3 lt = mix(mix(uLeafA, uLeafB, step(0.5, tid)), mix(uLeafR, uLeafR2, step(0.85, tid)), redT);
+    lt *= clamp(llum / max(dot(lt, vec3(0.2126, 0.7152, 0.0722)), 1e-3), 0.8, 1.5);
     diffuseColor.rgb = mix(diffuseColor.rgb, lt, lamt);
   }
   if (uBlossom > 0.001) {
-    float bl = uBlossom * max(isOrc, isCan * step(tid, 0.3)) * smoothstep(0.48, 0.62, f) * smoothstep(0.1, 0.6, vSN.y);
-    diffuseColor.rgb = mix(diffuseColor.rgb, mix(uBloomA, uBloomB, step(0.5, fract(tid * 7.0 + f * 3.0))), bl);
+    // 꽃송이: 잎 노이즈보다 잘게 (지름 15cm 안팎) → 큰 얼룩(곰팡이처럼 보임)이 아니라 송이송이
+    float bn = svn(vSW * 7.0);
+    #if SURF_OCT > 2
+      bn = bn * 0.65 + 0.35 * svn(vSW * 15.0 + 4.1);
+    #endif
+    bn = bn * 0.85 + f * 0.15;
+    float bt = mix(0.62, 0.5, isOrc); // 덮는 양: 과수원 약 절반, 활엽수 약 1/4
+    float bl = uBlossom * max(isOrc, isCan * step(tid, 0.3)) * smoothstep(bt - 0.05, bt + 0.05, bn) * smoothstep(-0.3, 0.4, vSN.y);
+    vec3 bc = mix(uBloomA, uBloomB, step(0.5, fract(tid * 7.0 + bn * 5.0)));
+    diffuseColor.rgb = mix(diffuseColor.rgb, bc, bl);
+    totalEmissiveRadiance += bc * 0.08 * bl; // 안개·흐림에 잿빛이 되지 않게 살짝 스스로 밝게
   }
-  snowW = 1.0 + 0.4 * isCan + 0.2 * isCon;`;
+  snowW = 1.0 + 0.6 * isCan + 0.2 * isCon;`;
 
 /** 재질에 디테일 셰이더 주입 (한 재질에 한 번) */
 export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim = 0, spots = 0 } = {}) {
@@ -126,12 +137,12 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
     sh.uniforms.uSurfFloor = SURF.floor;
     const leafAttr = !!m.userData.leafAttr, role = m.userData.leafRole || 0, leaf = kind === 'foliage' && (leafAttr || role > 0);
     if (leaf) {
-      Object.assign(sh.uniforms, { uLeafA: SURF.leafA, uLeafB: SURF.leafB, uLeafR: SURF.leafR, uLeafAmt: SURF.leafAmt, uBlossom: SURF.blossom, uBloomA: SURF.bloomA, uBloomB: SURF.bloomB });
+      Object.assign(sh.uniforms, { uLeafRole: { value: role }, uLeafA: SURF.leafA, uLeafB: SURF.leafB, uLeafR: SURF.leafR, uLeafR2: SURF.leafR2, uLeafAmt: SURF.leafAmt, uBlossom: SURF.blossom, uBloomA: SURF.bloomA, uBloomB: SURF.bloomB });
     }
     let vs = 'varying vec3 vSW; varying vec3 vSN; varying vec3 vOP; uniform float uSurfTime; uniform float uSurfWind;\n' + sh.vertexShader;
     if (leaf) {
       // 잎 역할·나무 난수: 합친 숲은 정점 속성(aLeaf), 따로 그리는 나무는 재질 역할 + 나무 위치 난수
-      vs = (leafAttr ? '#define USE_LEAF_ATTR\nattribute float aLeaf;\n' : '') + 'varying vec2 vLeaf;\n' + vs.replace('#include <begin_vertex>', `#include <begin_vertex>
+      vs = (leafAttr ? '#define USE_LEAF_ATTR\nattribute float aLeaf;\n' : 'uniform float uLeafRole;\n') + 'varying vec2 vLeaf;\n' + vs.replace('#include <begin_vertex>', `#include <begin_vertex>
         #ifdef USE_LEAF_ATTR
           vLeaf = vec2(floor(aLeaf + 0.001), fract(aLeaf) * 2.0);
         #else
@@ -139,7 +150,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
           #ifdef USE_INSTANCING
             lc = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
           #endif
-          vLeaf = vec2(${role.toFixed(1)}, fract(sin(dot(floor(lc.xz * 2.0), vec2(12.9898, 78.233))) * 43758.5453));
+          vLeaf = vec2(uLeafRole, fract(sin(dot(floor(lc.xz * 2.0), vec2(12.9898, 78.233))) * 43758.5453));
         #endif`);
     }
     if (kind === 'foliage') {
@@ -161,7 +172,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
       vSW = (modelMatrix * sw4).xyz;
       vOP = position; // 바인드 포즈 기준 좌표: 뼈대 애니메이션에도 무늬가 몸에 붙어 다님
       vSN = normalize(mat3(modelMatrix) * objectNormal);`);
-    const leafHead = leaf ? 'varying vec2 vLeaf; uniform vec3 uLeafA; uniform vec3 uLeafB; uniform vec3 uLeafR; uniform vec4 uLeafAmt; uniform float uBlossom; uniform vec3 uBloomA; uniform vec3 uBloomB;\n' : '';
+    const leafHead = leaf ? 'varying vec2 vLeaf; uniform vec3 uLeafA; uniform vec3 uLeafB; uniform vec3 uLeafR; uniform vec3 uLeafR2; uniform vec4 uLeafAmt; uniform float uBlossom; uniform vec3 uBloomA; uniform vec3 uBloomB;\n' : '';
     sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow; uniform float uSurfFloor; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn;\n' + leafHead + noise(SURF_DETAIL.oct) + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       float snowW = 1.0;
       ${kind !== 'fur' ? `// 시야 구멍: 카메라→캐릭터 선분 가까이에 있는 조각을 점묘(dither)로 버림 (노이즈 계산보다 먼저: 버릴 조각은 계산 생략)
@@ -195,7 +206,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
         totalEmissiveRadiance += vec3(1.0, 0.97, 0.9) * fres * ${rim.toFixed(2)};`);
     }
   };
-  m.customProgramCacheKey = () => `surf-${kind}-${contact}-${rim}-${spots}-${SURF_DETAIL.oct}` + (kind === 'foliage' ? `-${m.userData.leafAttr ? 'la' : m.userData.leafRole || 0}` : '');
+  m.customProgramCacheKey = () => `surf-${kind}-${contact}-${rim}-${spots}-${SURF_DETAIL.oct}` + (kind === 'foliage' ? (m.userData.leafAttr ? '-la' : m.userData.leafRole ? '-leaf' : '') : ''); // 역할은 유니폼 → 역할마다 셰이더를 따로 만들지 않음
   m.needsUpdate = true;
   return m;
 }

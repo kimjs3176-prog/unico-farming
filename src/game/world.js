@@ -52,7 +52,7 @@ export const LAYOUT = {
   npcs: {
     merchant: { x: 3.2, z: -8.4, pose: 'present', species: 'fox', name: '장터 여우' },
     researcher: { x: -14.5, z: -3.5, pose: 'lab', species: 'raccoon', name: '연구원 너구리' },
-    guide: { x: 4.95, z: 7.05, pose: 'megaphone', species: 'puppy', name: '안내 강아지' }, // 두 가로등 사이 (기본 카메라에서 기둥이 얼굴을 가리지 않게)
+    guide: { x: 3.5, z: 10.8, pose: 'megaphone', species: 'puppy', name: '안내 강아지' }, // 시작 자리 오른쪽 앞 풀밭: 첫 화면에서 가로등 기둥과 겹치지 않게
     granny: { x: -9.6, z: -19.4, pose: 'think', species: 'bear', name: '곰 할머니' },
     kid: { x: -6, z: 5, pose: 'cheer', species: 'rabbit', name: '꼬마 토끼', wander: { x0: -12, z0: 3.5, x1: -3, z1: 8 } },
     fisher: { x: -5.2, z: 27.4, pose: 'wave', species: 'cat', name: '낚시꾼 고양이' },
@@ -384,6 +384,20 @@ export class World {
         }
       }
     }
+    // 길 가장자리: 잔디 덩이를 길 안팎으로 흩뿌려 매끈한 띠 대신 닳은 풀 경계로
+    for (const p of LAYOUT.paths) {
+      for (let i = 0; i < p.pts.length - 1; i++) {
+        const [ax, az] = p.pts[i], [bx, bz] = p.pts[i + 1];
+        const len = Math.hypot(bx - ax, bz - az), nx = -(bz - az) / len, nz = (bx - ax) / len;
+        const n = Math.ceil(len * 3.2);
+        for (let k = 0; k < n; k++) {
+          const t = (k + rnd()) / n, side = rnd() > 0.5 ? 1 : -1, off = side * (p.w / 2 + (rnd() - 0.6) * 0.7);
+          const x = ax + (bx - ax) * t + nx * off, z = az + (bz - az) * t + nz * off, r = M(0.1 + rnd() * 0.22);
+          ctx.fillStyle = `hsla(${86 + rnd() * 18}, ${42 + rnd() * 16}%, ${40 + rnd() * 12}%, ${0.45 + rnd() * 0.35})`;
+          ctx.beginPath(); ctx.ellipse(P(x), P(z), r, r * (0.45 + rnd() * 0.4), rnd() * 3, 0, 7); ctx.fill();
+        }
+      }
+    }
     // 밭·트랙터 밭·논 바닥 (흙)
     const L = LAYOUT, f = L.farm;
     soft(M(0.5), () => {
@@ -700,7 +714,8 @@ export class World {
         const src = mat.vertexColors ? g.attributes.color : null;
         for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'color'].includes(k)) g.deleteAttribute(k);
         // 잎 묶음: 정점마다 (계절 역할 + 나무 난수) → 합친 숲도 나무 하나가 한 색 (역할 없는 작물·꽃은 0 = 물들지 않음)
-        if (vc && mat.userData.enhanced === 'foliage') g.setAttribute('aLeaf', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count).fill(leafAttrValue(mat.userData.leafRole || 0, ocx, ocz)), 1));
+        // (질감·투명 잎도 재질별 묶음에서 같은 속성을 씀: 합친 메시의 원점은 하나라 위치 난수로는 나무를 못 가름)
+        if (mat.userData.enhanced === 'foliage') g.setAttribute('aLeaf', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count).fill(leafAttrValue(mat.userData.leafRole || 0, ocx, ocz)), 1));
         // 인덱스는 그대로 둠 (공유 정점 재사용 → 정점 수·메모리 약 절반). 법선이 없으면 예전처럼 면마다 각진 법선
         if (!g.attributes.normal) { if (g.index) g = g.toNonIndexed(); g.computeVertexNormals(); }
         if (!g.index) g.setIndex(seqIndex(g.attributes.position.count)); // 한 묶음 안에서 모두 인덱스가 있어야 합칠 수 있음
@@ -729,6 +744,12 @@ export class World {
         const kind = mat.userData.enhanced;
         material.userData = kind === 'foliage' ? { leafAttr: true } : {};
         if (kind) enhanceMaterial(material, kind);
+      } else if (mat.userData.enhanced === 'foliage' && !mat.userData.leafAttr) {
+        // 재질별 잎 묶음: 정점 속성(aLeaf)을 읽는 복제 재질로
+        material = mat.clone();
+        material.userData = { ...mat.userData, leafAttr: true };
+        delete material.userData.enhanced;
+        enhanceMaterial(material, 'foliage');
       }
       const tris = new Map([...cells].map(([k, v]) => [k, v.tris]));
       for (const keys of planStaticGroups(tris)) {

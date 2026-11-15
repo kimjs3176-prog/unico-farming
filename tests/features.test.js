@@ -151,4 +151,29 @@ test('배치: 기본 카메라(남쪽에서 북쪽을 봄)에서 가로등·과�
     const l2 = (bx - ax) ** 2 + (bz - az) ** 2, t = Math.max(0, Math.min(1, ((g.x - ax) * (bx - ax) + (g.z - az) * (bz - az)) / l2));
     assert.ok(Math.hypot(g.x - ax - (bx - ax) * t, g.z - az - (bz - az) * t) > p.w / 2 - 0.3, '길 한가운데');
   }
+  // 첫 화면: 시작 따라가기 카메라와 입장 연출이 끝나 갈 때의 높은 카메라에 투영해,
+  // 화면에서 세로로 겹치는 키 큰 소품(가로등·과일나무·표지판)이 강아지 옆 1.2m(강아지 깊이 기준) 안에 없음
+  const THREE = await import('three');
+  const mail = LAYOUT.props.filter(([n]) => n === 'mailbox').map(([n, x, z]) => ({ n, x, z, h: 1.2 }));
+  const tallH = [...tall.map((p) => ({ ...p, h: p.n === 'fruit_tree' ? 3.2 : p.n === 'lamp' ? 2.6 : 1.6 })), ...mail];
+  const cams = [
+    { pos: [0, 1.1 + 9 * Math.sin(0.45), 9 + 9 * Math.cos(0.45)], look: [0, 1.1, 9], fov: 45, aspect: 1.6 }, // 시작 (0,0,9) 따라가기
+    { pos: [0, 1.1 + 9 * Math.sin(0.45), 9 + 9 * Math.cos(0.45)], look: [0, 1.1, 9], fov: 61, aspect: 412 / 839 },
+    { pos: [14.66, 15.08, 25.26], look: [0, 1.1, 9], fov: 45, aspect: 1.6 }, // 입장 연출 끝 (화면 측정값)
+  ];
+  for (const c of cams) {
+    const cam = new THREE.PerspectiveCamera(c.fov, c.aspect, 0.1, 500);
+    cam.position.set(...c.pos); cam.lookAt(...c.look); cam.updateMatrixWorld();
+    const sy = (x, y, z) => new THREE.Vector3(x, y, z).project(cam).y;
+    const cs = (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(cam.matrixWorldInverse);
+    const gc = cs(g.x, 0.7, g.z), gTop = sy(g.x, 1.4, g.z), gBot = sy(g.x, 0, g.z);
+    for (const p of tallH) {
+      const pTop = sy(p.x, p.h, p.z), pBot = sy(p.x, 0, p.z);
+      if (pBot > gTop || pTop < gBot) continue; // 화면에서 세로로 겹치지 않음
+      const pc = cs(p.x, 0.7, p.z);
+      if (pc.z >= 0) continue; // 카메라 뒤
+      const lat = Math.abs(pc.x * (gc.z / pc.z) - gc.x);
+      assert.ok(lat > 1.2, `첫 화면에서 ${p.n} (${p.x}, ${p.z}) 이 안내 강아지 옆 ${lat.toFixed(2)}m`);
+    }
+  }
 });
