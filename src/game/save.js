@@ -78,10 +78,10 @@ export function lastSaveError() { return lastError; }
 /** 읽기 전용: 새 버전으로 저장된 기록·다른 창에서 플레이 중일 때 이 창은 저장하지 않음 */
 export function setReadOnly(on = true) { blocked = !!on; }
 
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2; // 미완료 선물·수령 번호를 모르는 옛 클라이언트가 기록을 덮지 않게
 /** 저장 포맷이 바뀌면 여기에 v(n-1) → v(n) 변환을 추가 (vendored skill `save-systems` 의 버전/마이그레이션 패턴) */
 const MIGRATIONS = {
-  // 2: (d) => ({ ...d, v: 2 }),
+  2: (d) => ({ ...d, v: 2 }), // 새 SocialSim 필드는 load 에서 기본값으로 채움
 };
 
 export function migrate(data) {

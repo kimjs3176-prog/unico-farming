@@ -233,3 +233,14 @@ test('net: 붙어 있지 않을 때는 확인(probe)하지 않음 (접속 중인
   last().welcome();
   assert.ok(net.lastRecv > 0, '받은 시각을 기록');
 });
+
+
+test('net: 장부 장애로 잠깐 차단되면 다음 날까지 기다린다고 안내하지 않음', (t) => {
+  const { net, last, toasts } = setup(t);
+  net.connect(); last().open();
+  last().recv({ t: 'quota', reason: 'unavailable', until: Date.now() + 60000 });
+  assert.match(toasts.at(-1), /잠시/);
+  assert.doesNotMatch(toasts.at(-1), /오전 9시/);
+  net.switchRoom('2번 농장');
+  assert.doesNotMatch(toasts.at(-1), /오전 9시/);
+});

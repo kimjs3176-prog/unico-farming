@@ -9,6 +9,10 @@ export const FIVE_BONUS = 10, FIVE_PER_DAY = 3, GIFTS_PER_DAY = 10, GIFT_MAX = 5
 
 export class SocialSim {
   constructor() {
+    this.giftClientId = globalThis.crypto?.randomUUID?.() || `farm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    this.giftSeq = 0;
+    this.giftPending = null; // 차감과 함께 저장 → 같은 농장 식별자의 수신 확인이 올 때만 완료
+    this.giftReceipts = {}; // 보낸 농장별 마지막 수령 번호 (한 농장은 미완료 선물 하나만 허용)
     this.friends = [];      // 친구 이름
     this.day = 0;
     this.gifts = 0;         // 오늘 보낸 선물 횟수
@@ -46,6 +50,7 @@ export class SocialSim {
   }
 
   whyNotGift(have, n = 1) {
+    if (this.giftPending) return '앞서 보낸 선물의 수령을 확인하는 중이에요. 상대와 같은 방에서 다시 연결하면 이어서 전해요';
     if (this.gifts >= GIFTS_PER_DAY) return `오늘은 선물을 ${GIFTS_PER_DAY}번 다 보냈어요`;
     if (!Number.isInteger(n) || n < 1 || n > GIFT_MAX) return `한 번에 1~${GIFT_MAX}개까지`;
     if (have < n) return '가진 게 모자라요';
@@ -55,9 +60,14 @@ export class SocialSim {
   /** 선물이 전해지지 않았을 때(받는 사람이 나감 등): 오늘 보낸 횟수·누적 기록 되돌림 */
   undoGift() { this.gifts = Math.max(0, this.gifts - 1); this.stats.giftsSent = Math.max(0, this.stats.giftsSent - 1); }
 
-  toJSON() { return { friends: this.friends, day: this.day, gifts: this.gifts, fives: this.fives, stats: this.stats }; }
+  toJSON() { return { giftClientId: this.giftClientId, giftSeq: this.giftSeq, giftPending: this.giftPending, giftReceipts: this.giftReceipts, friends: this.friends, day: this.day, gifts: this.gifts, fives: this.fives, stats: this.stats }; }
   load(d) {
     if (!d) return;
+    if (validClientId(d.giftClientId)) this.giftClientId = d.giftClientId;
+    this.giftSeq = Number.isSafeInteger(d.giftSeq) && d.giftSeq >= 0 ? d.giftSeq : 0;
+    const p = d.giftPending;
+    this.giftPending = p && p.tx === `${this.giftClientId}:${this.giftSeq}` && validClientId(p.toClientId) && typeof p.item === 'string' && Number.isInteger(p.n) && p.n > 0 && p.n <= GIFT_MAX ? { ...p } : null;
+    this.giftReceipts = Object.fromEntries(Object.entries(d.giftReceipts || {}).filter(([id, seq]) => validClientId(id) && Number.isSafeInteger(seq) && seq > 0));
     this.friends = (Array.isArray(d.friends) ? d.friends : []).filter((x) => typeof x === 'string' && x.length <= 12).slice(-FRIEND_MAX);
     this.day = d.day | 0; this.gifts = Math.max(0, d.gifts | 0);
     this.fives = (Array.isArray(d.fives) ? d.fives : []).filter((x) => typeof x === 'string').slice(0, FIVE_PER_DAY);
@@ -69,3 +79,5 @@ export class SocialSim {
 export function validGift(item, n, catalog) {
   return typeof item === 'string' && Object.prototype.hasOwnProperty.call(catalog, item) && Number.isInteger(n) && n >= 1 && n <= GIFT_MAX;
 }
+
+export const validClientId = (v) => typeof v === 'string' && /^[a-z0-9-]{16,64}$/.test(v);

@@ -121,10 +121,10 @@ test('못 읽는 기록 + 백업 없음: 원본을 보관한 뒤에야 새 농�
   assert.ok(g.toasts.some((x) => /이번에는 저장하지 않아요/.test(x)));
 });
 
-test('새 버전(v:2)으로 저장된 기록: 불러오되 읽기 전용 (옛 판이 빠진 칸째로 덮어쓰지 않게), 인트로 없음', (t) => {
+test('새 버전(v:3)으로 저장된 기록: 불러오되 읽기 전용 (옛 판이 빠진 칸째로 덮어쓰지 않게), 인트로 없음', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   reset();
-  const raw = saved({ v: 2, economy: { money: 999 } });
+  const raw = saved({ v: 3, economy: { money: 999 } });
   store.set(SAVE_KEY, raw);
   assert.equal(S.loadSaveInfo().status, 'newer');
   const g = makeGame();
@@ -375,3 +375,25 @@ test('[여기서 이어 하기]: 표시를 남기고 새로고침 → 그 창은
 });
 
 test.after(() => { console.warn = quiet; });
+
+
+test('일부 불러오기 실패 + 원본 보관 공간 부족: 자동 저장은 원본을 덮지 않음', () => {
+  reset(); const raw = saved({ ranch: { animals: ['소'] } }); store.set(SAVE_KEY, raw);
+  failSet = (k) => k.startsWith(BROKEN_KEY) ? quota() : null;
+  const g = makeGame(); g.ranch.load = () => { throw new Error('목장 오류'); };
+  g.restore();
+  assert.equal(S.saveBlocked(), true);
+  failSet = null;
+  assert.equal(g.save(), false);
+  assert.equal(store.get(SAVE_KEY), raw);
+});
+
+test('손상된 원본 보관 실패 + 읽을 수 있는 백업: 백업으로 놀더라도 원본 덮어쓰기 금지', () => {
+  reset(); const raw = '{broken'; store.set(SAVE_KEY, raw); store.set(BAK_KEY, saved());
+  failSet = (k) => k.startsWith(BROKEN_KEY) ? quota() : null;
+  const g = makeGame(); g.restore();
+  assert.equal(g.economy.money, 777);
+  assert.equal(S.saveBlocked(), true);
+  failSet = null; assert.equal(g.save(), false);
+  assert.equal(store.get(SAVE_KEY), raw);
+});

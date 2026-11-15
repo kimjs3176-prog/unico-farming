@@ -15,6 +15,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright'); // package.json 에 넣지 않음 (CI 작업 안에서만 --no-save 로 설치)
 
+const QUICK = process.env.SMOKE_QUICK === '1';
 const DIST = path.resolve(process.argv[2] || 'dist');
 const BOOT_MS = Number(process.env.SMOKE_BOOT_MS || 300000); // 소프트웨어 WebGL 은 셰이더 준비가 느림
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2', '.glb': 'model/gltf-binary', '.bin': 'application/octet-stream', '.gz': 'application/gzip', '.wasm': 'application/wasm' };
@@ -42,7 +43,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok, detail }); console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`); };
 
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: process.env.SMOKE_CHROMIUM_EXECUTABLE || undefined, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let code = 1;
 try {
   // 창 하나 열기: 바깥 주소는 막고, 페이지 오류·console.error 를 모음
@@ -106,9 +107,17 @@ try {
   }
 
   // 1) 20초 동안 오류 없음
-  const rest = 20000 - (Date.now() - tShown);
+  const rest = (QUICK ? 3000 : 20000) - (Date.now() - tShown);
   if (rest > 0) await sleep(rest);
-  check('20초 동안 페이지 오류·console.error 없음', errors.length === 0, errors.slice(0, 5).join(' | '));
+  check(`${QUICK ? 3 : 20}초 동안 페이지 오류·console.error 없음`, errors.length === 0, errors.slice(0, 5).join(' | '));
+
+  // 실제 키 입력으로 이동이 되는지 (인트로 건너뛴 뒤).
+  const beforeMove = await game(() => ({ x: game.player.position.x, z: game.player.position.z }));
+  await page.keyboard.down('KeyW');
+  await sleep(1500);
+  await page.keyboard.up('KeyW');
+  const afterMove = await game(() => ({ x: game.player.position.x, z: game.player.position.z }));
+  check('키 입력으로 이동', Math.hypot(afterMove.x - beforeMove.x, afterMove.z - beforeMove.z) > 0.05);
 
   // 4) 저장 → 새로 고침 → 불러오기
   const saved = await game(() => { game.save(); return !!localStorage.getItem('unico-farm-save-v1'); });
@@ -128,7 +137,7 @@ try {
       ['KOAT 체험관', () => game.goKoat()], // 첫 방문이면 바로 안내데스크 컷신
       ['우리 집 안', () => { game.teleport(2.6, 15.2); game.home.enter(); }], // 0.45초 페이드 뒤 방 안
     ];
-    for (const [name, go] of ZONES) {
+    for (const [name, go] of (QUICK ? ZONES.slice(-1) : ZONES)) {
       const f0 = await game(() => game.frameNo || 0);
       await game(go);
       // 시간 대신 프레임으로 기다림: 새 장소 첫 프레임은 셰이더 준비로 몇 초 걸릴 수 있어 컷신이 늦게 뜸
@@ -143,7 +152,7 @@ try {
   check('끝까지 페이지 오류·console.error 없음', errors.length === 0, errors.slice(0, 5).join(' | '));
 
   // 6) 데스크톱 높음: 새 창(저장 없음)으로 입장, 높음 품질·화면 효과가 켜진 채 10초
-  {
+  if (!QUICK) {
     const d = await open({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
     const t1 = Date.now();
     await d.page.goto(`${origin}/?autostart&quality=high&weather=clear`, { waitUntil: 'commit' });
