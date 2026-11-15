@@ -33,7 +33,7 @@ srv.listen(0, async () => {
   await skip();
 
   const audit = () => p.evaluate(() => {
-    const panel = game.ui.panel || document.querySelector('.panel');
+    const panel = game.ui.panel || document.querySelector('.panel') || game.ui.drivePad; // 운전 버튼(ride_pad)은 창이 아니라 버튼 묶음
     if (!panel) return { missing: true };
     // 창이 미끄러져 들어오는 중이면 끝난 자리로 잼 (느린 점검 환경에서 등장 애니메이션 중간을 화면 밖으로 잘못 잡지 않게)
     for (const a of panel.getAnimations({ subtree: true })) { try { if (a.effect?.getTiming().iterations !== Infinity) a.finish(); } catch { /* 무한 반복은 그대로 */ } }
