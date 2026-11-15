@@ -1,18 +1,16 @@
-/* 씨앗 칩 — W1-F 가 채움 (seed_chip.js) */
+/* 씨앗 칩 (seed_chip.js): 지금 심을 씨앗 이모지 + 남은 개수 + ⇄. 눌러서 바꾸기 */
 /* 주의: theme.css 가 이 파일 뒤에 읽혀 button(.gold·.ghost)·.panel·.panel h2(::after)·.panel h3 을 다시 칠함 → 같은 세기면 테마가 이김.
    덮으려면 클래스 하나 더: .seed-chip button.gold, .panel.seed-chip h2 (.row 배경은 테마가 !important) */
-#ui > button.seed-chip { position: absolute; z-index: 4; pointer-events: auto; display: flex; align-items: center; gap: 4px; padding: 5px 10px 5px 8px; border-radius: 999px; background: #fff8e6; color: var(--ink); border: 2px solid var(--gold); box-shadow: 0 3px 0 #d9a21c, 0 4px 10px rgba(60, 40, 20, 0.25); font-weight: 800; font-size: 14px; line-height: 1; white-space: nowrap; transform: translate(0, -50%); }
-#ui > button.seed-chip.on-btn { transform: translate(-50%, -100%); flex-direction: column; gap: 2px; padding: 5px 8px 4px; border-radius: 16px; }
+#ui > button.seed-chip { position: absolute; z-index: 4; pointer-events: auto; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; padding: 0; border-radius: 50%; background: #fff8e6; color: var(--ink); border: 2px solid var(--gold); box-shadow: 0 3px 0 #d9a21c, 0 4px 10px rgba(60, 40, 20, 0.25); font-weight: 800; line-height: 1; white-space: nowrap; transform: translate(0, -50%); }
+#ui > button.seed-chip.on-btn { transform: translate(-100%, 0); }
 #ui > button.seed-chip.hidden { display: none; }
 #ui > button.seed-chip:hover:not(:disabled) { filter: brightness(1.03); }
 #ui > button.seed-chip:active:not(:disabled) { box-shadow: 0 1px 0 #d9a21c; }
-.seed-chip .sc-e { font-size: 20px; }
-.seed-chip .sc-n { font-size: 13px; min-width: 1ch; }
-.seed-chip .sc-f { font-size: 12px; }
-.seed-chip .sc-t { font-size: 11px; color: #8a6a45; font-weight: 700; }
-.seed-chip.on-btn .sc-n { position: absolute; right: -6px; top: -6px; background: var(--ink); color: #fff; border-radius: 999px; padding: 2px 5px; font-size: 11px; }
-.seed-chip.on-btn .sc-f { display: none; }
+.seed-chip .sc-e { font-size: 24px; }
+.seed-chip .sc-n { position: absolute; right: -4px; top: -4px; min-width: 18px; box-sizing: border-box; background: var(--ink); color: #fff; border: 2px solid #fff8e6; border-radius: 999px; padding: 2px 4px; font-size: 11px; text-align: center; }
+.seed-chip .sc-f { position: absolute; left: -3px; top: -3px; font-size: 12px; }
+.seed-chip .sc-t { position: absolute; right: -3px; bottom: -3px; width: 18px; height: 18px; border-radius: 50%; background: var(--gold); color: var(--ink); font-size: 12px; line-height: 18px; text-align: center; }
 .seed-chip.bump { animation: seedBump 0.32s cubic-bezier(.3, 1.6, .5, 1); }
-@keyframes seedBump { 0% { scale: 0.8; } 60% { scale: 1.12; } 100% { scale: 1; } }
+@keyframes seedBump { 0% { scale: 0.8; } 60% { scale: 1.15; } 100% { scale: 1; } }
 body.cine #ui > button.seed-chip { display: none; }
 @media (prefers-reduced-motion: reduce) { .seed-chip.bump { animation: none; } }

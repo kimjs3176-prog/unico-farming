@@ -60,22 +60,23 @@ export class SeedChip {
     const fert = this.farm.seedFert();
     const key = `${c.crop}|${n}|${fert}`;
     if (key !== this.key) {
+      if (this.key && this.key.split('|')[0] !== c.crop) bump = true; // R·탭·떨어져서 자동으로 — 어떻게 바뀌든 통 튀어 알림
       this.key = key;
-      this.el.innerHTML = `<span class="sc-e">${C.emoji}</span><span class="sc-n">${n}</span>${fert ? '<span class="sc-f">🟫</span>' : ''}<span class="sc-t">바꾸기</span>`;
+      this.el.innerHTML = `<span class="sc-e">${C.emoji}</span><span class="sc-n">${n}</span>${fert ? '<span class="sc-f">🟫</span>' : ''}<span class="sc-t" aria-hidden="true">⇄</span>`;
       this.el.title = `${C.name} 씨앗 ${n}개 — 눌러서 바꾸기`;
     }
     if (bump) { this.el.classList.remove('bump'); void this.el.offsetWidth; this.el.classList.add('bump'); }
   }
 
-  /** 자리 잡기: 터치 E 버튼이 보이면 그 위, 아니면 안내 말풍선 오른쪽 */
+  /** 자리 잡기: 터치 E 버튼이 보이면 그 왼쪽(윗변 맞춤, 8px 띄움), 아니면 안내 말풍선 오른쪽 */
   _place() {
     const ui = this.game.ui, el = this.el;
     const z = +getComputedStyle(el).zoom || 1; // #ui 아래는 --ui-zoom 으로 커짐 → 화면 px 를 CSS px 로
     const btn = ui.touchBtn?.getBoundingClientRect?.();
     if (btn && btn.width > 0) {
       el.classList.add('on-btn');
-      el.style.left = `${(btn.left + btn.width / 2) / z}px`;
-      el.style.top = `${(btn.top - 8) / z}px`;
+      el.style.left = `${(btn.left - 8) / z}px`;
+      el.style.top = `${btn.top / z}px`;
       return;
     }
     el.classList.remove('on-btn');

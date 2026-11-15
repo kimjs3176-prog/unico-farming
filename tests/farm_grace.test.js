@@ -91,15 +91,21 @@ test('보호 기간 수확은 별 2개 이상, 질 낮은 수확의 품질 안�
 
 test('마른 밭 💧: 자라는 중 물이 마르면 보이고, 물을 주거나 잡초가 나면 숨김', () => {
   const g = fakeGame(), F = g.farm;
+  const on = (i) => F.dry.vis.array[i] === 1;
+  assert.equal(F.dry.points.visible, false, '마른 밭이 없으면 그리지 않음');
   F.sim.till(0); F.sim.plant(0, 'carrot');
-  assert.equal(F.tiles[0].dry.visible, true);
+  assert.ok(on(0) && F.tiles[0].dry && F.dry.points.visible);
+  F.sim.till(1); F.sim.plant(1, 'carrot');
+  assert.ok(on(1));
+  assert.equal(F.dry.points.geometry.attributes.position.count, F.tiles.length, '모든 칸이 점 하나씩, Points 는 하나 (그리기 1번)');
   F.sim.water(0);
-  assert.equal(F.tiles[0].dry.visible, false);
+  assert.ok(!on(0) && on(1));
+  F.sim.water(1);
+  assert.equal(F.dry.points.visible, false);
   F.sim.plots[0].water = 0; F.refresh(0);
-  assert.equal(F.tiles[0].dry.visible, true);
+  assert.ok(on(0));
   F.sim.plots[0].weeds = true; F.refresh(0);
-  assert.equal(F.tiles[0].dry.visible, false);
-  assert.equal(F.tiles[0].dry.material, F.tiles[1].dry.material, '재질 하나를 함께 씀');
+  assert.ok(!on(0));
 });
 
 test('목표 고치기: 첫 수확 중 마른 밭 → 그 밭, 씨앗도 작물도 없으면 → 장터 여우', () => {

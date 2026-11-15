@@ -10,6 +10,14 @@ const KEEP = 96;
 /** 동시에 떠 있는 입자(별·먼지·물방울) 상한: 낮음 품질은 적게 (넘치면 더 만들지 않음) */
 export const fxCap = (q) => (q?.level === 'low' ? 48 : 128);
 
+/**
+ * 덮어쓰기 재질로 그리는 패스(주변광 차폐 GTAO 의 법선·깊이)에서는 글자 스프라이트를 그리지 않음:
+ * 투명한 사각형이 깊이로 들어가 글자 둘레에 검은 판이 생김 → 그 패스에서만 크기를 0 으로 (다음 렌더에서 다시 계산됨)
+ */
+export function skipOverride(renderer, scene) {
+  if (scene?.overrideMaterial) this.matrixWorld.makeScale(0, 0, 0);
+}
+
 /** 간단 이펙트: 떠오르는 이모지, 물방울 */
 export class FX {
   constructor(scene, quality = null) {
@@ -70,14 +78,16 @@ export class FX {
     }
   }
 
-  /** 떠오르는 글자. fly:false 면 가방으로 날아가지 않음 (수확 별처럼 보여 주기만) */
-  pop(x, z, text, { fly = true } = {}) {
-    this.burst(x, 1.0, z);
-    if (fly) this.onPop?.(text, new THREE.Vector3(x, 1.2, z));
+  /** 떠오르는 글자. fly:false 면 가방으로 날아가지 않음 (수확 별처럼 보여 주기만). y·vy 로 시작 높이·떠오르는 속도 */
+  pop(x, z, text, { fly = true, y = 1.2, vy = 1.6 } = {}) {
+    this.burst(x, y - 0.2, z);
+    if (fly) this.onPop?.(text, new THREE.Vector3(x, y, z));
     const s = makeLabel(text, { bg: 'rgba(0,0,0,0)', size: 56, scale: 0.012 });
-    s.position.set(x, 1.2, z);
+    s.material.depthWrite = false;
+    s.onBeforeRender = skipOverride;
+    s.position.set(x, y, z);
     this.scene.add(s);
-    this.items.push({ obj: s, life: 1.2, vy: 1.6, dispose: s.userData.dispose });
+    this.items.push({ obj: s, life: 1.2, vy, dispose: s.userData.dispose });
   }
 
   sprinkle(x, z) {

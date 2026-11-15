@@ -27,7 +27,7 @@ const WEED_GEO = (() => {
 const FERT_TINT = new THREE.Color(0.78, 0.68, 0.62);
 const WEED_MAT = new THREE.MeshStandardMaterial({ color: 0x5e8f2e, roughness: 0.9 });
 
-/** 빈 밭 흙 질감: 갈기 전의 다져진 맨흙 (고랑 없음) — 큰 얼룩 + 옅은 자갈 + 가장자리는 풀빛으로 부드럽게 사라짐 */
+/** 빈 밭 흙 질감: 갈기 전의 다져진 맨흙 (고랑 없음) — 따뜻한 진한 흙 + 큰 얼룩 + 옅은 자갈 + 다져진 테두리 + 가장자리 풀 몇 포기 */
 function soilTexture() {
   if (typeof document === 'undefined') return null;
   const N = 128, c = document.createElement('canvas');
@@ -47,16 +47,30 @@ function soilTexture() {
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     const u = x / (N - 1), v = y / (N - 1);
     const grain = rnd();
-    let shade = 1 + (blotch(u, v) - 0.5) * 0.2 + (grain - 0.5) * 0.08; // 얼룩 ±0.10, 알갱이 ±0.04
-    if (grain > 0.98) shade *= 1.14;                                  // 옅은 자갈 (약 2%)
-    const edge = Math.min(u, 1 - u, v, 1 - v);                        // 가장자리까지 거리
-    const a = Math.min(1, edge / 0.12) ** 1.5;
-    const green = Math.max(0, 1 - edge / 0.2) * 0.35;                 // 가장자리 띠는 풀빛이 살짝
+    let shade = 1 + (blotch(u, v) - 0.5) * 0.32 + (grain - 0.5) * 0.08; // 얼룩 ±0.16, 알갱이 ±0.04
+    if (grain > 0.98) shade *= 1.14;                                    // 옅은 자갈 (약 2%)
+    const edge = Math.min(u, 1 - u, v, 1 - v);                          // 가장자리까지 거리
+    const a = Math.min(1, edge / 0.045) ** 1.2;                         // 바깥 6px 만 풀밭으로 녹아듦
+    const rim = Math.max(0, 1 - Math.abs(edge - 0.07) / 0.022);         // 안쪽 3~4px 다져진 테두리
+    shade *= 1 - 0.28 * Math.min(1, rim * 1.6);
     const i = (y * N + x) * 4;
-    img.data[i] = (150 + (118 - 150) * green) * shade;
-    img.data[i + 1] = (120 + (128 - 120) * green) * shade;
-    img.data[i + 2] = (88 + (70 - 88) * green) * shade;
+    img.data[i] = 128 * shade;
+    img.data[i + 1] = 98 * shade;
+    img.data[i + 2] = 70 * shade;
     img.data[i + 3] = 255 * a;
+  }
+  // 가장자리 풀 몇 포기 (2~3px 덩이, 테두리 안쪽 가까이)
+  for (let k = 0; k < 34; k++) {
+    const side = k % 4, along = 0.08 + rnd() * 0.84, inset = 0.03 + rnd() * 0.1;
+    const cu = side === 0 ? inset : side === 1 ? 1 - inset : along, cv = side === 2 ? inset : side === 3 ? 1 - inset : along;
+    const cx = Math.round(cu * (N - 1)), cy = Math.round(cv * (N - 1)), r = 1 + (rnd() > 0.5 ? 1 : 0);
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy > r * r + 0.5 || rnd() < 0.25) continue;
+      const px = cx + dx, py = cy + dy;
+      if (px < 0 || py < 0 || px >= N || py >= N) continue;
+      const i = (py * N + px) * 4, l = 0.85 + rnd() * 0.3;
+      img.data[i] = 84 * l; img.data[i + 1] = 132 * l; img.data[i + 2] = 52 * l;
+    }
   }
   g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
@@ -67,38 +81,74 @@ function soilTexture() {
 const EMPTY_MAT = new THREE.MeshStandardMaterial({ color: 0xffffff, map: soilTexture(), roughness: 1, transparent: true, opacity: 0.95, depthWrite: false });
 
 /**
- * 마른 밭 💧 표시: 점 하나짜리 Points (질감·재질·지오메트리 하나를 모든 칸이 함께 씀)
+ * 마른 밭 💧 표시: 18칸 전체를 점 18개짜리 Points 하나로 (그리기 1번). 칸마다 보이기(aVis)만 바꿈.
  * 스프라이트는 주변광 차폐(GTAO)의 법선 그리기에 사각형으로 들어가 검은 판이 생김 → 점은 그 패스가 건너뜀.
- * 깊이 검사는 켜 둠 (작물·주인공 뒤로 가려짐)
+ * 화면 크기는 셰이더에서 시야각(투영 행렬)으로 계산하고 최소·최대 px 로 묶음 (먼 칸도 보이고, 가까워도 화면을 덮지 않게).
+ * 살랑 위아래 흔들림도 셰이더에서 (매 프레임 위치 갱신 없음). 깊이 검사는 켜 둠 (작물·주인공 뒤로 가려짐)
  */
-let DRY = null;
-function dryShared(fov = 45) {
-  if (DRY) return DRY;
-  let map = null;
-  if (typeof document !== 'undefined') {
-    const c = document.createElement('canvas');
-    c.width = c.height = 64;
-    const x = c.getContext('2d');
-    x.fillStyle = 'rgba(255,255,255,0.92)';
-    x.beginPath(); x.arc(32, 32, 27, 0, Math.PI * 2); x.fill();
-    x.lineWidth = 3; x.strokeStyle = 'rgba(70,150,210,0.9)'; x.stroke();
-    x.font = '34px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillText('💧', 32, 35);
-    map = new THREE.CanvasTexture(c);
-    map.colorSpace = THREE.SRGBColorSpace;
-  }
+const DRY_SIZE = 0.5;               // 기본 지름 (m)
+const DRY_PX = [28, 40];            // 화면 지름 최소·최대 (CSS px)
+function dryTexture() {
+  if (typeof document === 'undefined') return null;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = 'rgba(255,255,255,0.92)';
+  x.beginPath(); x.arc(32, 32, 27, 0, Math.PI * 2); x.fill();
+  x.lineWidth = 3; x.strokeStyle = 'rgba(70,150,210,0.9)'; x.stroke();
+  x.font = '34px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText('💧', 32, 35);
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  return map;
+}
+function dryPoints(tiles) {
+  const n = tiles.length, pos = new Float32Array(n * 3), vis = new Float32Array(n), ph = new Float32Array(n);
+  tiles.forEach((t, i) => { pos[i * 3] = t.x; pos[i * 3 + 1] = 1.3; pos[i * 3 + 2] = t.z; ph[i] = t.seed; });
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
-  // 점 크기는 화면 높이 기준이라 시야각 보정: 지름 약 0.62m
-  const mat = new THREE.PointsMaterial({ map, size: 0.62 / Math.tan((fov * Math.PI) / 360), sizeAttenuation: true, transparent: true, depthWrite: false, alphaTest: 0.05 });
-  DRY = { geo, mat };
-  return DRY;
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aVis', new THREE.BufferAttribute(vis, 1));
+  geo.setAttribute('aPh', new THREE.BufferAttribute(ph, 1));
+  geo.computeBoundingSphere();
+  geo.boundingSphere.radius += 1;
+  const map = dryTexture();
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { map: { value: map }, uTime: { value: 0 }, uVp: { value: 800 }, uDpr: { value: 1 }, uSize: { value: DRY_SIZE }, uPx: { value: new THREE.Vector2(...DRY_PX) } },
+    vertexShader: `attribute float aVis; attribute float aPh;
+      uniform float uTime, uVp, uDpr, uSize; uniform vec2 uPx;
+      void main() {
+        vec3 p = position; p.y += sin(uTime * 3.0 + aPh) * 0.06;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        float px = uSize * projectionMatrix[1][1] * 0.5 * uVp / max(0.1, -mv.z);
+        gl_PointSize = aVis * clamp(px, uPx.x * uDpr, uPx.y * uDpr);
+      }`,
+    fragmentShader: `uniform sampler2D map;
+      void main() {
+        vec4 c = texture2D(map, vec2(gl_PointCoord.x, 1.0 - gl_PointCoord.y));
+        if (c.a < 0.05) discard;
+        gl_FragColor = c;
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+    transparent: true, depthWrite: false,
+  });
+  if (!map) mat.visible = false;
+  const pts = new THREE.Points(geo, mat);
+  pts.renderOrder = 1;
+  pts.visible = false;
+  const vp = new THREE.Vector4();
+  // 그리는 대상(화면·후처리 버퍼)의 실제 높이와 픽셀 비율
+  pts.onBeforeRender = (r) => { r.getCurrentViewport?.(vp); if (vp.w > 0) mat.uniforms.uVp.value = vp.w; mat.uniforms.uDpr.value = r.getPixelRatio?.() || 1; };
+  return { points: pts, vis: geo.attributes.aVis, mat };
 }
 
 const TILL_POP = 0.35;      // 갈린 밭 이랑이 솟는 시간
 const PULL_FALLBACK = 0.45; // 뽑는 순간 신호가 안 오면 이때 수확물 등장
 const ITEM_ARC = 0.3;       // 흙 → 머리 위
 const ITEM_HOLD = 0.4;      // 머리 위에서 보여 주기
+const TUG = 0.15;           // 뽑기 전 포기가 쭉 늘어나는 시간
+const LEAVE = 0.25;         // 뽑힌 뒤 포기가 줄어들어 사라지는 시간
 const CHAIN = new Set(['till', 'weed', 'plant', 'water', 'fert', 'harvest']);
 const easeOutBack = (k) => { const c = 1.70158; return 1 + (c + 1) * (k - 1) ** 3 + c * (k - 1) ** 2; };
 
@@ -127,15 +177,11 @@ export class FarmView {
         ring.position.set(x, 0.03, z);
         ring.visible = false;
         game.world.scene.add(ring);
-        const D = dryShared(game.camera?.fov);
-        const dry = new THREE.Points(D.geo, D.mat);
-        dry.position.set(x, 1.3, z);
-        dry.renderOrder = 1;
-        dry.visible = false;
-        game.world.scene.add(dry);
-        this.tiles.push({ x, z, plot, empty, ring, dry, crop: null, cropKey: '', drops: null, seed: (r * 7 + c * 13) % 10 });
+        this.tiles.push({ x, z, plot, empty, ring, dry: false, crop: null, cropKey: '', drops: null, seed: (r * 7 + c * 13) % 10 });
       }
     }
+    this.dry = dryPoints(this.tiles);
+    game.world.scene.add(this.dry.points);
     this.sim.on((type, i) => this.refresh(i));
     this.near = -1;
     this.produce = new ProduceFactory(game.assets);
@@ -163,7 +209,13 @@ export class FarmView {
     }
     if (t.weeds) t.weeds.visible = !!p.weeds;
     t.empty.visible = p.state === 'empty';
-    t.dry.visible = p.state === 'growing' && p.water <= 0 && !p.weeds;
+    const dry = p.state === 'growing' && p.water <= 0 && !p.weeds;
+    if (dry !== t.dry) {
+      t.dry = dry;
+      this.dry.vis.array[i] = dry ? 1 : 0;
+      this.dry.vis.needsUpdate = true;
+      this.dry.points.visible = this.tiles.some((o) => o.dry);
+    }
     // 물 준 흙은 어둡게
     t.plot.traverse((o) => { if (o.isMesh && !o.userData.mat) { o.userData.mat = o.material.clone(); o.material = o.userData.mat; o.userData.base = o.material.color.clone(); } });
     // 물 준 흙은 어둡게, 퇴비 준 흙은 검붉은 기름진 흙
@@ -208,7 +260,6 @@ export class FarmView {
         const k = 1 - t.tillPop / TILL_POP;
         t.plot.scale.y = t.tillPop > 0 ? 0.2 + 0.8 * ease(k) + Math.sin(k * Math.PI) * 0.22 : 1;
       }
-      if (t.dry.visible) t.dry.position.y = 1.3 + Math.sin(this.t * 3 + t.seed) * 0.06;
       if (!t.crop) return;
       const p = this.sim.plots[i];
       let g = 1;
@@ -231,14 +282,25 @@ export class FarmView {
       // 다 익은 칸: 이따금 반짝
       if (ripe) { t.sparkle = (t.sparkle ?? t.seed * 0.3) - dt; if (t.sparkle <= 0) { t.sparkle = 2.5 + (t.seed % 3); this.game.fx.burst?.(t.x, 0.9, t.z, 0xfff3a0, 5); } }
     });
-    // 수확한 포기: 0.3초 동안 위로 살짝 뜨며 줄어들어 사라짐 (공유 지오메트리라 해제하지 않음)
+    this.dry.mat.uniforms.uTime.value = this.t;
+    // 수확한 포기: 잡아당기는 동안 위로 쭉 늘어나며 흔들리다(TUG) → 수확물이 튀어나오면 위로 뜨며 줄어들어 사라짐 (공유 지오메트리라 해제하지 않음)
     for (let k = this.leaving.length - 1; k >= 0; k--) {
-      const l = this.leaving[k];
+      const l = this.leaving[k], o = l.obj;
       l.t += dt;
-      const e = Math.min(1, l.t / 0.3);
-      l.obj.scale.setScalar(Math.max(0.001, 1 - e * e));
-      l.obj.position.y = l.y0 + e * 0.35;
-      if (e >= 1) { this.game.world.scene.remove(l.obj); this.leaving.splice(k, 1); }
+      if (l.out == null && (l.t >= PULL_FALLBACK || (l.it && l.it.phase !== 'wait'))) l.out = 0;
+      const tug = Math.min(1, l.t / TUG), wob = Math.sin(l.t * 38) * 0.14; // ±8°
+      if (l.out == null) {
+        o.scale.set(1 - 0.15 * tug, 1 + 0.25 * tug, 1 - 0.15 * tug);
+        o.rotation.z = wob * tug; o.rotation.x = wob * 0.5 * tug;
+        o.position.y = l.y0 + 0.04 * tug;
+        continue;
+      }
+      l.out += dt;
+      const e = Math.min(1, l.out / LEAVE), s = Math.max(0.001, 1 - e * e);
+      o.scale.set(0.85 * s, 1.25 * s, 0.85 * s);
+      o.rotation.z = wob * (1 - e); o.rotation.x = wob * 0.5 * (1 - e);
+      o.position.y = l.y0 + 0.04 + e * 0.35;
+      if (e >= 1) { this.game.world.scene.remove(o); this.leaving.splice(k, 1); }
     }
   }
 
@@ -266,6 +328,14 @@ export class FarmView {
       if (++hits >= n) fire();
     };
     this.job = { t: 0, dur: n * 0.6 + 0.05, done: () => { u.onHit = null; g.player.frozen = false; fire(); done?.(); } };
+  }
+
+  /** 밭 가는 '퍽' 소리 (음높이 ±8% 랜덤 → 연달아 갈아도 똑같이 들리지 않음) + 짧은 화면 떨림 */
+  _thud() {
+    const g = this.game, a = g.audio, r = 1 + (Math.random() - 0.5) * 0.16;
+    a.noise?.(0.12, 0.2, { type: 'lowpass', freq: 320 * r, q: 0.7 });
+    a.tone?.(92 * r, 0.2, 'sine', 0.2, -38 * r, { rev: 0.05, lp: 600 });
+    g.juice.shake(0.12);
   }
 
   // ---------------------------------------------------------------- 씨앗 고르기 (한 번 고르면 계속 그 씨앗)
@@ -300,8 +370,8 @@ export class FarmView {
 
   /** 고르기 창 (고른 씨앗을 기억. onPick 이 있으면 고른 뒤 실행) */
   pickSeed(onPick) {
-    const g = this.game;
-    g.ui.openSeedPicker((crop, fert) => { g.flags.seedSel = crop; g.flags.seedFert = !!fert; onPick?.(crop, fert); }, { fert: g.economy.count('compost') });
+    const g = this.game, hadFert = g.economy.count('compost') > 0; // 퇴비 칸이 보였을 때만 고른 값을 기억
+    g.ui.openSeedPicker((crop, fert) => { g.flags.seedSel = crop; if (hadFert) g.flags.seedFert = !!fert; onPick?.(crop, fert); }, { fert: g.economy.count('compost') });
   }
 
   plantLabel() {
@@ -329,8 +399,8 @@ export class FarmView {
   /** 머리 위 위치 */
   _headTop(out) {
     const P = this.game.player, u = P.unico;
-    if (u.headG?.getWorldPosition) { u.headG.getWorldPosition(out); out.y += 0.62; }
-    else out.set(P.position.x, P.position.y + 2.15, P.position.z);
+    if (u.headG?.getWorldPosition) { u.headG.getWorldPosition(out); out.y += 0.9; }
+    else out.set(P.position.x, P.position.y + 2.45, P.position.z);
     return out;
   }
 
@@ -346,14 +416,23 @@ export class FarmView {
     it.m.scale.setScalar(it.s * 0.4);
     it.m.position.copy(it.from);
     g.world.scene.add(it.m);
-    g.fx.burst(t.x, 0.3, t.z, 0x7a5636, 8);
+    g.fx.burst(t.x, 0.3, t.z, 0x7a5636, 8); // 뽑는 순간은 흙만 튐 (별·축하는 머리 위에 닿을 때)
     g.audio.play('dig', 0.6);
-    g.audio.play(r.stars === 3 || r.giant ? 'levelup' : 'harvest');
-    if (r.giant) { g.juice.shake(0.25); g.fx.burst(t.x, 1.2, t.z, 0xfff3a0, 26); }
-    if (r.stars > 1) g.fx.pop(t.x, t.z, '⭐'.repeat(r.stars), { fly: false }); // 별은 떠오르기만 (가방으로는 작물만)
-    // 이름표·화살표가 수확물을 가리지 않게 잠깐 숨김
-    if (u.label) u.label.visible = false;
-    if (g.player.arrow) g.player.arrow.visible = false;
+    // 이름표·화살표가 수확물을 가리지 않게 잠깐 숨김 (원래 보이던 것만 나중에 되돌림)
+    it.hid = [u.label, g.player.arrow].filter((o) => o?.visible);
+    for (const o of it.hid) o.visible = false;
+  }
+
+  /** 수확물이 머리 위에 닿는 순간: 축하 소리·별 */
+  _apex(head) {
+    const it = this.item, g = this.game, r = it.r;
+    const special = r.stars === 3 || r.giant;
+    g.audio.play(special ? 'levelup' : 'harvest');
+    g.fx.burst(head.x, head.y, head.z, special ? 0xffd75a : 0xfff3a0, special ? 14 : 6);
+    if (r.giant) { g.juice.shake(0.25); g.fx.burst(head.x, head.y, head.z, 0xfff3a0, 26); }
+    if (special) g.juice.pop(g.player.group, 0.2);
+    // 별은 수확물 위에서 천천히 떠오르기만 (가방으로는 작물만, 수확물을 가리지 않게)
+    if (r.stars > 1) g.fx.pop(head.x, head.z, '⭐'.repeat(r.stars), { fly: false, y: head.y + 1.05, vy: 0.35 });
   }
 
   _endItem() {
@@ -365,8 +444,7 @@ export class FarmView {
     const pos = it.m ? it.m.position.clone() : it.from.clone();
     if (it.m) g.world.scene.remove(it.m);
     if (it.phase !== 'wait') {
-      if (u.label) u.label.visible = true;
-      if (g.player.arrow) g.player.arrow.visible = true;
+      if (!g.cinema?.locked) for (const o of it.hid || []) o.visible = true; // 컷신이 숨긴 상태는 건드리지 않음
       if (it.phase === 'hold' && !it.lifted && !g.home?.inside && (u.action === 'pull' || !u.action)) u.playAction('lift', 0.6); // 일찍 끝나도 번쩍은 꼭
     }
     g.ui.flyToBag?.(CROPS[it.r.crop].emoji, pos);
@@ -393,16 +471,12 @@ export class FarmView {
       m.position.y += Math.sin(k * Math.PI) * 0.5;
       m.scale.setScalar(it.s * (0.4 + 0.6 * Math.min(1, k * 1.6)));
       m.rotation.set(0.25, m.rotation.y + dt * 6, 0);
-      if (k >= 1) {
-        it.phase = 'hold'; it.t = 0;
-        const special = it.r.stars === 3 || it.r.giant;
-        g.fx.burst(head.x, head.y, head.z, special ? 0xffd75a : 0xfff3a0, special ? 14 : 6);
-        if (special) g.juice.pop(P.group, 0.2);
-      }
+      if (k >= 1) { it.phase = 'hold'; it.t = 0; m.scale.setScalar(it.s * 1.15); this._apex(head); }
     } else {
       m.position.copy(head);
       m.position.y += Math.sin(it.t * 9) * 0.04;
-      m.rotation.set(0.25, m.rotation.y + dt * 2.5, Math.sin(it.t * 7) * 0.12);
+      m.scale.setScalar(it.s * (1 + 0.15 * Math.max(0, 1 - it.t / 0.18))); // 닿는 순간 '짠' 하고 1.15 → 1
+      m.rotation.set(0.25, m.rotation.y + dt * 2.5, 0.3 + Math.sin(it.t * 7) * 0.12);
       if (it.t >= ITEM_HOLD) this._endItem();
     }
   }
@@ -413,7 +487,8 @@ export class FarmView {
     if (p.state !== 'ready') return null;
     this.flushItem();
     // 다시 열리지 않는 작물: 남은 포기는 줄어들며 사라짐
-    if (!(p.regrowLeft > 0) && t.crop) { this.leaving.push({ obj: t.crop, t: 0, y0: t.crop.position.y }); t.crop = null; t.plants = null; t.cropKey = ''; }
+    let leave = null;
+    if (!(p.regrowLeft > 0) && t.crop) { leave = { obj: t.crop, t: 0, y0: t.crop.position.y, out: null, it: null }; this.leaving.push(leave); t.crop = null; t.plants = null; t.cropKey = ''; }
     const grace = this.grace;
     const r = this.sim.harvest(i, grace ? 2 : 1);
     if (!r) return null;
@@ -424,6 +499,7 @@ export class FarmView {
     it.hit = (kind) => { if (kind === 'pull') this._spawnItem(); };
     u.onHit = it.hit;
     this.item = it;
+    if (leave) leave.it = it;
     if (r.giant) g.onEvent('giant');
     if (r.stars === 3) g.onEvent('star3');
     const stars = '⭐'.repeat(r.stars);
@@ -462,7 +538,8 @@ export class FarmView {
       this.job.t += dt;
       if (this.job.t >= this.job.dur) {
         const j = this.job; this.job = null; j.done();
-        if (this.buffered) { this.buffered = false; this._chain(playerPos); }
+        // 눌러 둔 E 로 다음 일을 했으면 이 프레임은 안내 없이 (같은 E 로 두 번 하지 않게)
+        if (this.buffered) { this.buffered = false; this._chain(playerPos); this.seedChip?.update(); return { d: -1, label: '', key: 'hoeing' }; }
       }
       if (this.job) { this.seedChip?.update(); return { d: -1, label: '⛏️ 호미질 중…', key: 'hoeing' }; }
     }
@@ -509,6 +586,7 @@ export class FarmView {
       if (!this.sim.till(i)) return;
       t.tillPop = TILL_POP; t.plot.scale.y = 0.2; // 이랑이 흙에서 솟아오름
       g.fx.burst(t.x, 0.25, t.z, 0x7a5636, 10);
+      this._thud();
       g.onEvent('till');
     });
     else if (type === 'weed') this.hoe(i, 2, () => {

@@ -175,3 +175,109 @@ test('수확: 새 수확·다시 읽기는 진행 중인 연출을 바로 가방
   assert.equal(log.fly.length, 2);
   assert.equal(F.item, null);
 });
+
+test('심기 고르기 창: 퇴비가 없어 퇴비 칸이 안 보였으면 퇴비 여부를 기억하지 않음 (나중에 퇴비가 생기면 기본으로 줌)', () => {
+  const { g, log } = fakeGame({ seeds: { carrot: 2, cabbage: 3 }, compost: 0 });
+  const F = new FarmView(g);
+  F.pickSeed();
+  log.pick('cabbage', false);
+  assert.equal(g.flags.seedSel, 'cabbage');
+  assert.equal(g.flags.seedFert, undefined);
+  g.economy.items.compost = 2;
+  assert.equal(F.seedFert(), true, '퇴비가 생기면 함께 줌');
+  F.pickSeed();
+  log.pick('cabbage', false);
+  assert.equal(F.seedFert(), false, '퇴비 칸에서 끈 건 기억');
+});
+
+test('호미질이 끝나는 프레임에 누른 E: 이어 한 일 하나만 (같은 E 로 안내의 일을 또 하지 않게)', () => {
+  const { g } = fakeGame({ seeds: { carrot: 3 } });
+  const F = new FarmView(g);
+  standAt(F, g, 0);
+  F.interact(0, 'till');
+  run(F, g, 0.6);
+  g.input.e = true;
+  const p = run(F, g, 0.1, 0.1); // 이 프레임에 끝남 + E
+  g.input.e = false;
+  assert.equal(F.sim.plots[0].crop, 'carrot', '눌러 둔 E 로 바로 심음');
+  assert.equal(p.onInteract, undefined, '이 프레임 안내에는 할 일이 없음');
+  assert.equal(F.sim.plots[0].water, 0, '물은 아직 안 줌');
+});
+
+test('수확: 포기는 먼저 위로 쭉 늘어나며 흔들리다(당기기) 수확물이 나오면 줄어듦, 머리 위에 닿을 때 별', () => {
+  const { g } = fakeGame();
+  const pops = [];
+  g.fx.pop = (x, z, t, o) => pops.push([t, o]);
+  const F = new FarmView(g);
+  standAt(F, g, 0);
+  F.sim.till(0); F.sim.plant(0, 'carrot'); F.sim.plots[0].progress = 1; F.sim.plots[0].state = 'ready';
+  F.refresh(0);
+  F.interact(0, 'harvest');
+  const l = F.leaving[0];
+  run(F, g, 0.2);
+  assert.ok(l.obj.scale.y > 1.2 && l.obj.scale.x < 0.9, '당기는 중: 세로로 늘고 가로로 얇아짐');
+  assert.equal(pops.length, 0, '뽑는 순간엔 별 없음');
+  run(F, g, 0.3); // 0.45초 → 수확물 등장
+  assert.equal(F.item.phase, 'arc');
+  for (let k = 0; k < 30 && F.item.phase === 'arc'; k++) run(F, g, 1 / 30);
+  assert.equal(F.item.phase, 'hold');
+  assert.equal(pops.length, 1, '머리 위에 닿을 때 별 (보호 기간 별 2개)');
+  assert.match(pops[0][0], /^(⭐){2,3}$/);
+  assert.equal(pops[0][1].fly, false);
+  assert.ok(pops[0][1].y > F.item.m.position.y + 0.8, '별은 수확물 위 (가리지 않게)');
+  assert.ok(F.item.m.scale.x > F.item.s * 1.1, "닿는 순간 '짠' 하고 크게");
+  run(F, g, 0.2);
+  assert.ok(Math.abs(F.item.m.scale.x - F.item.s) < 1e-6, '그다음 제 크기');
+});
+
+test('수확물 재질: 작물 GLB 재질(시선 구멍 셰이더)을 빌리지 않고 전용 재질 하나를 함께 씀', async () => {
+  const { produceMaterial, ProduceFactory } = await import('../src/game/view/farm_produce.js');
+  const crops = new THREE.Group();
+  const borrowed = new THREE.MeshStandardMaterial({ vertexColors: true });
+  crops.add(new THREE.Mesh(new THREE.BoxGeometry(), borrowed));
+  const P = new ProduceFactory({ scenes: new Map([['crops', crops]]) });
+  const a = P.make('carrot'), b = P.make('tomato');
+  assert.notEqual(a.material, borrowed);
+  assert.equal(a.material, b.material);
+  assert.equal(a.material, produceMaterial());
+  assert.ok(a.geometry.attributes.color, '색은 정점 색');
+  const pos = a.geometry.attributes.position;
+  let wide = 0;
+  for (let i = 0; i < pos.count; i++) wide = Math.max(wide, Math.hypot(pos.getX(i), pos.getZ(i)));
+  assert.ok(wide >= 0.105, '통통한 당근 (반지름 0.11 정도)');
+});
+
+test('수확 중 숨긴 이름표·화살표: 원래 보이던 것만, 컷신 중이면 되돌리지 않음', () => {
+  for (const locked of [false, true]) {
+    const { g } = fakeGame();
+    g.cinema = { locked: false };
+    const F = new FarmView(g);
+    standAt(F, g, 0);
+    F.sim.till(0); F.sim.plant(0, 'carrot'); F.sim.plots[0].progress = 1; F.sim.plots[0].state = 'ready';
+    F.refresh(0);
+    F.interact(0, 'harvest');
+    run(F, g, 0.5);
+    assert.equal(g.player.unico.label.visible, false);
+    assert.equal(g.player.arrow.visible, false);
+    g.cinema.locked = locked;
+    run(F, g, 1.0);
+    assert.equal(F.item, null);
+    assert.equal(g.player.unico.label.visible, !locked);
+    assert.equal(g.player.arrow.visible, !locked);
+  }
+});
+
+test('밭 갈기: 내리찍는 순간 음높이가 조금씩 다른 퍽 소리와 짧은 흔들림', () => {
+  const { g } = fakeGame();
+  const tones = [];
+  g.audio.tone = (f) => tones.push(f);
+  g.audio.noise = () => {};
+  let shakes = 0;
+  g.juice.shake = () => shakes++;
+  const F = new FarmView(g);
+  for (let i = 0; i < 6; i++) { standAt(F, g, i); F.interact(i, 'till'); g.player.unico.onHit('hoe'); run(F, g, 0.7); }
+  assert.equal(tones.length, 6);
+  assert.ok(tones.every((f) => f >= 92 * 0.92 - 1e-9 && f <= 92 * 1.08 + 1e-9), '±8%');
+  assert.ok(new Set(tones).size > 1, '똑같은 소리만 나지 않음');
+  assert.ok(shakes >= 12, '호미 흔들림 + 갈기 흔들림');
+});
