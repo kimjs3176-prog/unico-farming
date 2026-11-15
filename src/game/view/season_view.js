@@ -4,27 +4,85 @@ import { SURF } from '../surface.js';
 
 /**
  * 계절 화면 (규칙은 sim/season.js)
- *  - 계절이 바뀌면: 풀 색(인스턴스 색)·들꽃 양·나무 잎 색(단풍·벚꽃빛·겨울 잿빛)·땅 색·눈 덮임
- *  - 봄엔 꽃잎, 가을엔 낙엽이 플레이어 주변에 흩날림 (비·눈 올 때·집 안에서는 쉼)
+ *  - 계절이 바뀌면: 풀 색(인스턴스 색)·들꽃 양·나무 잎 색(셰이더 유니폼: 단풍·봄 꽃송이·겨울 서리)·땅 색·눈 덮임
+ *  - 봄엔 꽃잎, 가을엔 낙엽이 카메라 앞쪽에 흩날림 (비·눈 올 때·집 안에서는 쉼)
+ *    카메라 바로 앞과 카메라→주인공 사이에서는 작아져 사라짐 (얼굴을 가리지 않게)
  *  - 밭 성장·판매가에 제철 배율 연결, 상단 HUD 계절 칩, 바뀔 때 알림
  */
 const FALL_N = 70;
+const PETAL_COLS = [0xf7a1c4, 0xffb3cf, 0xf48fb1, 0xffc9dc];
+const LEAF_COLS = [0xe0802c, 0xd4372c, 0xe8b23a, 0xa8642a];
+
+/** 꽃잎: 끝이 살짝 파인 물방울 모양, 가장자리를 들어 오목하게 (텍스처·알파 없이 모양을 지오메트리로) */
+export function petalGeometry() {
+  const ring = [[0, -0.045], [0.021, -0.031], [0.0325, -0.006], [0.028, 0.02], [0.013, 0.043], [0, 0.034], [-0.013, 0.043], [-0.028, 0.02], [-0.0325, -0.006], [-0.021, -0.031]];
+  return fanGeometry(ring, (x, y) => 0.008 * Math.min(1, Math.hypot(x, y) / 0.03), new THREE.Color(0xffc2d4), new THREE.Color(0xffffff), -0.045, 0.045);
+}
+
+/** 낙엽: 다섯 갈래 단풍잎, 가운데 잎맥을 따라 V 자로 접힘 */
+export function leafGeometry() {
+  const ring = [];
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2 - Math.PI / 2;
+    const r = 0.05 * (0.55 + 0.45 * Math.pow(Math.abs(Math.cos(a * 2.5 + Math.PI / 4)), 1.6));
+    ring.push([Math.cos(a) * r, -Math.sin(a) * r]);
+  }
+  return fanGeometry(ring, (x) => Math.abs(x) * 0.25, new THREE.Color(0xc9a27a), new THREE.Color(0xffffff), -0.05, 0.05);
+}
+
+/** 가운데 점 + 둘레 점 부채꼴 메시 (z 들어올림, 아래→위 정점 색) */
+function fanGeometry(ring, lift, c0, c1, y0, y1) {
+  const n = ring.length, pos = [0, 0, 0], col = [], idx = [];
+  const tmp = new THREE.Color();
+  const put = (y) => { tmp.copy(c0).lerp(c1, (y - y0) / (y1 - y0)); col.push(tmp.r, tmp.g, tmp.b); };
+  put(0);
+  for (const [x, y] of ring) { pos.push(x, y, lift(x, y)); put(y); }
+  for (let i = 0; i < n; i++) idx.push(0, 1 + i, 1 + ((i + 1) % n));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** 점 p 에서 선분 a-b 까지 거리 */
+function segDist(p, a, b) {
+  const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+  const l2 = abx * abx + aby * aby + abz * abz;
+  const t = l2 > 1e-9 ? Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby + (p.z - a.z) * abz) / l2)) : 0;
+  return Math.hypot(p.x - a.x - abx * t, p.y - a.y - aby * t, p.z - a.z - abz * t);
+}
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+/** 카메라 가까이·카메라→주인공 머리 사이면 0 쪽으로 (투명 없이 크기로 사라짐) */
+export function fallScale(p, cam, head) {
+  if (!cam) return 1;
+  const dc = Math.hypot(p.x - cam.x, p.y - cam.y, p.z - cam.z);
+  return smooth(1.5, 2.5, dc) * (head ? smooth(0.5, 1.1, segDist(p, cam, head)) : 1);
+}
 
 export class SeasonView {
   constructor(game) {
     this.game = game;
     this.cur = null;
-    this.leafMats = null;
-    // 꽃잎·낙엽 (작은 판 하나를 여러 개 그림)
-    const geo = new THREE.PlaneGeometry(0.14, 0.09);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, side: THREE.DoubleSide });
-    this.fall = new THREE.InstancedMesh(geo, mat, FALL_N);
+    // 꽃잎·낙엽 (작은 모양 하나를 여러 개 그림: 그리기 1번)
+    this.petalGeo = petalGeometry();
+    this.leafGeo = leafGeometry();
+    const mat = new THREE.MeshLambertMaterial({ color: 0xe6e6e6, vertexColors: true, side: THREE.DoubleSide });
+    this.fall = new THREE.InstancedMesh(this.petalGeo, mat, FALL_N);
     this.fall.frustumCulled = false;
+    this.fall.castShadow = false;
     this.fall.visible = false;
-    this.fallP = Array.from({ length: FALL_N }, () => ({ x: 0, y: 0, z: 0, vy: 0, ph: Math.random() * 6.28, spin: 0.5 + Math.random() * 2 }));
+    this.fallP = Array.from({ length: FALL_N }, () => {
+      const ax = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
+      if (ax.lengthSq() < 1e-4) ax.set(1, 0, 0);
+      return { x: 0, y: 0, z: 0, vy: 0, ph: Math.random() * 6.28, spin: 1.2 + Math.random() * 2.2, s: 0.7 + Math.random() * 0.4, ax: ax.normalize() };
+    });
     this.fallSeeded = false;
     game.world.scene.add(this.fall);
-    this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler(); this._s = new THREE.Vector3(1, 1, 1); this._p = new THREE.Vector3();
+    this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._q2 = new THREE.Quaternion(); this._s = new THREE.Vector3(1, 1, 1); this._p = new THREE.Vector3();
+    this._f = new THREE.Vector3(); this._z = new THREE.Vector3(0, 0, 1);
   }
 
   get season() { return this.cur; }
@@ -63,21 +121,20 @@ export class SeasonView {
     }
     // 들꽃 양
     if (sc) { sc.seasonFlowers = L.flowers; sc.setDensity(sc.density ?? 1); }
-    // 나무 잎: 잎 재질(foliage)마다 원래 색에서 계절 색으로 (두 가지 색을 번갈아 → 숲이 알록달록)
-    if (!this.leafMats) this.leafMats = this._collectLeaves();
-    const tint = new THREE.Color();
-    for (const [m, alt] of this.leafMats) {
-      const [hex, amt] = (alt && L.leafAlt) ? L.leafAlt : L.leaf;
-      m.color.copy(m.userData.baseColor).lerp(tint.set(hex), amt);
-    }
+    // 나무 잎: 모든 잎 셰이더가 함께 쓰는 유니폼만 바꿈 (재질 색을 건드리지 않아 언제 놓은 나무든 같은 계절 색)
+    const lv = L.leaves;
+    SURF.leafA.value.setHex(lv.a); SURF.leafB.value.setHex(lv.b); SURF.leafR.value.setHex(lv.red);
+    SURF.leafAmt.value.set(...lv.amt);
+    SURF.blossom.value = lv.blossom;
     // 땅 색·눈 덮임
     const gm = w.groundMat;
     if (gm) { gm.userData.baseColor ||= gm.color.clone(); gm.color.copy(gm.userData.baseColor).multiply(new THREE.Color(...L.ground)); }
     w.seasonSnow = L.snow;
     if (!announce) { w.snowCover = Math.max(w.snowCover || 0, L.snow); SURF.snow.value = Math.max(SURF.snow.value, L.snow * 0.85); } // 겨울에 접속하면 처음부터 눈이 쌓인 채로
-    // 꽃잎·낙엽 색
+    // 꽃잎·낙엽: 모양과 색
     if (L.fall) {
-      const cols = L.fall === 'petal' ? [0xffc4d8, 0xffd9e6, 0xfff0f5, 0xf7a8c4] : [0xe0802c, 0xd4372c, 0xe8b23a, 0xa8642a];
+      this.fall.geometry = L.fall === 'petal' ? this.petalGeo : this.leafGeo;
+      const cols = L.fall === 'petal' ? PETAL_COLS : LEAF_COLS;
       const col = new THREE.Color();
       for (let i = 0; i < FALL_N; i++) this.fall.setColorAt(i, col.setHex(cols[i % cols.length]));
       this.fall.instanceColor.needsUpdate = true;
@@ -91,47 +148,36 @@ export class SeasonView {
     }
   }
 
-  /**
-   * 계절 색을 입힐 잎 재질 → [[재질, 다른 색(leafAlt) 쓰기], ...]
-   *  - 에셋 원본 재질도 함께 모음: 게임 중에 놓는 꾸미기 나무·덤불, 나중에 심는 작물은 원본 재질을 같이 쓰므로
-   *    언제 놓아도 지금 계절 색으로 보임
-   *  - 두 색 번갈이: 원본은 모델 이름순, 나머지(합쳐 그린 숲 등)는 장면 순서 → 저장 내용(작물·꾸미기)과 상관없이 늘 같은 색
-   */
-  _collectLeaves() {
-    const g = this.game;
-    const each = (root, fn) => root.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (m?.userData?.enhanced === 'foliage') fn(m); });
-    const orig = new Map();
-    const sc = g.assets?.scenes;
-    for (const k of sc ? [...sc.keys()].sort() : []) each(sc.get(k), (m) => { if (!orig.has(m)) orig.set(m, orig.size % 2 === 1); }); // 받는 순서와 상관없이 이름순
-    const out = new Map();
-    let i = 0;
-    each(g.world.scene, (m) => { if (!orig.has(m) && !out.has(m)) out.set(m, i++ % 2 === 1); });
-    for (const [m, alt] of orig) out.set(m, alt);
-    for (const m of out.keys()) if (!m.userData.baseColor?.isColor) m.userData.baseColor = m.color.clone();
-    return [...out];
-  }
-
   updateFall(dt) {
     const g = this.game, w = g.world;
     const on = !!this.fallKind && !g.home?.inside && (w.weatherCur?.precip || 0) < 0.25 && (w.daylight ?? 1) > 0.15;
     this.fall.visible = on;
     if (!on) { this.fallSeeded = false; return; }
-    const c = g.followCam.target, R = 9;
-    const wind = w.weatherCur?.wind ?? 0.15;
+    const head = g.followCam.target, cam = g.camera?.position;
+    // 흩날리는 상자: 카메라가 보는 쪽으로 4m 밀어 둠 (화면 밖·카메라 뒤에 쓰지 않게)
+    const f = this._f.set(0, 0, -1);
+    if (g.camera?.getWorldDirection) { g.camera.getWorldDirection(f); f.y = 0; if (f.lengthSq() < 1e-6) f.set(0, 0, -1); f.normalize(); }
+    const cx = head.x + f.x * 4, cz = head.z + f.z * 4, base = head.y - 1.1, RX = 8, RZ = 7;
+    const wind = w.weatherCur?.wind ?? 0.15, petal = this.fallKind === 'petal';
     for (let i = 0; i < FALL_N; i++) {
       const p = this.fallP[i];
-      if (!this.fallSeeded || p.y < 0 || Math.abs(p.x - c.x) > R || Math.abs(p.z - c.z) > R) {
-        p.x = c.x + (Math.random() - 0.5) * 2 * R; p.z = c.z + (Math.random() - 0.5) * 2 * R;
-        p.y = this.fallSeeded ? 6 + Math.random() * 2 : Math.random() * 8;
-        p.vy = (this.fallKind === 'petal' ? 0.45 : 0.75) * (0.7 + Math.random() * 0.6);
+      if (!this.fallSeeded || p.y < base - 0.2 || Math.abs(p.x - cx) > RX || Math.abs(p.z - cz) > RZ) {
+        p.x = cx + (Math.random() - 0.5) * 2 * RX; p.z = cz + (Math.random() - 0.5) * 2 * RZ;
+        p.y = base + (this.fallSeeded ? 5 + Math.random() * 2 : 0.5 + Math.random() * 6.5);
+        p.vy = (petal ? 0.45 : 0.75) * (0.7 + Math.random() * 0.6);
       }
       p.ph += dt * p.spin;
-      p.y -= p.vy * dt;
-      p.x += (Math.sin(p.ph) * 0.5 + wind * 1.6) * dt;
+      p.y -= p.vy * (0.8 + 0.3 * Math.abs(Math.cos(p.ph))) * dt; // 뒤집힐 때마다 살짝 멈칫 (팔랑팔랑)
+      p.x += (Math.sin(p.ph) * 0.6 + wind * 1.6) * dt;
       p.z += Math.cos(p.ph * 0.7) * 0.35 * dt;
-      this._e.set(p.ph, p.ph * 0.6, p.ph * 0.3);
-      this._q.setFromEuler(this._e);
-      this._m.compose(this._p.set(p.x, p.y, p.z), this._q, this._s);
+      // 한 축으로 굴러 떨어지며 좌우로 흔들림
+      this._q.setFromAxisAngle(p.ax, p.ph);
+      this._q2.setFromAxisAngle(this._z, Math.sin(p.ph * 0.8) * 0.5);
+      this._q.multiply(this._q2);
+      this._p.set(p.x, p.y, p.z);
+      const k = p.s * fallScale(this._p, cam, head);
+      this._s.set(k, k, k);
+      this._m.compose(this._p, this._q, this._s);
       this.fall.setMatrixAt(i, this._m);
     }
     this.fallSeeded = true;

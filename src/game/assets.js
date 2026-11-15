@@ -6,7 +6,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { loadUnicoMesh, prebuildTemplates } from './unico.js';
 import { SPECIES_IDS } from './species.js';
 import { loadSettings, resolveQuality } from './quality.js';
-import { enhanceMaterial, kindOf } from './surface.js';
+import { enhanceMaterial, kindOf, seasonRole } from './surface.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /** 부품이 많은 움직이는 모델: 같은 부모 아래 같은 질감 종류의 부품을 정점 색으로 합쳐 그리기 횟수 감소 */
@@ -71,6 +71,7 @@ export class Assets {
     this.loader.setMeshoptDecoder(MeshoptDecoder);
     this.scenes = new Map();
     this.anims = new Map();
+    this.leafMats = new Map(); // (원본 잎 재질, 계절 역할) → 복제 재질 (한 쌍에 하나만)
   }
 
   /** GLB 받기 (배포 빌드는 .gz 로 받아 풂) → 해석 */
@@ -103,6 +104,7 @@ export class Assets {
             node.position.set(0, 0, 0);
             g.add(node);
             prepare(g);
+            applyLeafRole(g, node.name, this.leafMats);
             this.scenes.set(node.name, g);
           }
         } catch (e) {
@@ -120,6 +122,7 @@ export class Assets {
           gltf.scene.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh) dequantize(o.geometry); }); // 합치기 전에 압축 좌표 풀기
           if (MERGE_PARTS.has(n)) mergeSiblings(gltf.scene, MERGE_LOOSE.has(n));
           prepare(gltf.scene);
+          applyLeafRole(gltf.scene, n, this.leafMats);
           this.scenes.set(n, gltf.scene);
         } catch (e) {
           console.warn('모델 로드 실패, 대체 박스 사용:', n, e?.message || e);
@@ -251,6 +254,34 @@ function prepare(scene, { fur = false, spots = null } = {}) {
     o.castShadow = true;
     o.receiveShadow = true;
   });
+}
+
+/**
+ * 계절 잎 역할 붙이기: 나무·덤불 모델의 잎 재질을 역할별 복제본으로 바꿈 (작물·꽃 등은 그대로 = 물들지 않음)
+ * 한 GLB 안에서 소나무와 활엽수가 같은 잎 재질을 쓰므로 (원본, 역할) 쌍마다 한 번만 복제해 다시 씀
+ * → 정적 병합 묶음(재질 질감 종류 기준)은 늘지 않음. 복제본은 셰이더 주입이 빠지므로 다시 입힘
+ */
+export function applyLeafRole(root, model, cache = new Map()) {
+  const role = seasonRole(model);
+  if (!role) return 0;
+  let n = 0;
+  root.traverse((o) => {
+    if (!o.isMesh || Array.isArray(o.material)) return;
+    const m = o.material;
+    if (m?.userData?.enhanced !== 'foliage') return;
+    const key = `${m.uuid}|${role}`;
+    let c = cache.get(key);
+    if (!c) {
+      c = m.clone();
+      c.userData = { ...m.userData, leafRole: role };
+      delete c.userData.enhanced;
+      enhanceMaterial(c, 'foliage');
+      cache.set(key, c);
+    }
+    o.material = c;
+    n++;
+  });
+  return n;
 }
 
 /**
