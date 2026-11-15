@@ -39,7 +39,7 @@ export class Net {
       this.connected = true;
       this.last = ''; // 다시 들어가면 서 있어도 첫 위치는 꼭 보냄
       this.lookSent = this.game.look?.() || '';
-      this.send({ t: 'join', name: this.game.playerName, l: this.lookSent });
+      this.send({ t: 'join', name: this.game.playerName, l: this.lookSent, clientId: this.game.social?.giftClientId });
     };
     ws.onmessage = (e) => {
       if (ws !== this.ws) return;
@@ -112,8 +112,7 @@ export class Net {
   /** 다른 플레이어에게 상호작용 보내기 (인사·하이파이브·선물·친구): 보냈으면 true */
   sendAct(to, k, extra = {}) {
     if (!this.connected || this.ws?.readyState !== 1) return false;
-    this.send({ t: 'act', to, k, ...extra });
-    return true;
+    return this.send({ t: 'act', to, k, ...extra });
   }
 
   /** 가까운 다른 플레이어 안내 (E: 상호작용 창) */
@@ -140,14 +139,17 @@ export class Net {
     if (this.blockedUntil > Date.now()) { // 오늘 사용량이 다 참: 지금은 접속하지 않고, 다시 열리면 그 방으로
       this.wantRoom = name;
       if (!this.reconnect) this.retryIn(this.retryDelay());
-      this.game.ui.toast(`🌙 오늘 멀티플레이 서버 사용량이 다 찼어요. 오전 9시에 다시 열리면 ${name}으로 들어가요`);
+      this.game.ui.toast(this.quotaReason === 'unavailable' ? `🌙 서버 사용량 확인을 기다리는 중이에요. 잠시 뒤 ${name}으로 다시 접속해요` : `🌙 오늘 멀티플레이 서버 사용량이 다 찼어요. 오전 9시에 다시 열리면 ${name}으로 들어가요`);
       return;
     }
     this.connect(name);
     this.game.ui.toast(`🏡 ${name}으로 이동 중…`);
   }
 
-  send(o) { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(o)); }
+  send(o) {
+    if (this.ws?.readyState !== 1) return false;
+    try { this.ws.send(JSON.stringify(o)); return true; } catch { return false; }
+  }
   /** 옷을 갈아입으면 다른 접속자에게 알림 (같은 옷은 다시 보내지 않음: 세트 입기처럼 한 번에 두 번 불려도 한 번만) */
   sendLook() {
     if (!this.connected) return; // 다시 접속하면 join 에 지금 옷이 실려 감
@@ -175,9 +177,12 @@ export class Net {
       case 'chat': { const r = this.remote.get(m.id); if (m.id === this.id) { g.ui.chatLine(g.playerName, m.text, true); g.player.unico.say(m.text); } else { g.ui.chatLine(m.name, m.text); r?.unico.say(m.text); } break; }
       case 'full': g.ui.toast('⚠️ 모든 방이 가득 찼어요. 혼자 플레이하다가 자리가 나면 다시 들어가요'); break;
       case 'quota': // 무료 서버의 오늘 사용량이 다 참 → 초기화 시각까지 다시 접속하지 않음
+        this.quotaReason = m.reason;
         this.blockedUntil = Math.max(Date.now() + 60000, +m.until || 0);
-        if (!this.quotaShown) { this.quotaShown = true; g.ui.toast('🌙 오늘 멀티플레이 서버 사용량이 다 찼어요. 내일 오전 9시에 다시 열려요 (농장은 계속 혼자 플레이할 수 있어요)'); }
+        if (!this.quotaShown) { this.quotaShown = true; g.ui.toast(m.reason === 'unavailable' ? '🌙 서버 사용량을 확인할 수 없어 잠시 혼자 플레이해요. 잠시 뒤 다시 연결할게요' : '🌙 오늘 멀티플레이 서버 사용량이 다 찼어요. 오전 9시에 다시 열려요 (농장은 계속 혼자 플레이할 수 있어요)'); }
         break;
+      case 'gift': g.socialView?.onGift(m); break;
+      case 'gift_ack': g.socialView?.onGiftAck(m); break;
       case 'act': g.socialView?.onAct(m); break;
       case 'act_fail': g.socialView?.onActFail?.(m); break; // 선물을 전하지 못함 → 돌려받기
       case 'pong': this.pongOk = true; clearTimeout(this.probeTimer); this.probeTimer = 0; break; // 살아 있음
@@ -195,6 +200,7 @@ export class Net {
       u.group.position.set(r.target.x, 0, r.target.z);
       this.remote.set(p.id, r);
     }
+    if (p.clientId) { r.clientId = p.clientId; r.giftV = p.giftV; }
     if (p.l && p.l !== r.l) { r.l = p.l; r.unico.setOutfit(decodeLook(p.l)); } // 정해진 옷 이름만 (decodeLook)
     if (p.x !== undefined) { r.target.x = p.x; r.target.z = p.z; }
     if (p.f !== undefined) r.unico.facing = p.f;
@@ -223,6 +229,7 @@ export class Net {
       r.unico.update(dt, g.followCam.camera, g.world.daylight);
     }
     if (!this.connected) return;
+    g.socialView?.flushGift?.();
     this.acc += dt;
     if (this.acc < 1 / SEND_HZ) return;
     this.acc = 0;

@@ -17,6 +17,8 @@ globalThis.Response = class { constructor(body, init = {}) { this.status = init.
 
 const { FarmRoom, default: worker } = await import('../deploy/cloudflare/worker.js');
 const { MAX_PLAYERS, MAX_ROOMS } = await import('../deploy/cloudflare/limits.js');
+const budgetEnv = () => ({ ROOM: { idFromName: (n) => n, get: () => ({ fetch: async () => RealResponse.json({ granted: true, requests: 256, awakeSec: 60 }) }) } });
+const makeRoom = (state) => new FarmRoom(state, budgetEnv());
 const CAP = MAX_PLAYERS * 2; // 방 하나 소켓 총량 (입장 전 포함)
 
 function fakeState() {
@@ -27,7 +29,7 @@ const upgrade = (ip) => ({ url: 'https://relay/ws', headers: new Headers({ Upgra
 
 test('릴레이: 입장 안 한 채 10초 넘은 빈 소켓은 정리되어 방을 막지 못함', async (t) => {
   const st = fakeState();
-  const room = new FarmRoom(st);
+  const room = makeRoom(st);
   const realNow = Date.now;
   t.after(() => { Date.now = realNow; });
   let now = 1_000_000;
@@ -47,7 +49,7 @@ test('릴레이: 입장 안 한 채 10초 넘은 빈 소켓은 정리되어 방�
 
 test('릴레이: 입장 때 인원을 다시 확인해 방 정원(MAX_PLAYERS)을 넘지 않음', async () => {
   const st = fakeState();
-  const room = new FarmRoom(st);
+  const room = makeRoom(st);
   const N = MAX_PLAYERS + 10;
   for (let i = 0; i < N; i++) await room.fetch(upgrade(`10.1.${i >> 4}.${i & 15}`));
   const socks = st.getWebSockets();
@@ -61,7 +63,7 @@ test('릴레이: 목록 밖 방 이름(0번·01번·정원 밖 번호)은 가장
   const asked = [];
   const env = { ROOM: {
     idFromName: (n) => n,
-    get: (id) => ({ fetch: async (req) => { if (typeof req === 'string') return RealResponse.json({ count: 0 }); asked.push([id, decodeURIComponent(req.headers.get('X-Room'))]); return { status: 101 }; } }),
+    get: (id) => ({ fetch: async (req) => { if (typeof req === 'string') return RealResponse.json({ count: 0, over: false }); asked.push([id, decodeURIComponent(req.headers.get('X-Room'))]); return { status: 101 }; } }),
   } };
   for (const bad of ['0번 농장', '01번 농장', '00번 농장', `${MAX_ROOMS + 1}번 농장`, '21번 농장']) {
     await worker.fetch(new Request(`https://relay/ws?room=${encodeURIComponent(bad)}`, { headers: { Upgrade: 'websocket' } }), env);
@@ -86,7 +88,7 @@ test('릴레이: 오늘 무료 한도 안전선을 넘었으면 방을 찾지 �
 /** 방에 두 사람(a, b)을 들여보냄 */
 async function twoPlayers(t) {
   const st = fakeState();
-  const room = new FarmRoom(st);
+  const room = makeRoom(st);
   const realNow = Date.now;
   t.after(() => { Date.now = realNow; });
   const clock = { now: 5_000_000 };
@@ -151,7 +153,7 @@ test('릴레이: 선물을 전하지 못하면 번호(gid)로 알리고, ping �
   await say({ t: 'act', k: 'gift', to: idB, item: 'egg', n: 1, gid: 3 });
   assert.deepEqual(fails().at(-1), { t: 'act_fail', k: 'gift', gid: 3, why: 'busy' });
   // 받는 쪽 소켓이 보내다 끊김
-  const c = new FarmRoom(st);
+  const c = makeRoom(st);
   st.sockets.length = 0;
   await c.fetch(upgrade('10.3.0.1')); await c.fetch(upgrade('10.3.0.2'));
   const [x, y] = st.getWebSockets();
@@ -168,4 +170,86 @@ test('릴레이: 선물을 전하지 못하면 번호(gid)로 알리고, ping �
 test('릴레이 진입 파일은 핸들러(default)·Durable Object 클래스만 내보냄 (상수를 내보내면 workerd 가 시작 거부)', async () => {
   const mod = await import('../deploy/cloudflare/worker.js');
   for (const [k, v] of Object.entries(mod)) assert.ok(k === 'default' ? typeof v === 'object' : typeof v === 'function', `내보낸 ${k}: ${typeof v}`);
+});
+
+
+test('방 목록: 1·2번이 비어 있어도 사용 중인 3번 방을 표시하고 15초 동안 조회를 합침', async () => {
+  const asked = [];
+  const env = { ROOM: { idFromName: (n) => n, get: (id) => ({ fetch: async () => {
+    asked.push(id);
+    return RealResponse.json(id === '__ledger__' ? { over: false } : { count: id === '3번 농장' ? 1 : 0 });
+  } }) } };
+  const req = new Request('https://relay/rooms');
+  const result = await (await worker.fetch(req, env)).json();
+  assert.deepEqual(result.rooms.map((r) => r.name), ['1번 농장', '3번 농장']);
+  await worker.fetch(req, env);
+  assert.equal(asked.length, MAX_ROOMS + 1);
+});
+
+test('사용량 조회 장애: 입장·방 메시지 모두 차단, 전달·재질문 없음', async () => {
+  let calls = 0;
+  const env = { ROOM: { idFromName: (n) => n, get: () => ({ fetch: async () => { calls++; throw new Error('ledger down'); } }) } };
+  const res = await worker.fetch(new Request('https://relay/ws', { headers: { Upgrade: 'websocket' } }), env);
+  assert.equal(res.status, 101);
+  assert.equal(calls, 1);
+  assert.equal(res.webSocket.sent.length, 0);
+  const st = fakeState(), ws = new FakeWs();
+  ws.att = { id: 1, name: '나' }; st.sockets.push(ws);
+  const room = new FarmRoom(st, env);
+  await room.webSocketMessage(ws, '{"t":"chat","text":"전해지면 안 됨"}');
+  assert.equal(ws.closed, 1013);
+  assert.ok(ws.sent.every((m) => m.t === 'quota'));
+});
+
+test('예산: 동시 첫 메시지는 한 번만 예약하고, 재생성 후에는 새 몫을 먼저 예약', async () => {
+  let reserves = 0;
+  const env = { ROOM: { idFromName: (n) => n, get: () => ({ fetch: async () => {
+    reserves++; return RealResponse.json({ granted: true, requests: 2, awakeSec: 60 });
+  } }) } };
+  const st = fakeState();
+  let room = new FarmRoom(st, env);
+  assert.deepEqual(await Promise.all([room.ensureBudget(Date.now(), 'fetch'), room.ensureBudget(Date.now(), 'fetch')]), [true, true]);
+  assert.equal(reserves, 1);
+  await room.ensureBudget(Date.now(), 'msg'); assert.equal(reserves, 2);
+  room = new FarmRoom(st, env);
+  await room.ensureBudget(Date.now(), 'msg'); assert.equal(reserves, 3);
+});
+
+test('예산 소진: 이미 들어온 플레이어의 메시지도 전달하지 않고 닫음', async () => {
+  const st = fakeState(), ws = new FakeWs();
+  ws.att = { id: 1, name: '나' }; st.sockets.push(ws);
+  const env = { ROOM: { idFromName: (n) => n, get: () => ({ fetch: async () => RealResponse.json({ granted: false }) }) } };
+  await new FarmRoom(st, env).webSocketMessage(ws, '{"t":"ping"}');
+  assert.equal(ws.closed, 1013);
+  assert.deepEqual(ws.sent.map((m) => m.t), ['quota']);
+});
+
+test('영속 장부: 예약은 저장 후 승인, 한도 도달 후 반복 조회는 추가 쓰기 없음, 다음 날 재개', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 15, 12) });
+  let book, writes = 0;
+  const tx = { get: async () => book, put: async (_k, v) => { book = structuredClone(v); writes++; } };
+  const st = { getWebSockets: () => [], storage: { transaction: (fn) => fn(tx) } };
+  const room = new FarmRoom(st, { BUDGET_REQUESTS: '260', BUDGET_AWAKE_SEC: '120' });
+  const reserve = () => room.fetch(new Request('https://ledger/reserve', { method: 'POST' }));
+  assert.equal((await (await reserve()).json()).granted, true);
+  assert.equal((await (await reserve()).json()).granted, false);
+  const n = writes;
+  await room.fetch(new Request('https://ledger/status'));
+  await reserve();
+  assert.equal(writes, n);
+  t.mock.timers.tick(12 * 3600 * 1000);
+  assert.equal((await (await reserve()).json()).granted, true);
+});
+
+
+test('Cloudflare 선물: 식별자·번호를 유지해 전달하고 상대의 수신 확인을 전달', async (t) => {
+  const { room, a, b } = await twoPlayers(t);
+  const pa = a.deserializeAttachment(), pb = b.deserializeAttachment();
+  pa.clientId = 'farm-sender-000000001'; pb.clientId = 'farm-receiver-0000001';
+  a.serializeAttachment(pa); b.serializeAttachment(pb);
+  const tx = `${pa.clientId}:1`;
+  await room.webSocketMessage(a, JSON.stringify({ t: 'gift', to: pb.id, targetId: pb.clientId, tx, item: 'carrot', n: 2 }));
+  assert.equal(b.sent.at(-1).tx, tx);
+  await room.webSocketMessage(b, JSON.stringify({ t: 'gift_ack', to: pa.id, targetId: pa.clientId, tx }));
+  assert.equal(a.sent.at(-1).fromClientId, pb.clientId);
 });

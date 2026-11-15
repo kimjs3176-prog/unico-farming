@@ -54,6 +54,7 @@ export const GameSave = {
     if (info.status === 'broken') {
       // 못 읽은 기록: 원본을 따로 보관한 뒤 백업으로, 백업도 없으면 새 농장 (보관을 못 했으면 이번 접속은 저장하지 않음)
       const kept = keepBroken(info.raw);
+      if (!kept) setReadOnly(true); // 백업이 있어도 보관하지 못한 원본을 덮지 않음
       record(new Error('저장 기록을 읽지 못함'), 'load:broken');
       const bak = loadBackup();
       if (!bak) {
@@ -70,8 +71,11 @@ export const GameSave = {
     }
     const failed = this.loadSections(s);
     if (failed.length) {
-      if (info.status !== 'newer') keepBroken(info.raw); // 기본값으로 돌린 칸을 다음 자동 저장이 덮어쓰기 전에 원본 보관
-      note = { title: '💾 일부 기록을 불러오지 못했어요', text: '몇 가지 기록은 처음 상태로 돌아갔어요. 원래 기록은 따로 보관해 두었어요.' };
+      const kept = info.status === 'newer' || keepBroken(info.raw);
+      if (!kept) setReadOnly(true);
+      note = { title: '💾 일부 기록을 불러오지 못했어요', text: kept
+        ? '몇 가지 기록은 처음 상태로 돌아갔어요. 원래 기록은 따로 보관해 두었어요.'
+        : '몇 가지 기록을 불러오지 못했고 원본 보관도 실패했어요. 이전 기록을 지키려고 이번에는 저장하지 않아요.' };
     } else if (info.status === 'ok') {
       // 마지막으로 깨끗하게 불러온 기록 (부팅마다 한 번) — 지난 접속이 치명 오류로 멈췄으면 오류 직전 백업을 지킴
       if (crashMarked()) this._crashMark = Date.now();

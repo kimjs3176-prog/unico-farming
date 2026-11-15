@@ -29,6 +29,18 @@ export function sanitizeAct(m) {
   if (!/^[a-z0-9_]{1,24}$/.test(item) || !Number.isInteger(n) || n < 1 || n > 5) return null;
   return { to, k, item, n };
 }
+/** 저장된 농장 식별자·순번으로 재전송을 구분. 별도 메시지라 옛 클라이언트 선물과 섞이지 않음. */
+export const validClientId = (v) => typeof v === 'string' && /^[a-z0-9-]{16,64}$/.test(v);
+export function giftEnvelope(p, m) {
+  if (!validClientId(p.clientId) || !validClientId(m.targetId) || !Number.isInteger(m.to) || m.to < 1) return null;
+  if (typeof m.tx !== 'string' || m.tx.length > 90) return null;
+  const split = m.tx.lastIndexOf(':'), source = m.tx.slice(0, split), seq = Number(m.tx.slice(split + 1));
+  if (!validClientId(source) || !Number.isSafeInteger(seq) || seq < 1 || `${source}:${seq}` !== m.tx) return null;
+  if (m.t === 'gift' && (source !== p.clientId || !sanitizeAct({ ...m, k: 'gift' }))) return null;
+  if (m.t === 'gift_ack' && source !== m.targetId) return null;
+  return { t: m.t, tx: m.tx, from: p.id, fromClientId: p.clientId, name: p.name, ...(m.t === 'gift' ? { item: m.item, n: m.n } : {}) };
+}
+
 /** 선물 번호 (보낸 사람이 붙임): 전하지 못하면 이 번호로 알려 줘서 돌려받게. 없거나 이상하면 0 (옛 클라이언트) */
 export function sanitizeGid(v) {
   const n = Number(v);
@@ -54,7 +66,7 @@ export class Player {
     this.chatTimes = [];
     this.actTimes = [];
   }
-  public() { return { id: this.id, name: this.name, x: this.x, z: this.z, f: this.f, a: this.a, l: this.l }; }
+  public() { return { ...(this.clientId ? { clientId: this.clientId, giftV: 1 } : {}), id: this.id, name: this.name, x: this.x, z: this.z, f: this.f, a: this.a, l: this.l }; }
   send(obj) { try { if (this.ws.readyState === 1) this.ws.send(JSON.stringify(obj)); } catch {} }
 }
 
@@ -96,11 +108,12 @@ export class Rooms {
     return null;
   }
 
-  join(ws, name, wantRoom, look = '') {
+  join(ws, name, wantRoom, look = '', clientId = '') {
     const room = this.pick(wantRoom);
     if (!room) return null;
     const p = new Player(ws, sanitizeName(name), room);
     p.l = sanitizeLook(look);
+    p.clientId = validClientId(clientId) ? clientId : '';
     room.players.set(p.id, p);
     return p;
   }
@@ -114,6 +127,19 @@ export class Rooms {
 
   handle(p, m) {
     switch (m.t) {
+      case 'gift':
+      case 'gift_ack': {
+        const gift = giftEnvelope(p, m);
+        if (!gift) return;
+        const t = this.now();
+        p.giftTimes = (p.giftTimes || []).filter((x) => t - x < 10000);
+        if (p.giftTimes.length >= ACT_LIMIT) return;
+        p.giftTimes.push(t);
+        const target = p.room.players.get(m.to);
+        if (!target || target === p || target.clientId !== m.targetId || target.clientId === p.clientId) return;
+        target.send(gift);
+        return;
+      }
       case 'pos': {
         if (typeof m.x !== 'number' || typeof m.z !== 'number') return;
         p.x = clamp(m.x, -60, 60); p.z = clamp(m.z, -60, 60); p.f = clamp(Number(m.f) || 0, -20, 20); p.a = String(m.a || '').replace(/[^a-z_]/gi, '').slice(0, 12); // 동작 이름은 영문·밑줄만
