@@ -1,20 +1,24 @@
 import * as THREE from 'three';
 import { Unico } from './unico.js';
-import { DEADZONE, runBand } from './input.js';
+import { DEADZONE, RUN_ON, runBand } from './input.js';
 
 // 걷기·달리기 속도(m/s, 속도 배율 전). 짧은 다리라 걷기는 종종걸음, 달리기는 발이 공중에 뜨는 뜀박질 (unico.js bipedGait)
 export const WALK_SPEED = 1.9, RUN_SPEED = 4.6, SWIM_SPEED = 2.4;
 /** 탭·클릭 이동: 남은 거리가 이만큼 안이면 걷기 속도까지 줄이며 다가감 (가까운 곳은 걸어서) */
 export const ARRIVE_WALK = 2.5;
+/** 살짝 기울였을 때 가장 느린 걸음 (m/s) */
+export const CREEP_SPEED = 0.9;
 
 /**
  * 이동 막대 기울기 m(0..1) → { run, speed } (속도 배율 전)
- * 데드존 안은 0, 반쯤 기울이면 걷기, 끝까지(0.6 이상) 기울이면 달리기 — 달리다가는 0.45 아래로 내려야 걷기. walkKey(Shift)면 늘 걷기
+ * 데드존 안은 0(달리기 기억도 지움), 기울인 만큼 0.9→1.9 로 천천히~걷기, 끝까지(0.6 이상) 기울이면 달리기 — 달리다가는 0.45 아래로 내려야 걷기. walkKey(Shift)면 늘 걷기
  */
 export function stickSpeed(m, wasRun = false, walkKey = false) {
-  if (!(m >= DEADZONE)) return { run: !!wasRun, speed: 0 };
+  if (!(m >= DEADZONE)) return { run: false, speed: 0 };
   const run = runBand(m, wasRun) && !walkKey;
-  return { run, speed: run ? RUN_SPEED : WALK_SPEED };
+  if (run) return { run, speed: RUN_SPEED };
+  const k = Math.min(1, (m - DEADZONE) / (RUN_ON - DEADZONE)), e = k * k * (3 - 2 * k);
+  return { run, speed: CREEP_SPEED + (WALK_SPEED - CREEP_SPEED) * e };
 }
 
 /** 탭·클릭 이동의 남은 거리 rem(m) → 목표 속도: 2.5m 밖은 달리기, 0.5m 안은 걷기, 그 사이는 서서히 */
@@ -79,7 +83,9 @@ export class Player {
     const m = Math.min(1, Math.hypot(ax.x, ax.y));
     const st = stickSpeed(m, this.running, !!input.walkHeld?.());
     const dir = (this._dir ||= new THREE.Vector3()).set(0, 0, 0);
-    if (st.speed > 0) { dir.addScaledVector(fwd, -ax.y).addScaledVector(right, ax.x); this.running = st.run; }
+    // 손을 떼면(데드존 안) 달리기 기억도 지움 → 다음에 반쯤 기울이면 늘 걷기
+    if (st.speed > 0) dir.addScaledVector(fwd, -ax.y).addScaledVector(right, ax.x);
+    this.running = st.run;
     let speed = st.speed || RUN_SPEED;
     if (st.speed > 0 || this.frozen) this.moveTarget = null; // 키보드/조이스틱 입력이 우선
     else if (this.moveTarget) {

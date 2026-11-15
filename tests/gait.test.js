@@ -63,9 +63,14 @@ test('다리 각도: 디딤 끝·듦 끝이 이어지고(튀지 않음), 멈추�
   assert.equal(legAngle(0.3, still.beta, still.A), 0);
 });
 
-test('기울기 → 속도: 데드존·반쯤(걷기 1.9)·끝까지(달리기 4.6)·경계에서 깜빡이지 않음·Shift 는 걷기', () => {
+test('기울기 → 속도: 데드존·살짝(0.9부터)~반쯤(걷기 1.9)·끝까지(달리기 4.6)·경계에서 깜빡이지 않음·Shift 는 걷기', () => {
   assert.equal(stickSpeed(0.08).speed, 0, '데드존 안');
-  assert.equal(stickSpeed(0.4).speed, WALK_SPEED);
+  assert.equal(stickSpeed(0.08, true).run, false, '손을 떼면 달리기 기억을 지움');
+  // 걷기 구간은 기울기를 따라 매끄럽게 빨라짐 (0.9 → 1.9)
+  const a = stickSpeed(0.13).speed, b = stickSpeed(0.3).speed, c = stickSpeed(0.45).speed, d = stickSpeed(0.599).speed;
+  assert.ok(a > 0.85 && a < 1.0, `살짝 ${a}`);
+  assert.ok(a < b && b < c && c < d, '기울일수록 빨라짐');
+  assert.ok(d > WALK_SPEED - 0.01 && d <= WALK_SPEED, `달리기 직전 ${d}`);
   assert.equal(WALK_SPEED, 1.9);
   assert.equal(stickSpeed(1).speed, RUN_SPEED);
   assert.equal(RUN_SPEED, 4.6);
@@ -74,6 +79,7 @@ test('기울기 → 속도: 데드존·반쯤(걷기 1.9)·끝까지(달리기 4
   assert.equal(stickSpeed(0.55, true).run, true);
   assert.equal(stickSpeed(0.44, true).run, false);
   assert.equal(stickSpeed(1, false, true).speed, WALK_SPEED, 'Shift');
+  assert.equal(stickSpeed(0.55, true).speed, RUN_SPEED, '달리던 중이면 0.45 까지 달리기 속도');
   // 탭 이동: 멀면 달리고 가까워지면 걷기 속도까지
   assert.equal(arriveSpeed(6), RUN_SPEED);
   assert.equal(arriveSpeed(0.3), WALK_SPEED);
@@ -128,8 +134,10 @@ test('달리기 자세: 더 숙이고 팔을 크게 흔듦, 발소리(onStep)는
   const walk = pose(1.9), run = pose(4.6);
   assert.ok(run.pitch > walk.pitch + 0.1, `달리면 더 숙임 ${walk.pitch.toFixed(2)} → ${run.pitch.toFixed(2)}`);
   assert.ok(run.arm > walk.arm * 1.4, '팔 흔들기');
-  assert.ok(walk.steps.length >= 9 && walk.steps.every((r) => r === 0), '걷기 발소리 (r=0)');
-  assert.ok(run.steps.length > walk.steps.length && run.steps.every((r) => r > 0.99), '달리기 발소리 (r=1)');
+  // 먼지는 두 발짝에 한 번 (약 2초 동안)
+  assert.ok(walk.steps.length >= 4 && walk.steps.every((r) => r === 0), `걷기 발 먼지 (r=0) ${walk.steps.length}`);
+  assert.ok(run.steps.length > walk.steps.length && run.steps.every((r) => r > 0.99), '달리기 발 먼지 (r=1)');
+  assert.ok(run.steps.length / (119 / 60) < 6, `달려도 먼지는 예전(초당 6번)보다 적게: 초당 ${(run.steps.length / (119 / 60)).toFixed(1)}`);
 });
 
 test('달리다 멈추면 한 번 제동(먼지 두 번), 걷다 멈추거나 1.5초 안에 다시 멈추면 제동 없음', () => {

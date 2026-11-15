@@ -57,11 +57,16 @@ export class Juice {
 
   /**
    * 화면 흔들림 (예전 호출 그대로 씀). 0.2 미만은 가벼운 손맛(카메라 밀림 + 짧은 멈칫)으로,
-   * 그 이상은 트라우마로 쌓임 (여러 충격이 겹치면 누적, 최대 1)
+   * 그 이상은 트라우마로 쌓임 (여러 충격이 겹치면 누적, 최대 1).
+   * 멈칫은 내 캐릭터가 한 동작(호미질·챔질·짓기)일 때만: 다른 캐릭터·주변 사건이면 opts.stop=false, opts.actor 로 멈칫할 캐릭터 지정
    */
-  shake(amount) {
+  shake(amount, opts = {}) {
     if (!(amount > 0)) return;
-    if (amount < 0.2) { this.kick(null, 0.04 + amount * 0.2); this.hitStop(TIERS[1].stop); return; }
+    if (amount < 0.2) {
+      this.kick(null, 0.04 + amount * 0.2);
+      if (opts.stop !== false) this.hitStop(TIERS[1].stop, opts.actor);
+      return;
+    }
     if (this.motionOk) this.trauma = Math.min(1, this.trauma + amount);
   }
 

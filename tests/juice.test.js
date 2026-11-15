@@ -77,6 +77,15 @@ test('약한 흔들림(0.2 미만)은 카메라 밀림 + 내 캐릭터 히트스
     j.shake(0.25);
     assert.equal(j.trauma, 0.25);
     assert.equal(stops.length, 1, '센 흔들림(천둥 등)은 멈칫 없음');
+    // 내 동작이 아닌 가벼운 충격: 밀림만, 멈칫 없음 / 다른 캐릭터를 멈칫
+    j._kick = null;
+    j.shake(0.1, { stop: false });
+    assert.ok(j._kick, '밀림은 그대로');
+    assert.equal(stops.length, 1, 'stop:false 면 내 캐릭터 멈칫 없음');
+    const other = [];
+    j.shake(0.1, { actor: { hitStop: (s) => other.push(s) } });
+    assert.equal(stops.length, 1);
+    assert.deepEqual(other, [TIERS[1].stop], '지정한 캐릭터만 멈칫');
   } finally { if (had) globalThis.game = prev; else delete globalThis.game; }
 });
 

@@ -231,11 +231,11 @@ function buildTemplate(rig = 'quad') {
     return { p: pw.addScaledVector(n, -inset).sub(HC), n };
   };
   const SN = FACE ? V(...FACE.snout) : V(0, -0.15, 0.3);
-  const head = [];
+  const head = [], nose = [];
   for (const sx of [-1, 1]) {
-    // 콧구멍: 주둥이 앞쪽 위
+    // 콧구멍: 주둥이 앞쪽 위 (입 메시에 함께 담음 — 머리 묶음에서 검은 재질 그룹이 빠져 그리기 1번 줄어듦)
     const no = FACE ? onFrom(SN, V(sx * 0.32, 0.38, 1), 0.008) : onFace(V(sx * 0.17, -0.25, 0.95), 0.012);
-    head.push([sph(0.024, { s: [1, 0.75, 0.55], q: outward(no.n), p: no.p.toArray() }, 10), C.eye()]);
+    nose.push(sph(0.024, { s: [1, 0.75, 0.55], q: outward(no.n), p: no.p.toArray() }, 10));
     // 볼: 주둥이 양옆 머리 표면
     const ch = onFace(FACE ? V(sx * FACE.cheek[0], FACE.cheek[1], FACE.cheek[2]) : V(sx * 0.75, -0.2, 0.62), 0.01);
     head.push([sph(0.09, { s: [1, 0.72, 0.28], q: outward(ch.n), p: ch.p.toArray() }, 16), C.pink()]);
@@ -244,16 +244,15 @@ function buildTemplate(rig = 'quad') {
     head.push([sph(0.05, { s: [0.75, 1.9, 0.35], r: [0.25, 0, sx * -0.45], p: ear }, 12), C.earIn()]);
   }
   // 미소: 주둥이 아래쪽 앞면을 따라 그린 곡선
-  // 입 방향 (주둥이 표면 위 점을 찾는 방향): t 0..1 가로, d 0(입꼬리 선)..1(미소 선) — 벌린 입도 같은 식으로 만들어 미소 선이 테두리가 됨
-  const mouthAt = (t, d, inset) => {
-    const x = -0.11 + 0.22 * t, s = Math.sin(t * Math.PI);
+  // 입 방향 (주둥이 표면 위 점을 찾는 방향): t 0..1 가로, d 0(입꼬리 선)..1(미소 선) — 벌린 입도 같은 식으로 만듦
+  const mouthAt = (t, d, inset, wx = 1) => {
+    const x = (-0.11 + 0.22 * t) * wx, s = Math.sin(t * Math.PI); // wx: 입꼬리보다 넓게 (벌린 입)
     return FACE ? onFrom(SN, V(x * 2.2, -0.32 - s * 0.12 * d, 1), inset) : onFace(V(x, -0.37 - s * 0.03 * d, 0.92), inset);
   };
   const smile = [];
   for (let i = 0; i <= 8; i++) smile.push(mouthAt(i / 8, 1, -0.004).p);
   const curve = new THREE.CatmullRomCurve3(smile);
-  head.push([new THREE.TubeGeometry(curve, 16, 0.011, 6, false), C.eye()]);
-  T.mouthOpen = openMouthGeo(mouthAt, !FACE);
+  T.mouthOpen = openMouthGeo(mouthAt, !FACE, nose, new THREE.TubeGeometry(curve, 16, 0.011, 6, false));
   // 뿔 (앞으로 기울어진 금색 원뿔 + 주황 띠 2개), 뿌리를 정수리 표면에 박음
   const tilt = 0.32, axis = V(0, Math.cos(tilt), Math.sin(tilt));
   const hornBase = onFace(FACE ? V(...FACE.horn) : V(0, 1, 0.38), 0.03).p;
@@ -286,6 +285,14 @@ function buildTemplate(rig = 'quad') {
   T.eyes.geo.translate(-eyeC.x, -eyeC.y, -eyeC.z);
   T.happy.geo.translate(-eyeC.x, -eyeC.y, -eyeC.z);
   T.eyeAt = eyeC;
+  // 놀란 눈: 같은 버퍼에서 반짝이 점만 뺀 지오메트리 (동그랗게 커진 눈만 → 그리기 1번 줄어듦)
+  const wide = new THREE.BufferGeometry();
+  for (const [k, a] of Object.entries(T.eyes.geo.attributes)) wide.setAttribute(k, a);
+  if (T.eyes.geo.index) wide.setIndex(T.eyes.geo.index);
+  const g0 = T.eyes.geo.groups.find((g) => g.materialIndex === 0);
+  wide.addGroup(g0.start, g0.count, 0);
+  wide.boundingSphere = T.eyes.geo.boundingSphere.clone();
+  T.eyesWide = wide;
 
   // ---- 소품 (머리/몸통 기준) ----
   T.sprout = bundle([
@@ -596,20 +603,16 @@ function faceViews(closed, face, open) {
 }
 
 /**
- * 유니콘 벌린 입 (말할 때·웃을 때): 미소 선을 테두리로 한 'D' 모양 입속 + 혀. 주둥이 표면을 따라 격자로 붙여(안쪽 2mm 위) 굴곡에도 묻히지 않음.
- * mouthAt(t, d, inset): t 가로 0..1, d 0 = 입꼬리를 이은 선, 1 = 미소 선. 두 발은 입꼬리 선~미소 선, 네 발은 미소 선이 얕아 그 아래로 더 내림.
- * 정점 색 재질 하나라 그리기 1번 (주민 얼굴과 같은 재질)
+ * 유니콘 입 메시 (늘 보임, 그리기 1번): 한 버퍼에 [미소 선][콧구멍][D 입][O 입][콧구멍] 순서로 담고 세 지오메트리가 그릴 범위만 달리 씀.
+ * 다문 입 = 미소 선 + 콧구멍, D(말하기·웃음) = 콧구멍 + 테두리·입속·혀, O(놀람) = 동그란 입 + 콧구멍. 벌리면 미소 선은 그리지 않음.
+ * 주둥이 표면을 따라 격자로 붙임. mouthAt(t, d, inset, wx): t 가로 0..1, d 0 = 입꼬리 선, 1 = 미소 선, wx 가로 배율
  */
-function openMouthGeo(mouthAt, quad) {
-  const [dTop, dBot] = quad ? [1, 3.4] : [-0.4, 1.05];
-  const NX = 10, NY = 4;
-  const sheet = (d0, d1, t0, t1, inset, round = 0) => {
+function openMouthGeo(mouthAt, quad, nose, smile) {
+  const grid = (NX, NY, at, inset) => {
     const P = [], idx = [];
     for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) {
-      const tt = i / NX, t = t0 + (t1 - t0) * tt;
-      // round: 혀 윗선을 둥글게 (가운데가 가장 높음)
-      const top = d0 + (d1 - d0) * round * (1 - Math.sin(tt * Math.PI));
-      P.push(mouthAt(t, top + (d1 - top) * (j / NY), inset).p);
+      const [t, d, wx] = at(i / NX, j / NY);
+      P.push(mouthAt(t, d, inset, wx).p);
     }
     for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const a = j * (NX + 1) + i, b = a + NX + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
     const g = new THREE.BufferGeometry().setFromPoints(P);
@@ -618,15 +621,55 @@ function openMouthGeo(mouthAt, quad) {
     // 바깥(카메라 쪽 +z)을 보게
     const N = g.attributes.normal;
     let nz = 0;
-    for (let i = 0; i < N.count; i++) nz += N.getZ(i);
+    for (let i = 0; i < N.count; i++) nz += N.getZ(i) || 0;
     if (nz < 0) { for (let q = 0; q < idx.length; q += 3) { const s = idx[q + 1]; idx[q + 1] = idx[q + 2]; idx[q + 2] = s; } g.setIndex(idx); g.computeVertexNormals(); }
     return g;
   };
-  const tongueTop = quad ? dTop + (dBot - dTop) * 0.5 : 0.5;
-  return bundleVC([
-    [sheet(dTop, dBot, 0, 1, -0.002), 0x5a2a2a, 0.55],
-    [sheet(tongueTop, dBot * 0.98, 0.3, 0.7, -0.0028, 1), 0xf27c8c, 0.45],
-  ]);
+  // D: 가로 0..1(× wx), 세로 d0..d1 (round: 윗선을 둥글게 — 혀)
+  const sheet = (d0, d1, t0, t1, inset, wx, round = 0, NX = 12, NY = 6) => grid(NX, NY, (u, v) => {
+    const top = d0 + (d1 - d0) * round * (1 - Math.sin(u * Math.PI));
+    return [t0 + (t1 - t0) * u, top + (d1 - top) * v, wx];
+  }, inset);
+  // O: 가운데 (0.5, dc) 둘레 타원. d 를 sin(πt) 로 나눠 옆이 들리지 않는 둥근 모양
+  const oval = (dc, rd, rt, inset) => grid(20, 4, (u, v) => {
+    const a = u * TWO_PI, t = 0.5 + rt * v * Math.cos(a);
+    return [t, (dc + rd * v * Math.sin(a)) / Math.sin(t * Math.PI), 1];
+  }, inset);
+  const DARK = 0x2a1416, IN = 0x8c3b3b, TONGUE = 0xff8fa0, B = -0.003;
+  // 두 발: 입꼬리보다 35% 넓고 미소 선 아래로 깊게. 네 발: 미소 선이 얕아 그 아래로 더 내림
+  const [dTop, dBot, wx] = quad ? [0.2, 4.2, 1.15] : [-0.5, 2.6, 1.35];
+  const tongueTop = dTop + (dBot - dTop) * 0.5;
+  const [oc, ord, ort] = quad ? [2.0, 2.2, 0.22] : [1.0, 1.5, 0.3];
+  const rim = quad ? 0.35 : 0.3; // 테두리 두께 (d 단위)
+  const shut = [[smile, 0x1b1513, 0.12], ...nose.map((g) => [g, 0x1b1513, 0.12])];
+  const D = [
+    [sheet(dTop - rim, dBot + rim, 0, 1, B, wx * 1.05), DARK, 0.4],
+    [sheet(dTop, dBot, 0, 1, B - 0.001, wx), IN, 0.55],
+    [sheet(tongueTop, dBot * 0.97, 0.2, 0.8, B - 0.002, wx, 1, 10, 4), TONGUE, 0.45],
+  ];
+  const O = [
+    [oval(oc, ord + rim, ort * (1 + rim / ord), B), DARK, 0.4],
+    [oval(oc, ord, ort, B - 0.001), IN, 0.55],
+    [oval(oc + ord * 0.5, ord * 0.4, ort * 0.55, B - 0.002), TONGUE, 0.45],
+  ];
+  const nose2 = nose.map((g) => [g.clone(), 0x1b1513, 0.12]);
+  const cnt = (ps) => ps.reduce((n, [g]) => n + (g.index ? g.index.count : g.attributes.position.count), 0);
+  const nS = cnt([shut[0]]), nN = cnt(shut.slice(1)), nD = cnt(D), nO = cnt(O);
+  const b = bundleVC([...shut, ...D, ...O, ...nose2]);
+  const view = (start, count) => {
+    const g = new THREE.BufferGeometry();
+    for (const [k, at] of Object.entries(b.geo.attributes)) g.setAttribute(k, at);
+    g.setIndex(b.geo.index);
+    g.setDrawRange(start, count);
+    g.boundingSphere = b.geo.boundingSphere.clone();
+    return g;
+  };
+  return {
+    geo: view(0, nS + nN), // 다문 입
+    d: view(nS, nN + nD),
+    o: view(nS + nN + nD, nO + nN),
+    mats: b.mats,
+  };
 }
 
 function buildSpeciesTemplate(rig, sp) {
@@ -1154,8 +1197,9 @@ export class Unico {
       this.eyesHappy.position.copy(TPL.eyeAt);
       this.eyesHappy.visible = false;
       this.faceG.add(this.eyesHappy);
-      this.mouthOpenM = meshOf(TPL.mouthOpen);
-      this.mouthOpenM.visible = false;
+      this.mouthOpenM = meshOf(TPL.mouthOpen); // 미소 선·콧구멍·벌린 입 (늘 보임, 그릴 범위만 바꿈)
+      this._mouthGeo = [TPL.mouthOpen.geo, TPL.mouthOpen.d, TPL.mouthOpen.o]; // 다문 입 · D(말하기·웃음) · O(놀람)
+      this._eyeGeo = [TPL.eyes.geo, TPL.eyesWide]; // 보통 눈 ↔ 놀란 눈(반짝이 없음)
       this.faceG.add(this.mouthOpenM);
       this.mouthOpenNow = false;
       // 소품
@@ -1217,6 +1261,7 @@ export class Unico {
     this.happyUntil = 0;
     this.attnYaw = 0;
     this._speakUntil = 0;
+    this._talkSeed = Math.random() * 1000; // 말하기 입 박자 (캐릭터마다 다르게)
     // 이름표·감정 아이콘·말풍선 높이: 종은 굽힌 키로, 유니콘은 예전 값
     const LH = sp ? labelHeights(sp, R.meta.top) : this.biped ? { label: 2.3, emote: 2.6, bubble: 3.0 } : { label: 2.55, emote: 2.6, bubble: 3.0 };
     this.labelY = LH.label; this.emoteY = LH.emote; this.bubbleY = LH.bubble;
@@ -1329,9 +1374,36 @@ export class Unico {
     return this._pb ||= [this.bodyG, this.headG, ...this.legs, ...this.arms];
   }
 
-  /** 말하기: sec 초 동안 입을 8Hz 로 열고 닫음 (주민 동물) */
+  /** 말하기: sec 초 동안 음절 박자로 입을 열고 닫음 */
   speak(sec = 1.5) {
     this._speakUntil = this.t + Math.max(0, sec);
+    this._syl = null;
+  }
+
+  /**
+   * 말하는 입 (음절 박자): 열림 70~150ms ·닫힘 50~120ms 를 음절마다 뽑고, 4~7음절마다 200~300ms 쉼.
+   * 끝나기 0.1초 전부터는 닫음. 박자는 캐릭터 씨앗 + 음절 번호로 정해짐 (같은 말이면 같은 입)
+   */
+  _talkMouth() {
+    const t = this.t;
+    if (!(t < this._speakUntil - 0.1)) { this._syl = null; return false; }
+    const h = (k) => { const x = Math.sin((this._talkSeed + k) * 12.9898) * 43758.5453; return x - Math.floor(x); };
+    let S = this._syl;
+    if (!S) S = this._syl = { n: 0, open: true, until: t + 0.07 + 0.08 * h(0), left: 4 + Math.floor(h(0.5) * 4) };
+    while (t >= S.until) {
+      if (S.open) {
+        S.open = false;
+        S.left--;
+        const gap = S.left <= 0;
+        if (gap) S.left = 4 + Math.floor(h(S.n + 0.5) * 4);
+        S.until += gap ? 0.2 + 0.1 * h(S.n + 0.25) : 0.05 + 0.07 * h(S.n + 0.75);
+      } else {
+        S.n++;
+        S.open = true;
+        S.until += 0.07 + 0.08 * h(S.n);
+      }
+    }
+    return S.open;
   }
 
   /** 꼬리 부풀기 (놀람·입질): amt 배, dur 초 */
@@ -1403,9 +1475,9 @@ export class Unico {
     }
     const big = startle ? 1.15 : 1;
     this.eyesG.scale.set(big, blink * open, big);
-    // 입: 말하는 동안 8Hz 로 열고 닫기, 아니면 만세·하트·반가운 꼬리(강아지)·선물 뒤·하품 때만 (세수·허리 두드리기·대기 눈웃음은 다문 입)
+    // 입: 말하는 동안 음절 박자로 열고 닫기, 아니면 만세·하트·반가운 꼬리(강아지)·선물 뒤·하품 때만 (세수·허리 두드리기·대기 눈웃음은 다문 입)
     const yawn = this.action === 'stretch' && this.actionT > 0.6 && this.actionT < 1.6;
-    const mo = speaking ? Math.sin(t * TWO_PI * 8) > 0 : OPEN_MOUTH.has(this.action) || t < this.happyUntil || yawn;
+    const mo = speaking ? this._talkMouth() : OPEN_MOUTH.has(this.action) || t < this.happyUntil || yawn;
     if (mo !== this.mouthOpenNow) { this.mouthOpenNow = mo; this.faceM.geometry = this._faceGeo[mo ? 1 : 0]; }
     // 토끼 코 씰룩 (2~4초마다 0.5초, 'nose' 동작 중엔 계속)
     if (this.noseM) {
@@ -1424,18 +1496,42 @@ export class Unico {
   _expressHero(dt, blink) {
     const t = this.t, act = this.action;
     const happy = HERO_HAPPY.has(act) || t < this.happyUntil;
-    if (happy !== !!this._heroHappy) { this._heroHappy = happy; this.eyesG.visible = !happy; this.eyesHappy.visible = happy; }
-    // 놀람: 0.4초 동안 눈을 크게 (눈 묶음 가운데 기준이라 제자리에서)
-    const startle = act === 'startle' && this.actionT < 0.4;
-    this.eyesG.scale.set(startle ? 1.06 : 1, blink * (startle ? 1.2 : 1), 1);
+    // 웃는 눈 ↔ 보통 눈: 깜빡이듯 60ms 접었다가 바꾸고 60ms 동안 펴짐 (한 프레임에 툭 바뀌지 않게)
+    let fold = 1;
+    if (happy !== !!this._heroHappy) {
+      this._swapT = (this._swapT ?? 0) + dt;
+      fold = 0.2;
+      if (this._swapT >= 0.06) { this._heroHappy = happy; this.eyesG.visible = !happy; this.eyesHappy.visible = happy; this._swapT = undefined; this._unfold = 0; }
+    } else this._swapT = undefined;
+    if (this._unfold !== undefined) {
+      this._unfold += dt;
+      if (this._unfold >= 0.06) this._unfold = undefined;
+      else fold = 0.2 + 0.8 * (this._unfold / 0.06);
+    }
+    this.eyesHappy.scale.y = this._heroHappy ? fold : 1;
+    // 놀람: 0.08초 만에 크게(1.25×1.4) 튀었다가 1.12×1.2 로 놀람 내내 유지, 끝나기 0.15초 전부터 원래대로. 반짝이를 빼 동그란 눈만
+    let sx = 1, sy = 1;
+    const startle = act === 'startle';
+    if (startle) {
+      const a = this.actionT;
+      if (a < 0.08) { const e = Math.sin((a / 0.08) * Math.PI * 0.5); sx = 1 + 0.25 * e; sy = 1 + 0.4 * e; }
+      else { const q = Math.exp(-(a - 0.08) / 0.1); sx = 1.12 + 0.13 * q; sy = 1.2 + 0.2 * q; }
+      const rel = Number.isFinite(this.actionUntil) ? Math.min(1, Math.max(0, (this.actionUntil - t) / 0.15)) : 1;
+      sx = 1 + (sx - 1) * rel; sy = 1 + (sy - 1) * rel;
+    }
+    const wide = sy > 1.1;
+    if (wide !== !!this._eyeWide) { this._eyeWide = wide; this.eyesG.geometry = this._eyeGeo[wide ? 1 : 0]; }
+    this.eyesG.scale.set(sx, blink * sy * (this._heroHappy ? 1 : fold), 1);
     // 생각: 눈을 살짝 위로 (올려다보기)
     const upT = act === 'think' ? 0.012 : 0;
     this._eyeUp = (this._eyeUp ?? 0) + (upT - (this._eyeUp ?? 0)) * (1 - Math.exp(-dt * 10));
     this.eyesG.position.y = this._eyeAt.y + this._eyeUp;
-    // 입: 말하는 동안 8Hz 로 열고 닫기, 아니면 만세·하트·인사·확성기·번쩍 들기·놀람(헉) 때 벌림
-    const mo = t < this._speakUntil ? Math.sin(t * TWO_PI * 8) > 0
-      : HERO_OPEN.has(act) || t < this.happyUntil || (startle && this.actionT > 0.05);
-    if (mo !== this.mouthOpenNow) { this.mouthOpenNow = mo; this.mouthOpenM.visible = mo; }
+    // 입: 말하는 동안 음절 박자로 열고 닫기(D), 아니면 만세·하트·인사·확성기·번쩍 들기 때 D, 놀람(헉)은 동그란 O
+    const talking = t < this._speakUntil, heok = startle && this.actionT > 0.05;
+    const mo = talking ? this._talkMouth() : HERO_OPEN.has(act) || t < this.happyUntil || heok;
+    const shape = !mo ? 0 : heok && !talking ? 2 : 1;
+    this.mouthOpenNow = mo;
+    if (shape !== (this._mouthShape ?? 0)) { this._mouthShape = shape; this.mouthOpenM.geometry = this._mouthGeo[shape]; }
   }
 
   /** 잠깐 멈칫(히트스톱): s 초 동안 동작 시간(actionT)만 0.05배로 — 위치·걷기·다른 캐릭터는 그대로 */
@@ -1725,11 +1821,11 @@ export class Unico {
       const armK = (0.55 + 0.4 * sp01) * (1 - r) + 1.1 * r, asw = Math.sin(ph) * A * w, open = (0.14 + 0.05 * sp01 + 0.3 * r) * w;
       AL.rotation.set(-asw * armK, 0, -open); AR.rotation.set(asw * armK, 0, open);
       if (w < 0.5) { const br = Math.sin(this.t * 2.1) * 0.04; AL.rotation.z -= br; AR.rotation.z += br; }
-      // 발소리·먼지: 발이 땅에 닿는 순간, 그 발 자리에서 (세 번째 값 = 달리기 섞임)
+      // 발 먼지: 발이 땅에 닿는 순간, 그 발 자리에서 (세 번째 값 = 달리기 섞임). 두 발짝에 한 번만 — 달리기 걸음이 빨라도 먼지 수는 예전보다 적게
       if (walking && !this.swimming && (stepL || stepR)) {
         const f = LEG_LEN * this.scale * Math.sin(A) * w, sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
         for (const [hit, leg] of [[stepL, Ll], [stepR, Rl]]) {
-          if (!hit) continue;
+          if (!hit || (this._stepN = (this._stepN | 0) + 1) & 1) continue;
           const hx = leg.position.x * this.scale;
           this.onStep?.(pos.x + sy * f + cy * hx, pos.z + cy * f - sy * hx, r);
         }

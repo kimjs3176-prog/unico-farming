@@ -116,11 +116,11 @@ test('플레이어: 멀리 누르면 달려가다 끝에서 걷기로, 자동 �
   assert.equal(wp.targetSpeed, 4.6);
 });
 
-test('플레이어: 조이스틱 반쯤 = 걷기 1.9, 끝까지 = 달리기 4.6 (푹 잔 날은 배율), Shift = 걷기', () => {
+test('플레이어: 조이스틱 반쯤 = 걷기(기울인 만큼 ~1.9), 끝까지 = 달리기 4.6 (푹 잔 날은 배율), Shift = 걷기', () => {
   const p = fakePlayer();
   const stick = (y, shift = false) => ({ axis: () => ({ x: 0, y }), walkHeld: () => shift });
   p.update(1 / 60, stick(-0.4), cam);
-  assert.equal(p.targetSpeed, 1.9);
+  assert.ok(p.targetSpeed > 1.3 && p.targetSpeed < 1.9, `반쯤 ${p.targetSpeed}`);
   p.update(1 / 60, stick(-1), cam);
   assert.equal(p.targetSpeed, 4.6);
   p.update(1 / 60, stick(-0.5), cam);
@@ -132,6 +132,9 @@ test('플레이어: 조이스틱 반쯤 = 걷기 1.9, 끝까지 = 달리기 4.6 
   assert.ok(Math.abs(p.targetSpeed - 4.6 * 1.15) < 1e-9);
   p.update(1 / 60, stick(-0.05), cam);
   assert.equal(p.targetSpeed, 0, '데드존');
+  // 달리다 손을 뗀 뒤 다시 반쯤 기울이면 걷기 (지난 달리기를 기억하지 않음)
+  p.update(1 / 60, stick(-0.55), cam);
+  assert.ok(p.targetSpeed < 1.9 * 1.15 + 1e-9, `다시 반쯤은 걷기 ${p.targetSpeed}`);
 });
 
 test('도착 처리: 주문서 쪽에서 퇴비통을 누르면, 주문서가 더 가까워도 한 번 더 다가가 퇴비통을 엶', () => {
