@@ -11,8 +11,13 @@ import { ColorGradeShader } from './surface.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { HorizontalTiltShiftShader } from 'three/addons/shaders/HorizontalTiltShiftShader.js';
 import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftShader.js';
+import { installGradeToneMapping, toneMappingFor } from './tonemap.js';
+import { visibleLabels, declutterLabels } from './label.js';
+
+installGradeToneMapping(); // 첫 셰이더 컴파일 전에: 저사양 톤 매핑에 색 보정을 넣어 둠
 
 const ENV = new WeakMap(); // 장면 → 환경맵 렌더 타깃
+const NO_CHILDREN = Object.freeze([]); // 이름표 장면은 그릴 때만 자식을 빌림
 
 /**
  * 고주사율(100Hz 이상) 모바일 화면 프레임 제한: 화면 갱신(vsync)의 정수 배로만 건너뛰어 고르게 그림
@@ -34,10 +39,19 @@ export class FrameCap {
   }
 }
 
+/** 미니어처 흐림 띠의 초점 높이 (화면 아래에서 비율). 대화 구도가 렌즈를 올리면(카메라 view offset) 얼굴 높이로 따라 올라감 */
+export const TILT_R = 0.52;
+export function tiltFocus(camera) {
+  const v = camera?.view;
+  return v?.enabled && v.fullHeight ? Math.min(0.9, TILT_R + v.offsetY / v.fullHeight) : TILT_R;
+}
+
 /**
  * 후처리 파이프라인: 렌더 → 주변광 차폐(GTAO, 고사양) → 약한 블룸 → 톤매핑/sRGB 출력 → 색 보정
- *   → SMAA 안티앨리어싱 → 틸트시프트(화면 위·아래를 살짝 흐려 미니어처 디오라마 느낌) → 비네팅
+ *   → SMAA 안티앨리어싱 → 틸트시프트(화면 위·아래를 살짝 흐려 미니어처 디오라마 느낌) → 비네팅 → 이름표 (효과 밖에서 화면 색 그대로)
  * + 환경맵(RoomEnvironment PMREM) 으로 은은한 반사/간접광
+ * 후처리를 끈 저사양은 한 번에 그리고, 색 보정은 톤 매핑 안에서 (tonemap.js, 패스·그리기 추가 없음.
+ *  비네팅은 넣지 않음: 그리기가 1번 늘고, 재 보니 보통보다 오히려 어두워짐)
  */
 export class PostFX {
   constructor(renderer, scene, camera, quality = { bloom: true, smaa: true }) {
@@ -67,7 +81,7 @@ export class PostFX {
     if (quality.tiltShift) {
       this.tiltH = new ShaderPass(HorizontalTiltShiftShader);
       this.tiltV = new ShaderPass(VerticalTiltShiftShader);
-      for (const t of [this.tiltH, this.tiltV]) t.uniforms.r.value = 0.52;
+      for (const t of [this.tiltH, this.tiltV]) t.uniforms.r.value = TILT_R;
       this.composer.addPass(this.tiltH);
       this.composer.addPass(this.tiltV);
     }
@@ -75,9 +89,15 @@ export class PostFX {
     this.vignette.uniforms.offset.value = 1.05;
     this.vignette.uniforms.darkness.value = 0.95;
     this.composer.addPass(this.vignette);
-    this.enabled = true;
     this.scene = scene;
     this.camera = camera;
+    // 이름표만 담는 빈 장면 (배경·안개·불빛 없음): 월드 장면의 이름표를 자식 목록으로만 빌려 마지막에 화면 위에 그림
+    this.labelScene = new THREE.Scene();
+    this.labelScene.matrixWorldAutoUpdate = false; // 월드 행렬은 본 장면을 그릴 때 이미 맞춰짐 (부모는 그대로)
+    this._shown = []; this._kept = [];
+    this._size = new THREE.Vector2(1, 1);
+    this._t = -1;
+    this.enabled = quality.post !== false;
     // 환경맵: 장면마다 한 번만 구워 다시 씀 (PostFX 를 다시 만들 때 새로 굽거나 새지 않게)
     // quality.env === false 면 끔 (값이 없으면 지금처럼 켬)
     this.envOn = quality.env !== false;
@@ -99,6 +119,13 @@ export class PostFX {
     pmrem.dispose();
     ENV.set(scene, rt);
     scene.environment = rt.texture;
+  }
+
+  /** 후처리 켜기/끄기: 끄면 톤 매핑이 색 보정까지 맡음 (켜면 ACES, 색 보정은 패스가) */
+  get enabled() { return this._enabled; }
+  set enabled(v) {
+    this._enabled = !!v;
+    this.renderer.toneMapping = toneMappingFor(this._enabled);
   }
 
   setSize(w, h) {
@@ -125,8 +152,48 @@ export class PostFX {
     u.tint.value.set(1 + (tod.tint[0] - 1) * k, 1 + (tod.tint[1] - 1) * k, 1 + (tod.tint[2] - 1) * k);
   }
 
+  /**
+   * 한 프레임 그리기. 이름표: 겹치면 흐리게(label.js), 후처리를 켰으면 효과 패스 동안 숨겼다가 마지막에 따로 그림
+   * (깊이 테스트를 안 하므로 순서만 맨 위. 따로 그리는 장면엔 불빛·그림자가 없어 그림자를 다시 그리지 않음)
+   */
   render() {
-    if (this.enabled) this.composer.render();
-    else this.renderer.render(this.scene, this.camera);
+    const { renderer, scene, camera } = this;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const dt = this._t < 0 ? 0 : Math.min(0.1, (now - this._t) / 1000);
+    this._t = now;
+    const shown = visibleLabels(scene, this._shown);
+    renderer.getSize?.(this._size);
+    declutterLabels(shown, camera, this._size.x, this._size.y, dt);
+    const kept = this._kept;
+    kept.length = 0;
+    for (const s of shown) {
+      const m = s.userData.fadeMul ?? 1;
+      if (m < 0.999) { kept.push(s, s.material.opacity); s.material.opacity *= m; }
+    }
+    try {
+      if (!this.enabled) { renderer.render(scene, camera); return; }
+      if (this.tiltH) this.tiltH.uniforms.r.value = this.tiltV.uniforms.r.value = tiltFocus(camera);
+      for (const s of shown) s.visible = false;
+      try { this.composer.render(); } finally { for (const s of shown) s.visible = true; }
+      if (shown.length) this._drawLabels(shown);
+    } finally {
+      for (let i = 0; i < kept.length; i += 2) kept[i].material.opacity = kept[i + 1];
+    }
+  }
+
+  /** 효과를 다 입힌 화면 위에 이름표만 (지우지 않고 덧그림) */
+  _drawLabels(shown) {
+    const { renderer, camera } = this, L = this.labelScene;
+    const ac = renderer.autoClear, rt = renderer.getRenderTarget?.() ?? null;
+    L.children = shown;
+    renderer.autoClear = false;
+    try {
+      renderer.setRenderTarget(null);
+      renderer.render(L, camera);
+    } finally {
+      L.children = NO_CHILDREN;
+      renderer.autoClear = ac;
+      renderer.setRenderTarget(rt);
+    }
   }
 }

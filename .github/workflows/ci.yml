@@ -53,9 +53,9 @@ jobs:
       - run: npm ci
       - run: npm run check:gen
 
-  # 브라우저 연기 시험: 직접 실행할 때만 (소프트웨어 WebGL 이라 몇 분 걸림, 합치기를 막지 않음)
+  # PR 은 짧은 입장·이동·저장 검사, 직접 실행은 전체 검사. 외부 서버 요청은 모두 차단.
   smoke:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -78,3 +78,5 @@ jobs:
           npx playwright install --with-deps chromium
       - name: 연기 시험
         run: npm run smoke
+        env:
+          SMOKE_QUICK: ${{ github.event_name == 'pull_request' && '1' || '0' }}

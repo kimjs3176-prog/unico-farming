@@ -13,3 +13,7 @@ new_sqlite_classes = ["FarmRoom"]
 # 게임 화면이 올라간 주소에서 온 접속만 받음 (쉼표로 여러 개). 미리보기 배포 주소는 여기 없으면 혼자 플레이(오프라인)로 동작
 [vars]
 ALLOWED_ORIGINS = "https://unico-farming.vercel.app"
+
+# 낮추기만 가능. 코드에서도 공식 무료 한도의 85%를 넘는 값은 제한함.
+BUDGET_REQUESTS = "85000"
+BUDGET_AWAKE_SEC = "86328"

@@ -23,8 +23,10 @@ test('입력: reset 으로 눌린 것 모두 정리, 조이스틱 손가락을 �
   // 손가락 1을 뗀 이벤트를 못 받은 채 새 손가락 2가 왼쪽에 닿음 → 1은 풀리고 2가 조이스틱
   I.touchStart({ changedTouches: [t(2, 60, 620)], touches: [t(2, 60, 620)] }, 1000);
   assert.equal(I.joy.id, 2);
-  I.keys.add('KeyW'); I.clicks.push({ x: 1, y: 1 }); I.interactTap = true; I.virtual.y = -1;
+  I.keys.add('KeyW'); I.keys.add('ShiftLeft'); I.clicks.push({ x: 1, y: 1 }); I.interactTap = true; I.virtual.y = -1;
+  assert.equal(I.walkHeld(), true);
   I.reset();
+  assert.equal(I.walkHeld(), false, '걷기 키(Shift)도 풀림 → 돌아와서 계속 걷지 않음');
   assert.equal(I.joy.active, false);
   assert.equal(joy.at(-1), false);
   assert.deepEqual(I.axis(), { x: 0, y: 0 });

@@ -85,7 +85,7 @@ export class Pests {
     const night = g.world.daylight < 0.35;
     // 등장 타이밍
     if (!g.cinema.locked) {
-      this.crowTimer -= dt;
+      if (!g.farm?.grace) this.crowTimer -= dt; // 첫 수확 전에는 까마귀가 오지 않음
       if (this.crowTimer <= 0) { this.crowTimer = 55 + Math.random() * 50; if (this.list.filter((p) => p.kind === 'crow').length < 2) this.spawnCrow(); }
       this.predTimer -= dt;
       if (this.predTimer <= 0) { this.predTimer = 80 + Math.random() * 60; if (night && !this.list.some((p) => p.kind !== 'crow')) this.spawnPredator(); }
@@ -158,7 +158,7 @@ export class Pests {
 
   _flee(p, byPlayer) {
     p.state = 'flee'; p.t = 0;
-    if (p.mark) { p.root.remove(p.mark); p.mark = null; }
+    if (p.mark) { p.root.remove(p.mark); p.mark.userData.dispose?.(); p.mark = null; } // 이름표 텍스처·재질도 놓아 줌
     if (p.kind === 'crow') {
       const away = new THREE.Vector3(p.root.position.x - this.game.player.position.x, 0, p.root.position.z - this.game.player.position.z).normalize();
       p.vel = new THREE.Vector3(away.x * 6, 3, away.z * 6);

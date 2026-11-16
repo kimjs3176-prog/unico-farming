@@ -1,7 +1,8 @@
 /* 안내 말풍선·조이스틱·터치 E 버튼 (prompt.js) */
-.prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 30px; font-weight: 700; box-shadow: var(--shadow); display: flex; gap: 10px; align-items: center; white-space: nowrap; max-width: calc(92vw / var(--ui-zoom, 1)); }
+/* 나타날 때 위로 톡(0.12~0.14초), 사라질 때 살짝 내려가며 흐려짐(0.08초, 글은 남겨 둠) — 가운데 맞춤 transform 과 따로 놀게 translate 속성만 씀 */
+.prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 30px; font-weight: 700; box-shadow: var(--shadow); display: flex; gap: 10px; align-items: center; white-space: nowrap; max-width: calc(92vw / var(--ui-zoom, 1));
+  transition: opacity 0.12s ease-out, translate 0.14s cubic-bezier(.3,1.4,.5,1); }
 .prompt kbd { background: var(--gold); color: var(--ink); border-radius: 8px; padding: 2px 8px; font-weight: 900; }
-.prompt.hidden { display: none; }
 
 /* 모바일 컨트롤 */
 .joystick { position: absolute; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.35); border: 2px solid rgba(255,255,255,0.7); display: none; }
@@ -12,9 +13,18 @@
 @media (max-width: 600px) { .touch-btn { bottom: 20px; } }
 
 /* 클릭 가능한 상호작용 안내 */
-.prompt.clickable { cursor: pointer; pointer-events: auto; transition: transform 0.1s; }
+.prompt.clickable { cursor: pointer; pointer-events: auto; transition: transform 0.1s, opacity 0.12s ease-out, translate 0.14s cubic-bezier(.3,1.4,.5,1); }
 .prompt.clickable:hover { transform: translateX(-50%) scale(1.04); background: #3a2b26; }
+/* 숨김: 누를 수 있던 안내도 (.clickable 보다 세게) */
+.prompt.hidden, .prompt.clickable.hidden { opacity: 0; visibility: hidden; translate: 0 8px; pointer-events: none;
+  transition: opacity 0.08s ease-in, translate 0.08s ease-in, visibility 0s linear 0.08s; }
+/* 움직임 줄이기: 흐려지기만 */
+@media (prefers-reduced-motion: reduce) {
+  .prompt, .prompt.clickable { transition: opacity 0.12s ease-out; }
+  .prompt.hidden, .prompt.clickable.hidden { translate: none; transition: opacity 0.08s ease-in, visibility 0s linear 0.08s; }
+}
 .prompt .tapme { animation: tap 1s infinite; display: inline-block; }
+.prompt.hidden .tapme { animation: none; } /* 숨은 동안은 손가락 까딱임을 멈춤 (계속 도는 애니메이션 없음) */
 @keyframes tap { 0%,100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
 
 /* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */

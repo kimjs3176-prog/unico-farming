@@ -3,7 +3,7 @@ import { heightAt, HILLS, CHESTS } from './terrain.js';
 import { Scenery } from './scenery.js';
 import { Precipitation } from './precip.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { enhanceMaterial, SURF, setSurfaceDetail } from './surface.js';
+import { enhanceMaterial, SURF, setSurfaceDetail, leafAttrValue } from './surface.js';
 import { timeOfDay } from './sim/tod.js';
 import { Birds } from './birds.js';
 import { whenFontReady } from './label.js';
@@ -52,7 +52,7 @@ export const LAYOUT = {
   npcs: {
     merchant: { x: 3.2, z: -8.4, pose: 'present', species: 'fox', name: '장터 여우' },
     researcher: { x: -14.5, z: -3.5, pose: 'lab', species: 'raccoon', name: '연구원 너구리' },
-    guide: { x: 4.5, z: 6.5, pose: 'megaphone', species: 'puppy', name: '안내 강아지' },
+    guide: { x: 3.5, z: 10.8, pose: 'megaphone', species: 'puppy', name: '안내 강아지' }, // 시작 자리 오른쪽 앞 풀밭: 첫 화면에서 가로등 기둥과 겹치지 않게
     granny: { x: -9.6, z: -19.4, pose: 'think', species: 'bear', name: '곰 할머니' },
     kid: { x: -6, z: 5, pose: 'cheer', species: 'rabbit', name: '꼬마 토끼', wander: { x0: -12, z0: 3.5, x1: -3, z1: 8 } },
     fisher: { x: -5.2, z: 27.4, pose: 'wave', species: 'cat', name: '낚시꾼 고양이' },
@@ -280,13 +280,24 @@ export class World {
     const detail = grassTexture();
     detail.repeat.set(1, 1);
     this.groundTime = { value: 0 };
+    this.groundSnow = { value: 0 }; // 눈 덮임 (update 에서 snowCover)
     this.groundMat.onBeforeCompile = (sh) => {
       sh.uniforms.detailMap = { value: detail };
       sh.uniforms.uTime = this.groundTime;
-      sh.fragmentShader = 'uniform sampler2D detailMap; uniform float uTime;\n' + sh.fragmentShader.replace('#include <map_fragment>',
+      sh.uniforms.uSnow = this.groundSnow;
+      sh.fragmentShader = 'uniform sampler2D detailMap; uniform float uTime; uniform float uSnow;\n' + sh.fragmentShader.replace('#include <map_fragment>',
         `#include <map_fragment>
          vec3 d = texture2D(detailMap, vMapUv * 46.0).rgb;
-         diffuseColor.rgb *= mix(vec3(1.0), d * 1.55, 0.42);
+         // 흙(길·밭·모래·광장: 칠한 색의 r ≥ g)에는 잔디 디테일의 밝기만 곱함 → 흙이 연두로 물들지 않음
+         float bare = smoothstep(-0.03, 0.02, sampledDiffuseColor.r - sampledDiffuseColor.g);
+         float dl = dot(d, vec3(0.2126, 0.7152, 0.0722));
+         diffuseColor.rgb *= mix(vec3(1.0), mix(d * 1.55, vec3(dl * 2.05), bare), 0.42);
+         // 눈 덮인 땅: 바탕색을 눈 색으로 (빛·그림자·밤을 그대로 받음), 길·밭은 덜 덮여 길이 보임
+         if (uSnow > 0.001) {
+           float sv = sin(vMapUv.x * 173.0 + sin(vMapUv.y * 131.0) * 1.7) * sin(vMapUv.y * 157.0 + sin(vMapUv.x * 97.0) * 1.3);
+           float sn = uSnow * smoothstep(0.3, 0.62, 0.5 + 0.28 * sv + (dl - 0.3) * 0.6 + uSnow * 0.3) * mix(1.0, 0.45, bare);
+           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.95), sn);
+         }
          // 흘러가는 구름 그림자 (넓고 부드럽게)
          vec2 cp = vMapUv * 5.2 + vec2(uTime * 0.011, uTime * 0.0045);
          float cn = sin(cp.x * 3.1 + sin(cp.y * 2.3)) * sin(cp.y * 2.7 + sin(cp.x * 1.7)) + 0.35 * sin(cp.x * 7.3 + cp.y * 5.1);
@@ -358,8 +369,9 @@ export class World {
       }
       const l = pts[pts.length - 1]; ctx.lineTo(P(l[0]), P(l[1])); ctx.stroke(); ctx.globalAlpha = 1;
     };
-    soft(M(0.9), () => { for (const p of LAYOUT.paths) stroke(p.pts, p.w + 1.2, '#b89a62', 0.55); });
-    soft(M(0.35), () => { for (const p of LAYOUT.paths) stroke(p.pts, p.w, '#dcc28d', 1); });
+    // 길 색: 하얀 유니코가 묻히지 않게 따뜻한 황토 (예전 크림색은 화면 아래 1/3 을 하얗게 날림)
+    soft(M(0.9), () => { for (const p of LAYOUT.paths) stroke(p.pts, p.w + 1.2, '#9f7b4b', 0.55); });
+    soft(M(0.35), () => { for (const p of LAYOUT.paths) stroke(p.pts, p.w, '#b48c58', 1); });
     // 바퀴 자국/자갈
     for (const p of LAYOUT.paths) {
       for (let i = 0; i < p.pts.length - 1; i++) {
@@ -367,8 +379,22 @@ export class World {
         const n = Math.ceil(Math.hypot(bx - ax, bz - az) * 6);
         for (let k = 0; k < n; k++) {
           const t = k / n, x = ax + (bx - ax) * t + (rnd() - 0.5) * p.w * 0.8, z = az + (bz - az) * t + (rnd() - 0.5) * p.w * 0.8;
-          ctx.fillStyle = rnd() > 0.5 ? 'rgba(150,120,80,0.45)' : 'rgba(245,230,200,0.5)';
+          ctx.fillStyle = rnd() > 0.5 ? 'rgba(130,100,64,0.45)' : 'rgba(232,212,172,0.3)';
           ctx.beginPath(); ctx.arc(P(x), P(z), M(0.04 + rnd() * 0.07), 0, 7); ctx.fill();
+        }
+      }
+    }
+    // 길 가장자리: 잔디 덩이를 길 안팎으로 흩뿌려 매끈한 띠 대신 닳은 풀 경계로
+    for (const p of LAYOUT.paths) {
+      for (let i = 0; i < p.pts.length - 1; i++) {
+        const [ax, az] = p.pts[i], [bx, bz] = p.pts[i + 1];
+        const len = Math.hypot(bx - ax, bz - az), nx = -(bz - az) / len, nz = (bx - ax) / len;
+        const n = Math.ceil(len * 3.2);
+        for (let k = 0; k < n; k++) {
+          const t = (k + rnd()) / n, side = rnd() > 0.5 ? 1 : -1, off = side * (p.w / 2 + (rnd() - 0.6) * 0.7);
+          const x = ax + (bx - ax) * t + nx * off, z = az + (bz - az) * t + nz * off, r = M(0.1 + rnd() * 0.22);
+          ctx.fillStyle = `hsla(${86 + rnd() * 18}, ${42 + rnd() * 16}%, ${40 + rnd() * 12}%, ${0.45 + rnd() * 0.35})`;
+          ctx.beginPath(); ctx.ellipse(P(x), P(z), r, r * (0.45 + rnd() * 0.4), rnd() * 3, 0, 7); ctx.fill();
         }
       }
     }
@@ -386,10 +412,10 @@ export class World {
       ctx.fillRect(P(pd.x0 - 0.4), P(pd.z0 - 0.4), M(pw + 0.8), M(ph + 0.8));
       // KOAT 체험관 광장
       const kp = L.koat.plaza;
-      ctx.fillStyle = '#d9d4c7';
+      ctx.fillStyle = '#cfc9bb'; // 흙 디테일이 연두 대신 밝기만 곱해져 밝아진 만큼 한 단계 낮춤
       ctx.fillRect(P(kp[0]), P(kp[1]), M(kp[2] - kp[0]), M(kp[3] - kp[1]));
       // 연못 모래 테두리
-      ctx.fillStyle = '#d8c18c';
+      ctx.fillStyle = '#d0b886';
       ctx.beginPath(); ctx.arc(P(L.pond.x), P(L.pond.z), M(L.pond.r + 0.9), 0, 7); ctx.fill();
       ctx.beginPath(); ctx.arc(P(L.lake.x), P(L.lake.z), M(L.lake.r + 1.1), 0, 7); ctx.fill();
     });
@@ -676,7 +702,8 @@ export class World {
       // 키 작은 장식(풀·꽃·덤불·작은 돌·연잎)은 그림자를 드리우지 않는 묶음으로 → 그림자 패스 삼각형 감소
       const small = (o.userData.h ??= bb.getSize(size).y) < 0.7;
       // 칸은 물체 중심으로 정함 → 한 물체의 부품은 같은 칸에 (칸 경계에서 갈라지지 않게)
-      const cell = cellKey((bb.min.x + bb.max.x) / 2, (bb.min.z + bb.max.z) / 2, STATIC_CELL);
+      const ocx = (bb.min.x + bb.max.x) / 2, ocz = (bb.min.z + bb.max.z) / 2;
+      const cell = cellKey(ocx, ocz, STATIC_CELL);
       o.traverse((m) => {
         if (!m.isMesh) return;
         const mat = m.material, vc = plain(mat);
@@ -686,6 +713,9 @@ export class World {
         let g = m.geometry.clone().applyMatrix4(m.matrixWorld);
         const src = mat.vertexColors ? g.attributes.color : null;
         for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'color'].includes(k)) g.deleteAttribute(k);
+        // 잎 묶음: 정점마다 (계절 역할 + 나무 난수) → 합친 숲도 나무 하나가 한 색 (역할 없는 작물·꽃은 0 = 물들지 않음)
+        // (질감·투명 잎도 재질별 묶음에서 같은 속성을 씀: 합친 메시의 원점은 하나라 위치 난수로는 나무를 못 가름)
+        if (mat.userData.enhanced === 'foliage') g.setAttribute('aLeaf', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count).fill(leafAttrValue(mat.userData.leafRole || 0, ocx, ocz)), 1));
         // 인덱스는 그대로 둠 (공유 정점 재사용 → 정점 수·메모리 약 절반). 법선이 없으면 예전처럼 면마다 각진 법선
         if (!g.attributes.normal) { if (g.index) g = g.toNonIndexed(); g.computeVertexNormals(); }
         if (!g.index) g.setIndex(seqIndex(g.attributes.position.count)); // 한 묶음 안에서 모두 인덱스가 있어야 합칠 수 있음
@@ -712,8 +742,14 @@ export class World {
         material.color.set(0xffffff);
         material.vertexColors = true;
         const kind = mat.userData.enhanced;
-        material.userData = {};
+        material.userData = kind === 'foliage' ? { leafAttr: true } : {};
         if (kind) enhanceMaterial(material, kind);
+      } else if (mat.userData.enhanced === 'foliage' && !mat.userData.leafAttr) {
+        // 재질별 잎 묶음: 정점 속성(aLeaf)을 읽는 복제 재질로
+        material = mat.clone();
+        material.userData = { ...mat.userData, leafAttr: true };
+        delete material.userData.enhanced;
+        enhanceMaterial(material, 'foliage');
       }
       const tris = new Map([...cells].map(([k, v]) => [k, v.tris]));
       for (const keys of planStaticGroups(tris)) {
@@ -941,7 +977,7 @@ export class World {
     // 눈: 지면이 점점 하얗게 덮임
     const snowCover = Math.max(W.kind === 'snow' ? Math.min(1, W.precip * 1.2) : 0, this.seasonSnow || 0); // 겨울엔 눈이 안 와도 소복이
     this.snowCover = (this.snowCover || 0) + (snowCover - (this.snowCover || 0)) * Math.min(1, dt * 0.15);
-    this.groundMat.emissive.setRGB(0.94, 0.97, 1).multiplyScalar(this.snowCover * 0.62 * (0.3 + daylight * 0.7)); // 눈 덮인 땅 (겨울·눈 오는 날)
+    this.groundSnow.value = this.snowCover; // 눈 덮인 땅 (겨울·눈 오는 날): 바탕색을 바꿔 그림자·밤빛을 그대로 받음
     const tod = this.tod = timeOfDay(t, this._tod ||= { sun: [0, 0, 0], tint: [0, 0, 0], warmth: 0, sat: 0 }); // 시간대 빛 색 (같은 객체를 다시 채움)
     this.sun.color.setRGB(tod.sun[0], tod.sun[1], tod.sun[2]);
     this.hemi.color.setHex(0xd8eeff).lerp(this.sun.color, 0.16).lerp(GREY, overcast * 0.6);

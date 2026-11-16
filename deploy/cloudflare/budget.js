@@ -4,7 +4,7 @@
  *   - 요청 하루 100,000건 (HTTP 요청·WebSocket 연결, 받은 WebSocket 메시지는 20개 = 1건, 보낸 메시지는 무료)
  *   - 실행 시간 하루 13,000 GB-s (객체 하나 128MB 기준 → 깨어 있는 시간 104,000초). 잠든(hibernation) 동안은 0
  *   - 하루 기준은 UTC 0시(한국 오전 9시)에 초기화, 넘으면 그날은 오류
- * 방마다 쓴 양을 1분마다 장부(ledger) 객체에 모아, 전체가 안전선(85%)을 넘으면 그날은 새 접속을 받지 않음
+ * 방마다 처리 전에 작은 몫을 장부에 예약. 85% 안전선을 넘는 예약은 거절 (청구액 상한은 아니며 Free 플랜 유지 필요)
  */
 export const FREE = { requests: 100000, gbs: 13000, memGB: 0.128, wsRatio: 20 };
 export const SAFETY = 0.85;
@@ -16,9 +16,21 @@ export const nextReset = (now) => (dayOf(now) + 1) * 86400000;
 
 /** 하루 한도 (wrangler.toml [vars] 로 줄일 수 있음: BUDGET_REQUESTS, BUDGET_AWAKE_SEC) */
 export function limits(env = {}) {
-  const req = +env.BUDGET_REQUESTS > 0 ? +env.BUDGET_REQUESTS : Math.floor(FREE.requests * SAFETY);
-  const awake = +env.BUDGET_AWAKE_SEC > 0 ? +env.BUDGET_AWAKE_SEC : Math.floor((FREE.gbs / FREE.memGB) * SAFETY);
+  const lower = (v, cap) => Number.isFinite(+v) && +v > 0 ? Math.max(1, Math.min(cap, Math.floor(+v))) : cap;
+  const req = lower(env.BUDGET_REQUESTS, Math.floor(FREE.requests * SAFETY));
+  const awake = lower(env.BUDGET_AWAKE_SEC, Math.floor((FREE.gbs / FREE.memGB) * SAFETY));
   return { requests: req, awakeSec: awake };
+}
+
+/** 처리 전에 영속 장부에 기록하는 작은 몫. 방이 재시작해도 집계가 빠지지 않음. */
+export function reserveBudget(book, now, lim) {
+  const requests = Math.min(256, Math.max(0, lim.requests - 1));
+  const awakeSec = Math.min(60, lim.awakeSec);
+  const current = book?.day === dayOf(now) ? book : { day: dayOf(now), requests: 0, awakeSec: 0 };
+  const granted = !current.over && requests >= 1 && current.requests + requests + 1 <= lim.requests && current.awakeSec + awakeSec <= lim.awakeSec;
+  const next = addToLedger(current, granted ? { requests, awakeSec } : {}, now, lim);
+  if (!granted) next.over = true;
+  return { book: next, granted, requests: granted ? requests : 0, awakeSec: granted ? awakeSec : 0 };
 }
 
 /** 방 하나가 쓰는 양을 세는 계량기 (1분마다 장부로 넘기고 0으로) */

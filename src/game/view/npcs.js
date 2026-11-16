@@ -5,7 +5,9 @@ import { LAYOUT } from '../world.js';
 import { VILLAGERS } from '../sim/villagers.js';
 import { CROPS } from '../sim/crops.js';
 import { VILLAGER_SPECIES, villagerName } from '../species.js';
-import { talkShot } from '../cutscene.js';
+import { talkShot, speakerShot, cheatYaw, liftFor, hudFrac } from '../cutscene.js';
+import { setHeroLabel, setLabelOccluders } from '../label.js';
+import { heightAt } from '../terrain.js';
 
 const ROLE_ICON = { merchant: '🛒', researcher: '🔬', guide: '📣', granny: '🌾', kid: '🦋', fisher: '🎣' };
 /** 대화창 이름표 색 (역할별) */
@@ -45,11 +47,20 @@ const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 /** 가로 화면 대화 구도: 카메라 높이·시선 높이 상한 — 아래 대화창(선택지 6개면 화면 아래 약 64%)이 얼굴을 가리지 않게
  *  얼굴 가운데를 화면 위 30% 안에 둠 (세로 화면은 cutscene.talkShot 이 이미 시선을 더 낮춤 — 그대로) */
 const TALK_CAM_Y = 2.0, TALK_LOOK_Y = 0;
+/** 앞모습 대화 구도: 말하는 주민 정면에서 돈 각도(지금 카메라 쪽 먼저, 55° 넘으면 쓰지 않음), 두 얼굴 최소 간격(화면 너비 비율),
+ *  구도를 정한 뒤 몸을 카메라 쪽으로 살짝 돌리는 양 (주민 17°, 나 12° — 작아서 어색하지 않고 옆모습·뒤통수가 줄어듦) */
+const FRONT_THETA = [35, 45, 25, 55].map((d) => (d * Math.PI) / 180), FRONT_SEP = 0.15;
+const CHEAT_NPC = (17 * Math.PI) / 180, CHEAT_ME = (12 * Math.PI) / 180;
 /** 대화 구도에서 카메라→시선 선에 이만큼(m) 가까운 다른 캐릭터가 있으면 다른 구도, 카메라에서 이만큼(m) 안의 캐릭터는 이름표를 숨김 */
 const TALK_CLEAR = 1.2, TALK_HIDE = 6;
 /** 내 이름표 흐리게: 내 뒤(카메라에서 더 먼 쪽) 5m 안 주민이 카메라→내 이름표 방향 12° 안에 있고, 화면에서 그 얼굴·이름표가 내 이름표에 겹칠 때 */
 const PL_FADE_R = 5, PL_FADE_COS = Math.cos((12 * Math.PI) / 180), PL_FADE_A = 0.35;
 const _lv = new THREE.Vector3(), _nv = new THREE.Vector3();
+/** 대화 구도 화면 검사: 대화창 윗변 가정(선택지 5개 + 설명 줄, 화면 위에서 비율 — 가로 0.42 · 세로 0.46 · 낮은 가로폰 0.48),
+ *  이름 칩은 창 위로 28px, 주민 턱(얼굴 - 0.25m)은 그보다 0.04(NDC 0.08) 위, 내 몸 너비는 화면 28% 까지 (좁은 세로 폰은 40%), 화면 끝에 40% 넘게 잘리면 안 됨 */
+export const TALK_FRAME = { chip: 28, room: 0.04, heroW: 0.28, heroWTall: 0.4, heroClip: 0.4, heroR: 0.6, heroTop: 1.85, lowH: 500, lowRoom: 0.12 };
+export const talkBoxTop = (aspect, h) => (aspect < 1 ? 0.46 : h <= TALK_FRAME.lowH ? 0.48 : 0.42);
+const _fc = new THREE.PerspectiveCamera(), _fr = new THREE.Vector3(), _fp = new THREE.Vector3();
 
 /** 점 (px, pz) 에서 선분 (ax, az)–(bx, bz) 까지 거리 (바닥 평면) */
 function segDist(px, pz, ax, az, bx, bz) {
@@ -136,7 +147,8 @@ export class NPCs {
       } else {
         e.u.moving = false;
         e.spd = 0;
-        if (d < 7) e.u.facing = Math.atan2(playerPos.x - p.x, playerPos.z - p.z);
+        if (e.u.faceLock != null) e.u.facing = e.u.faceLock; // 대화 구도에서 카메라 쪽으로 살짝 돈 방향 (cinema.release 가 풂)
+        else if (d < 7) e.u.facing = Math.atan2(playerPos.x - p.x, playerPos.z - p.z);
       }
       // 플레이어를 보는 정도(귀 쫑긋·꼬리·눈인사), 우정 하트, 플레이어 쪽 상대 각도
       const u = e.u;
@@ -176,6 +188,9 @@ export class NPCs {
    */
   _fadePlayerLabel(dt, pp) {
     const g = this.game, lb = g.player?.unico?.label, cam = g.followCam?.camera;
+    setHeroLabel(lb); // 이름표 겹침 정리에서 내 이름표가 먼저 자리를 잡음 (label.js)
+    const placed = g.world?.placed; // 건물 뒤 이름표 흐리게 (label.js): 건물을 새로 지으면 다시 알려 줌
+    if (placed && placed.length !== this._occN) { this._occN = placed.length; setLabelOccluders(placed.map((o) => ({ ...o, y0: heightAt(o.x, o.z) }))); }
     if (!lb || !cam?.position) return;
     const c = cam.position, ly = (g.player.unico.group?.position.y ?? 0) + (g.player.unico.labelY ?? 2.3);
     const lx = pp.x - c.x, lyy = ly - c.y, lz = pp.z - c.z, ll = Math.hypot(lx, lyy, lz) || 1;
@@ -210,8 +225,8 @@ export class NPCs {
     for (const b of g.koat?.booths || []) if (b.npc) out.push(b.npc);
     if (g.koat?.desk) out.push(g.koat.desk);
     for (const r of g.net?.remote?.values?.() || []) if (r.unico) out.push(r.unico);
-    // 반려견 콩이: 이름표만 (대화가 끝나면 cutscene 이 labelAlways 인 것의 이름표를 다시 켬)
-    if (g.pet?.label && g.pet.e?.m) out.push({ group: g.pet.e.m, label: g.pet.label, labelAlways: true });
+    // 반려견 콩이: 이름표만 (대화가 끝나면 cutscene 이 labelAlways 인 것의 이름표를 다시 켬). 키가 작아 거의 수평인 앞모습 구도의 시선은 가리지 않음 (short)
+    if (g.pet?.label && g.pet.e?.m) out.push({ group: g.pet.e.m, label: g.pet.label, labelAlways: true, short: true });
     return out;
   }
 
@@ -230,31 +245,110 @@ export class NPCs {
     return hit;
   }
 
-  /**
-   * 대화 구도 { pos, look, near }: 지금 카메라 쪽 → 반대쪽 → 각각 ±25° 돌린 것 중 카메라→시선 선 1.2m 안에 다른 캐릭터가 없고
-   * 건물·소품을 지나지 않는 첫 구도 (모두 가리면 가장 덜 가리는 것). 가로 화면은 카메라·시선을 낮춰 얼굴이 대화창 위, near = 카메라 6m 안 캐릭터 (이름표 숨김)
-   */
-  talkCamera(a, b, e) {
-    const cam = this.game.camera, others = this._others(e).filter((u) => u?.group);
+  /** 옛 대화 구도 후보: 두 사람을 잇는 선의 옆에서 (지금 카메라 쪽 → 반대쪽, 각각 ±25° 돌린 것). 가로 화면은 카메라·시선을 낮춰 얼굴이 대화창 위 */
+  _sideShots(a, b) {
+    const cam = this.game.camera, shots = [];
     const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2, d = Math.hypot(b.x - a.x, b.z - a.z) || 1, nx = -(b.z - a.z) / d, nz = (b.x - a.x) / d;
     const here = (cam.position.x - mx) * nx + (cam.position.z - mz) * nz >= 0 ? 1 : -1;
-    const shots = [];
     for (const side of [here, -here]) {
       const s0 = talkShot(a, b, { x: mx + nx * side * 5, z: mz + nz * side * 5 }, cam.fov, cam.aspect);
       for (const rot of [0, 0.44, -0.44]) {
         const c = Math.cos(rot), sn = Math.sin(rot), ox = s0.pos[0] - mx, oz = s0.pos[2] - mz;
         const wide = !(cam.aspect < 1);
-        shots.push({ pos: [mx + ox * c - oz * sn, wide ? TALK_CAM_Y : s0.pos[1], mz + ox * sn + oz * c], look: [s0.look[0], wide ? Math.min(s0.look[1], TALK_LOOK_Y) : s0.look[1], s0.look[2]] });
+        shots.push({ pos: [mx + ox * c - oz * sn, wide ? TALK_CAM_Y : s0.pos[1], mz + ox * sn + oz * c], look: [s0.look[0], wide ? Math.min(s0.look[1], TALK_LOOK_Y) : s0.look[1], s0.look[2]], lift: 0 });
       }
     }
-    let best = null;
-    for (const s of shots) {
-      s.clear = Infinity;
-      for (const u of others) { const p = u.group.position; s.clear = Math.min(s.clear, segDist(p.x, p.z, s.pos[0], s.pos[2], s.look[0], s.look[2])); }
-      s.block = this._blockedOnSegment(s.pos, s.look, a, b);
-      if (s.clear >= TALK_CLEAR && !s.block) { best = s; break; }
-      if (!best || s.block < best.block || (s.block === best.block && s.clear > best.clear)) best = s;
+    return shots;
+  }
+
+  /**
+   * 대화 구도가 화면에서 어떻게 보이나 (렌즈 올림까지): chinGap = 이름 칩 아래 여유 - 주민 턱 위치, head = 대화창 윗변 - 주민 얼굴,
+   * heroW = 내 몸 너비(화면 비율), heroClip = 내 몸이 화면 끝에 잘린 비율 (0 = 다 보임, 1 = 다 밖)
+   */
+  talkFrame(shot, a, b, sc, aspect, fov, h = typeof innerHeight === 'number' ? innerHeight : 800) {
+    const F = TALK_FRAME, box = talkBoxTop(aspect, h), cam = _fc;
+    cam.fov = fov; cam.aspect = aspect; cam.near = 0.1; cam.far = 600;
+    cam.position.set(...shot.pos); cam.lookAt(...shot.look);
+    if (shot.lift === true) cam.setViewOffset(aspect, 1, 0, liftFor(box, hudFrac(h)), aspect, 1); else cam.clearViewOffset();
+    cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+    const yf = (p, y) => (1 - _fp.set(p.x, y, p.z).project(cam).y) / 2;
+    const face = 1.3 * sc;
+    _fr.setFromMatrixColumn(cam.matrixWorld, 0).setY(0).normalize().multiplyScalar(F.heroR);
+    let x0 = Infinity, x1 = -Infinity;
+    for (const s of [-1, 1]) for (const y of [0.2, F.heroTop]) {
+      _fp.set(a.x + _fr.x * s, y, a.z + _fr.z * s).project(cam);
+      x0 = Math.min(x0, _fp.x); x1 = Math.max(x1, _fp.x);
     }
+    const w = Math.max(1e-6, x1 - x0), out = Math.max(0, x1 - 1) + Math.max(0, -1 - x0);
+    return { chinGap: box - F.chip / h - yf(b, face - 0.25 * sc), head: box - yf(b, face), heroW: w / 2, heroClip: Math.min(1, out / w) };
+  }
+
+  /** 화면 검사 통과: 턱이 이름 칩 위, (낮은 가로폰은 얼굴이 창 위로 12% 이상), 내 몸은 좁고 다 보이거나 아예 밖 */
+  _frameOk(m, aspect, h) {
+    const F = TALK_FRAME;
+    if (m.chinGap < F.room) return false;
+    if (!(aspect < 1) && h <= F.lowH && m.head < F.lowRoom) return false;
+    if (m.heroClip >= 0.999) return true;
+    return m.heroW <= (aspect < 1 ? F.heroWTall : F.heroW) && m.heroClip <= F.heroClip;
+  }
+
+  /**
+   * 앞모습 대화 구도 후보 (cutscene.speakerShot): 말하는 주민 b 정면에서 35°·45°·25°·55° (지금 카메라 쪽 먼저), 두 얼굴이 너무 붙는 것은 뺌
+   * 각 각도에서 화면 검사(_frameOk)를 통과할 때까지 0.4m 씩 물러남 (6.5m 까지). 통과하면 fit = true
+   */
+  _frontShots(a, b, e) {
+    const cam = this.game.camera, sc = e?.u?.scale ?? 1, face = 1.3 * sc, tall = cam.aspect < 1;
+    const h = typeof innerHeight === 'number' ? innerHeight : 800, lowLand = !tall && h <= TALK_FRAME.lowH;
+    const fx = a.x - b.x, fz = a.z - b.z, d = Math.hypot(fx, fz) || 1;
+    const here = (cam.position.x - b.x) * (-fz / d) + (cam.position.z - b.z) * (fx / d) >= 0 ? 1 : -1;
+    // 세로 폰은 조금 더 물러나 시작 (얼굴이 위 HUD 에 붙지 않고 내 몸이 화면을 덜 덮게), 낮은 가로폰은 가깝고 낮게 (얼굴이 작지 않게)
+    const opts = { fov: cam.fov, aspect: cam.aspect, faceS: face, faceL: 1.35, camY: lowLand ? Math.min(1.3, face) : face + 0.3, lookY: face * 0.7 + 1.35 * 0.3 - 0.05, fit: tall ? 0.75 : 0.8, maxD: 6.5 };
+    const D0 = tall ? 5.4 : lowLand ? 4.0 : 5.2;
+    const shots = [];
+    for (const side of [here, -here]) for (const theta of FRONT_THETA) {
+      let s = null;
+      for (let D = D0; ; D = Math.min(6.5, D + 0.4)) {
+        s = speakerShot(a, b, side, { ...opts, theta, D });
+        s.frame = this.talkFrame(s, a, b, sc, cam.aspect, cam.fov, h);
+        s.fit = this._frameOk(s.frame, cam.aspect, h);
+        if (s.fit || s.dist >= 6.5 - 1e-6) break;
+      }
+      if (s.sep >= FRONT_SEP) shots.push({ ...s, front: true });
+    }
+    return shots;
+  }
+
+  /**
+   * 대화 구도 { pos, look, lift, near, front? }: 후보 중 카메라→시선 선 1.2m 안에 다른 캐릭터가 없고 건물·소품을 지나지 않는 첫 구도
+   * (모두 가리면 가장 덜 가리는 것). near = 카메라 6m 안 캐릭터 (이름표 숨김)
+   *  front: 말하는 주민(b)의 얼굴을 3/4 앞에서 (렌즈 올림 lift 로 얼굴을 대화창 위에) → 모두 가리면 옛 옆 구도
+   *  front 없이: 옛 옆 구도만 (카메라를 낮춰 얼굴을 대화창 위에 — 렌즈 올림 없음)
+   */
+  talkCamera(a, b, e, { front = false } = {}) {
+    const others = this._others(e).filter((u) => u?.group);
+    const pass = (shots) => {
+      let best = null;
+      for (const s of shots) {
+        s.clear = Infinity;
+        for (const u of others) { if (s.front && u.short) continue; const p = u.group.position; s.clear = Math.min(s.clear, segDist(p.x, p.z, s.pos[0], s.pos[2], s.look[0], s.look[2])); }
+        s.block = this._blockedOnSegment(s.pos, s.look, a, b);
+        if (s.clear >= TALK_CLEAR && !s.block) return { best: s, ok: true };
+        if (!best || s.block < best.block || (s.block === best.block && s.clear > best.clear)) best = s;
+      }
+      return { best, ok: false };
+    };
+    let r = { best: null, ok: false };
+    if (front) { // 화면 검사를 통과한 것 먼저, 그것들이 모두 가리면 통과 못 한 것 중 트인 것
+      const fs = this._frontShots(a, b, e);
+      r = pass(fs.filter((s) => s.fit));
+      if (!r.ok) { const r2 = pass(fs); if (r2.ok || !r.best) r = r2; }
+    }
+    if (!r.ok) {
+      const side = pass(this._sideShots(a, b));
+      const fb = r.best, sb = side.best; // 둘 다 조금씩 가리면: 덜 막힌 쪽, 같으면 앞모습 (옆 구도가 훨씬 트였을 때만 옆)
+      if (side.ok || !fb || sb.block < fb.block || (sb.block === fb.block && sb.clear > fb.clear + 0.3)) r = side;
+    }
+    const best = r.best;
     best.near = others.filter((u) => Math.hypot(u.group.position.x - best.pos[0], u.group.position.z - best.pos[2]) < TALK_HIDE);
     return best;
   }
@@ -266,9 +360,19 @@ export class NPCs {
     const pp = g.player.position, np = e.u.group.position;
     e.u.facing = Math.atan2(pp.x - np.x, pp.z - np.z);
     g.player.unico.facing = Math.atan2(np.x - pp.x, np.z - pp.z);
-    const shot = this.talkCamera(pp, np, e);
-    g.cinema.shot(shot.pos, shot.look, 0.7);
+    const shot = this.talkCamera(pp, np, e, { front: true });
+    g.cinema.shot(shot.pos, shot.look, 0.7, { lift: shot.lift });
+    if (shot.front) { // 서로 마주 보되 카메라 쪽으로 살짝 (얼굴이 3/4 앞으로)
+      g.cinema.faceLock(e.u, cheatYaw(np, pp, shot.pos, CHEAT_NPC));
+      g.cinema.faceLock(g.player.unico, cheatYaw(pp, np, shot.pos, CHEAT_ME));
+    }
     g.cinema.hideLabelsOf(g.player.unico, e.u, ...shot.near);
+    try { await this._talkLoop(e); } finally { g.cinema.release(); } // 도중에 오류가 나도 카메라·렌즈·몸 방향은 풀림
+  }
+
+  /** 대화 내용: 첫 인사 보상 → 선택지(부탁·선물·장터·퀘스트·이야기) 반복 → 끝나면 고른 창 열기 */
+  async _talkLoop(e) {
+    const g = this.game;
     const r = g.villagers.talk(e.id, g.world.day);
     if (r.gained) g.ui.toast(`💕 ${e.name}${josa(e.name, '와/과')} 오늘 첫 인사! 우정 +${r.gained}`);
     this.applyRewards(e, r);
@@ -308,7 +412,7 @@ export class NPCs {
       else after = c;
       break;
     }
-    g.cinema.release();
+    g.cinema.release(); // 창을 열기 전에 카메라를 돌려놓음 (talk 의 finally 에서 한 번 더 불러도 같음)
     if (after === 'gift') g.ui.openGiftPicker(e);
     else if (after === 'market') g.ui.openMarket();
     else if (after === 'quests') g.ui.openQuests();

@@ -6,6 +6,36 @@ import { makeLabel } from '../label.js';
 import { PetSim, TRICKS, TRICK_TIME } from '../sim/pet.js';
 import { CROPS } from '../sim/crops.js';
 import { ITEMS } from '../sim/items.js';
+import { speakerShot, cheatYaw } from '../cutscene.js';
+
+/**
+ * 돌보기 구도: 콩이 얼굴(0.45m)을 정면에서 60° 옆, 2.4m 떨어진 무릎 높이(0.9m)에서 (세로 폰은 3.4m 까지 물러남), 렌즈 올림으로 대화창 위에.
+ * 옆으로 많이 돌아 내 몸은 화면 가장자리 밖으로 빠지고, 콩이는 카메라 쪽으로 50° 고개를 돌려 거의 정면 (올려다보는 강아지)
+ */
+const PET_SHOT = { theta: (60 * Math.PI) / 180, D: 2.4, maxD: 3.4, camY: 0.9, lookY: 0.45, lookMix: 0.15, faceS: 0.45, faceL: null };
+const PET_CHEAT = (50 * Math.PI) / 180, ME_CHEAT = (12 * Math.PI) / 180;
+/** 돌보기 구도 후보 각도: 60° 먼저 (지금 카메라 쪽 → 반대쪽), 그다음 75°·40°. 앞 2m 안 화면(3×3 칸)이나 카메라→콩이 선에 나무·기둥이 걸리면 다음 후보 */
+const PET_THETA = [60, 75, 40].map((d) => (d * Math.PI) / 180);
+const PET_NEAR = [0.6, 1.3, 2.0], PET_NEAR_X = [-0.85, 0, 0.85];
+
+/**
+ * 돌보기 구도가 얼마나 가리나 (0 = 깨끗): world.obstacles(원)·boxes(상자) 로 봄. 콩이·나 0.6m 안의 것은 셈하지 않음
+ *  - 카메라→콩이 얼굴 선(0.25m 마다)에 걸리면 칸마다 2, 카메라 앞 2m 안 화면 3×3 칸(깊이 3 × 가로 3)에 걸리면 1, 카메라가 안에 있으면 3
+ */
+export function petShotBlock(shot, dog, me, world, fov = 45, aspect = 1.6) {
+  if (!world) return 0;
+  const far = (o) => Math.hypot(o.x - dog.x, o.z - dog.z) > 0.6 + o.r && Math.hypot(o.x - me.x, o.z - me.z) > 0.6 + o.r;
+  const obs = (world.obstacles || []).filter(far), boxes = world.boxes || [];
+  const inside = (x, z, pad = 0.1) => obs.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + pad) || boxes.some((b) => x > b.x0 - pad && x < b.x1 + pad && z > b.z0 - pad && z < b.z1 + pad);
+  const [cx, , cz] = shot.pos;
+  let n = inside(cx, cz) ? 3 : 0;
+  const L = Math.hypot(dog.x - cx, dog.z - cz), steps = Math.max(2, Math.ceil((L * 0.9) / 0.25));
+  for (let i = 1; i <= steps; i++) { const t = (i / steps) * 0.9; if (inside(cx + (dog.x - cx) * t, cz + (dog.z - cz) * t)) n += 2; }
+  const fx = shot.look[0] - cx, fz = shot.look[2] - cz, fl = Math.hypot(fx, fz) || 1, ux = fx / fl, uz = fz / fl;
+  const tanH = Math.tan(((fov * Math.PI) / 180) / 2) * aspect;
+  for (const z of PET_NEAR) for (const u of PET_NEAR_X) if (inside(cx + ux * z - uz * u * z * tanH, cz + uz * z + ux * u * z * tanH, 0)) n++;
+  return n;
+}
 
 /**
  * 반려견 '콩이' (CC0 Quaternius 시바견, 뼈대 애니메이션)
@@ -59,8 +89,8 @@ export class Pet {
       p.set(playerPos.x - 1.2, 0, playerPos.z + 1.2);
       this.vel = 0;
     }
-    // 키우기: 배고픔·애정, 행복하면 가끔 땅을 팜
-    if (this.sim.tick(dt) === 'dig' && !this.digging && !this.trick) {
+    // 키우기: 배고픔·애정, 행복하면 가끔 땅을 팜 (돌보기 대화 중에는 자리를 지킴)
+    if (this.sim.tick(dt) === 'dig' && !this.digging && !this.trick && !this.caring) {
       const a = Math.random() * Math.PI * 2;
       this.digging = { t: 0, x: playerPos.x + Math.cos(a) * 2.2, z: playerPos.z + Math.sin(a) * 2.2 };
     }
@@ -93,8 +123,8 @@ export class Pet {
     p.y = heightAt(p.x, p.z);
     const rate = e.cur === 'walk' ? this.vel / 1.6 : e.cur === 'run' ? this.vel / 4.5 : 1;
     e.mixer.update(dt * THREE.MathUtils.clamp(rate, 0.5, 1.8));
-    // 이름표는 가까울 때만 (화면 정리), 쓰다듬기는 다른 할 일보다 우선순위 낮게
-    this.label.visible = d < 4.5;
+    // 이름표는 가까울 때만 (화면 정리), 대화창이 떠 있으면 숨김. 쓰다듬기는 다른 할 일보다 우선순위 낮게
+    this.label.visible = d < 4.5 && !this.game.dialogue?.active;
     if (this.sim.found && d < 2 && !hidden) return { d: d - 0.5, label: `🐕 ${this.sim.name}${josa(this.sim.name, '이/가')} 찾아 온 것 받기`, key: 'petfind', onInteract: () => this.takeFound() };
     if (d < 1.4 && !hidden) return { d: d + 1.2, label: `🐕 ${this.sim.name} 돌보기`, key: 'pet', onInteract: () => this.care() };
     return null;
@@ -130,7 +160,7 @@ export class Pet {
       this.trick = null; this._hop = 0;
       this.game.fx.pop(e.m.position.x, e.m.position.z, '✨');
     }
-    this.label.visible = d < 4.5;
+    this.label.visible = d < 4.5 && !this.game.dialogue?.active;
     return null;
   }
 
@@ -176,36 +206,75 @@ export class Pet {
     this.sim.affection = Math.min(100, this.sim.affection + 2);
   }
 
-  /** 돌보기 대화: 쓰다듬기 · 간식/작물 주기 · 재주 · 이름 짓기 */
+  /** 돌보기 구도: 후보(PET_THETA × 지금 쪽·반대쪽) 중 가림이 없는 첫 것, 모두 가리면 가장 덜 가리는 것 (같으면 앞 순서 = 60° 지금 쪽) */
+  _careShot(pp, p, here) {
+    const cam = this.game.camera;
+    let best = null;
+    for (const theta of PET_THETA) for (const side of [here, -here]) {
+      const s = speakerShot(pp, p, side, { ...PET_SHOT, theta, fov: cam.fov, aspect: cam.aspect });
+      s.block = petShotBlock(s, p, pp, this.game.world, cam.fov, cam.aspect);
+      if (!s.block) return s;
+      if (!best || s.block < best.block) best = s;
+    }
+    return best;
+  }
+
+  /**
+   * 돌보기 대화: 쓰다듬기 · 간식/작물 주기 · 재주(따로 고르는 목록) · 이름 짓기
+   * 카메라는 콩이를 3/4 앞에서 낮게 (선택지를 줄여 대화창 위에 콩이가 보이게)
+   */
   async care() {
-    const g = this.game, sim = this.sim, eco = g.economy;
+    const g = this.game;
     if (g.dialogue.active) return;
-    const p = this.e.m.position, pp = g.player.position;
-    this.e.m.rotation.y = Math.atan2(pp.x - p.x, pp.z - p.z);
-    g.player.unico.facing = Math.atan2(p.x - pp.x, p.z - pp.z);
-    g.cinema.focusTalk(pp, p);
+    const p = this.e.m.position, pp = g.player.position, cam = g.camera;
+    const fx = pp.x - p.x, fz = pp.z - p.z, d = Math.hypot(fx, fz) || 1;
+    const side = (cam.position.x - p.x) * (-fz / d) + (cam.position.z - p.z) * (fx / d) >= 0 ? 1 : -1; // 지금 카메라 쪽
+    const shot = this._careShot(pp, p, side);
+    this.e.m.rotation.y = cheatYaw(p, pp, shot.pos, PET_CHEAT);
+    g.player.unico.facing = cheatYaw(pp, p, shot.pos, ME_CHEAT);
+    g.cinema.shot(shot.pos, shot.look, 0.8, { lift: true });
     g.cinema.hideLabelsOf(g.player.unico);
     this.label.visible = false;
-    const treats = eco.count('pet_treat');
+    this.caring = true;
+    let c;
+    try { c = await this._careMenu(); } finally { g.cinema.release(); this.caring = false; }
+    const sim = this.sim, eco = g.economy;
     const crop = Object.keys(eco.inventory.crops).find((k) => eco.inventory.crops[k] > 0);
-    const moodText = { hungry: '배가 고파서 기운이 없어 보여요…', happy: '꼬리를 신나게 흔들고 있어요!', calm: '얌전히 기다리고 있어요.' }[sim.mood];
-    const choices = [
-      { label: '🤲 쓰다듬기', value: 'pet', note: sim.petCool > 0 ? '방금 쓰다듬었어요 (조금 뒤에 애정이 올라요)' : '' },
-      { label: `🦴 간식 주기 (보유 ${treats})`, value: 'treat', disabled: !treats || sim.hunger >= 98, note: treats ? '' : '장터에서 강아지 간식을 살 수 있어요' },
-    ];
-    if (crop) choices.push({ label: `${CROPS[crop].emoji} ${CROPS[crop].name} 나눠 주기`, value: 'crop', disabled: sim.hunger >= 98 });
-    for (const t of TRICKS) choices.push({ label: `${t.emoji} 재주: ${t.name}`, value: 'trick:' + t.id, disabled: !sim.unlocked(t.id), note: sim.unlocked(t.id) ? '' : `하트 ${t.hearts}개가 되면 배워요` });
-    choices.push({ label: '✏️ 이름 짓기', value: 'name' }, { label: '👋 그만', value: 'bye' });
-    const c = await g.dialogue.say({ speaker: null, portrait: 'dog', name: `🐕 ${sim.name}`, color: '#e39a4a', sub: `애정 ${'❤️'.repeat(sim.hearts)}${'🤍'.repeat(5 - sim.hearts)} · 배부름 ${Math.round(sim.hunger)}%`, text: `${sim.name}는 ${moodText}`, choices });
-    g.cinema.release();
     if (c === 'pet') this.pet();
     else if (c === 'treat' && eco.take('pet_treat', 1)) this._fed(sim.feed('treat'), '🦴');
-    else if (c === 'crop' && eco.take(crop, 1)) this._fed(sim.feed('crop'), CROPS[crop].emoji);
+    else if (c === 'crop' && crop && eco.take(crop, 1)) this._fed(sim.feed('crop'), CROPS[crop].emoji);
     else if (c?.startsWith('trick:')) { this.trick = { id: c.slice(6), t: 0 }; g.audio.play('bark'); g.player.unico.playAction('present', 1); }
     else if (c === 'name') {
       const n = (prompt('반려견 이름을 지어 주세요 (최대 6글자)', sim.name) || '').trim().slice(0, 6);
       if (n) { sim.name = n; this._lt = ''; this._label(); g.ui.toast(`🐕 이제 이름은 '${n}'!`); }
     }
+  }
+
+  /** 돌보기 선택지: 첫 목록은 짧게(콩이가 대화창 위에 보이게), 재주는 따로 고르는 목록 → 고른 값 */
+  async _careMenu() {
+    const g = this.game, sim = this.sim, eco = g.economy;
+    const head = () => ({ speaker: null, portrait: 'dog', name: `🐕 ${sim.name}`, color: '#e39a4a', sub: `애정 ${'❤️'.repeat(sim.hearts)}${'🤍'.repeat(5 - sim.hearts)} · 배부름 ${Math.round(sim.hunger)}%` });
+    for (let guard = 0; guard < 8; guard++) {
+      const treats = eco.count('pet_treat');
+      const crop = Object.keys(eco.inventory.crops).find((k) => eco.inventory.crops[k] > 0);
+      const moodText = { hungry: '배가 고파서 기운이 없어 보여요…', happy: '꼬리를 신나게 흔들고 있어요!', calm: '얌전히 기다리고 있어요.' }[sim.mood];
+      const learned = TRICKS.filter((t) => sim.unlocked(t.id)).length;
+      const choices = [
+        { label: '🤲 쓰다듬기', value: 'pet', note: sim.petCool > 0 ? '방금 쓰다듬었어요 (조금 뒤에 애정이 올라요)' : '' },
+        { label: `🦴 간식 주기 (보유 ${treats})`, value: 'treat', disabled: !treats || sim.hunger >= 98, note: treats ? '' : '장터에서 강아지 간식을 살 수 있어요' },
+      ];
+      if (crop) choices.push({ label: `${CROPS[crop].emoji} ${CROPS[crop].name} 나눠 주기`, value: 'crop', disabled: sim.hunger >= 98 });
+      choices.push(
+        { label: `🎪 재주 시키기 (${learned}/${TRICKS.length})`, value: 'tricks', disabled: !learned, note: learned ? '' : `하트 ${TRICKS[0].hearts}개가 되면 첫 재주를 배워요` },
+        { label: '✏️ 이름 짓기', value: 'name' }, { label: '👋 그만', value: 'bye' },
+      );
+      const c = await g.dialogue.say({ ...head(), text: `${sim.name}${josa(sim.name, '은/는')} ${moodText}`, choices });
+      if (c !== 'tricks') return c;
+      const tricks = TRICKS.map((t) => ({ label: `${t.emoji} ${t.name}`, value: 'trick:' + t.id, disabled: !sim.unlocked(t.id), note: sim.unlocked(t.id) ? '' : `하트 ${t.hearts}개가 되면 배워요` }));
+      const t = await g.dialogue.say({ ...head(), text: `${sim.name}에게 어떤 재주를 시켜 볼까요?`, choices: [...tricks, { label: '↩️ 돌아가기', value: 'back' }] });
+      if (t !== 'back') return t;
+    }
+    return 'bye';
   }
 
   _fed(r, emoji) {

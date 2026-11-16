@@ -4,13 +4,13 @@
  * - 클라이언트 빌드: VITE_WS_URL=wss://<worker>.workers.dev/ws
  * - 프로토콜은 Node 서버(server/index.js)와 같음: join → welcome / joined / state / chat / left / full / ping → pong / 선물 못 전함 → act_fail
  * 배포: cd deploy/cloudflare && npx wrangler deploy  (docs/DEPLOY.md 참고)
- * 무료 플랜 한도 지키기 (budget.js): 방마다 쓴 양을 1분마다 장부 객체(__ledger__)에 모으고,
+ * 무료 플랜 안전선 (budget.js): 처리 전에 작은 사용량 몫을 영속 장부(__ledger__)에 예약하고,
  *   하루 안전선(무료 한도의 85%)을 넘으면 그날은 새 접속을 받지 않고 접속 중인 사람도 오프라인으로 (UTC 0시 = 한국 오전 9시에 다시 열림)
  *   사용량 보기: GET /usage
  */
-import { Meter, addToLedger, limits, nextReset } from './budget.js';
+import { addToLedger, reserveBudget, limits, nextReset } from './budget.js';
 import { MAX_PLAYERS, MAX_ROOMS } from './limits.js';
-import { sanitizeAct, sanitizeGid, ACT_LIMIT, LOOK_MS } from '../../server/rooms.js';
+import { sanitizeAct, sanitizeGid, ACT_LIMIT, LOOK_MS, validClientId, giftEnvelope } from '../../server/rooms.js';
 
 const LEDGER = '__ledger__';
 const MAX_MSG = 4096;           // 메시지 최대 길이(바이트)
@@ -31,13 +31,19 @@ function noticeSocket(msg) {
   return new Response(null, { status: 101, webSocket: client });
 }
 const fullSocket = () => noticeSocket({ t: 'full' });
-const quotaSocket = () => noticeSocket({ t: 'quota', until: nextReset(Date.now()) });
+const quotaSocket = (until = nextReset(Date.now()), reason = 'daily') => noticeSocket({ t: 'quota', until, reason });
+// 15초 동안 같은 목록 요청을 합침: 중간 번호가 비어 있어도 네 방을 모두 확인.
+const roomLists = new WeakMap();
 
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
-    const count = async (name) => (await (await env.ROOM.get(env.ROOM.idFromName(name)).fetch('https://room/count')).json()).count;
+    const count = async (name) => {
+      const res = await env.ROOM.get(env.ROOM.idFromName(name)).fetch('https://room/count');
+      if (!res.ok) throw new Error('room usage check failed');
+      return (await res.json()).count;
+    };
     const ledger = () => env.ROOM.get(env.ROOM.idFromName(LEDGER));
 
     // 오늘 쓴 양 (무료 한도 대비)
@@ -46,16 +52,25 @@ export default {
       return Response.json(b, { headers: { ...CORS, 'Cache-Control': 'no-store' } });
     }
 
-    // 방 목록 (방 선택 창): 사람이 있는 방 + 1번 방. 빈 방이 두 번 연속이면 그 뒤는 보지 않음(요청 수 절약)
     if (url.pathname === '/rooms') {
-      const rooms = [];
-      let empty = 0;
-      for (let i = 1; i <= MAX_ROOMS && empty < 2; i++) {
-        const c = await count(roomName(i));
-        if (c > 0 || i === 1) rooms.push({ name: roomName(i), count: c, max: MAX_PLAYERS });
-        empty = c > 0 ? 0 : empty + 1;
-      }
-      return Response.json({ maxPlayers: MAX_PLAYERS, rooms }, { headers: { ...CORS, 'Cache-Control': 'no-store' } });
+      const cached = roomLists.get(env);
+      if (cached && cached.until > Date.now()) return Response.json(await cached.value, { headers: { ...CORS, 'Cache-Control': 'no-store' } });
+      const value = (async () => {
+        const res = await ledger().fetch('https://ledger/status');
+        if (!res.ok) throw new Error('ledger');
+        const status = await res.json();
+        if (typeof status.over !== 'boolean') throw new Error('invalid ledger response');
+        if (status.over) return { maxPlayers: MAX_PLAYERS, rooms: [], quota: true, until: nextReset(Date.now()) };
+        const rooms = [];
+        for (let i = 1; i <= MAX_ROOMS; i++) {
+          const c = await count(roomName(i));
+          if (c > 0 || i === 1) rooms.push({ name: roomName(i), count: c, max: MAX_PLAYERS });
+        }
+        return { maxPlayers: MAX_PLAYERS, rooms };
+      })();
+      roomLists.set(env, { until: Date.now() + 15000, value });
+      try { return Response.json(await value, { headers: { ...CORS, 'Cache-Control': 'no-store' } }); }
+      catch { roomLists.delete(env); return new Response('usage check unavailable', { status: 503, headers: { ...CORS, 'Retry-After': '60' } }); }
     }
 
     if (url.pathname === '/ws') {
@@ -64,7 +79,13 @@ export default {
       const allowed = String(env.ALLOWED_ORIGINS || '').split(',').map((x) => x.trim()).filter(Boolean);
       if (allowed.length && !allowed.includes(req.headers.get('Origin'))) return new Response('forbidden origin', { status: 403 });
       // 오늘 무료 한도 안전선을 넘었으면 방을 찾지 않고 바로 '내일 다시' (요청 수 절약)
-      if ((await (await ledger().fetch('https://ledger/status')).json()).over) return quotaSocket();
+      try {
+        const res = await ledger().fetch('https://ledger/status');
+        if (!res.ok) throw new Error('ledger');
+        const status = await res.json();
+        if (typeof status.over !== 'boolean') throw new Error('invalid ledger response');
+        if (status.over) return quotaSocket();
+      } catch { return quotaSocket(Date.now() + 60000, 'unavailable'); } // 사용량을 확인하지 못하면 입장 차단
       // 원하는 방(있고 자리가 있으면) → 없으면 자리가 있는 가장 낮은 번호 방
       let name = url.searchParams.get('room');
       const valid = name && /^[1-9]\d?번 농장$/.test(name) && +name.split('번')[0] <= MAX_ROOMS; // 1~MAX_ROOMS번만 ('0번'·'01번' 같은 목록 밖 방 금지)
@@ -88,11 +109,11 @@ export class FarmRoom {
   constructor(state, env) {
     this.state = state;
     this.env = env || {};
-    this.meter = new Meter();
+    this.lease = null;
+    this.budgetTail = Promise.resolve();
     // 잠들었다 깨어나면 생성자가 다시 불리므로, 남아 있는 접속의 id 다음 번호부터 (id 중복 방지)
     this.nextId = 1 + Math.max(0, ...state.getWebSockets().map((ws) => ws.deserializeAttachment()?.id || 0));
-    // 살아 있는지 확인(ping)에는 잠든 객체를 깨우지 않고 바로 답함 (못 쓰는 환경이면 webSocketMessage 에서 답함)
-    try { if (typeof WebSocketRequestResponsePair === 'function') state.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"t":"ping"}', '{"t":"pong"}')); } catch { /* 지원 안 함 */ }
+    // 자동 pong 은 집계를 우회하므로 사용하지 않음. ping 도 아래 예산 검사 후 답함.
     this.later = (fn, ms) => setTimeout(fn, ms); // 미뤄 둔 옷 전하기 타이머 (테스트에서 바꿔 끼움)
     this.lookTimer = 0;
   }
@@ -101,19 +122,44 @@ export class FarmRoom {
     return this.state.getWebSockets().map((ws) => ws.deserializeAttachment()).filter((p) => p?.name);
   }
 
-  pub(p) { return { id: p.id, name: p.name, x: p.x, z: p.z, f: p.f, a: p.a, l: p.l || '' }; }
+  pub(p) { return { ...(p.clientId ? { clientId: p.clientId, giftV: 1 } : {}), id: p.id, name: p.name, x: p.x, z: p.z, f: p.f, a: p.a, l: p.l || '' }; }
 
-  /** 1분마다 쓴 양을 장부에 넘기고, 안전선을 넘었으면 모두 오프라인으로 */
-  async report(now) {
-    if (!this.meter.due(now, +this.env.REPORT_MS || 60000)) return;
-    const r = this.meter.take(now);
-    try {
-      const res = await this.env.ROOM.get(this.env.ROOM.idFromName(LEDGER)).fetch('https://ledger/report', { method: 'POST', body: JSON.stringify(r) });
-      if ((await res.json()).over) this.kickAll({ t: 'quota', until: nextReset(now) });
-    } catch { /* 장부가 잠깐 안 되면 다음 번에 */ }
+  /** 처리하기 전에 작은 사용량 몫을 영속 장부에 예약. 재시작·휴면 때 남은 몫은 돌려주지 않아 보수적으로 셈. */
+  async ensureBudget(now, kind) {
+    const run = async () => {
+      now = Math.max(now, Date.now());
+      if (now < (this.budgetBlockedUntil || 0)) return false;
+      const cost = kind === 'msg' ? 1 / 20 : 1;
+      try {
+        if (!this.lease || now >= this.lease.until || this.lease.requests < cost) {
+          const res = await this.env.ROOM.get(this.env.ROOM.idFromName(LEDGER)).fetch('https://ledger/reserve', { method: 'POST' });
+          if (!res.ok) throw new Error('ledger');
+          const r = await res.json();
+          if (!r.granted || !(r.requests >= cost) || !(r.awakeSec > 0)) {
+            this.budgetUnavailable = false;
+            this.budgetBlockedUntil = nextReset(now);
+            this.kickAll({ t: 'quota', until: this.budgetBlockedUntil });
+            return false;
+          }
+          this.lease = { requests: r.requests, until: Math.min(nextReset(now), now + r.awakeSec * 1000) };
+        }
+        this.lease.requests -= cost;
+        return true;
+      } catch {
+        this.lease = null;
+        this.budgetUnavailable = true;
+        this.budgetBlockedUntil = now + 60000;
+        this.kickAll({ t: 'quota', until: this.budgetBlockedUntil, reason: 'unavailable' });
+        return false;
+      }
+    };
+    const result = this.budgetTail.then(run);
+    this.budgetTail = result.then(() => {}, () => {});
+    return result;
   }
 
   kickAll(msg) {
+    clearTimeout(this.lookTimer); this.lookTimer = 0;
     const s = JSON.stringify(msg);
     for (const ws of this.state.getWebSockets()) { try { ws.send(s); ws.close(1013, msg.t); } catch { /* 끊김 */ } }
   }
@@ -121,26 +167,32 @@ export class FarmRoom {
   /** 장부 객체 (이름 __ledger__): 하루치 합계를 저장소에 보관 */
   async ledgerFetch(url, req) {
     const now = Date.now(), lim = limits(this.env);
-    let book = await this.state.storage.get('book');
-    if (url.pathname === '/report') {
-      let r = {};
-      try { r = await req.json(); } catch { /* 빈 보고 */ }
-      book = addToLedger(book, { requests: r.requests, awakeSec: (+r.awakeSec || 0) + 0.1 }, now, lim);
-      await this.state.storage.put('book', book);
-      return Response.json({ over: book.over });
-    }
-    // 상태: 이 조회도 1건으로 셈
-    book = addToLedger(book, { requests: 0, awakeSec: 0.05 }, now, lim);
-    await this.state.storage.put('book', book);
-    return Response.json({ ...book, limit: lim, resetAt: new Date(nextReset(now)).toISOString() });
+    // transaction 으로 동시에 온 상태 조회·예약의 읽기/쓰기가 서로 덮이지 않게 함.
+    return this.state.storage.transaction(async (tx) => {
+      const old = await tx.get('book');
+      if (old?.day === Math.floor(now / 86400000) && old.over) {
+        return Response.json({ ...old, granted: false, limit: lim, resetAt: new Date(nextReset(now)).toISOString() });
+      }
+      if (url.pathname === '/reserve') {
+        const r = reserveBudget(old, now, lim);
+        await tx.put('book', r.book);
+        return Response.json({ granted: r.granted, requests: r.requests, awakeSec: r.awakeSec });
+      }
+      // 공개 /usage·입장 전 확인도 장부 호출 자체 1건으로 셈. 한도 도달 후에는 추가 쓰기 없음.
+      const book = addToLedger(old, { awakeSec: 0.05 }, now, lim);
+      await tx.put('book', book);
+      return Response.json({ ...book, limit: lim, resetAt: new Date(nextReset(now)).toISOString() });
+    });
   }
 
   async fetch(req) {
     const url = new URL(req.url);
     if (url.hostname === 'ledger') return this.ledgerFetch(url, req);
     const t0 = Date.now();
-    this.meter.tick(t0, 'fetch');
-    this.report(t0);
+    if (!await this.ensureBudget(t0, 'fetch')) {
+      if (url.pathname === '/count') return new Response('quota', { status: 503 });
+      return quotaSocket(this.budgetBlockedUntil, this.budgetUnavailable ? 'unavailable' : 'daily');
+    }
     // 인원은 입장(join)한 사람만 셈: 입장 안 한 빈 소켓으로 방을 '가득 참'으로 만들지 못하게
     if (url.pathname === '/count') return Response.json({ count: this.players().length });
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
@@ -172,19 +224,18 @@ export class FarmRoom {
   }
 
   async webSocketMessage(ws, raw) {
+    if (!await this.ensureBudget(Date.now(), 'msg')) return; // 잘못된 JSON·큰 메시지도 처리 전에 셈
     if (typeof raw !== 'string' || raw.length > MAX_MSG) return;
     let m;
     try { m = JSON.parse(raw); } catch { return; }
     if (!m || typeof m !== 'object') return; // null·숫자·문자열 JSON 무시
     const p = ws.deserializeAttachment();
     if (!p) return;
-    const now0 = Date.now();
-    this.meter.tick(now0, 'msg');
-    this.report(now0);
     if (m.t === 'join') {
       if (p.name) return; // 한 번만
       // 접속은 방 인원의 2배까지 받으므로, 입장 때 다시 확인 (동시에 붙은 소켓이 한꺼번에 입장해 50명을 넘지 않게)
       if (this.players().length >= MAX_PLAYERS) { try { ws.send(JSON.stringify({ t: 'full' })); ws.close(1013, 'full'); } catch { /* 이미 닫힘 */ } return; }
+      p.clientId = validClientId(m.clientId) ? m.clientId : '';
       p.name = String(m.name || '').replace(/[<>&"'`]/g, '').trim().slice(0, 12) || '유니코';
       p.l = String(m.l || '').replace(/[^a-z0-9.-]/g, '').slice(0, 48); // 옷차림
       ws.serializeAttachment(p);
@@ -194,7 +245,19 @@ export class FarmRoom {
       return;
     }
     if (!p.name) return; // 입장 전 메시지 무시
-    if (m.t === 'ping') {
+    if (m.t === 'gift' || m.t === 'gift_ack') {
+      const gift = giftEnvelope(p, m);
+      if (!gift) return;
+      const now = Date.now();
+      p.giftTimes = (p.giftTimes || []).filter((t) => now - t < 10000);
+      if (p.giftTimes.length >= ACT_LIMIT) return;
+      p.giftTimes.push(now); ws.serializeAttachment(p);
+      const target = this.state.getWebSockets().find((w) => {
+        const q = w.deserializeAttachment();
+        return q?.name && q.id === m.to && q.id !== p.id && q.clientId === m.targetId && q.clientId !== p.clientId;
+      });
+      try { target?.send(JSON.stringify(gift)); } catch { /* 수신 확인 전까지 보낸 쪽 저장에 남음 */ }
+    } else if (m.t === 'ping') {
       try { ws.send('{"t":"pong"}'); } catch { /* 끊김 */ }
     } else if (m.t === 'pos') {
       const now = Date.now(); if (now - (p.lp || 0) < 100) return; p.lp = now; // 위치는 초당 10번까지 (방 전체로 퍼지므로)

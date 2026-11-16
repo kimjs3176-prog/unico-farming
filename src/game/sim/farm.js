@@ -109,13 +109,14 @@ export class FarmSim {
   /**
    * 수확: 관리 점수로 별(품질)과 수확량이 정해짐. 대왕 작물은 3배.
    * 다시 열리는 작물(토마토·딸기)은 덜 자란 상태로 돌아가 다시 열림
+   * minStars: 별 하한 (3D판 첫 수확 보호 기간에 2 → 첫 당근이 넉넉히). 도트판은 넘기지 않음
    * @returns { crop, amount, stars, giant, regrow, xp, levelUp }
    */
-  harvest(i) {
+  harvest(i, minStars = 1) {
     const p = this.plots[i];
     if (p.state !== 'ready') return null;
     const crop = p.crop, C = CROPS[crop];
-    const stars = starsOf(this.care(i));
+    const stars = Math.max(minStars, starsOf(this.care(i)));
     const giant = !!p.giant;
     const amount = Math.max(1, C.yield + (stars - 2)) * (giant ? 3 : 1); // ★ -1, ★★ 기본, ★★★ +1
     const lv = this.level;

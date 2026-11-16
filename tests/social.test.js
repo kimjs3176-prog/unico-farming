@@ -70,3 +70,21 @@ test('서버: 상호작용은 정해진 종류·값만, 같은 방 받는 사람
   now = 11000; rooms.handle(a, { t: 'act', k: 'wave', to: b.id });
   assert.equal(b.ws.sent.filter((m) => m.t === 'act').length, 8);
 });
+
+
+test('서버 선물 프로토콜: 같은 방·농장 식별자 확인, 거래 번호와 수신 확인을 양쪽으로 전달', () => {
+  const fake = () => ({ readyState: 1, sent: [], send(s) { this.sent.push(JSON.parse(s)); } });
+  const rooms = new Rooms();
+  const a = rooms.join(fake(), 'a', '', '', 'farm-sender-000000001');
+  const b = rooms.join(fake(), 'b', '', '', 'farm-receiver-0000001');
+  const tx = `${a.clientId}:1`;
+  rooms.handle(a, { t: 'gift', to: b.id, targetId: b.clientId, tx, item: 'carrot', n: 2 });
+  assert.equal(b.ws.sent[0].tx, tx);
+  assert.equal(b.ws.sent[0].fromClientId, a.clientId);
+  rooms.handle(b, { t: 'gift_ack', to: a.id, targetId: a.clientId, tx });
+  assert.equal(a.ws.sent[0].tx, tx);
+  assert.equal(a.ws.sent[0].fromClientId, b.clientId);
+  rooms.handle(a, { t: 'gift', to: b.id, targetId: 'farm-wrong-000000001', tx, item: 'carrot', n: 2 });
+  rooms.handle(a, { t: 'gift', to: b.id, targetId: b.clientId, tx: `${b.clientId}:1`, item: 'carrot', n: 2 });
+  assert.equal(b.ws.sent.length, 1);
+});

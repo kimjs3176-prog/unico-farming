@@ -42,6 +42,33 @@ function targetOf(id, g) {
   }
 }
 
+/**
+ * 첫 농사 목표 고치기 (심기 3·첫 수확 5):
+ *  - 씨앗도 자라는 작물도 없으면 → 장터 여우에게 씨앗 사러
+ *  - 첫 수확 보호 기간에 다 익은 밭이 없고 마른 밭이 있으면 → 그 밭에 다시 물 주기
+ * 고친 목표는 id 뒤에 꼬리를 붙여 칩이 새로 그려지게 함. 해당 없으면 null
+ */
+export function farmObjective(cur, g) {
+  if (!cur || cur.complete || (cur.id !== 'plant3' && cur.id !== 'harvest5')) return null;
+  const F = g.farm, plots = F.sim.plots;
+  const seeds = Object.values(g.economy.inventory.seeds).some((n) => n > 0);
+  if (!seeds && !plots.some((p) => p.state === 'growing' || p.state === 'ready')) {
+    const M = LAYOUT.npcs.merchant;
+    return { q: { ...cur, id: `${cur.id}:seed`, desc: '장터 여우에게 당근 씨앗 사기' }, tgt: new THREE.Vector3(M.x, 0, M.z) };
+  }
+  if (cur.id === 'harvest5' && F.grace && !plots.some((p) => p.state === 'ready')) {
+    const pp = g.player.position;
+    let best = -1, bd = Infinity;
+    plots.forEach((p, i) => {
+      if (p.state !== 'growing' || p.water > 0 || p.weeds) return;
+      const t = F.tiles[i], d = Math.hypot(t.x - pp.x, t.z - pp.z);
+      if (d < bd) { bd = d; best = i; }
+    });
+    if (best >= 0) return { q: { ...cur, id: `${cur.id}:dry`, desc: '💧 마른 밭에 다시 물 주기' }, tgt: new THREE.Vector3(F.tiles[best].x, 0, F.tiles[best].z), dry: true };
+  }
+  return null;
+}
+
 /** 목표 안내: HUD 칩(할 일·거리·방향) + 월드 빛기둥 표시 */
 export class Guide {
   constructor(game) {
@@ -87,8 +114,13 @@ export class Guide {
     this.acc += dt;
     if (this.acc < 0.15) return;
     this.acc = 0;
-    const cur = this.current();
-    const tgt = cur && !cur.complete ? targetOf(cur.id, g) : null;
+    let cur = this.current();
+    let tgt = cur && !cur.complete ? targetOf(cur.id, g) : null;
+    const fo = farmObjective(cur, g);
+    if (fo) {
+      cur = fo.q; tgt = fo.tgt;
+      if (fo.dry && !g.flags.dryTip) { g.flags.dryTip = true; g.ui.toast('💧 물이 마른 밭은 천천히 자라요. 다시 물을 주면 품질 별이 늘어요'); }
+    }
     const pp = g.ride.driving ? g.ride.riderGroup.position : g.player.position;
     let dist = null, ang = 0;
     if (tgt) {

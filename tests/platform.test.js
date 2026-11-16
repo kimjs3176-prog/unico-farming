@@ -95,7 +95,8 @@ test('날씨: 입장 때 위치 권한을 묻지 않음 (허용 전이면 기본
     await svc.start();
     clearInterval(svc.timer);
     assert.equal(calls.geo, 0, `권한 ${perm}: getCurrentPosition 을 부르면 안 됨`);
-    assert.match(svc.loc.name, /기본 위치/);
+    assert.equal(svc.loc.name, '익산', '화면에 나가는 지명은 이름만 (기본 위치 안내는 날씨 창에서)');
+    assert.equal(svc.usingDefault, true);
     assert.equal(svc.source, 'live');
   }
 });

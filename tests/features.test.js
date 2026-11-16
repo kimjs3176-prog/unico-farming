@@ -124,3 +124,56 @@ test('economy handles rice grades, fish and seeds', () => {
   assert.equal(e.count('rice_5'), 0);
   assert.ok(e.take('rice_seed', 2) && !e.take('rice_seed', 99));
 });
+
+test('배치: 기본 카메라(남쪽에서 북쪽을 봄)에서 가로등·과일나무·표지판이 주민 얼굴을 가리지 않음', async () => {
+  const { LAYOUT } = await import('../src/game/world.js');
+  // 키 큰 소품: 가로등, 과수원 나무, 표지판 (농장·밭갈이 표지판은 world.js 에 좌표가 박혀 있음)
+  const tall = [
+    ...LAYOUT.props.filter(([n]) => n === 'lamp').map(([n, x, z]) => ({ n, x, z })),
+    ...LAYOUT.orchard.map((t) => ({ n: 'fruit_tree', x: t.x, z: t.z })),
+    { n: 'herd.sign', ...LAYOUT.herd.sign }, { n: 'lake.board', ...LAYOUT.lake.board }, { n: 'town.sign', ...LAYOUT.town.sign },
+    { n: 'sign', x: -1.9, z: 5.8 }, { n: 'sign', x: 11, z: 11 },
+  ];
+  for (const [id, npc] of Object.entries(LAYOUT.npcs)) {
+    if (npc.wander) continue;
+    for (const p of tall) {
+      const dx = p.x - npc.x, dz = p.z - npc.z;
+      // 카메라 쪽(+Z) 6m 안, 가로 시야 반각 약 34° (+ 머리·귀 반폭 0.5m) 안이면 얼굴을 가림
+      const blocks = dz > 0 && dz <= 6 && Math.abs(dx) < 0.67 * dz + 0.5;
+      assert.ok(!blocks, `${id} 앞을 ${p.n} (${p.x}, ${p.z}) 가 가림`);
+    }
+  }
+  // 안내 강아지: 가로등 충돌체와 대화 카메라가 비켜 갈 만큼 떨어져 있고, 흙길 위가 아님
+  const g = LAYOUT.npcs.guide;
+  for (const [n, x, z] of LAYOUT.props) if (n === 'lamp') assert.ok(Math.hypot(x - g.x, z - g.z) > 1.6, '가로등과 너무 붙음');
+  for (const p of LAYOUT.paths) for (let i = 0; i < p.pts.length - 1; i++) {
+    const [ax, az] = p.pts[i], [bx, bz] = p.pts[i + 1];
+    const l2 = (bx - ax) ** 2 + (bz - az) ** 2, t = Math.max(0, Math.min(1, ((g.x - ax) * (bx - ax) + (g.z - az) * (bz - az)) / l2));
+    assert.ok(Math.hypot(g.x - ax - (bx - ax) * t, g.z - az - (bz - az) * t) > p.w / 2 - 0.3, '길 한가운데');
+  }
+  // 첫 화면: 시작 따라가기 카메라와 입장 연출이 끝나 갈 때의 높은 카메라에 투영해,
+  // 화면에서 세로로 겹치는 키 큰 소품(가로등·과일나무·표지판)이 강아지 옆 1.2m(강아지 깊이 기준) 안에 없음
+  const THREE = await import('three');
+  const mail = LAYOUT.props.filter(([n]) => n === 'mailbox').map(([n, x, z]) => ({ n, x, z, h: 1.2 }));
+  const tallH = [...tall.map((p) => ({ ...p, h: p.n === 'fruit_tree' ? 3.2 : p.n === 'lamp' ? 2.6 : 1.6 })), ...mail];
+  const cams = [
+    { pos: [0, 1.1 + 9 * Math.sin(0.45), 9 + 9 * Math.cos(0.45)], look: [0, 1.1, 9], fov: 45, aspect: 1.6 }, // 시작 (0,0,9) 따라가기
+    { pos: [0, 1.1 + 9 * Math.sin(0.45), 9 + 9 * Math.cos(0.45)], look: [0, 1.1, 9], fov: 61, aspect: 412 / 839 },
+    { pos: [14.66, 15.08, 25.26], look: [0, 1.1, 9], fov: 45, aspect: 1.6 }, // 입장 연출 끝 (화면 측정값)
+  ];
+  for (const c of cams) {
+    const cam = new THREE.PerspectiveCamera(c.fov, c.aspect, 0.1, 500);
+    cam.position.set(...c.pos); cam.lookAt(...c.look); cam.updateMatrixWorld();
+    const sy = (x, y, z) => new THREE.Vector3(x, y, z).project(cam).y;
+    const cs = (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(cam.matrixWorldInverse);
+    const gc = cs(g.x, 0.7, g.z), gTop = sy(g.x, 1.4, g.z), gBot = sy(g.x, 0, g.z);
+    for (const p of tallH) {
+      const pTop = sy(p.x, p.h, p.z), pBot = sy(p.x, 0, p.z);
+      if (pBot > gTop || pTop < gBot) continue; // 화면에서 세로로 겹치지 않음
+      const pc = cs(p.x, 0.7, p.z);
+      if (pc.z >= 0) continue; // 카메라 뒤
+      const lat = Math.abs(pc.x * (gc.z / pc.z) - gc.x);
+      assert.ok(lat > 1.2, `첫 화면에서 ${p.n} (${p.x}, ${p.z}) 이 안내 강아지 옆 ${lat.toFixed(2)}m`);
+    }
+  }
+});

@@ -1,6 +1,6 @@
 import { CROPS, PRODUCTS } from '../sim/crops.js';
 import { ITEMS } from '../sim/items.js';
-import { validGift, GIFT_MAX } from '../sim/social.js';
+import { validGift, validClientId, GIFT_MAX } from '../sim/social.js';
 import { saveGame } from '../save.js';
 
 /**
@@ -110,19 +110,66 @@ export class SocialView {
     if (!r) return g.ui.toast('그 플레이어가 방을 떠났어요');
     const why = so.whyNotGift(eco.count(item), n);
     if (why) return g.ui.toast(`🎁 ${why}`);
+    if (!validClientId(r.clientId) || r.giftV !== 1 || r.clientId === so.giftClientId) return g.ui.toast('🎁 상대가 게임을 새로고침한 뒤 다시 보내 주세요');
     if (!eco.take(item, n)) return;
-    const gid = ++this.gid;
-    if (!g.net.sendAct(id, 'gift', { item, n, gid })) { this.refund(item, n); return g.ui.toast('🎁 서버와 연결이 끊겨서 보내지 못했어요'); }
+    const seq = ++so.giftSeq;
+    so.giftPending = { tx: `${so.giftClientId}:${seq}`, toClientId: r.clientId, name: r.name, item, n };
     so.noteGift();
-    for (const [k, v] of this.sent) if (this.now - v.at > 60) this.sent.delete(k);
-    this.sent.set(gid, { item, n, name: r.name, at: this.now });
+    // 차감과 미완료 거래를 먼저 함께 저장. 저장할 수 없으면 아무것도 전하지 않음.
+    if (!this.persist()) {
+      this.refund(item, n); so.giftPending = null; so.undoGift();
+      return g.ui.toast('🎁 농장을 저장할 수 없어 선물을 보내지 않았어요');
+    }
+    this.giftRetryAt = 0;
+    this.flushGift();
     this.face(r);
     g.player.unico.playAction('present', 1.4);
-    g.audio.play('pop');
     g.ui.closePanel();
-    g.ui.toast(`🎁 ${r.name} 님에게 ${CATALOG[item].emoji} ${CATALOG[item].name} ${n}개를 보냈어요`);
+    g.ui.toast('🎁 선물을 전하는 중이에요. 상대가 저장한 뒤 완료를 알려 드릴게요');
+  }
+
+  persist() { return typeof this.game.save === 'function' ? this.game.save() : saveGame(this.game); }
+
+  /** 같은 농장 식별자가 같은 방에 있을 때만 10초마다 미완료 거래 하나를 재전송. */
+  flushGift() {
+    const g = this.game, p = g.social.giftPending;
+    if (!p || !g.net.connected || g.net.probeTimer || this.now < (this.giftRetryAt || 0)) return;
+    const target = [...g.net.remote].find(([, r]) => r.clientId === p.toClientId && r.giftV === 1);
+    if (!target) return;
+    this.giftRetryAt = this.now + 10;
+    g.net.send({ t: 'gift', to: target[0], targetId: p.toClientId, tx: p.tx, item: p.item, n: p.n });
+  }
+
+  onGift(m) {
+    const g = this.game, so = g.social, sender = m.fromClientId;
+    const seq = Number(String(m.tx).slice(String(m.tx).lastIndexOf(':') + 1));
+    if (!validClientId(sender) || sender === so.giftClientId || !Number.isSafeInteger(seq) || seq < 1 || m.tx !== `${sender}:${seq}` || !validGift(m.item, m.n, CATALOG) || m.item === 'paddy') return;
+    const previous = so.giftReceipts[sender] || 0;
+    if (previous < seq) {
+      if (!previous && Object.keys(so.giftReceipts).length >= 1024) return; // 수령 기록을 버려 중복 지급하지 않음
+      const bag = g.economy.bagOf(m.item), before = bag[m.item] || 0;
+      bag[m.item] = before + m.n;
+      so.giftReceipts[sender] = seq;
+      so.stats.giftsGot++;
+      if (!this.persist()) {
+        bag[m.item] = before; so.stats.giftsGot--;
+        if (previous) so.giftReceipts[sender] = previous; else delete so.giftReceipts[sender];
+        return; // 보낸 쪽에는 미완료로 남아 나중에 다시 시도
+      }
+      g.audio.play('coin');
+      g.ui.toast(`🎁 ${String(m.name || '누군가').slice(0, 12)} 님의 선물 ${CATALOG[m.item].name} ${m.n}개를 받았어요`);
+    }
+    // 저장한 수령 번호가 이미 있어도 확인은 다시 보냄 (확인 패킷이 유실된 경우).
+    g.net.send({ t: 'gift_ack', to: m.from, targetId: sender, tx: m.tx });
+  }
+
+  onGiftAck(m) {
+    const g = this.game, so = g.social, p = so.giftPending;
+    if (!p || p.tx !== m.tx || p.toClientId !== m.fromClientId) return;
+    so.giftPending = null;
+    if (!this.persist()) { so.giftPending = p; return; }
+    g.ui.toast(`🎁 ${p.name} 님에게 ${CATALOG[p.item]?.name || p.item} ${p.n}개가 전달됐어요`);
     g.onEvent('giftp');
-    saveGame(g);
   }
 
   /** 꺼낸 물건을 가방에 다시 넣음 (eco.take 의 반대) */

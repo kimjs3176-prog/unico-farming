@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Meter, addToLedger, limits, dayOf, nextReset, IDLE_SLEEP_MS } from '../deploy/cloudflare/budget.js';
+import { Meter, addToLedger, limits, dayOf, nextReset, IDLE_SLEEP_MS, reserveBudget } from '../deploy/cloudflare/budget.js';
 
 test('무료 한도: 기본은 공식 한도의 85%, 환경변수로 줄일 수 있음', () => {
   assert.deepEqual(limits(), { requests: 85000, awakeSec: 86328 });
@@ -33,4 +33,21 @@ test('장부: 하루 합계, 넘으면 over, UTC 0시에 새로', () => {
   assert.equal(b.over, true, '실행 시간도 한도');
   assert.equal(nextReset(t0), Date.UTC(2026, 10, 7));
   assert.equal(dayOf(Date.UTC(2026, 10, 7)) - dayOf(t0), 1);
+});
+
+
+test('설정값은 무료 안전선보다 키울 수 없고 무한대·잘못된 값도 기본 한도를 넘기지 않음', () => {
+  for (const v of ['999999999', 'Infinity', 'NaN', '-3', '0']) {
+    assert.deepEqual(limits({ BUDGET_REQUESTS: v, BUDGET_AWAKE_SEC: v }), limits());
+  }
+});
+
+test('처리 전 예약은 승인분을 전부 장부에 셈하고 재시작 때 남은 몫을 환급하지 않음', () => {
+  const lim = { requests: 520, awakeSec: 120 };
+  const a = reserveBudget(null, 1000, lim);
+  assert.equal(a.granted, true); assert.equal(a.book.requests, 257);
+  const b = reserveBudget(a.book, 2000, lim);
+  assert.equal(b.granted, true); assert.equal(b.book.awakeSec, 120);
+  const c = reserveBudget(b.book, 3000, lim);
+  assert.equal(c.granted, false); assert.equal(c.book.over, true);
 });

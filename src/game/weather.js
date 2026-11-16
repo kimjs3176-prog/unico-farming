@@ -1,6 +1,7 @@
 import { describeWeather, PRESETS } from './sim/weather_codes.js';
 
-const DEFAULT_LOC = { lat: 35.95, lon: 126.96, name: '익산(기본 위치)' }; // 한국농업기술진흥원 인근
+// 한국농업기술진흥원 인근. def: 기본 위치 표시 (지명은 화면에 그대로 나가므로 '익산' 만, '기본 위치' 안내는 날씨 창에서)
+const DEFAULT_LOC = { lat: 35.95, lon: 126.96, name: '익산', def: true };
 const REFRESH_MS = 15 * 60 * 1000;
 
 /** 위치 권한을 이미 허용했는지 (Permissions API 가 없거나 모르면 false → 묻지 않음) */
@@ -91,7 +92,7 @@ export class WeatherService {
   }
 
   /** 아직 기본 위치(익산) 날씨인지: 권한을 묻지 않았거나 위치를 못 받음 → 날씨 창에서 '내 위치 날씨'를 권함 */
-  get usingDefault() { return !this.loc || this.loc.name === DEFAULT_LOC.name; }
+  get usingDefault() { return !this.loc || !!this.loc.def; }
 
   get label() {
     const s = this.state;

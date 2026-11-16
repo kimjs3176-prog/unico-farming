@@ -44,3 +44,42 @@ test('FX: 상한에 걸린 별 터지기는 개수를 줄여 고른 고리로 (�
   assert.equal(fx.items.filter((it) => it.star).length, 8);
 });
 
+// ---------------------------------------------------------------- 떠오르는 글자: 가방으로 날리기 끄기
+test('FX.pop: {fly:false} 면 가방 날리기(onPop)를 부르지 않음 (수확 별은 떠오르기만)', () => {
+  SURF.seeCam.value.set(0, 5, 10);
+  const ctx = { measureText: (t) => ({ width: t.length * 20 }), clearRect() {}, beginPath() {}, moveTo() {}, arcTo() {}, closePath() {}, fill() {}, fillText() {} };
+  const had = globalThis.document;
+  globalThis.document = { createElement: () => ({ width: 300, height: 150, getContext: () => ctx }) }; // 글자표용 가짜 캔버스
+  const fx = new FX(new THREE.Scene(), { level: 'high' });
+  const flown = [];
+  fx.onPop = (t) => flown.push(t);
+  fx.pop(0, 0, '⭐⭐', { fly: false });
+  assert.deepEqual(flown, []);
+  assert.ok(fx.items.some((it) => !it.kind), '글자는 그대로 떠오름');
+  fx.pop(0, 0, '🥕');
+  assert.deepEqual(flown, ['🥕'], '기본은 예전처럼 날아감');
+  if (had) globalThis.document = had; else delete globalThis.document;
+});
+
+
+test('FX.pop 글자: 덮어쓰기 재질 패스(GTAO 법선)에서는 크기 0 으로 건너뜀 → 글자 둘레 검은 판 없음', () => {
+  SURF.seeCam.value.set(0, 5, 10);
+  const ctx = { measureText: (t) => ({ width: t.length * 20 }), clearRect() {}, beginPath() {}, moveTo() {}, arcTo() {}, closePath() {}, fill() {}, fillText() {} };
+  const had = globalThis.document;
+  globalThis.document = { createElement: () => ({ width: 300, height: 150, getContext: () => ctx }) };
+  const scene = new THREE.Scene();
+  const fx = new FX(scene, { level: 'high' });
+  fx.pop(1, 2, '⭐⭐⭐', { fly: false });
+  const s = fx.items.find((it) => !it.kind).obj;
+  assert.equal(s.material.depthWrite, false);
+  s.updateMatrixWorld(true);
+  s.onBeforeRender(null, scene);
+  assert.notEqual(s.matrixWorld.elements[0], 0, '보통 그리기는 그대로');
+  scene.overrideMaterial = new THREE.MeshNormalMaterial();
+  s.onBeforeRender(null, scene);
+  assert.ok(s.matrixWorld.elements.slice(0, 15).every((v) => v === 0), '덮어쓰기 패스: 크기 0');
+  scene.overrideMaterial = null;
+  s.updateMatrixWorld(true);
+  assert.equal(s.matrixWorld.elements[12], 1, '다음 계산 때 제자리');
+  if (had) globalThis.document = had; else delete globalThis.document;
+});
