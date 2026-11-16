@@ -78,6 +78,9 @@ export const GameGfx = {
 
   resize() {
     const w = innerWidth, h = innerHeight;
+    // 낮음 단계는 화면 넓이로 해상도를 정함 → 창 크기가 바뀌면 다시 맞춤 (가로·세로 돌리기는 넓이가 같아 그대로)
+    const pr = this.gfx && this.withSaver(resolveQuality(this.gfx)).pixelRatio;
+    if (pr && Math.abs(pr - this.renderer.getPixelRatio()) > 0.01) { this.renderer.setPixelRatio(pr); this.quality.pixelRatio = pr; }
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.fov = fovFor(w / h); // 세로 폰: 주변이 보이도록 시야를 넓힘
