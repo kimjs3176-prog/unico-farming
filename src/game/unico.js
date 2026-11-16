@@ -145,7 +145,7 @@ export async function loadUnicoMesh(url, key = 'quad', { yieldTo = null, data = 
     SKINS[key].slotWeights = null;
   } else if (yieldTo) {
     // 나중에 온 네 발 원본: 이미 있는 KOAT 담당 팔레트 색을 한가할 때 하나씩 미리 만듦 → 바꾸는 프레임에는 만들 것 없음
-    for (const [id, pal] of Object.entries(PALETTES)) if (id.startsWith('koat')) { await yieldTo(); skinGeometry(key, pal); }
+    for (const [id, pal] of Object.entries(PALETTES)) if (id.startsWith('koat')) { await yieldTo(); skinGeometry(key, pal, true); }
   }
 }
 
@@ -1157,7 +1157,7 @@ export class Unico {
     this.skeleton = new THREE.Skeleton(R.bones.map((b) => boneMap[b[0]]));
     // 몸 색: 종 팔레트(+가짜 AO) 또는 유니콘 팔레트. 원본이 아직 없으면 저해상도로 시작해 나중에 지오메트리만 올림 (생성은 늘 동기·늘 보임)
     this._pal = sp ? sp.palette : PALETTES[palette] || OFFICIAL;
-    this._ao = !!sp;
+    this._ao = true; // 가짜 AO·또렷한 색 경계: 주민 동물과 같게 유니코(주인공·접속자·KOAT 담당)에도
     this._wantFull = !SKINS[rig];
     this._waitT = 0;
     this.skin = new THREE.SkinnedMesh(skinGeometry(SKINS[rig] ? rig : rig + '_lod', this._pal, this._ao), SKIN_MAT);
