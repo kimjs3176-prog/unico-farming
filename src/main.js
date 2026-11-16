@@ -54,6 +54,7 @@ import { SeasonView } from './game/view/season_view.js';
 import { DecorView } from './game/view/decor_view.js';
 import { DIVISIONS } from './game/sim/koat.js';
 import { boot, pushBackGuard } from './boot.js';
+import { patchShadowChunk } from './game/shadow_soft.js';
 import { GameGfx } from './game/game_gfx.js';
 import { GameSave } from './game/game_save.js';
 import { GameStory } from './game/game_story.js';
@@ -73,9 +74,10 @@ class Game {
     this.governor = new FpsGovernor();
     this.renderer.setPixelRatio(this.quality.pixelRatio);
     this.renderer.shadowMap.enabled = true;
-    // three r182 는 PCFSoftShadowMap 을 실제로 1탭(Basic) 그림자로 그림 → 같은 결과·비용을 그대로 명시 (버전을 올려도 몰래 비싸지지 않게)
-    // three 버전을 올릴 때는 모바일 그림자 비용(프레임 시간)을 다시 잴 것. type 은 부팅 때만 정함 (바꾸면 모든 재질을 다시 컴파일)
-    this.renderer.shadowMap.type = THREE.BasicShadowMap;
+    // 그림자: PCF(하드웨어 비교 샘플) + shadow_soft.js 의 1탭 갈래 → 낮음은 Basic 과 같은 1번 읽기로 계단 없는 경계, 보통·높음은 5탭 반그림자
+    // three 버전을 올릴 때는 patchShadowChunk 가 true 인지(tests/shadow_soft.test.js)와 모바일 그림자 비용을 다시 잴 것. type 은 부팅 때만 정함 (바꾸면 모든 재질을 다시 컴파일)
+    patchShadowChunk();
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.95;

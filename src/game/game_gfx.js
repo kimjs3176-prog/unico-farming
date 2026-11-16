@@ -6,6 +6,7 @@ import { fovFor } from './camera.js';
 import { Unico } from './unico.js';
 import { PostFX } from './postfx.js';
 import { saveSettings, resolveQuality, uiScaleOf } from './quality.js';
+import { shadowRadiusFor } from './shadow_soft.js';
 
 export const GameGfx = {
   /** 환경설정에서 그래픽 설정을 바꿨을 때 (저장 + 즉시 적용) */
@@ -27,6 +28,7 @@ export const GameGfx = {
     // 그림자: 끄기/켜기, 해상도 바꾸면 그림자 맵 다시 만들기
     const sun = this.world.sun;
     sun.castShadow = q.shadows !== 'off';
+    sun.shadow.radius = shadowRadiusFor(q.level); // 낮음 = 1탭(계단 없는 경계, 비용은 예전과 같음), 보통·높음 = 5탭 반그림자
     if (sun.shadow.mapSize.x !== q.shadowMap) {
       sun.shadow.mapSize.set(q.shadowMap, q.shadowMap);
       sun.shadow.map?.dispose();

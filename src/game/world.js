@@ -7,6 +7,7 @@ import { enhanceMaterial, SURF, setSurfaceDetail, leafAttrValue } from './surfac
 import { timeOfDay } from './sim/tod.js';
 import { Birds } from './birds.js';
 import { whenFontReady } from './label.js';
+import { shadowRadiusFor } from './shadow_soft.js';
 
 /** 월드 레이아웃 상수 (m). +X 동쪽, +Z 남쪽, 스폰 (0,0,9) */
 export const LAYOUT = {
@@ -253,7 +254,7 @@ export class World {
     this.sun.shadow.mapSize.set(this.quality.shadowMap, this.quality.shadowMap);
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.05;
-    this.sun.shadow.radius = 3; // BasicShadowMap 에서는 쓰이지 않음 (PCF 로 바꿀 때만 의미 있음)
+    this.sun.shadow.radius = shadowRadiusFor(this.quality?.level); // 품질별 그림자 경계 (shadow_soft.js)
     this.scene.add(this.sun, this.sun.target);
     this.ambient = new THREE.AmbientLight(0xffffff, 0.15);
     this.scene.add(this.ambient);
