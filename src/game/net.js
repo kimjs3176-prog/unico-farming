@@ -1,5 +1,6 @@
 import { decodeLook } from './sim/costume.js';
 import { Unico } from './unico.js';
+import { jumpStep, JUMP_V } from './player.js';
 
 const SEND_HZ = 5;
 const PROBE_AFTER = 15000; // 이보다 오래 숨겨졌다 돌아오면 소켓이 살아 있는지 확인
@@ -204,7 +205,11 @@ export class Net {
     if (p.l && p.l !== r.l) { r.l = p.l; r.unico.setOutfit(decodeLook(p.l)); } // 정해진 옷 이름만 (decodeLook)
     if (p.x !== undefined) { r.target.x = p.x; r.target.z = p.z; }
     if (p.f !== undefined) r.unico.facing = p.f;
-    if (p.a !== undefined) { if (p.a) r.unico.playAction(p.a, 0); else r.unico.clearAction(); }
+    if (p.a !== undefined) {
+      // 'jump' 은 동작이 아니라 점프 신호: 받는 쪽에서 같은 점프를 그려 냄 (위치는 초당 5번이라 높이를 보내면 끊겨 보임)
+      if (p.a === 'jump') { if (!(r.jumpY > 0) && !r.jumped) { r.jumpY = 1e-4; r.jumpV = JUMP_V; } r.jumped = true; if (r.unico.action) r.unico.clearAction(); }
+      else { r.jumped = false; if (p.a) r.unico.playAction(p.a, 0); else r.unico.clearAction(); }
+    }
   }
 
   removeRemote(id) { const r = this.remote.get(id); if (r) { this.game.world.scene.remove(r.unico.group); r.unico.dispose(); this.remote.delete(id); } }
@@ -226,6 +231,8 @@ export class Net {
       } else r.spd = 0;
       r.unico.moving = d > 0.08 && (r.spd || 0) > 0.4;
       r.unico.swimming = g.world.inSwimWater(r.unico.group.position.x, r.unico.group.position.z, 0.4);
+      if (r.jumpY > 0) { const j = jumpStep(r.jumpY, r.jumpV, dt); r.jumpY = j.y; r.jumpV = j.v; if (j.landed) { r.unico._squash = 0.1; r.unico._landed = true; } }
+      r.unico.jumpY = r.jumpY || 0;
       r.unico.update(dt, g.followCam.camera, g.world.daylight);
     }
     if (!this.connected) return;
@@ -235,7 +242,7 @@ export class Net {
     this.acc = 0;
     const pos = g.ride.driving ? g.ride.riderGroup.position : g.home?.inside ? g.home.outPos : g.player.position; // 집 안이면 다른 사람에게는 문 앞으로
     const u = g.player.unico;
-    const msg = { t: 'pos', x: +pos.x.toFixed(2), z: +pos.z.toFixed(2), f: +u.facing.toFixed(2), a: u.action || '' };
+    const msg = { t: 'pos', x: +pos.x.toFixed(2), z: +pos.z.toFixed(2), f: +u.facing.toFixed(2), a: g.player.airborne ? 'jump' : u.action || '' }; // 공중이면 'jump' (받는 쪽이 점프를 그림)
     const key = JSON.stringify(msg);
     if (key !== this.last) { this.last = key; this.send(msg); }
   }

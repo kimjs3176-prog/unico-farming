@@ -74,6 +74,12 @@ export const ActionbarUI = {
     cb('－', '카메라 멀리', () => game.followCam.zoom(+1));
     cb('🎥', '카메라 처음 거리로 (캐릭터 뒤에서)', () => game.followCam.resetView(game.player.unico.facing));
     root.append(this.camPad);
+    // 터치 기기: 점프 버튼 (E 왼쪽). 키보드는 Space
+    this.jumpBtn = h('button', 'jump-btn', '⤴');
+    this.jumpBtn.setAttribute('aria-label', '점프 (Space)'); this.jumpBtn.title = '점프 (Space)';
+    this.jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); game.tryJump(); }, { passive: false });
+    this.jumpBtn.addEventListener('click', () => game.tryJump());
+    root.append(this.jumpBtn);
     this.emoteMenu = null;
   },
 

@@ -157,7 +157,7 @@
 
 /* 논 상태 (폰 세로·가로): 화면을 가리지 않게 맨 아래 ☰ 와 E 사이에 작고 투명한 게이지 띠로 (누름은 통과) */
 @media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
-  .rice-panel { top: auto; bottom: calc(10px + var(--sab)); left: calc(64px + var(--sal)); right: calc(78px + var(--sar)); width: auto; max-width: 460px; max-height: none; overflow: visible;
+  .rice-panel { top: auto; bottom: calc(10px + var(--sab)); left: calc(64px + var(--sal)); right: calc(136px + var(--sar)); width: auto; max-width: 460px; /* 오른쪽: 점프·E 버튼 자리 */ max-height: none; overflow: visible;
     padding: 5px 10px 6px; border-radius: 12px; background: rgba(35,25,22,0.5); box-shadow: none; pointer-events: none;
     display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); gap: 0 8px; align-items: end; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
   .rice-panel h3 { margin: 0; font-size: 13px; color: #fff; align-self: center; white-space: nowrap; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; }

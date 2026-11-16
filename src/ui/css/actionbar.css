@@ -64,4 +64,13 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
 }
 /* 태블릿: E 버튼이 행동 막대 위(110px)라 그 위로 */
 @media (pointer: coarse) and (min-width: 601px) and (min-height: 501px) { .cam-pad { bottom: 200px; } }
+/* 점프 버튼 (터치 기기만): E 버튼 왼쪽 아래 */
+.jump-btn { display: none; }
+@media (pointer: coarse) {
+  .jump-btn { display: block; position: absolute; right: calc(80px + var(--sar)); bottom: calc(10px + var(--sab)); width: 50px; height: 50px; padding: 0; border-radius: 50%;
+    font-size: 24px; line-height: 1; background: rgba(35,25,22,0.62); color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,0.3); text-shadow: none; }
+  .jump-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,0.3); }
+}
+/* 태블릿: E 버튼이 행동 막대 위(110px)라 그 옆으로 */
+@media (pointer: coarse) and (min-width: 601px) and (min-height: 501px) { .jump-btn { bottom: 116px; } }
 

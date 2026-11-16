@@ -110,6 +110,7 @@ class Game {
     this.fx = new FX(this.world.scene, this.quality);
     this.waterfx = new WaterFX(this.world.scene, this.world.scenery, this.quality);
     this.player.unico.onStep = (x, z, r) => { if (r === undefined || r > 0.5) this.fx.dust(x, z); }; // r: 달리기 섞임 (주는 쪽이 있으면 걸을 때는 먼지 없음)
+    this.player.onLand = () => { const p = this.player.position; this.fx.dust(p.x, p.z); this.fx.dust(p.x + 0.3, p.z - 0.2); this.audio.play('bump', 0.25); };
     this.farm = new FarmView(this);
     this.ranch = new RanchView(this);
     this.ride = new RideView(this); // 마을 탈것 (트랙터·자전거·농장 카트)
@@ -285,13 +286,22 @@ class Game {
     this.camHintOnce();
   }
 
+  /** 점프: 창·대화·컷신·탈것·탈곡·낚시·미니게임 중에는 안 함 (그때 Space 는 다른 일) */
+  tryJump() {
+    if (this.ui.panel || this.dialogue.active || this.cinema.locked || this.ride?.driving || this.rice?.threshing || this.nature?.fishing
+      || this.herding?.active || this.smartfarm?.active || this.home?.inside || document.querySelector('.mg-count, .mg-wrap')) return false;
+    if (!this.player.jump()) return false;
+    this.audio.play('pop', 0.35);
+    return true;
+  }
+
   /** 터치 기기 첫 플레이: 컷신·대화가 끝난 뒤 카메라 조작법을 한 번만 알려 줌 */
   camHintOnce() {
     if (!touchUI()) return;
     try { if (localStorage.getItem(CAM_KEY + '.hint')) return; } catch { return; }
     const tick = () => {
       if (this.cinema?.locked || this.dialogue?.active || this.ui?.panel) return setTimeout(tick, 1500);
-      this.ui.toast('🎥 오른쪽 화면을 밀면 시점이 돌아가요 · 오른쪽 ＋/－ 버튼으로 가까이/멀리');
+      this.ui.toast('🎥 오른쪽 화면을 밀면 시점이 돌아가요 · ＋/－ 버튼으로 가까이/멀리 · ⤴ 버튼으로 점프');
       try { localStorage.setItem(CAM_KEY + '.hint', '1'); } catch { /* 무시 */ }
     };
     setTimeout(tick, 2500);
@@ -374,6 +384,7 @@ class Game {
     if (input.justPressed('Escape') && this.ui.panel) this.ui.closePanel();
     if (input.justPressed('KeyT')) this.ui.chatInput.focus();
     if (input.justPressed('KeyP') && !this.ui.panel) this.autoplay.toggle(); // 오토플레이
+    if (input.justPressed('Space')) this.tryJump(); // 점프 (탈곡·낚시·탈것처럼 Space 를 쓰는 동안은 tryJump 가 막음)
     if (input.pressed.has('KeyM') && (!this.ui.panel || this.ui.panel.dataset.kind === 'map')) this.minimap.openBig(); // 지도 열기/닫기
 
     const pp = this.player.position;

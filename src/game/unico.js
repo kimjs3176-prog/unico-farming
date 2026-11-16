@@ -2212,6 +2212,22 @@ export class Unico {
         arms[1].rotation.set(arms[1].rotation.x * (1 - skidK) + 0.35 * skidK, 0, arms[1].rotation.z * (1 - skidK) + 0.75 * skidK);
       }
     }
+    // 점프: 몸만 들어 올림 (발밑 그림자·링은 땅에 남고, 그림자는 아래 '점프하면 작고 옅어짐'이 처리).
+    // 감정표현 중이 아니면 공중 자세: 다리를 접고(앞다리 앞으로·뒷다리 뒤로) 두 발이면 팔을 살짝 올림
+    const jy = this.jumpY || 0;
+    if (jy > 0.001 && !this.riding && !this.swimming) {
+      bodyY += jy / (this.root.scale.y || 1);
+      if (!this.action) {
+        const k = Math.min(1, jy / 0.2);
+        for (let i = 0; i < legs.length; i++) legs[i].rotation.x += ((i % 2 ? 0.5 : -0.45) - legs[i].rotation.x) * k;
+        if (bp && arms.length >= 2) {
+          const [AL, AR] = arms;
+          AL.rotation.set(AL.rotation.x + (-0.3 - AL.rotation.x) * k, 0, AL.rotation.z + (-1.1 - AL.rotation.z) * k);
+          AR.rotation.set(AR.rotation.x + (-0.3 - AR.rotation.x) * k, 0, AR.rotation.z + (1.1 - AR.rotation.z) * k);
+        }
+        headPitch += (-0.18 - headPitch) * k;
+      }
+    }
     this.bodyG.position.y = bodyY;
     this.bodyG.rotation.set(bodyPitch, 0, bodyRoll);
     if (sp) this.bodyG.scale.y = bodySY;

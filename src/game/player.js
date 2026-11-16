@@ -4,6 +4,17 @@ import { DEADZONE, RUN_ON, runBand } from './input.js';
 
 // 걷기·달리기 속도(m/s, 속도 배율 전). 짧은 다리라 걷기는 종종걸음, 달리기는 발이 공중에 뜨는 뜀박질 (unico.js bipedGait)
 export const WALK_SPEED = 1.9, RUN_SPEED = 4.6, SWIM_SPEED = 2.4;
+/** 점프: 처음 속도(m/s)·중력(m/s²) → 높이 약 0.9m, 공중 약 0.6초 */
+export const JUMP_V = 6.0, GRAVITY = 20;
+
+/** 점프 한 걸음 (순수 함수): { y, v } 를 dt 만큼 진행. 땅(0)에 닿으면 landed.
+ *  등가속도 공식(y += v·dt − ½g·dt²) 그대로 → 프레임이 끊기는 폰에서도 높이·공중 시간이 같음 */
+export function jumpStep(y, v, dt) {
+  y += v * dt - 0.5 * GRAVITY * dt * dt;
+  v -= GRAVITY * dt;
+  if (y <= 0) return { y: 0, v: 0, landed: true };
+  return { y, v, landed: false };
+}
 /** 탭·클릭 이동: 남은 거리가 이만큼 안이면 걷기 속도까지 줄이며 다가감 (가까운 곳은 걸어서) */
 export const ARRIVE_WALK = 2.5;
 /** 살짝 기울였을 때 가장 느린 걸음 (m/s) */
@@ -76,6 +87,17 @@ export class Player {
     this.moveTarget = { pos, stop, interact, key, stuck: 0, arrive: interact || stop < 0.3 };
   }
 
+  /** 지금 점프할 수 있나 (멈춤·헤엄·탑승·숨김 중이 아니고, 이미 공중이 아님) */
+  canJump() { return !this.frozen && !this.swimming && !this.unico.riding && !this.hidden && !(this.jumpY > 0); }
+  get airborne() { return this.jumpY > 0; }
+
+  /** 점프 (Space · 화면 점프 버튼). 할 수 없으면 false */
+  jump() {
+    if (!this.canJump()) return false;
+    this.jumpV = JUMP_V; this.jumpY = 1e-4;
+    return true;
+  }
+
   update(dt, input, followCam) {
     const ax = this.frozen ? { x: 0, y: 0 } : input.axis();
     const { fwd, right } = followCam.basis();
@@ -132,6 +154,13 @@ export class Player {
       if (dt > 0) { const real = next.distanceTo(from) / dt, sp = vel.length(); if (real < sp) vel.multiplyScalar(Math.max(0, real / sp)); }
     }
     if (this.frozen) vel.set(0, 0, 0);
+    // 점프: 공중에서도 방향키로 움직임은 그대로, 땅에 닿으면 살짝 눌렸다 펴짐
+    if (this.jumpY > 0) {
+      const r = jumpStep(this.jumpY, this.jumpV, dt);
+      this.jumpY = r.y; this.jumpV = r.v;
+      if (r.landed) { this.unico._squash = 0.1; this.unico._landed = true; this.onLand?.(); }
+    }
+    this.unico.jumpY = this.jumpY || 0;
     // 수영: 물가에서 조금 들어가면 헤엄 자세 (나올 때는 조금 더 얕은 곳까지 헤엄 → 경계에서 깜빡이지 않게)
     const p = this.group.position;
     const sw = this.world.inSwimWater(p.x, p.z, this.swimming ? 0.25 : 0.55);
