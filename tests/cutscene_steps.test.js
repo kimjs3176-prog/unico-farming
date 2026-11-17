@@ -9,7 +9,7 @@ globalThis.document ??= { createElement: el, getElementById: el, body: el() };
 globalThis.innerHeight ??= 800;
 const { introSteps, koatSteps, farmShot } = await import('../src/game/game_story.js');
 const { lakeIntroSteps } = await import('../src/game/view/lake_view.js');
-const { faceShot, posOf, faceY, liftFor, guessBoxTop, hudFrac } = await import('../src/game/cutscene.js');
+const { faceShot, posOf, faceY, liftFor, guessBoxTop, hudFrac, screenShare, bodyR, LISTENER_MAX } = await import('../src/game/cutscene.js');
 const { SPECIES } = await import('../src/game/species.js');
 const { LAYOUT } = await import('../src/game/world.js');
 const { fovFor } = await import('../src/game/camera.js');
@@ -45,11 +45,12 @@ function viewCam(pos, look, aspect, lift) {
 function simulate(steps, g, h) {
   const out = [];
   const { aspect } = g.camera;
-  let cam = null;
+  let cam = null, prev = null;
   for (const s of steps) {
     if (s.cam) cam = viewCam(s.cam[0], s.cam[1], aspect, 0);
     else if (s.face) {
-      const f = faceShot(s, cam ? cam.position : g.camera.position, fovFor(aspect), aspect);
+      const me = !s.with && g.player.unico !== s.face ? g.player.position : null; // 컷신(_play)과 같게: 함께 담지 않는 나는 선을 막으면 안 됨
+      const f = (prev = faceShot(s, cam ? cam.position : g.camera.position, fovFor(aspect), aspect, null, { clear: me ? [me] : [], prev }));
       assert.ok(f, '얼굴 구도');
       cam = viewCam(f.pos, f.look, aspect, liftFor(guessBoxTop(aspect), hudFrac(h)));
     }
@@ -94,7 +95,9 @@ test('인트로: 탭 4번 + 이름 카드 하나, 끝은 밭을 바라봄 · 그
   const says = steps.filter((s) => s.say).length, asks = steps.filter((s) => s.ask);
   assert.equal(says, 4);
   assert.equal(asks.length, 1);
-  assert.deepEqual(asks[0].ask.input, { value: '콩이', max: 6, icon: '🐕' });
+  const { onShow, ...inp } = asks[0].ask.input;
+  assert.deepEqual(inp, { value: '콩이', max: 6, icon: '🐕' });
+  assert.equal(typeof onShow, 'function', '카드가 뜨면 반려견이 반김');
   const txt = JSON.stringify(steps.map((s) => s.say || s.ask));
   assert.match(txt, /네 거야/);
   assert.match(txt, /당근 씨앗 3개/);
@@ -139,4 +142,92 @@ test('얼굴 구도: 카메라 자리·카메라→얼굴 선이 건물에 막�
   assert.ok(f.pos[0] <= 1.5, `막히지 않은 자리: ${f.pos.map((v) => v.toFixed(1))}`);
   const part = faceShot(step, { x: 5, z: 1 }, 45, 1.6, (x, z) => x > 1.5 && z > 0); // 북동쪽만 막힘
   assert.ok(!(part.pos[0] > 1.5 && part.pos[2] > 0));
+});
+
+/** 구도 하나를 화면 없이: 듣는 쪽 화면 비율 · 카메라~듣는 얼굴 거리 · 말하는 얼굴 NDC (렌즈 올림 포함) */
+function frameOf(f, s, aspect, h) {
+  const fov = fovFor(aspect), W = posOf(s.with), S = posOf(s.face);
+  const cam = viewCam(f.pos, f.look, aspect, liftFor(guessBoxTop(aspect), hudFrac(h)));
+  const v = new THREE.Vector3(S.x, faceY(s.face), S.z).project(cam);
+  return {
+    share: W ? screenShare(f.pos, f.look, W, faceY(s.with), bodyR(s.with), fov, aspect) : 0,
+    dist: W ? Math.hypot(W.x - f.pos[0], faceY(s.with) - f.pos[1], W.z - f.pos[2]) : Infinity,
+    sx: v.x, sy: v.y,
+  };
+}
+
+for (const [an, { aspect, h }] of Object.entries(ASPECTS)) {
+  test(`두 사람 구도 · ${an}: 듣는 쪽(나)은 화면 가로 ${LISTENER_MAX * 100}% 이하·1.6m 이상, 말하는 얼굴은 아래 30%(대화창 띠) 위`, () => {
+    const g = mockGame(aspect), steps = introSteps(g);
+    let prev = null, cam = g.camera.position;
+    for (const s of steps) {
+      if (s.cam) { cam = { x: s.cam[0][0], z: s.cam[0][2] }; continue; }
+      if (!s.face || !s.with || posOf(s.face) === g.pet.e.m.position) continue;
+      const f = (prev = faceShot(s, cam, fovFor(aspect), aspect, null, { prev }));
+      const m = frameOf(f, s, aspect, h);
+      assert.ok(m.share < 0.25, `듣는 쪽 비율 ${m.share.toFixed(2)}`);
+      assert.ok(m.dist >= 1.6, `듣는 얼굴까지 ${m.dist.toFixed(2)}m`);
+      assert.ok(m.sy > -0.4 && Math.abs(m.sx) < 0.85, `말하는 얼굴 (${m.sx.toFixed(2)}, ${m.sy.toFixed(2)})`);
+      cam = { x: f.pos[0], z: f.pos[2] };
+    }
+  });
+
+  test(`같은 둘의 얼굴 구도가 잇달아 나오면 다른 자리 (1m 넘게) · ${an}`, () => {
+    const g = mockGame(aspect), guide = g.npcs.list[0].u, me = g.player.unico;
+    const s = { face: guide, with: me };
+    const a = faceShot(s, g.camera.position, fovFor(aspect), aspect);
+    const b = faceShot(s, { x: a.pos[0], z: a.pos[2] }, fovFor(aspect), aspect, null, { prev: a });
+    const d = Math.hypot(a.pos[0] - b.pos[0], a.pos[2] - b.pos[2]);
+    assert.ok(d > 1, `카메라 거리 ${d.toFixed(2)}m`);
+    assert.ok(frameOf(b, s, aspect, h).share < 0.25);
+  });
+}
+
+test('인트로 얼굴 구도 셋(첫 인사·씨앗 건네기·마무리)은 서로 다른 자리', () => {
+  for (const { aspect } of Object.values(ASPECTS)) {
+    const g = mockGame(aspect), steps = introSteps(g), guide = g.npcs.list[0].u;
+    let prev = null, cam = g.camera.position;
+    const pos = [];
+    for (const s of steps) {
+      if (s.cam) { cam = { x: s.cam[0][0], z: s.cam[0][2] }; continue; }
+      if (!s.face) continue;
+      const f = (prev = faceShot(s, cam, fovFor(aspect), aspect, null, { prev }));
+      if (s.face === guide) pos.push(f.pos);
+      cam = { x: f.pos[0], z: f.pos[2] };
+    }
+    assert.equal(pos.length, 3);
+    for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) assert.ok(Math.hypot(pos[i][0] - pos[j][0], pos[i][2] - pos[j][2]) > 1, `${aspect}: ${i}·${j}`);
+    // 건네주기는 옆모습(두 사람을 잇는 선과 거의 직각)
+    const gift = steps.find((s) => s.profile);
+    assert.ok(gift && gift.with === g.player.unico);
+  }
+});
+
+test('낚시터 떡밥 선물 줄: 내가 낚시꾼 근처 어디에 서 있어도 카메라→낚시꾼 얼굴 선이 내 몸(캡슐)을 비켜 감', () => {
+  for (const { aspect } of Object.values(ASPECTS)) {
+    const g = mockGame(aspect, 'lake'), K = LAYOUT.lake, fisher = g.npcs.list.find((e) => e.id === 'fisher').u, F = posOf(fisher);
+    const step = lakeIntroSteps(g).find((s) => s.face && s.toward && s.toward[0] === K.shop.x);
+    assert.ok(step, '가게 쪽 구도 스텝');
+    for (const r of [1.2, 2, 3]) for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2, me = { x: F.x + Math.cos(a) * r, z: F.z + Math.sin(a) * r };
+      if (Math.abs(me.x - K.shop.x) < 1.6 && Math.abs(me.z - K.shop.z) < 1.6) continue; // 가게 안
+      const f = faceShot(step, { x: me.x, z: me.z + 9 }, fovFor(aspect), aspect, null, { clear: [me] });
+      const cx = f.pos[0], cz = f.pos[2], dx = F.x - cx, dz = F.z - cz, L = dx * dx + dz * dz;
+      const t = Math.max(0, Math.min(1, ((me.x - cx) * dx + (me.z - cz) * dz) / L));
+      const d = Math.hypot(me.x - cx - dx * t, me.z - cz - dz * t);
+      assert.ok(d >= 0.55, `${aspect} 나 (${me.x.toFixed(1)}, ${me.z.toFixed(1)}) → 선까지 ${d.toFixed(2)}m`);
+    }
+  }
+});
+
+test('반려견 이름 카드 구도: 낮은 카메라(0.6m)·반려견은 카메라를 똑바로·주인이 멀리 있어도 반려견이 가운데 근처', () => {
+  for (const { aspect } of Object.values(ASPECTS)) for (const far of [1.5, 6]) {
+    const me = unico(0, 9), pet = { e: { m: { position: new THREE.Vector3(far, 0, 9.5), rotation: { y: 0 } } } };
+    const f = faceShot({ face: pet, with: me }, { x: 0, z: 18 }, fovFor(aspect), aspect);
+    assert.ok(Math.abs(f.pos[1] - 0.6) < 1e-9, '낮은 카메라');
+    const cam = viewCam(f.pos, f.look, aspect, 0), v = new THREE.Vector3(far, 0.45, 9.5).project(cam);
+    assert.ok(Math.abs(v.x) < 0.5, `${aspect} 주인 ${far}m: 반려견 x ${v.x.toFixed(2)}`);
+    const toCam = Math.atan2(f.pos[0] - far, f.pos[2] - 9.5);
+    assert.ok(Math.abs(Math.atan2(Math.sin(f.yaw - toCam), Math.cos(f.yaw - toCam))) < 1e-6, '카메라를 똑바로');
+  }
 });

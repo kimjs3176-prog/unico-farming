@@ -91,21 +91,63 @@ const isPet = (o) => !!o?.e?.m && !o.group;
 /** 얼굴 높이(m): 반려견 0.45, 주민은 몸 크기만큼 */
 export const faceY = (o) => (isPet(o) ? 0.45 : 1.3 * (o?.scale ?? 1));
 
+/** 화면 세로 위치(NDC y): ndcX 와 같은 카메라 (렌즈 올림 없이) */
+export function ndcY(pos, look, p, y, fov) {
+  let fx = look[0] - pos[0], fy = look[1] - pos[1], fz = look[2] - pos[2];
+  const fl = Math.hypot(fx, fy, fz) || 1;
+  fx /= fl; fy /= fl; fz /= fl;
+  const rl = Math.hypot(fx, fz) || 1, rx = -fz / rl, rz = fx / rl;
+  const ux = -fy * rz, uy = fz * rx - fx * rz, uz = fy * rx; // 위 = 오른쪽 × 앞
+  const vx = p.x - pos[0], vy = y - pos[1], vz = p.z - pos[2];
+  const z = vx * fx + vy * fy + vz * fz;
+  return z > 0.05 ? (vx * ux + vy * uy + vz * uz) / (z * Math.tan((fov * DEG) / 2)) : -Infinity;
+}
+
+/** 몸통 반지름(m): 머리·몸이 둥근 유니코 기준, 반려견은 작게 */
+export const bodyR = (o) => (isPet(o) ? 0.3 : 0.55 * (o?.scale ?? 1));
+
 /**
- * 말하는 쪽 얼굴 구도 { face } 스텝 → { pos, look, lift, yaw } (그 순간 위치로)
- *  - with: 함께 담을 상대 (보통 나) → 두 사람 구도, 말하는 쪽 얼굴이 3/4 앞
+ * 인물이 화면 가로에서 차지하는 비율 (0~1, 화면 밖으로 잘린 만큼 뺌): 머리 높이에서 반지름 r 인 공으로 봄
+ * 카메라 뒤면 0, 카메라에 너무 붙으면(0.3m 안) 1
+ */
+export function screenShare(pos, look, p, y, r, fov, aspect) {
+  let fx = look[0] - pos[0], fy = look[1] - pos[1], fz = look[2] - pos[2];
+  const fl = Math.hypot(fx, fy, fz) || 1;
+  const z = ((p.x - pos[0]) * fx + (y - pos[1]) * fy + (p.z - pos[2]) * fz) / fl;
+  if (z <= -r) return 0;
+  if (z < 0.3) return 1;
+  const x = ndcX(pos, look, p, y, fov, aspect), h = r / (z * Math.tan((fov * DEG) / 2) * aspect);
+  return Math.max(0, Math.min(1, x + h) - Math.max(-1, x - h)) / 2;
+}
+
+/** 점 (px, pz) 에서 선분 a→b 까지 바닥 거리 */
+function segDist(px, pz, ax, az, bx, bz) {
+  const dx = bx - ax, dz = bz - az, L = dx * dx + dz * dz || 1;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / L));
+  return Math.hypot(px - ax - dx * t, pz - az - dz * t);
+}
+
+/** 두 사람 구도에서 듣는 쪽이 화면 가로에서 차지해도 되는 최대 비율 (어깨·등 가장자리만) */
+export const LISTENER_MAX = 0.22;
+
+/**
+ * 말하는 쪽 얼굴 구도 { face } 스텝 → { pos, look, lift, yaw, key, share } (그 순간 위치로)
+ *  - with: 함께 담을 상대 (보통 나) → 두 사람 구도, 말하는 쪽 얼굴이 3/4 앞. 상대는 화면 가장자리에 어깨만 (LISTENER_MAX 이하, 1.6m 이상 떨어짐)
+ *    profile: true → 두 사람을 옆(90°)에서 조금 낮게 (건네주기 장면)
  *  - toward: [x, z] 소개하는 곳 → 그곳을 등지고 카메라 쪽을 보는 구도 (뒤로 그곳이 보임)
  *  - 둘 다 없으면 지금 바라보는 쪽 2.5m 앞을 상대로
  *  - avoid: 화면 밖으로 빼고 싶은 인물, blocked(x, z): 건물·소품 자리인가 (가리지 않는 각도·쪽을 고름)
- *  yaw = 말하는 쪽 몸 방향 (카메라 쪽으로 돌림)
+ *  ctx: { soft(x, z): 가로등·우체통 같은 작은 소품 근처인가 (카메라→얼굴 선과 얼굴 뒤 배경에서 조금만 감점),
+ *         clear: [{x, z}] 카메라→얼굴 선을 막으면 안 되는 사람 (함께 담지 않는 나), prev: 바로 앞 얼굴 구도 (같은 둘이면 다른 자리로) }
+ *  yaw = 말하는 쪽 몸 방향 (카메라 쪽으로 돌림, 반려견은 카메라를 똑바로)
  */
-export function faceShot(step, camPos, fov = 45, aspect = 1.6, blocked = null) {
+export function faceShot(step, camPos, fov = 45, aspect = 1.6, blocked = null, ctx = {}) {
   const who = step.face, S = posOf(who);
   if (!S) return null;
   const pet = isPet(who), fS = faceY(who);
   let L, faceL = null, theta = 30 * DEG, cheat = 60 * DEG;
   const W = step.with && posOf(step.with);
-  if (W && Math.hypot(W.x - S.x, W.z - S.z) > 0.3) { L = W; faceL = faceY(step.with); theta = 35 * DEG; cheat = 20 * DEG; }
+  if (W && Math.hypot(W.x - S.x, W.z - S.z) > 0.3) { L = W; faceL = faceY(step.with); theta = (step.profile ? 90 : 35) * DEG; cheat = (step.profile ? 10 : 20) * DEG; }
   else if (step.toward) {
     const dx = step.toward[0] - S.x, dz = step.toward[1] - S.z, d = Math.hypot(dx, dz) || 1;
     L = { x: S.x - (dx / d) * 2.5, z: S.z - (dz / d) * 2.5 };
@@ -117,33 +159,61 @@ export function faceShot(step, camPos, fov = 45, aspect = 1.6, blocked = null) {
   const fx = L.x - S.x, fz = L.z - S.z, fd = Math.hypot(fx, fz) || 1;
   const side = (camPos.x - S.x) * (-fz / fd) + (camPos.z - S.z) * (fx / fd) >= 0 ? 1 : -1;
   const tall = aspect < 1;
-  if (pet) cheat = 50 * DEG; // 반려견은 고개를 카메라 쪽으로 많이 (올려다보는 강아지)
+  if (pet) cheat = Math.PI; // 반려견은 카메라를 똑바로 봄 (이름 카드에서 눈을 맞춤)
   const opts = pet
-    ? { theta: 60 * DEG, D: 2.6, maxD: 3.6, camY: 0.95, lookY: 0.45, lookMix: 0.15, faceS: fS, faceL: null }
-    : { theta, D: faceL ? (tall ? 5.0 : 4.4) : tall ? 6.0 : 5.4, maxD: 7, camY: fS + 0.35, lookY: faceL ? fS * 0.7 + faceL * 0.3 - 0.05 : fS - 0.1, lookMix: faceL ? 0.3 : 0, faceS: fS, faceL, fit: tall ? 0.75 : 0.8 };
-  // 후보: 지금 카메라 쪽 → 반대쪽, 각도 그대로 → ±20° → +40°. 점수 = 건물·소품 가림(blocked: 카메라 자리와 카메라→얼굴 선) + avoid 인물이 화면에 걸림
-  const A = step.avoid && posOf(step.avoid);
+    ? { theta: 60 * DEG, D: 2.4, maxD: 3.4, camY: 0.6, lookY: 0.5, lookMix: Math.min(0.15, 0.3 / fd), faceS: fS, faceL: null } // 낮게, 거의 눈높이. 시선은 반려견에서 0.3m 안 (주인이 멀어도 가운데)
+    : step.profile && faceL
+      ? { theta, D: tall ? 5.2 : 4.2, maxD: tall ? 12 : 8, camY: fS + 0.05, lookY: fS * 0.5 + faceL * 0.5 - 0.15, lookMix: tall ? 0.4 : 0.5, faceS: fS, faceL, fit: tall ? 0.72 : 0.7 }
+      : { theta, D: faceL ? (tall ? 5.0 : 4.4) : tall ? 6.0 : 5.4, maxD: faceL ? 8 : 7, camY: fS + 0.35, lookY: faceL ? fS * 0.7 + faceL * 0.3 - 0.05 : fS - 0.1, lookMix: faceL ? 0.3 : 0, faceS: fS, faceL, fit: tall ? 0.75 : 0.8 };
+  const A = step.avoid && posOf(step.avoid), clear = (ctx.clear || []).filter(Boolean), soft = ctx.soft;
+  const key = `${who?.id ?? ''}|${posOf(step.with) ? 'w' : ''}`, prev = ctx.prev && ctx.prev.who === who && ctx.prev.withWho === (step.with || null) ? ctx.prev : null;
+  // 점수 = 건물·소품 가림(blocked) + avoid 인물이 화면에 걸림 + 듣는 쪽이 화면을 덮음·말하는 얼굴을 가림 + 사람이 선을 막음 + 작은 소품(soft) + 바로 앞 구도와 같은 자리
   const score = (sh) => {
     let n = 0;
+    const cx = sh.pos[0], cz = sh.pos[2];
     if (blocked) {
-      if (blocked(sh.pos[0], sh.pos[2])) n += 3;
-      const L0 = Math.hypot(S.x - sh.pos[0], S.z - sh.pos[2]) || 1, tMax = Math.max(0, 1 - 1.3 / L0); // 말하는 쪽 1.3m 안(자기 자리)은 빼고
-      for (let k = 1; k <= 8; k++) { const t = (k / 8) * tMax; if (blocked(sh.pos[0] + (S.x - sh.pos[0]) * t, sh.pos[2] + (S.z - sh.pos[2]) * t)) n += 2; }
+      if (blocked(cx, cz)) n += 3;
+      const L0 = Math.hypot(S.x - cx, S.z - cz) || 1, tMax = Math.max(0, 1 - 1.3 / L0); // 말하는 쪽 1.3m 안(자기 자리)은 빼고
+      for (let k = 1; k <= 8; k++) { const t = (k / 8) * tMax; if (blocked(cx + (S.x - cx) * t, cz + (S.z - cz) * t)) n += 2; }
+    }
+    if (soft) {
+      const L0 = Math.hypot(S.x - cx, S.z - cz) || 1, ux = (S.x - cx) / L0, uz = (S.z - cz) / L0;
+      for (let k = 1; k <= 6; k++) { const t = (k / 6) * Math.max(0, L0 - 0.8); if (soft(cx + ux * t, cz + uz * t)) n += 0.5; } // 카메라→얼굴 선 (얼굴 앞 0.8m 까지)
+      for (const t of [0.8, 1.6, 2.6]) if (soft(S.x + ux * t, S.z + uz * t)) n += 0.4; // 얼굴 바로 뒤 배경 (가로등 기둥이 머리에서 솟지 않게)
     }
     if (A && Math.abs(ndcX(sh.pos, sh.look, A, faceY(step.avoid), fov, aspect)) < 1.1) n += 5;
+    if (Math.abs(ndcX(sh.pos, sh.look, S, fS, fov, aspect)) > (opts.fit ?? 0.8) + 0.05) n += 8; // 말하는 얼굴이 화면 끝에 걸림
+    if (faceL != null) {
+      const sw = step.with, share = screenShare(sh.pos, sh.look, W, faceL, bodyR(sw), fov, aspect);
+      sh.share = share;
+      if (share > LISTENER_MAX) n += 6 + share * 4;
+      if (Math.hypot(W.x - cx, faceL - sh.pos[1], W.z - cz) < 1.6) n += 6;
+      // 듣는 쪽이 카메라와 말하는 얼굴 사이에서 얼굴을 가림
+      const dS = Math.hypot(S.x - cx, S.z - cz), dW = Math.hypot(W.x - cx, W.z - cz);
+      if (dW < dS && segDist(W.x, W.z, cx, cz, S.x, S.z) < bodyR(sw) + 0.15) n += 6;
+    }
+    for (const c of clear) {
+      if (Math.hypot(c.x - S.x, c.z - S.z) < 0.4) continue;
+      if (segDist(c.x, c.z, cx, cz, S.x, S.z) < 0.7) n += 6; // 내 몸이 얼굴을 가림
+      else if (screenShare(sh.pos, sh.look, c, 1.3, 0.55, fov, aspect) > LISTENER_MAX) n += 4; // 카메라 바로 앞 큰 뒷모습
+    }
+    if (prev && Math.hypot(prev.pos[0] - cx, prev.pos[2] - cz) < 1.2) n += 4;
     return n;
   };
   let sh = null, best = Infinity;
   // toward 인데 그쪽이 다 막히면 마지막으로 소개하는 곳 쪽에서 (그곳은 카메라 뒤로 빠지지만 얼굴은 보임)
   const Ls = step.toward && blocked ? [L, { x: 2 * S.x - L.x, z: 2 * S.z - L.z }] : [L];
-  search: for (const LL of Ls) for (const sd of [side, -side]) for (const dt of [0, 20, -20, 40]) {
+  // 옆모습(profile)은 90° 를 넘겨 말하는 쪽 뒤로 돌지 않게 (얼굴이 보이는 쪽으로만)
+  const dts = step.profile ? [0, -15, 10, -30] : faceL != null ? [0, 20, -15, 10, 40, -25] : [0, 20, -20, 40];
+  const Ds = faceL != null ? [opts.D, opts.D + 1.4, opts.D + 2.8] : [opts.D];
+  search: for (const LL of Ls) for (const sd of [side, -side]) for (const D of Ds) for (const dt of dts) {
     const th = opts.theta + dt * DEG;
     if (th < 5 * DEG) continue;
-    const c = speakerShot(LL, S, sd, { ...opts, theta: th, fov, aspect }), n = score(c);
-    if (n < best) { best = n; sh = c; sh.L = LL; }
+    const c = speakerShot(LL, S, sd, { ...opts, D, maxD: Math.max(opts.maxD, D), theta: th, fov, aspect }), n = score(c);
+    if (n < best - 1e-6) { best = n; sh = c; sh.L = LL; }
     if (n === 0) break search;
   }
-  return { pos: sh.pos, look: sh.look, lift: true, yaw: cheatYaw(S, sh.L ?? L, sh.pos, cheat) };
+  return { pos: sh.pos, look: sh.look, lift: true, yaw: cheatYaw(S, sh.L ?? L, sh.pos, cheat), key, who, withWho: step.with || null, share: sh.share ?? 0, score: best };
 }
 
 /**
@@ -292,11 +362,12 @@ export class Cinematics {
     cam.lookAt(this._fl);
   }
 
-  wait(s) { return new Promise((r) => { const end = performance.now() + s * 1000; const tick = () => (this.skipping || performance.now() >= end ? r() : requestAnimationFrame(tick)); tick(); }); }
+  /** s 초 기다림 (until() 이 참이 되면 일찍 끝냄 — 느린 기기에서도 '도착할 때까지') */
+  wait(s, until = null) { return new Promise((r) => { const end = performance.now() + s * 1000; const tick = () => (this.skipping || performance.now() >= end || until?.() ? r() : requestAnimationFrame(tick)); tick(); }); }
 
   /**
    * 컷신 실행. steps: { cam:[pos,look,dur,opts] } | { face: 인물, with?, toward?: [x,z], dur? } | { say:[lines] }
-   *  | { ask: line, then?(값) } (이름 카드 같은 입력 — 건너뛰면 기본값) | { wait:s } | { run:fn }
+   *  | { ask: line, then?(값) } (이름 카드 같은 입력 — 건너뛰면 기본값) | { wait:s, until?() } | { run:fn }
    * 건너뛰면 남은 카메라·대기는 생략하고 run(상태 변경)과 ask 기본값만 실행
    * 다른 컷신이 도는 중이면 끝난 뒤 이어서 (버리지 않음). 도중에 오류가 나도 띠·멈춤·카메라는 풀림
    */
@@ -319,7 +390,7 @@ export class Cinematics {
   }
 
   async _play(steps) {
-    this.locked = true; this.skipping = false;
+    this.locked = true; this.skipping = false; this._lastFace = null;
     const g = this.game, P = g.player;
     P.hold ? P.hold('cine') : (P.frozen = true);
     try {
@@ -339,8 +410,11 @@ export class Cinematics {
         if (s.cam) { this.shot(...s.cam); if (s.hold !== false) await this.wait((s.cam[2] ?? 1.2) * (s.hold ?? 1)); }
         else if (s.face) {
           const cam = g.camera, W0 = g.world, me = !s.with && P.unico !== s.face ? P.position : null; // 함께 담지 않는 나도 얼굴을 가리면 안 됨
-          const blocked = (x, z) => !!(W0?.isBlocked?.(x, z, 0.35) || (me && Math.hypot(x - me.x, z - me.z) < 0.75));
-          const f = faceShot(s, cam.position, cam.fov, cam.aspect, blocked);
+          const blocked = (x, z) => !!W0?.isBlocked?.(x, z, 0.35);
+          const props = (W0?.obstacles || []).filter((o) => o.r <= 0.8); // 가로등·우체통·화분 같은 작은 소품
+          const soft = (x, z) => props.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + 0.9);
+          const f = faceShot(s, cam.position, cam.fov, cam.aspect, blocked, { soft, clear: me ? [me] : [], prev: this._lastFace });
+          this._lastFace = f;
           if (f) {
             if (!isPet(s.face)) this.faceLock(s.face, f.yaw);
             else s.face.e.m.rotation.y = f.yaw; // 반려견: 멈춰 선 채(pet.settle) 카메라 쪽으로
@@ -352,7 +426,7 @@ export class Cinematics {
             if (s.hold !== false) await this.wait(dur * (s.hold ?? 1));
           }
         } else if (s.say) await g.dialogue.say(s.say);
-        else if (s.wait) await this.wait(s.wait);
+        else if (s.wait) await this.wait(s.wait, s.until);
       }
     } finally {
       document.body?.classList?.remove('cine');

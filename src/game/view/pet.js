@@ -91,7 +91,7 @@ export class Pet {
       this.vel = 0;
     }
     // 키우기: 배고픔·애정, 행복하면 가끔 땅을 팜 (돌보기 대화 중에는 자리를 지킴)
-    if (this.sim.tick(dt) === 'dig' && !this.digging && !this.trick && !this.caring) {
+    if (this.sim.tick(dt) === 'dig' && !this.digging && !this.trick && !this.caring && !this.game.cinema?.locked) { // 컷신 중엔 자리를 지킴
       const a = Math.random() * Math.PI * 2;
       this.digging = { t: 0, x: playerPos.x + Math.cos(a) * 2.2, z: playerPos.z + Math.sin(a) * 2.2 };
     }
@@ -99,6 +99,7 @@ export class Pet {
     if (this.trick) return this._doTrick(dt, d);
     if (this.digging) return this._doDig(dt, playerPos);
     let want = 0;
+    if (this.petT > 60 && !this.game.cinema?.locked) this.petT = 0; // 컷신용 긴 멈춤은 컷신이 끝나면 (도중에 끊겨도) 풂
     if (this.petT > 0) this.petT -= dt;
     else if (this.chaseT > 0) want = d > 1.2 ? 6 : 0;
     else if (d > 6) want = this.sim.mood === 'hungry' ? 3.4 : 5.2; // 배고프면 기운이 없음
@@ -117,7 +118,7 @@ export class Pet {
       this.idleT = 0;
     } else {
       this.idleT += dt;
-      if (this.petT > 0) playClip(e, 'look');
+      if (this.petT > 0) playClip(e, this.game.cinema?.locked ? 'idle' : 'look'); // 컷신 중엔 두리번거리지 않고 카메라를 봄
       else playClip(e, this.idleT > 6 ? 'idle2' : this.idleT > 3 ? 'look' : 'idle', 0.4);
       if (this.idleT > 12) this.idleT = 0;
     }
@@ -254,8 +255,17 @@ export class Pet {
     }
   }
 
-  /** 잠깐 멈춰 서기 (인트로 이름 카드 구도): 따라오기를 몇 초 쉬고 두리번 */
+  /** 잠깐 멈춰 서기 (인트로 이름 카드 구도): 따라오기를 s 초 쉬고 두리번. 0 이면 바로 다시 따라옴 */
   settle(s = 6) { if (!this.ok) return; this.petT = s; this.vel = 0; }
+
+  /** 반기기: 제자리 깡충 + 멍멍 + 분홍 가루 */
+  cheer() {
+    if (!this.ok) return;
+    const p = this.e.m.position, g = this.game;
+    this.trick = { id: 'jump', t: 0 };
+    g.audio?.play?.('bark');
+    g.fx?.burst?.(p.x, 0.75, p.z, 0xff7aa8, 16); // 분홍 하트 가루 (낮은 가까이 구도에서 큰 글자 그림이 화면을 덮지 않게)
+  }
 
   /** 이름 바꾸기 (다듬어서, 비면 그대로) */
   rename(raw, { quiet = false } = {}) {

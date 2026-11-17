@@ -16,7 +16,7 @@ const { Player } = await import('../src/game/player.js');
 const { UI } = await import('../src/ui/ui.js');
 const { Cinematics } = await import('../src/game/cutscene.js');
 const { Dialogue } = await import('../src/ui/dialogue.js');
-const { GameTravel, BUSY_TRAVEL } = await import('../src/game/game_travel.js');
+const { GameTravel, BUSY_TRAVEL, BUSY_TOAST } = await import('../src/game/game_travel.js');
 const { Minimap } = await import('../src/ui/minimap.js');
 
 /** 멈춤 까닭만 있는 플레이어 (Player 의 hold/frozen 그대로) */
@@ -24,8 +24,8 @@ const player = () => Object.assign(Object.create(Player.prototype), { unico: { p
 
 function game(over = {}) {
   const g = {
-    player: player(), input: { enabled: true }, toasts: [],
-    ui: { closePanel() { g.ui.panel = null; g.player.unhold('panel'); }, toast: (t) => g.toasts.push(t), panel: null },
+    player: player(), input: { enabled: true }, toasts: [], toastOpts: [],
+    ui: { closePanel() { g.ui.panel = null; g.player.unhold('panel'); }, toast: (t, o) => { g.toasts.push(t); g.toastOpts.push(o); }, panel: null },
     camera: new THREE.PerspectiveCamera(45, 1.6, 0.1, 600), followCam: { smooth: new THREE.Vector3() },
     dialogue: { active: false, say: async () => null, skipAll() {} },
     governor: { reset() {} },
@@ -144,6 +144,9 @@ test('대화 중이면 체험관 이동·순간이동·지도 이동을 막고 �
   m.openBig();
   assert.equal(moved, 0);
   assert.ok(g.toasts.length >= 4 && g.toasts.every((t) => t === BUSY_TRAVEL), g.toasts.join('/'));
+  // 한 장으로 합쳐지고(같은 key) 경고 모양 (보상 알림과 구분)
+  assert.ok(g.toastOpts.every((o) => o === BUSY_TOAST));
+  assert.deepEqual(BUSY_TOAST, { key: 'busy-travel', type: 'warn' });
   // 대화가 끝나면 다시 이동
   g.dialogue.active = false;
   m.travel(3, 3, '장터');
@@ -169,4 +172,12 @@ test('대화·컷신 중에는 I·Q·M·P·T 단축키로 창을 열지 않음 (
   for (const k of ['KeyI', 'KeyQ', 'KeyM', 'KeyP', 'KeyT']) assert.ok(block.includes(`'${k}'`), k);
   assert.ok(src.indexOf("justPressed('Escape')") < i, 'Esc 는 막지 않음');
   assert.match(src, /busy\(\) \{ return !!\(this\.cinema\?\.locked \|\| this\.dialogue\?\.active\); \}/);
+});
+
+test('오토플레이가 넘기는 대화 중에도 끌 수 있음: P 는 켜진 오토플레이를 끄기만, 자동 칩은 흐리게 막지 않음', () => {
+  const src = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.match(src, /\} else if \(input\.justPressed\('KeyP'\) && this\.autoplay\.on\) this\.autoplay\.toggle\(false\);/);
+  const css = fs.readFileSync(new URL('../src/ui/css/dialogue.css', import.meta.url), 'utf8');
+  const rule = css.split('\n').find((l) => l.startsWith('body.talking:not(.cine)'));
+  assert.ok(rule && rule.includes('.actionbar') && !rule.includes('.auto-chip'), rule);
 });

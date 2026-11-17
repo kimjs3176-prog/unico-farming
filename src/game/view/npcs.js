@@ -58,7 +58,7 @@ const PL_FADE_R = 5, PL_FADE_COS = Math.cos((12 * Math.PI) / 180), PL_FADE_A = 0
 const _lv = new THREE.Vector3(), _nv = new THREE.Vector3();
 /** 대화 구도 화면 검사: 대화창 윗변 가정(선택지 5개 + 설명 줄, 화면 위에서 비율 — 가로 0.42 · 세로 0.46 · 낮은 가로폰 0.48),
  *  이름 칩은 창 위로 28px, 주민 턱(얼굴 - 0.25m)은 그보다 0.04(NDC 0.08) 위, 내 몸 너비는 화면 28% 까지 (좁은 세로 폰은 40%), 화면 끝에 40% 넘게 잘리면 안 됨 */
-export const TALK_FRAME = { chip: 28, room: 0.04, heroW: 0.28, heroWTall: 0.4, heroClip: 0.4, heroR: 0.6, heroTop: 1.85, lowH: 500, lowRoom: 0.12 };
+export const TALK_FRAME = { chip: 28, room: 0.04, heroW: 0.24, heroWTall: 0.4, heroClip: 0.4, heroR: 0.6, heroTop: 1.85, lowH: 500, lowRoom: 0.12 };
 export const talkBoxTop = (aspect, h) => (aspect < 1 ? 0.46 : h <= TALK_FRAME.lowH ? 0.48 : 0.42);
 const _fc = new THREE.PerspectiveCamera(), _fr = new THREE.Vector3(), _fp = new THREE.Vector3();
 
@@ -245,6 +245,18 @@ export class NPCs {
     return hit;
   }
 
+  /** 카메라→주민 얼굴 선을 가리는 소품 수 (우체통·가로등이 내 옆에 있어도 셈, 주민 0.6m 안은 빼고) */
+  _propsOnFace(pos, b) {
+    const W = this.game.world;
+    if (!W) return 0;
+    let hit = 0;
+    for (const o of W.obstacles || []) {
+      if (o.r > 0.8 || Math.hypot(o.x - b.x, o.z - b.z) < 0.6 + o.r) continue;
+      if (segDist(o.x, o.z, pos[0], pos[2], b.x, b.z) < o.r + 0.2) hit++;
+    }
+    return hit;
+  }
+
   /** 옛 대화 구도 후보: 두 사람을 잇는 선의 옆에서 (지금 카메라 쪽 → 반대쪽, 각각 ±25° 돌린 것). 가로 화면은 카메라·시선을 낮춰 얼굴이 대화창 위 */
   _sideShots(a, b) {
     const cam = this.game.camera, shots = [];
@@ -280,7 +292,9 @@ export class NPCs {
       x0 = Math.min(x0, _fp.x); x1 = Math.max(x1, _fp.x);
     }
     const w = Math.max(1e-6, x1 - x0), out = Math.max(0, x1 - 1) + Math.max(0, -1 - x0);
-    return { chinGap: box - F.chip / h - yf(b, face - 0.25 * sc), head: box - yf(b, face), heroW: w / 2, heroClip: Math.min(1, out / w) };
+    const fx = _fp.set(b.x, face, b.z).project(cam).x;
+    // cover: 내 몸(화면 가로 구간)이 주민 얼굴 가운데를 덮음 (어깨 너머 구도에서 내 등이 얼굴 위로 오면 안 됨)
+    return { chinGap: box - F.chip / h - yf(b, face - 0.25 * sc), head: box - yf(b, face), heroW: w / 2, heroClip: Math.min(1, out / w), cover: fx > x0 - 0.06 && fx < x1 + 0.06 };
   }
 
   /** 화면 검사 통과: 턱이 이름 칩 위, (낮은 가로폰은 얼굴이 창 위로 12% 이상), 내 몸은 좁고 다 보이거나 아예 밖 */
@@ -289,6 +303,7 @@ export class NPCs {
     if (m.chinGap < F.room) return false;
     if (!(aspect < 1) && h <= F.lowH && m.head < F.lowRoom) return false;
     if (m.heroClip >= 0.999) return true;
+    if (m.cover) return false;
     return m.heroW <= (aspect < 1 ? F.heroWTall : F.heroW) && m.heroClip <= F.heroClip;
   }
 
@@ -331,7 +346,7 @@ export class NPCs {
       for (const s of shots) {
         s.clear = Infinity;
         for (const u of others) { if (s.front && u.short) continue; const p = u.group.position; s.clear = Math.min(s.clear, segDist(p.x, p.z, s.pos[0], s.pos[2], s.look[0], s.look[2])); }
-        s.block = this._blockedOnSegment(s.pos, s.look, a, b);
+        s.block = this._blockedOnSegment(s.pos, s.look, a, b) + (s.front ? this._propsOnFace(s.pos, b) : 0);
         if (s.clear >= TALK_CLEAR && !s.block) return { best: s, ok: true };
         if (!best || s.block < best.block || (s.block === best.block && s.clear > best.clear)) best = s;
       }
@@ -388,7 +403,7 @@ export class NPCs {
       const req = g.villagers.requestFor(id, g.world.day, this.requestPool());
       const v = g.villagers.state[id];
       const choices = [];
-      if (!req.done) { const have = g.economy.count(req.item); choices.push({ label: `📝 부탁 들어주기`, note: `${g.villagers.describeRequest(req)} · 보유 ${have}/${req.n}`, value: 'req', disabled: have < req.n }); }
+      if (!req.done) { const have = g.economy.count(req.item); choices.push({ label: `📝 부탁 들어주기`, note: have < req.n ? `${g.villagers.describeRequest(req)} · 보유 ${have}/${req.n} — ${req.n}개 모으면 가능` : `${g.villagers.describeRequest(req)} · 보유 ${have}/${req.n}`, value: 'req', disabled: have < req.n }); }
       choices.push({ label: '🎁 선물하기', note: v.lastGift === g.world.day ? '오늘은 이미 선물했어요' : '', value: 'gift', disabled: v.lastGift === g.world.day });
       if (id === 'merchant') choices.push({ label: '🛒 장터 열기', value: 'market' });
       if (id === 'guide') {

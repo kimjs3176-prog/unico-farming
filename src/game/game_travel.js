@@ -4,11 +4,13 @@ import { LAYOUT } from './world.js';
 
 /** 대화·컷신 중 이동을 막을 때 알림 */
 export const BUSY_TRAVEL = '대화가 끝나면 이동할 수 있어요';
+/** 같은 알림은 한 장만 (거듭 눌러도 쌓이지 않게), 경고 모양으로 보상 알림과 구분 */
+export const BUSY_TOAST = { key: 'busy-travel', type: 'warn' };
 
 export const GameTravel = {
   /** KOAT 체험관 입구로 이동 */
   goKoat() {
-    if (this.busy?.()) return this.ui.toast(BUSY_TRAVEL);
+    if (this.busy?.()) return this.ui.toast(BUSY_TRAVEL, BUSY_TOAST);
     if (this.ride.driving || this.smartfarm.active || this.nature.fishing || this.rice.threshing) return this.ui.toast('지금은 이동할 수 없어요');
     this.teleport(25, -24, { yaw: 0, pitch: 0.62, distance: 13, facing: Math.PI });
     // 도착 팡파르는 없앰 (순간이동 소리만): 큰 축하 소리는 보상·레벨업에만
@@ -18,7 +20,7 @@ export const GameTravel = {
 
   /** 순간이동 (지도·체험관 버튼). 카메라는 현재 각도 유지가 기본 */
   teleport(x, z, { yaw, pitch, distance, facing } = {}) {
-    if (this.busy?.()) { this.ui.toast(BUSY_TRAVEL); return false; }
+    if (this.busy?.()) { this.ui.toast(BUSY_TRAVEL, BUSY_TOAST); return false; }
     this.home?.leave(true); // 집 안에서 지도로 이동하면 먼저 밖으로
     this.ui.closePanel();
     this.player.position.set(x, 0, z);

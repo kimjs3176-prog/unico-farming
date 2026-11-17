@@ -61,7 +61,7 @@ test('앞모습 대화 구도: 주민 6종 × 다가온 방향 8곳 × 가로·�
   }
 });
 
-test('앞모습 구도 화면 검사: 주민 턱이 이름 칩보다 0.04 위, 내 몸은 좁고(가로 28%·세로 폰 40%) 화면 끝에 40% 넘게 잘리지 않음, 낮은 가로폰은 얼굴이 창 위로 12%', () => {
+test('앞모습 구도 화면 검사: 주민 턱이 이름 칩보다 0.04 위, 내 몸은 좁고(가로 24%·세로 폰 40%) 주민 얼굴을 덮지 않으며 화면 끝에 40% 넘게 잘리지 않음, 낮은 가로폰은 얼굴이 창 위로 12%', () => {
   const H0 = globalThis.innerHeight;
   try {
     for (const sp of SPECIES_IDS) for (let k = 0; k < 8; k++) for (const [name, { aspect, h }] of Object.entries(ASPECTS)) {
@@ -86,7 +86,9 @@ test('앞모습 구도 화면 검사: 주민 턱이 이름 칩보다 0.04 위, �
       for (const sgn of [-1, 1]) for (const y of [0.2, 1.85]) { const v = new THREE.Vector3(L.x + right.x * sgn, y, L.z + right.z * sgn).project(cam); x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x); }
       const w = (x1 - x0) / 2, clip = (Math.max(0, x1 - 1) + Math.max(0, -1 - x0)) / (x1 - x0);
       if (clip < 0.999) {
-        assert.ok(w <= (aspect < 1 ? 0.4 : 0.28) + 1e-9, `${tag}: 내 몸 너비 ${w.toFixed(2)}`);
+        assert.ok(w <= (aspect < 1 ? 0.4 : 0.24) + 1e-9, `${tag}: 내 몸 너비 ${w.toFixed(2)}`);
+        const fx = proj(cam, S, 1.3 * sc).x;
+        assert.ok(fx <= x0 - 0.06 || fx >= x1 + 0.06, `${tag}: 내 몸이 얼굴을 덮음 (${x0.toFixed(2)}~${x1.toFixed(2)}, 얼굴 ${fx.toFixed(2)})`);
         assert.ok(clip <= 0.4 + 1e-9, `${tag}: 내 몸 잘림 ${clip.toFixed(2)}`);
       }
     }
@@ -104,7 +106,7 @@ test('앞모습 구도 화면 검사: 가까우면 턱이 대화창에 붙으므
   for (const s of self._frontShots(L, S, e)) {
     const f = self.talkFrame(s, L, S, 1, 1.6, 45, 800);
     assert.equal(s.fit, self._frameOk(f, 1.6, 800));
-    if (s.fit) assert.ok(f.chinGap >= TALK_FRAME.room && f.heroW <= TALK_FRAME.heroW);
+    if (s.fit) assert.ok(f.chinGap >= TALK_FRAME.room && f.heroW <= TALK_FRAME.heroW && !f.cover);
   }
 });
 
@@ -311,4 +313,19 @@ test('렌즈 올림: 올린 대화 바로 뒤 컷신 샷(올림 없음)은 남�
   for (let i = 0; i < 30; i++) a.cin.update(1 / 30);
   assert.ok(!a.camera.view?.enabled, '다 걷히면 지움');
   assert.equal(a.cin._liftFast, false);
+});
+
+test('앞모습 대화 구도: 내 옆 우체통이 카메라→주민 얼굴 선에 있으면 다른 구도 (내 가까이 소품도 셈)', () => {
+  const camera = new THREE.PerspectiveCamera(45, 1.6, 0.1, 600);
+  camera.position.set(-3, 4, 10);
+  const e = entry('puppy'), S = e.u.group.position, L = { x: 0, z: 1.9 };
+  const world = { obstacles: [], boxes: [] };
+  const self = npcsWith(camera, { world });
+  const s0 = self.talkCamera(L, S, e, { front: true });
+  // 첫 구도의 카메라→얼굴 선 위에 우체통
+  const t = 0.62, mb = { x: s0.pos[0] + (S.x - s0.pos[0]) * t, z: s0.pos[2] + (S.z - s0.pos[2]) * t, r: 0.4 };
+  world.obstacles.push(mb);
+  assert.ok(self._propsOnFace(s0.pos, S) >= 1);
+  const s1 = self.talkCamera(L, S, e, { front: true });
+  assert.equal(self._propsOnFace(s1.pos, S), 0, `우체통을 피한 구도 ${s1.pos.map((v) => v.toFixed(1))}`);
 });

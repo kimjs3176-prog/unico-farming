@@ -361,7 +361,7 @@ class Game {
       if (input.justPressed('KeyT')) this.ui.chatInput.focus();
       if (input.justPressed('KeyP') && !this.ui.panel) this.autoplay.toggle(); // 오토플레이
       if (input.pressed.has('KeyM') && (!this.ui.panel || this.ui.panel.dataset.kind === 'map')) this.minimap.openBig(); // 지도 열기/닫기
-    }
+    } else if (input.justPressed('KeyP') && this.autoplay.on) this.autoplay.toggle(false); // 오토플레이가 넘기는 대화 중에도 P 로 끌 수 있게 (켜기는 안 됨)
 
     const pp = this.player.position;
     if (!this._warmedDeferred) this.warmDeferred(); // 뒤에서 받는 동물: 도착한 프레임에 셰이더 준비 (목장이 1초마다 풀어 놓기 전에)

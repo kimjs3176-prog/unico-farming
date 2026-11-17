@@ -36,7 +36,8 @@ export class Dialogue {
       if (!this.active || e.isComposing || e.target?.tagName === 'INPUT') return;
       if (['KeyE', 'Space', 'Enter'].includes(e.code)) { e.preventDefault(); e.stopImmediatePropagation(); this._advance(); return; }
       const n = +e.key;
-      if (n >= 1 && n <= 9 && this.choosing) { e.stopImmediatePropagation(); this.el.querySelectorAll('.dlg-choices button')[n - 1]?.click(); } // 선택지 번호 1~9
+      // preventDefault: 바꾸기로 글 상자에 포커스가 옮겨 가도 누른 숫자가 이름 칸에 찍히지 않게
+      if (n >= 1 && n <= 9 && this.choosing) { e.preventDefault(); e.stopImmediatePropagation(); this.el.querySelectorAll('.dlg-choices button')[n - 1]?.click(); } // 선택지 번호 1~9
     }, true);
     this.portraits = new Map();
     preloadPortraits();
@@ -108,6 +109,7 @@ export class Dialogue {
       this.$('.dlg-name small').innerHTML = ln.sub ? esc(ln.sub) : '';
       this.$('.dlg-choices').innerHTML = '';
       this.el.classList.toggle('has-choices', !!(ln.choices || ln.input));
+      this.el.classList.toggle('has-input', !!ln.input);
       ln.speaker?.playAction?.(ln.emote || 'talk', Math.min(2.5, ln.text.length * 0.05));
       ln.speaker?.speak?.(Math.min(6, [...ln.text].length / 38 + 0.2)); // 글자 나오는 동안 입 움직임 (초당 38자)
       result = await this._type(ln);
@@ -172,27 +174,13 @@ export class Dialogue {
   /**
    * 이름 카드 (대화창 안): 🐕 지금 이름 + [좋아!] / [✏️ 바꾸기]
    * 바꾸기를 눌러야 글 상자를 열고 포커스 (폰에서 처음부터 자판이 올라오지 않게). Enter 는 한글 조합이 끝난 뒤에만
+   * 글 상자 상태: 🐕 + 글 상자 + 글자 수(n/6), [좋아!] / [취소] (취소 → 처음 상태로)
+   * opt.onShow(): 카드가 뜰 때 (반려견 반기기 등)
    */
   _showName(opt, resolve) {
-    const max = opt.max || 6, cur = sanitizeName(opt.value, '', max);
+    const max = opt.max || 6, cur = sanitizeName(opt.value, '', max), icon = opt.icon || '🐕';
     this.choosing = true; this._choices = null; this._autoAt = 0;
     const box = this.$('.dlg-choices');
-    box.innerHTML = '';
-    const card = document.createElement('div');
-    card.className = 'dlg-name-card';
-    const chip = document.createElement('span');
-    chip.className = 'nm';
-    chip.textContent = `${opt.icon || '🐕'} ${cur}`;
-    const btns = document.createElement('div');
-    btns.className = 'btns';
-    const ok = document.createElement('button');
-    ok.className = 'gold';
-    ok.innerHTML = '<span class="k">1</span>좋아!';
-    const edit = document.createElement('button');
-    edit.innerHTML = '<span class="k">2</span>✏️ 바꾸기';
-    btns.append(ok, edit);
-    card.append(chip, btns);
-    box.append(card);
     let input = null;
     const n = (this._naming = {
       editing: false,
@@ -204,11 +192,39 @@ export class Dialogue {
         resolve(sanitizeName(v ?? cur, cur, max));
       },
     });
-    ok.onclick = (e) => { e.stopPropagation(); n.done(input ? input.value : cur); };
-    edit.onclick = (e) => {
-      e.stopPropagation();
-      if (input) return input.focus();
+    const btn = (k, label, cls = '') => {
+      const b = document.createElement('button');
+      if (cls) b.className = cls;
+      b.innerHTML = `<span class="k">${k}</span>${label}`;
+      return b;
+    };
+    // 처음 상태: 지금 이름 + [좋아!] / [✏️ 바꾸기]
+    const view = () => {
+      n.editing = false; input = null;
+      box.innerHTML = '';
+      const card = document.createElement('div');
+      card.className = 'dlg-name-card';
+      const chip = document.createElement('span');
+      chip.className = 'nm';
+      chip.innerHTML = `<i class="ic">${esc(icon)}</i>${esc(cur)}`;
+      const btns = document.createElement('div');
+      btns.className = 'btns';
+      const ok = btn(1, '좋아!', 'gold'), edit = btn(2, '✏️ 바꾸기');
+      ok.onclick = (e) => { e.stopPropagation(); n.done(cur); };
+      edit.onclick = (e) => { e.stopPropagation(); editView(); };
+      btns.append(ok, edit);
+      card.append(chip, btns);
+      box.append(card);
+    };
+    // 바꾸기 상태: 🐕 [글 상자 n/6] + [좋아!] / [취소]
+    const editView = () => {
       n.editing = true;
+      box.innerHTML = '';
+      const card = document.createElement('div');
+      card.className = 'dlg-name-card editing';
+      const field = document.createElement('label');
+      field.className = 'nm nm-edit';
+      field.innerHTML = `<i class="ic">${esc(icon)}</i>`;
       input = document.createElement('input');
       input.type = 'text';
       input.maxLength = max;
@@ -216,17 +232,30 @@ export class Dialogue {
       input.placeholder = `${max}글자까지`;
       input.setAttribute('enterkeyhint', 'done');
       input.setAttribute('aria-label', '새 이름');
+      const cnt = document.createElement('small');
+      cnt.className = 'cnt';
+      const count = () => { cnt.textContent = `${[...input.value].length}/${max}`; };
+      count();
+      input.addEventListener('input', count);
       input.addEventListener('keydown', (k) => {
         if (isSubmitEnter(k)) { k.preventDefault(); n.done(input.value); }
-        else if (k.key === 'Escape') { k.preventDefault(); n.done(cur); }
+        else if (k.key === 'Escape') { k.preventDefault(); view(); }
         k.stopPropagation(); // 이름을 치는 동안 게임 단축키로 새지 않게
       });
-      chip.replaceWith(input);
-      edit.remove();
-      ok.innerHTML = '<span class="k">↵</span>이 이름으로!';
+      field.append(input, cnt);
+      const btns = document.createElement('div');
+      btns.className = 'btns';
+      const ok = btn(1, '좋아!', 'gold'), cancel = btn(2, '취소', 'ghost');
+      ok.onclick = (e) => { e.stopPropagation(); n.done(input.value); };
+      cancel.onclick = (e) => { e.stopPropagation(); view(); };
+      btns.append(ok, cancel);
+      card.append(field, btns);
+      box.append(card);
       input.focus();
       input.select?.();
     };
+    view();
+    try { opt.onShow?.(); } catch { /* 연출 실패는 무시 */ }
   }
 
   _showChoices(choices, resolve) {
