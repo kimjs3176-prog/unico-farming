@@ -131,6 +131,7 @@ export class Scenery {
     this.grassGeo = geo;
     this.grassGeoLean = mergeGeometries([0, 2, 4, 6].map((i) => parts[i])); // 저사양: 잎 4장 (정점 -43%, 같은 잎을 골라 모양은 비슷)
     const mat = new THREE.MeshStandardMaterial({ color: 0x86d156, roughness: 1, side: THREE.DoubleSide });
+    this.nightU ||= { value: 0 }; // 밤 정도 (풀·수면 공용)
     this.windUniform = { value: 0 };
     this.grassFar = { value: new THREE.Vector3(0, 0, 0) }; // 저사양 풀 거리 제한 (x,z: 기준점, y: 거리, 0 = 끔)
     this.pushers = { value: [0, 1, 2, 3].map(() => new THREE.Vector3(9999, 0.01, 9999)) }; // (x, 반지름, z)
@@ -141,6 +142,7 @@ export class Scenery {
       sh.uniforms.uPush = this.pushers;
       sh.uniforms.uGFar = this.grassFar;
       sh.uniforms.uWet = SURF.wet;
+      sh.uniforms.uNight = this.nightU;
       sh.vertexShader = 'uniform float uTime; uniform float uWind; uniform vec3 uPush[4]; uniform vec3 uGFar; varying float vGH;\n' + sh.vertexShader.replace('#include <begin_vertex>',
         `#include <begin_vertex>
          vGH = clamp(position.y / 0.26, 0.0, 1.0);
@@ -154,10 +156,13 @@ export class Scenery {
          }
          // 거리 제한(저사양): 끝 ${GRASS_FADE}m 동안 포기가 밑동 쪽으로 줄어들며 사라짐 (칸이 툭 끊기지 않게)
          if (uGFar.y > 0.0) transformed *= 1.0 - smoothstep(uGFar.y - ${GRASS_FADE.toFixed(1)}, uGFar.y, distance(instanceMatrix[3].xz, uGFar.xz));`);
-      sh.fragmentShader = 'varying float vGH; uniform float uWet;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      sh.fragmentShader = 'varying float vGH; uniform float uWet; uniform float uNight;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
          diffuseColor.rgb *= mix(0.42, 1.18, vGH);
          diffuseColor.rgb += vec3(0.06, 0.07, 0.0) * smoothstep(0.7, 1.0, vGH);
-         diffuseColor.rgb *= 1.0 - 0.2 * uWet; // 비에 젖은 풀: 땅과 함께 어둡게`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+         // 비에 젖은 풀: 어둡고 조금 진하게
+         diffuseColor.rgb = mix(vec3(dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11))), diffuseColor.rgb, 1.0 + 0.15 * uWet) * (1.0 - 0.15 * uWet);
+         // 밤: 채도를 낮추고 달빛 푸른색으로 (물·바위와 같은 밤 색)
+         diffuseColor.rgb = mix(vec3(dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11))), diffuseColor.rgb, 1.0 - 0.35 * uNight) * mix(vec3(1.0), vec3(0.85, 0.92, 1.1), uNight);`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
          roughnessFactor *= 1.0 - 0.3 * uWet;`);
     };
     const COUNT = 9000; // 최대치로 위치를 뽑고 품질 설정에 따라 앞쪽 일부만 그림 (setDensity)
@@ -307,8 +312,8 @@ export class Scenery {
     const COMMON = /* glsl */`
       uniform float uTime, uClock, uRain, uDay, uNight; uniform vec3 deep, shallow, skyCol, sunDir, uLit;
       uniform vec3 uLamps[${LAMP_SLOTS}];
-      // 물가 거품 색: 밤에는 수면과 함께 어두워지되 조금 더 밝게 (물가 선이 보이게)
-      vec3 foamCol(){ return vec3(0.97, 0.99, 1.0) * mix(uLit, vec3(1.0), 0.15); }
+      // 물가 거품 색: 낮은 흰색, 밤은 수면과 함께 어두운 달빛 회청색 (하얀 표시처럼 뜨지 않게)
+      vec3 foamCol(){ return mix(vec3(0.97, 0.99, 1.0) * mix(uLit, vec3(1.0), 0.15), vec3(0.55, 0.62, 0.8) * uLit * 1.6, uNight); }
       uniform vec4 uRip[${RIPPLES}];
       varying vec3 vW; varying vec3 vPool; // xy: 중심(x,z), z: 반지름
       float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -334,7 +339,7 @@ export class Scenery {
           float front = 0.12 + age * 1.15, x = d - front;
           float env = exp(-x * x * 7.0) * step(x, 0.35) * exp(-age * 1.15) * r.w;
           s.xy += dv / d * (cos(x * 15.0) * 15.0 * 0.018 * env);
-          rfoam += exp(-x * x * 40.0) * exp(-age * 3.0) * r.w;
+          rfoam += exp(-x * x * mix(40.0, 90.0, uNight)) * exp(-age * 3.0) * r.w; // 밤엔 가는 고리
         }
         // 빗방울: 0.8m 칸마다 무작위 시각에 작은 고리
         if (uRain > 0.01) {
@@ -366,7 +371,7 @@ export class Scenery {
         float surge = 0.5 + 0.5 * sin(uTime * 1.3 - d * 2.0);
         float band = smoothstep(0.75 + surge * 0.25, 0.05, edgeD + (vnoise(vW.xz * 2.6 + uTime * 0.25) - 0.5) * 0.45);
         float breakup = smoothstep(0.35, 0.75, vnoise(vW.xz * 7.0 - uTime * 0.4));
-        foam = clamp(band * (0.35 + 0.65 * breakup) + rfoam * (0.5 + 0.5 * breakup), 0.0, 1.0);
+        foam = clamp(band * (0.35 + 0.65 * breakup) * mix(1.0, 0.5, uNight) + rfoam * (0.5 + 0.5 * breakup) * mix(1.0, 0.35, uNight), 0.0, 1.0); // 밤: 거품·고리는 은빛으로 은은하게
         // 햇빛 반짝임 (넓은 하이라이트 + 잘게 부서지는 반짝이)
         vec3 L = normalize(sunDir);
         float sd = max(dot(reflect(-V, N), L), 0.0);
@@ -386,13 +391,15 @@ export class Scenery {
             // 반사 중심: 등 높이와 카메라 높이 비율만큼 등에서 카메라 쪽 (거울상)
             float mid = dc * lp.y / (lp.y + max(cameraPosition.y - vW.y, 0.3));
             float lat = dot(rel, sideV) + dot(slope, sideV) * 2.2;
-            float w = 0.1 + 0.015 * abs(along - mid);
-            float body = exp(-lat * lat / (w * w)) * exp(-abs(along - mid) * 1.1 / (1.0 + mid * 0.1));
+            float w = 0.14 + 0.02 * abs(along - mid);
+            float body = exp(-lat * lat / (w * w)) * exp(-abs(along - mid) * 0.7 / (1.0 + mid * 0.1));
             float dash = 0.6 + 0.4 * sin(along * 9.0 + dot(slope, toCam) * 12.0 - uTime * 2.0);
             ls += body * dash;
           }
-          base += vec3(1.0, 0.5, 0.16) * ls * 1.1 * uNight;
+          base += vec3(1.0, 0.5, 0.16) * ls * 1.4 * uNight;
         }
+        // 땅거미: 노을빛이 물에 조금 (밤과 구별)
+        base += vec3(1.0, 0.6, 0.4) * 0.15 * (1.0 - uNight) * smoothstep(0.0, 0.3, uNight) * (0.6 + 0.4 * fres);
         return base + (pow(sd, 48.0) * 0.45 + glit) * glintCol;
       }`;
     const geo = mergeGeo(waters.map((W) => {
@@ -558,8 +565,8 @@ export class Scenery {
       const lit = this.litU.value.setRGB(1, 1, 1).lerp(NIGHT_WATER, nk).lerp(u.glow.value, duskK);
       const flash = this.world.precip?.flash || 0;
       if (flash > 0) lit.addScalar(flash * 0.6);
-      this.nightU.value = nk;
     }
+    if (this.nightU) this.nightU.value = nightFactor(daylight);
     for (const m of this.ridges || []) m.uniforms.horizon.value.copy(u.horizon.value).lerp(u.glow.value, u.dusk.value * 0.25);
     // 구름: 노을이면 아랫면이 물듦
     const tint = (this._tint ||= new THREE.Color()).setHex(0xffffff).lerp(u.glow.value, u.dusk.value * 0.55);

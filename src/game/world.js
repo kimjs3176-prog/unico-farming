@@ -133,6 +133,7 @@ const DAY_LENGTH = 360; // 실제 초 = 게임 하루
 // 애니메이션·상호작용이 있어 병합하면 안 되는 모델
 const DYNAMIC = new Set(['windmill', 'tower_windmill', 'drone', 'smartfarm', 'fruit_tree', 'thresher', 'tractor', 'hen', 'cloud']);
 const GREY = new THREE.Color(0x9aa4ae);
+const RAIN_COOL = new THREE.Color(0x8fa0b4), RAIN_COOL_GROUND = new THREE.Color(0x56645e); // 비 오는 날 빛 (서늘한 회청색)
 // 밤 달빛: 하늘빛은 푸르게, 땅 반사는 초록 대신 남색, 주변광도 푸르스름하게
 const MOON = new THREE.Color(0x9db4ff), NIGHT_GROUND = new THREE.Color(0x2c3a52), DAY_GROUND = new THREE.Color(0x6f9a4a), NIGHT_AMB = new THREE.Color(0xa9bcff), WHITE = new THREE.Color(0xffffff);
 const DAY_SKY = new THREE.Color(0xbfe4ff), DUSK_SKY = new THREE.Color(0xf4b183), NIGHT_SKY = new THREE.Color(0x1d2a4a);
@@ -289,13 +290,17 @@ export class World {
     this.groundSnow = { value: 0 }; // 눈 덮임 (update 에서 snowCover)
     this.groundWet = { value: 0 }; // 비에 젖음 (update 에서 SURF.wet)
     this.groundPud = { value: 0 }; // 흙길 물웅덩이 (보통·고사양만 1)
+    this.groundNight = { value: 0 }; // 밤 정도 (채도 낮추고 달빛 푸르게)
+    this.groundSky = { value: new THREE.Color(0xbcd3e6) }; // 하늘색 (물웅덩이에 비침)
     this.groundMat.onBeforeCompile = (sh) => {
       sh.uniforms.detailMap = { value: detail };
       sh.uniforms.uTime = this.groundTime;
       sh.uniforms.uSnow = this.groundSnow;
       sh.uniforms.uWet = this.groundWet;
       sh.uniforms.uPud = this.groundPud;
-      sh.fragmentShader = 'uniform sampler2D detailMap; uniform float uTime; uniform float uSnow; uniform float uWet; uniform float uPud;\n' + sh.fragmentShader.replace('#include <map_fragment>',
+      sh.uniforms.uNight = this.groundNight;
+      sh.uniforms.uSkyC = this.groundSky;
+      sh.fragmentShader = 'uniform sampler2D detailMap; uniform float uTime; uniform float uSnow; uniform float uWet; uniform float uPud; uniform float uNight; uniform vec3 uSkyC;\n' + sh.fragmentShader.replace('#include <map_fragment>',
         `#include <map_fragment>
          vec3 d = texture2D(detailMap, vMapUv * 46.0).rgb;
          // 흙(길·밭·모래·광장: 칠한 색의 r ≥ g)에는 잔디 디테일의 밝기만 곱함 → 흙이 연두로 물들지 않음
@@ -313,18 +318,29 @@ export class World {
          float cn = sin(cp.x * 3.1 + sin(cp.y * 2.3)) * sin(cp.y * 2.7 + sin(cp.x * 1.7)) + 0.35 * sin(cp.x * 7.3 + cp.y * 5.1);
          diffuseColor.rgb *= 1.0 - smoothstep(0.3, 0.85, cn) * 0.22;
          // 비에 젖은 땅: 흙은 진하게, 풀밭은 조금. 보통·고사양은 흙길 낮은 곳에 물웅덩이
-         float gWet = 0.0;
+         float gWet = 0.0, gPud = 0.0;
          if (uWet > 0.001) {
            gWet = uWet * mix(0.55, 1.0, bare);
-           diffuseColor.rgb *= mix(vec3(1.0), vec3(0.7, 0.72, 0.76), gWet);
+           // 흙·길은 0.72 배로 진하게, 풀밭은 0.8 배 + 채도 1.1 (서늘하게)
+           float gl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+           vec3 wetG = mix(vec3(gl), diffuseColor.rgb, 1.1) * vec3(0.76, 0.8, 0.86);
+           vec3 wetS = diffuseColor.rgb * vec3(0.7, 0.72, 0.76);
+           diffuseColor.rgb = mix(diffuseColor.rgb, max(mix(wetG, wetS, bare), 0.0), uWet);
            if (uPud > 0.5) {
              float pn = sin(vMapUv.x * 61.0 + sin(vMapUv.y * 43.0) * 2.1) * sin(vMapUv.y * 67.0 + sin(vMapUv.x * 37.0) * 1.7) + 0.4 * sin(vMapUv.x * 151.0 - vMapUv.y * 133.0);
-             float pud = bare * smoothstep(0.68, 0.86, pn) * smoothstep(0.4, 0.9, uWet);
-             diffuseColor.rgb *= mix(1.0, 0.55, pud);
-             gWet = max(gWet, pud * 1.4);
+             gPud = bare * smoothstep(0.68, 0.86, pn) * smoothstep(0.4, 0.9, uWet);
+             diffuseColor.rgb *= mix(1.0, 0.55, gPud);
+             gWet = max(gWet, gPud * 1.4);
            }
-         }`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-         roughnessFactor *= 1.0 - 0.35 * min(gWet, 1.0) - 0.45 * max(gWet - 1.0, 0.0) / 0.6;`);
+         }
+         // 밤: 채도를 낮추고 달빛 푸른색으로 (물·바위와 같은 밤 색)
+         diffuseColor.rgb = mix(vec3(dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11))), diffuseColor.rgb, 1.0 - 0.35 * uNight) * mix(vec3(1.0), vec3(0.85, 0.92, 1.1), uNight);`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+         roughnessFactor *= 1.0 - 0.35 * min(gWet, 1.0) - 0.45 * max(gWet - 1.0, 0.0) / 0.6;`).replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+         // 물웅덩이에 하늘이 비침 (보통·고사양, 비스듬히 볼수록 많이)
+         if (gPud > 0.001) {
+           float pf = 0.25 + 0.75 * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 2.0);
+           totalEmissiveRadiance += uSkyC * 0.9 * gPud * pf * uWet * 0.6;
+         }`);
     };
     // 연못 바닥 / 테두리 (물은 scenery 가 그림)
     const pondBed = new THREE.Mesh(new THREE.CircleGeometry(LAYOUT.pond.r, 48), new THREE.MeshStandardMaterial({ color: 0x3f7fa8, roughness: 0.9 }));
@@ -1021,7 +1037,8 @@ export class World {
     const overcast = W.cloud;
     const daylight = THREE.MathUtils.clamp(elev * 2.2 + 0.25, 0, 1) * (1 - overcast * 0.35);
     this.daylight = daylight;
-    this.sun.intensity = (0.15 + daylight * 2.2) * (1 - overcast * 0.8);
+    const rainK = W.kind === 'rain' || W.kind === 'storm' ? Math.min(1, W.precip) : 0; // 비 세기 (빛을 서늘하게)
+    this.sun.intensity = (0.15 + daylight * 2.2) * (1 - overcast * 0.8) * (1 - 0.35 * rainK);
     const nightK = this.nightK = nightFactor(daylight); // 0 낮 ~ 1 밤
     this.hemi.intensity = 0.1 + daylight * 1.0 + nightK * 0.06 + this.precip.flash * 2.5; // 밤에도 폰 화면에서 읽히게 조금 밝게
     this.scene.environmentIntensity = 0.06 + daylight * 0.28; // 환경광도 밤에는 줄임
@@ -1034,6 +1051,9 @@ export class World {
     this.hemi.color.setHex(0xd8eeff).lerp(this.sun.color, 0.16).lerp(MOON, nightK * 0.75).lerp(GREY, overcast * 0.6);
     this.hemi.groundColor.copy(DAY_GROUND).lerp(NIGHT_GROUND, nightK);
     this.ambient.color.copy(WHITE).lerp(NIGHT_AMB, nightK);
+    // 비: 하늘빛·주변광을 서늘한 회색 쪽으로 (그리기 추가 없음)
+    const wetL = SURF.wet.value * 0.25;
+    if (wetL > 0.001) { this.hemi.color.lerp(RAIN_COOL, wetL); this.hemi.groundColor.lerp(RAIN_COOL_GROUND, wetL); this.ambient.color.lerp(RAIN_COOL, wetL); }
     const sky = (this._sky ||= new THREE.Color());
     if (elev > 0.25) sky.copy(DAY_SKY);
     else if (elev > -0.1) sky.copy(DUSK_SKY).lerp(DAY_SKY, (elev + 0.1) / 0.35);
@@ -1055,7 +1075,7 @@ export class World {
     const wetT = W.kind === 'rain' || W.kind === 'storm' ? Math.min(1, W.precip * 1.3) : 0;
     SURF.wet.value = this._wetSeen || !this.weatherKind ? easeWet(SURF.wet.value, wetT, dt) : wetT;
     if (this.weatherKind) this._wetSeen = true;
-    if (this.groundWet) { this.groundWet.value = SURF.wet.value; this.groundPud.value = q.level === 'low' ? 0 : 1; }
+    if (this.groundWet) { this.groundWet.value = SURF.wet.value; this.groundPud.value = q.level === 'low' ? 0 : 1; this.groundNight.value = nightK; this.groundSky.value.copy(sky); }
     const night = daylight < 0.4 ? 1 : 0;
     for (const m of this.lampMaterials) m.emissiveIntensity = 1 + night * 3;
     const dusk = THREE.MathUtils.clamp(1 - daylight * 1.6, 0, 1);

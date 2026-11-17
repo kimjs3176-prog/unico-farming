@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Precipitation, activeCount, rainCount, rainPxLimits } from '../src/game/precip.js';
+import { Precipitation, activeCount, rainCount, rainPxLimits, RAIN_BOX_LOW } from '../src/game/precip.js';
 
 const fakeScene = () => ({ added: [], add(...o) { this.added.push(...o); } });
 
@@ -30,13 +30,15 @@ test('빗줄기: 맑음·실내(밀도 0)이면 그리지 않음', () => {
   assert.equal(p.rainGeo.instanceCount, 0); assert.equal(p.rain.visible, false);
 });
 
-test('빗줄기 저사양: 품질 비율 0.4 의 3/4 (0.3), 화면 폭은 2px 이하', () => {
+test('빗줄기 저사양: 품질 비율 0.4 의 9/8 (0.45), 진하게·작은 상자, 화면 폭은 2px 이하', () => {
   const N = 2200;
-  assert.equal(rainCount(N, 1, 0.4, true), activeCount(N, 1, 0.3));
+  assert.equal(rainCount(N, 1, 0.4, true), activeCount(N, 1, 0.45));
   assert.equal(rainCount(N, 1, 1, false), N);
   const p = new Precipitation(fakeScene());
   p.set('storm', 1, 0.5); p.density = 0.4; p.thin = true; p.update(0.016, { x: 0, z: 0 });
-  assert.equal(p.rainGeo.instanceCount, Math.floor(N * 0.3));
+  assert.equal(p.rainGeo.instanceCount, Math.floor(N * 0.45));
+  assert.ok(Math.abs(p.rainU.uAlpha.value - 0.98) < 1e-9, '저사양 폭풍 0.7 × 1.4');
+  assert.deepEqual(p.rainU.uBox.value.toArray(), [RAIN_BOX_LOW.w, RAIN_BOX_LOW.h, RAIN_BOX_LOW.d]);
   // 폭 한계: 실제 픽셀 비율을 반영, 저사양 최대 2 장치 픽셀
   for (const pr of [1, 1.35, 2, 3]) {
     const lo = rainPxLimits(pr, true), hi = rainPxLimits(pr, false);
@@ -56,7 +58,8 @@ test('빗줄기 상자: 플레이어와 카메라 사이 가운데', () => {
 test('땅 튀김: 보통·고사양에서만, 물·건물 위(null)는 건너뜀', () => {
   const p = new Precipitation(fakeScene());
   p.set('rain', 1, 0.2); p.splash = false; p.update(0.016, { x: 0, z: 0 });
-  assert.equal(p.spl, undefined, '꺼져 있으면 만들지도 않음');
+  assert.equal(p.spl.visible, false, '꺼져 있으면 그리지 않음');
+  assert.equal(p.splGeo.instanceCount, 0);
   p.splash = true;
   p.ground = (x) => (x > 0 ? null : 0.5);
   for (let i = 0; i < 40; i++) p.update(0.05, { x: 0, z: 0 });
@@ -70,4 +73,27 @@ test('땅 튀김: 보통·고사양에서만, 물·건물 위(null)는 건너뜀
     assert.equal(a[i * 4 + 1], 0.5, '땅 높이에');
   }
   assert.ok(shown > 5);
+});
+
+test('로딩 미리 컴파일: 비·튀김·눈은 처음엔 보이되 그릴 개수 0, 첫 update 에서 꺼짐', () => {
+  const p = new Precipitation(fakeScene());
+  assert.equal(p.rain.visible, true); assert.equal(p.rainGeo.instanceCount, 0);
+  assert.equal(p.spl.visible, true); assert.equal(p.splGeo.instanceCount, 0);
+  assert.equal(p.snow.visible, true); assert.equal(p.snowGeo.drawRange.count, 0);
+  p.set('clear', 0, 0); p.update(0.016, { x: 0, z: 0 });
+  assert.equal(p.rain.visible, false); assert.equal(p.spl.visible, false); assert.equal(p.snow.visible, false);
+});
+
+test('AO 덮어쓰기 패스: 비·튀김은 크기 0 으로 (원점 사각형 겹침 방지)', () => {
+  const p = new Precipitation(fakeScene());
+  const r = { getDrawingBufferSize: (v) => v.set(800, 600), getPixelRatio: () => 1 };
+  p.rain.onBeforeRender(r, { overrideMaterial: {} });
+  assert.equal(p.rain.matrixWorld.determinant(), 0);
+  p.spl.onBeforeRender(r, { overrideMaterial: {} });
+  assert.equal(p.spl.matrixWorld.determinant(), 0);
+  // 보통 패스는 그대로
+  const q = new Precipitation(fakeScene());
+  q.rain.onBeforeRender(r, { overrideMaterial: null });
+  assert.equal(q.rain.matrixWorld.determinant(), 1);
+  assert.equal(q.rainU.uViewH.value, 600);
 });

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { skipOverride } from './fx.js';
 
 // 빗줄기 (GPU): 사각형 한 장을 빗방울 수만큼 인스턴스로 그림. 위치·낙하는 정점 셰이더가 시간으로 계산 → 매 프레임 JS 계산·버퍼 업로드 없음
 const RAIN_VS = /* glsl */`
@@ -43,13 +44,14 @@ const RAIN_FS = /* glsl */`
   }`;
 
 // 땅 튀김 (보통·고사양): 바닥에 퍼지는 작은 고리
-const SPLASH_N = 48, SPLASH_LIFE = 0.32;
+const SPLASH_N = 64, SPLASH_LIFE = 0.36;
 const SPLASH_VS = /* glsl */`
   attribute vec4 aSpl; // x, y, z, 시작 시각
   uniform float uTime; varying vec2 vUv; varying float vAge;
   void main(){
     vAge = (uTime - aSpl.w) / ${SPLASH_LIFE.toFixed(2)};
-    float r = 0.05 + 0.2 * clamp(vAge, 0.0, 1.0);
+    float sz = 0.7 + 0.6 * fract(aSpl.w * 7.31); // 고리마다 크기 조금씩 다르게
+    float r = (0.06 + 0.22 * sqrt(clamp(vAge, 0.0, 1.0))) * sz; // 빨리 퍼지다 느려짐 (반지름 약 0.2~0.35m)
     vUv = position.xz;
     vec3 p = aSpl.xyz + vec3(position.x * r, 0.03, position.z * r);
     gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
@@ -58,8 +60,8 @@ const SPLASH_FS = /* glsl */`
   uniform vec3 uColor; uniform float uAlpha; varying vec2 vUv; varying float vAge;
   void main(){
     float d = length(vUv);
-    float ring = smoothstep(0.55, 0.8, d) * (1.0 - smoothstep(0.85, 1.0, d));
-    float a = ring * (1.0 - vAge) * step(0.0, vAge) * step(vAge, 0.999);
+    float ring = smoothstep(0.68, 0.86, d) * (1.0 - smoothstep(0.88, 1.0, d));
+    float a = ring * (1.0 - vAge) * (1.0 - vAge) * step(0.0, vAge) * step(vAge, 0.999);
     if (a < 0.01) discard;
     gl_FragColor = vec4(uColor, a * uAlpha);
     #include <tonemapping_fragment>
@@ -98,9 +100,12 @@ export class Precipitation {
     this.rain = new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: this.rainU, vertexShader: RAIN_VS, fragmentShader: RAIN_FS, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide }));
     this.rain.frustumCulled = false;
     this.rain.renderOrder = 2;
-    this.rain.visible = false;
+    // 처음엔 보이게 둠 (그릴 개수 0 → 그리지 않음): 로딩 때 셰이더를 미리 컴파일, update 가 매 프레임 정함
+    this.rain.visible = true;
     // 실제 화면 높이(장치 픽셀)·픽셀 비율로 폭 제한 (저사양 폰은 약 1.35배로 그림)
-    this.rain.onBeforeRender = (r) => {
+    this.rain.onBeforeRender = (r, scene) => {
+      // AO 법선·깊이 패스(덮어쓰기 재질)에서는 그리지 않음: 원점에 사각형 겹침이 생김
+      if (scene?.overrideMaterial) { this.rain.matrixWorld.makeScale(0, 0, 0); return; }
       r.getDrawingBufferSize(_buf);
       const pr = r.getPixelRatio();
       this.rainU.uViewH.value = _buf.y;
@@ -108,15 +113,17 @@ export class Precipitation {
       this.rainU.uPxMin.value = lim.min;
       this.rainU.uPxMax.value = lim.max;
     };
-    // 눈: 둥근 점 (텍스처는 처음 눈이 올 때 만듦)
+    // 눈: 둥근 점 (그릴 개수 0 으로 보이게 두어 로딩 때 컴파일)
     const spos = new Float32Array(N * 3);
     this.snowGeo = new THREE.BufferGeometry();
     this.snowGeo.setAttribute('position', new THREE.BufferAttribute(spos, 3));
-    this.snowMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.16, transparent: true, alphaTest: 0.1, depthWrite: false });
+    this.snowGeo.setDrawRange(0, 0);
+    this.snowMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.16, transparent: true, alphaTest: 0.1, depthWrite: false, map: typeof document !== 'undefined' ? dotTexture() : null });
     this.snow = new THREE.Points(this.snowGeo, this.snowMat);
     this.snow.frustumCulled = false;
-    this.snow.visible = false;
+    this.snow.visible = true;
     scene.add(this.rain, this.snow);
+    this._makeSplash();
     this.kind = 'clear';
     this.intensity = 0;
     this.wind = 0;
@@ -155,11 +162,12 @@ export class Precipitation {
       // 상자 중심: 플레이어와 카메라 사이 (카메라 정보가 없으면 플레이어)
       U.uCenter.value.set(v ? (center.x + v.x) / 2 : center.x, 0, v ? (center.z + v.z) / 2 : center.z);
       U.uColor.value.setHex(0xa7c3db).multiplyScalar(this.light);
-      U.uAlpha.value = this.kind === 'storm' ? 0.7 : 0.6;
+      U.uAlpha.value = (this.kind === 'storm' ? 0.7 : 0.6) * (this.thin ? 1.4 : 1); // 저사양: 가는 줄이라 조금 진하게
+      const B = this.thin ? RAIN_BOX_LOW : this.rainBox; // 저사양: 상자를 줄여 같은 수로 화면에 촘촘히
+      U.uBox.value.set(B.w, B.h, B.d);
     }
     this._splashes(isRain && this.splash, center);
     if (isSnow) {
-      this.snowMat.map ||= dotTexture();
       const pos = this.snowGeo.attributes.position.array, sd = this.seeds;
       for (let i = 0; i < active; i++) {
         const o = i * 3;
@@ -180,36 +188,41 @@ export class Precipitation {
     }
   }
 
+  /** 땅 튀김 메시 (처음부터 만들어 로딩 때 컴파일, 개수 0 이면 그리지 않음) */
+  _makeSplash() {
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([-1, 0, -1, 1, 0, -1, -1, 0, 1, 1, 0, 1], 3));
+    geo.setIndex([0, 2, 1, 1, 2, 3]);
+    this.splArr = new Float32Array(SPLASH_N * 4).fill(-99);
+    this.splAttr = new THREE.InstancedBufferAttribute(this.splArr, 4);
+    this.splAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('aSpl', this.splAttr);
+    geo.instanceCount = 0;
+    this.splGeo = geo;
+    this.splU = { uTime: { value: 0 }, uColor: { value: new THREE.Color(0xe4eef8) }, uAlpha: { value: 0.4 } }; // 은은하게 (하얀 표시처럼 뜨지 않게)
+    this.spl = new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: this.splU, vertexShader: SPLASH_VS, fragmentShader: SPLASH_FS, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+    this.spl.frustumCulled = false;
+    this.spl.renderOrder = 1;
+    this.spl.onBeforeRender = skipOverride; // AO 패스에서는 그리지 않음
+    this.scene.add(this.spl);
+  }
+
   /** 땅 튀김: 수명이 끝난 것만 CPU 에서 새 자리로 (프레임당 몇 개), 물·건물·장애물 위는 건너뜀 */
   _splashes(on, center) {
-    if (!on) { if (this.spl) this.spl.visible = false; return; }
-    if (!this.spl) {
-      const geo = new THREE.InstancedBufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute([-1, 0, -1, 1, 0, -1, -1, 0, 1, 1, 0, 1], 3));
-      geo.setIndex([0, 2, 1, 1, 2, 3]);
-      this.splArr = new Float32Array(SPLASH_N * 4).fill(-99);
-      this.splAttr = new THREE.InstancedBufferAttribute(this.splArr, 4);
-      this.splAttr.setUsage(THREE.DynamicDrawUsage);
-      geo.setAttribute('aSpl', this.splAttr);
-      geo.instanceCount = SPLASH_N;
-      this.splU = { uTime: { value: 0 }, uColor: { value: new THREE.Color(0xd8e6f2) }, uAlpha: { value: 0.55 } };
-      this.spl = new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: this.splU, vertexShader: SPLASH_VS, fragmentShader: SPLASH_FS, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide }));
-      this.spl.frustumCulled = false;
-      this.spl.renderOrder = 1;
-      this.scene.add(this.spl);
-    }
-    this.spl.visible = true;
+    this.spl.visible = on;
+    this.splGeo.instanceCount = on ? SPLASH_N : 0;
+    if (!on) return;
     const U = this.splU, a = this.splArr, t = this.t;
     U.uTime.value = t;
-    U.uColor.value.setHex(0xd8e6f2).multiplyScalar(this.light);
+    U.uColor.value.setHex(0xe4eef8).multiplyScalar(this.light);
     let dirty = false;
     const n = Math.max(1, Math.round(SPLASH_N * Math.min(1, this.intensity * 1.3)));
     for (let i = 0; i < n; i++) {
       if (t - a[i * 4 + 3] < SPLASH_LIFE) continue;
-      // 플레이어 둘레 12m (카메라 쪽으로 조금 치우침)
+      // 플레이어 둘레 10m (카메라 쪽으로 조금 치우침: 보는 곳에 촘촘히)
       const v = this.view;
       const cx = v ? center.x + (v.x - center.x) * 0.3 : center.x, cz = v ? center.z + (v.z - center.z) * 0.3 : center.z;
-      const r = Math.sqrt(Math.random()) * 12, ang = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * 10, ang = Math.random() * Math.PI * 2;
       const x = cx + Math.cos(ang) * r, z = cz + Math.sin(ang) * r;
       const y = this.ground ? this.ground(x, z) : 0;
       a[i * 4 + 3] = t + Math.random() * 0.25; // 시작을 흩어 한꺼번에 터지지 않게
@@ -223,10 +236,12 @@ export class Precipitation {
 }
 
 const _buf = new THREE.Vector2();
+/** 저사양 비 상자: 카메라 앞을 더 촘촘히 (같은 그리기 1번) */
+export const RAIN_BOX_LOW = { w: 22, h: 14, d: 22 };
 
-/** 빗줄기 수: 저사양(thin)은 눈 입자 비율의 3/4 (0.4 → 0.3) — 빗줄기가 선보다 넓어 채우는 픽셀이 늘지 않게 */
+/** 빗줄기 수: 저사양(thin)은 품질 비율 0.4 의 9/8 (약 0.45) — 폭 2px 이하라 폰에서도 비가 읽히게 */
 export function rainCount(N, intensity, density = 1, thin = false) {
-  return activeCount(N, intensity, density * (thin ? 0.75 : 1));
+  return activeCount(N, intensity, density * (thin ? 1.125 : 1));
 }
 
 /** 빗줄기 화면 폭 한계(장치 픽셀): 최소 1.4 CSS px (실제 픽셀 비율 반영), 저사양은 최대 2px */
