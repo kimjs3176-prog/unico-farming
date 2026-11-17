@@ -17,6 +17,9 @@ export const KINDS = [
   ['rod', '낚싯대', 'lake'],
 ];
 
+/** 카드에서만 바꿔 쓰는 그림: 꾸미기 '외바퀴 수레'(🛒)가 장터 단추(🛒)와 겹치지 않게 */
+export const CARD_ICON = { cart: '🪵' };
+
 /** 플레이어 레벨 최고값 */
 export const MAX_LEVEL = LEVELS.length;
 
@@ -26,7 +29,7 @@ export function unlocksAt(lv) {
   for (const c of Object.values(CROPS)) if (c.unlockLevel === lv && lv > 1) out.push({ icon: c.emoji, name: `${c.name} 씨앗`, kind: 'seed' });
   for (const b of Object.values(BUILDINGS)) if (b.lv === lv && lv > 1) out.push({ icon: b.emoji, name: b.name, kind: 'building' });
   for (const c of COSTUMES) if (c.lv === lv && lv > 1 && c.unlock !== 'stamps' && !c.festival) out.push({ icon: c.icon, name: c.name, kind: 'costume' });
-  for (const d of DECOR) if (d.lv === lv && lv > 1) out.push({ icon: d.icon, name: d.name, kind: 'decor' });
+  for (const d of DECOR) if (d.lv === lv && lv > 1) out.push({ icon: CARD_ICON[d.id] || d.icon, name: d.name, kind: 'decor' });
   for (const h of HOME_LEVELS) if (h.lv === lv && lv > 1) out.push({ icon: '🏡', name: `${h.name} 넓히기`, kind: 'home' });
   for (const r of RODS) if (r.level === lv && lv > 1) out.push({ icon: r.emoji, name: r.name, kind: 'rod' });
   const order = KINDS.map((k) => k[0]);

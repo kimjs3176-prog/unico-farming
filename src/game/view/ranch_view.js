@@ -428,9 +428,9 @@ export class RanchView {
     if (this._lv && lv > this._lv) {
       const g = this.game;
       const unlock = Object.entries(RANCH_RECIPES).filter(([, r]) => r.level === lv).map(([k]) => ITEMS[k].name);
+      // 리본이 같은 말을 하므로 알림은 리본이 없을 때만
       if (g.ui.skillLevelUp) g.ui.skillLevelUp(`🐄 목장 Lv.${lv}!`, Object.entries(RANCH_RECIPES).filter(([, r]) => r.level === lv).map(([k]) => `${ITEMS[k].emoji} ${ITEMS[k].name}`));
-      else g.audio.play('win');
-      g.ui.toast(`🐄 목장 숙련도 Lv.${lv}!${unlock.length ? ` 목장 가공소에서 ${unlock.join(', ')}${josa(unlock.join(', '), '을/를')} 만들 수 있어요` : ''}`);
+      else { g.audio.play('win'); g.ui.toast(`🐄 목장 숙련도 Lv.${lv}!${unlock.length ? ` 목장 가공소에서 ${unlock.join(', ')}${josa(unlock.join(', '), '을/를')} 만들 수 있어요` : ''}`); }
     }
     this._lv = lv;
   }

@@ -38,7 +38,11 @@
    입력칸은 display/visibility 로 숨기지 않음 (보이지만 않게: 초점은 그대로 받음) */
 .chat-bubble { display: none; }
 @media (min-width: 601px) and (pointer: fine) {
-  .chat:not(:focus-within):not(.peek) { width: fit-content; }
-  .chat:not(:focus-within):not(.peek) .log, .chat:not(:focus-within) input { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; clip-path: inset(50%); }
-  .chat:not(:focus-within):not(.peek) .chat-bubble { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; font-size: 19px; }
+  /* 접힌 동그라미는 아래 행동 막대와 같은 바닥선(16px)에 (펼치면 위의 자리로) */
+  .chat:not(:focus-within):not(.peek) { width: fit-content; bottom: 16px; }
+  /* 펼쳐 보여 주는 동안(.peek)은 입력칸도 보여 바로 눌러 답할 수 있게 */
+  .chat:not(:focus-within):not(.peek) .log, .chat:not(:focus-within):not(.peek) input { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; clip-path: inset(50%); }
+  .chat:not(:focus-within):not(.peek) .chat-bubble { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; font-size: 20px; }
+  /* 접혀 있는 동안 새 글: 빨간 점 */
+  .chat-bubble.unread::after { content: ''; position: absolute; top: 1px; right: 1px; width: 11px; height: 11px; border-radius: 50%; background: #d9443b; box-shadow: 0 0 0 2px #fff; }
 }

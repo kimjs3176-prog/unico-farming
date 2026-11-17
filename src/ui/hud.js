@@ -7,6 +7,8 @@ import { portraitSVG } from './portrait2d.js';
 import { showRibbon, showUnlockCard } from './levelup.js';
 import { reward } from '../game/reward.js';
 
+/** 레벨업: 리본 뒤 만세까지(ms), 만세 뒤 해금 카드까지(ms) — 합이 리본 시간(RIBBON_MS 1.8초)보다 길어 카드가 리본과 겹치지 않음 */
+export const LV_CHEER_AT = 500, LV_CARD_AFTER = 1400;
 /** 끊긴 뒤 이만큼 다시 붙지 못하면 알림 */
 export const NET_LOST_MS = 2500;
 /** 코인 날리기: 한 번에 날리는 개수(높음/낮음 품질), 동시에 떠 있는 코인 상한, 하나씩 떠나는 간격(ms), 날아가는 시간(ms), 안전하게 다 풀어 주는 시간(ms) */
@@ -18,6 +20,23 @@ export function splitCoins(amount, n) {
   const base = Math.floor(amount / n), extra = amount - base * n;
   return Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
 }
+/**
+ * 코인 하나가 날아가는 길: (0,0) → (dx,dy) 2차 곡선 (조절점은 출발점 위로 띄워 포물선), 크기 0.6 → 1.15 → 0.8
+ * @param side 옆으로 휘는 정도(px, 코인마다 좌우 번갈아) · @param n 구간 수
+ * @returns Web Animations 키프레임 [{ transform, offset }]
+ */
+export function coinArc(dx, dy, side = 0, n = 9) {
+  const cx = dx * 0.25 + side, cy = Math.min(0, dy) - 70 - Math.abs(dx) * 0.08;
+  const out = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, u = 1 - t;
+    const x = 2 * u * t * cx + t * t * dx, y = 2 * u * t * cy + t * t * dy;
+    const sc = t < 0.3 ? 0.6 + (t / 0.3) * 0.55 : 1.15 - ((t - 0.3) / 0.7) * 0.35;
+    out.push({ transform: `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${sc.toFixed(3)})`, offset: t });
+  }
+  return out;
+}
+
 /** 경험치 고리 % (이번 레벨 시작점부터) */
 export function xpPct(q) {
   const prev = q.level > 1 ? (q.nextXp === q.xp ? q.xp : LEVEL_PREV(q)) : 0;
@@ -53,7 +72,7 @@ export const HudUI = {
     this.calendar.title = '날씨 자세히 보기 · 계절은 7일마다 바뀌어요 (제철 작물은 빨리 자라고 비싸게 팔려요)';
     this.calendar.onclick = () => this.openWeather();
     this.weatherChip = this.calendar;
-    // 오른쪽 버튼: 가방 · 퀘스트(받을 보상 수) · 설정. 단축키는 올리거나 키보드로 고를 때만
+    // 오른쪽 버튼: 가방 · 퀘스트(받을 보상 수) · 설정 · 도움말 (폰은 가방·설정만). 단축키는 올리거나 키보드로 고를 때만
     const right = (this.hudRight = h('div', 'hud-right'));
     this.btnBag = h('button', 'ghost hud-btn bag-btn', '🎒<kbd class="kc">I</kbd>');
     this.btnBag.setAttribute('aria-label', '가방 (I)');
@@ -61,13 +80,15 @@ export const HudUI = {
     this.btnQuest.setAttribute('aria-label', '퀘스트 (Q)');
     this.btnSettings = h('button', 'ghost hud-btn set-btn', '⚙️');
     this.btnSettings.setAttribute('aria-label', '환경설정');
-    this.btnSettings.title = '환경설정 (그래픽 품질·도움말)';
-    this.btnHelp = h('button', 'ghost hud-btn', '❔'); // 화면에는 붙이지 않음: 도움말은 설정 창 안에서
+    this.btnSettings.title = '환경설정 (그래픽 품질·소리·글자 크기)';
+    this.btnHelp = h('button', 'ghost hud-btn help-btn', '❔');
+    this.btnHelp.setAttribute('aria-label', '도움말');
+    this.btnHelp.title = '도움말';
     this.btnSettings.onclick = () => this.openSettings();
     this.btnBag.onclick = () => this.openInventory();
     this.btnQuest.onclick = () => this.openQuests();
     this.btnHelp.onclick = () => this.openHelp();
-    right.append(this.btnBag, this.btnQuest, this.btnSettings);
+    right.append(this.btnBag, this.btnQuest, this.btnSettings, this.btnHelp);
     this.fpsChip = h('div', 'fps-chip', '');
     root.append(this.fpsChip);
     this.top.append(this.badge, this.purse, this.calendar);
@@ -163,8 +184,9 @@ export const HudUI = {
    * 코인 날리기: from(월드 Vector3 또는 화면 사각형)에서 지갑으로 🪙 여러 개가 45ms 간격으로 날아감.
    * 닿을 때마다 숫자가 그만큼 올라가고 소리가 반음씩 높아짐 (그동안 HUD 는 아직 안 닿은 몫을 빼고 보여 줌)
    * 화면 밖·숨은 탭·닫힌 창이어도 1.3초 뒤에는 남은 몫을 다 풀어 줌
+   * onDone: 마지막 코인이 닿은 뒤 (장터 알림을 그때 띄움)
    */
-  flyToCoin(amount, from) {
+  flyToCoin(amount, from, onDone) {
     const g = this.game;
     amount = Math.round(amount);
     if (!(amount > 0)) return;
@@ -179,6 +201,7 @@ export const HudUI = {
       batch.done = true;
       if (batch.left > 0) { this.coinHold = Math.max(0, this.coinHold - batch.left); batch.left = 0; this._paintCoin(); }
       this._coinPlus(amount);
+      onDone?.();
     };
     const tgt = this._coinEl()?.getBoundingClientRect();
     parts.forEach((part, k) => {
@@ -187,14 +210,14 @@ export const HudUI = {
         let el = null;
         if (tgt && (this._liveCoins || 0) < COIN_LIVE_CAP && !document.hidden) {
           this._liveCoins = (this._liveCoins || 0) + 1;
-          el = h('div', 'fly coin', '🪙');
+          el = h('div', 'fly coin', '<i>🪙</i>');
           if (low) el.style.filter = 'none';
           const jx = (Math.random() - 0.5) * 26, jy = (Math.random() - 0.5) * 18; // 한 점에서 나오지 않게 살짝 흩뿌림
-          el.style.left = `${sx + jx - 11}px`; el.style.top = `${sy + jy - 11}px`;
+          el.style.left = `${sx + jx - 15}px`; el.style.top = `${sy + jy - 15}px`;
           document.body.append(el);
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            el.style.transform = `translate(${tgt.left + tgt.width / 2 - sx - jx}px, ${tgt.top + tgt.height / 2 - sy - jy}px) scale(0.7)`;
-          }));
+          const path = coinArc(tgt.left + tgt.width / 2 - sx - jx, tgt.top + tgt.height / 2 - sy - jy, (k % 2 ? 1 : -1) * (20 + Math.random() * 30), low ? 5 : 9);
+          if (el.animate) el.animate(path, { duration: COIN_FLIGHT, easing: 'cubic-bezier(.4,0,.7,1)', fill: 'forwards' });
+          else requestAnimationFrame(() => requestAnimationFrame(() => { el.style.transform = path[path.length - 1].transform; }));
         }
         setTimeout(() => {
           if (el) { el.remove(); this._liveCoins--; }
@@ -215,7 +238,12 @@ export const HudUI = {
     const el = this._coinEl();
     if (!el) return;
     if (el.closest?.('.mk-coin')) el.textContent = Math.max(0, this.game.economy.money - (this.coinHold || 0)).toLocaleString();
-    if (bump) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+    if (bump) {
+      el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+      // HUD 지갑 자체도 톡 (장터 위쪽 숫자는 숫자만)
+      const pu = el.closest?.('.purse');
+      if (pu) { pu.classList.remove('bump'); void pu.offsetWidth; pu.classList.add('bump'); clearTimeout(this._purseT); this._purseT = setTimeout(() => pu.classList.remove('bump'), 300); }
+    }
   },
 
   /** '+N' 이 지갑 옆에 잠깐 떠오름 */
@@ -242,26 +270,34 @@ export const HudUI = {
 
   /**
    * 플레이어 레벨업 축하 (updateHud 가 레벨이 오른 것을 보고 부름 → 퀘스트·체험관 투어·그 밖의 모든 경험치)
-   * 바로: 'Lv.N!' 리본(창 위에서도) + 소리 + 배지 금빛. 창·대화·컷신이 없어지면: 만세 + 금빛 반짝임 + 해금 카드
+   * 차례: 'Lv.N!' 리본(창 위에서도, 컷신 중이면 끝난 뒤) + 소리 + 배지 금빛 → 창·대화·컷신이 없으면 만세 + 금빛 반짝임
+   *   → 리본이 사라진 뒤 해금 카드 (만세를 먼저 보여 주고, 'Lv' 머리글이 두 번 겹치지 않게)
    */
   celebrateLevel(before, after) {
+    const g = this.game, p = this._lvPending, cine = !!g.cinema?.locked;
+    if (!cine) this._levelRibbon(after);
+    this._lvPending = { before: p ? Math.min(p.before, before) : before, after, at: performance.now() + LV_CHEER_AT, ribbon: cine, cheered: false };
+  },
+
+  /** 'Lv.N!' 리본 + 팡파르 + 배지 금빛 */
+  _levelRibbon(lv) {
     const g = this.game;
-    showRibbon(this.root, { title: `Lv.${after}!`, sub: '레벨이 올랐어요' });
+    showRibbon(this.root, { title: `Lv.${lv}!`, sub: '레벨이 올랐어요' });
     g.audio?.play('levelup');
     g.audio?.duck?.(0.6, 1.5);
     this.badge.classList.remove('glow'); void this.badge.offsetWidth; this.badge.classList.add('glow');
     clearTimeout(this._glowT);
     this._glowT = setTimeout(() => this.badge.classList.remove('glow'), 700);
-    const p = this._lvPending;
-    this._lvPending = { before: p ? Math.min(p.before, before) : before, after, at: performance.now() + 1300 }; // 카드는 리본이 거의 지나간 뒤
   },
 
-  /** 미뤄 둔 레벨업 카드: 창·대화·컷신·미니게임이 없을 때 */
+  /** 미뤄 둔 레벨업 차례: 창·대화·컷신·미니게임이 없을 때 (리본 → 만세 → 카드) */
   _flushLevel() {
-    const p = this._lvPending, g = this.game;
-    if (!p || performance.now() < p.at || this.panel || g.dialogue?.active || g.cinema?.locked || this.root.querySelector('.mg-wrap')) return;
+    const p = this._lvPending, g = this.game, now = performance.now();
+    if (!p || now < p.at || this.panel || g.dialogue?.active || g.cinema?.locked || this.root.querySelector('.mg-wrap')) return;
+    if (p.ribbon) { p.ribbon = false; this._levelRibbon(p.after); p.at = now + LV_CHEER_AT; return; }
+    if (!p.cheered) { p.cheered = true; reward(g, 3, { sound: null }); p.at = now + LV_CARD_AFTER; return; }
     this._lvPending = null;
-    reward(g, 3, { sound: null });
+    this.root.querySelector('.lvl-ribbon:not(.skill)')?.remove(); // 카드가 머리글을 이어받음
     showUnlockCard(this, p.before, p.after, { auto: !!g.autoplay?.on });
   },
 
@@ -293,9 +329,12 @@ export const HudUI = {
       g.fx.onCoin = (n, p) => this.flyToCoin(n, p);
       g.reward ||= (tier, o) => reward(g, tier, o);
     }
-    if (!this._face && g.player?.unico) {
-      this._face = true;
-      try { this.badge.querySelector('.pb-face').append(portraitSVG(g.player.unico, { accent: '#30b6aa' })); } catch { /* 얼굴 없이 고리만 */ }
+    // 배지 얼굴: 캐릭터나 색(palette)이 바뀌면 다시 그림 (매 프레임은 비교만)
+    const pu = g.player?.unico;
+    if (pu && (this._faceU !== pu || this._facePal !== pu.palette)) {
+      this._faceU = pu; this._facePal = pu.palette;
+      const box = this.badge.querySelector('.pb-face');
+      try { box.replaceChildren(portraitSVG(pu, { accent: '#30b6aa' })); } catch { /* 얼굴 없이 고리만 */ }
     }
     // 한 번만 뜨는 팁: 0.25초마다 (탭이 숨었다 돌아온 긴 틈은 한 프레임 0.1초로 셈)
     const fdt = Math.min(100, now - (this._hudLast || now));
@@ -332,7 +371,7 @@ export const HudUI = {
     put('day', this.calendar, 'title', `${sp > 0 ? ct.slice(0, sp) + ' · ' : ''}날씨 자세히 보기 · 계절은 7일마다 바뀌어요`);
     const q = g.quests;
     put('lv', el.lv, 'text', String(q.level));
-    const pct = xpPct(q);
+    const pct0 = xpPct(q), pct = pct0 > 0 ? Math.max(3, pct0) : 0; // 조금이라도 있으면 고리에 보이게 3% 부터
     const hadXp = this._hv?.xpv;
     put('xpv', this.badge, '--xp', String(pct));
     if (hadXp !== undefined && hadXp !== String(pct)) this.pulseXp();

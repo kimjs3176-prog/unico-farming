@@ -1,4 +1,4 @@
-// 레벨업 축하: 위에서 떨어지는 'Lv.N!' 리본(창 위에서도 바로) + 해금 카드(창·대화·컷신이 없을 때)
+// 레벨업 축하: 위에서 떨어지는 'Lv.N!' 리본(창 위에서도 바로) + 해금 카드(창·대화·컷신이 없을 때, 리본이 사라진 뒤)
 // 둘 다 입력을 막지 않음: 리본은 눌리지 않고, 카드는 버튼만 눌림 (게임은 계속 움직임)
 import { h, esc } from './dom.js';
 import { unlocksBetween, nextUnlockLine, cardAction } from '../game/sim/unlocks.js';
@@ -31,7 +31,7 @@ export function unlockRowsHTML(groups) {
 }
 
 /**
- * 해금 카드 (창이 아님: 화면 위쪽 가운데, 저절로 닫힘, 손가락·마우스를 올리면 멈춤)
+ * 해금 카드 (창이 아님: 넓은 화면은 왼쪽 목표 카드 아래, 세로 폰은 아래 판, 저절로 닫힘, 손가락·마우스를 올리면 멈춤)
  * @param ui UI (root·game·openMarket 사용)
  * @param before 이전 레벨 · after 새 레벨
  * @param o { auto: 자동 진행 중이면 짧게 }
@@ -69,5 +69,11 @@ export function showUnlockCard(ui, before, after, o = {}) {
   card.addEventListener('pointerup', arm);
   arm();
   root.append(card);
+  // 넓은 화면: 왼쪽 목표 카드 바로 아래 (가운데 캐릭터를 가리지 않게)
+  const ob = ui.objective && ui.objective.style?.display !== 'none' ? ui.objective.getBoundingClientRect?.() : null;
+  if (ob?.height) {
+    const z = +getComputedStyle(card).zoom || 1;
+    card.style.setProperty('--obj-b', `${Math.round(ob.bottom / z)}px`);
+  }
   return card;
 }

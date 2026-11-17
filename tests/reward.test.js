@@ -115,5 +115,7 @@ test('주인공 동작: glad·fistpump 는 웃는 얼굴, 주기 동작이라 �
   assert.match(src, /const HERO_HAPPY = new Set\(\[[^\]]*'glad'[^\]]*'fistpump'/);
   assert.match(src, /case 'glad': \{[^}]*a % 0\.6/);
   assert.match(src, /case 'fistpump': \{[^}]*a % 1/);
-  assert.match(src, /\(14 - d\) \/ 4/, '주민 이름표는 가까이에서만');
+  // 주민 동물(species) 이름표는 내 캐릭터 곁에서만 (줌과 상관없이), 다른 접속자는 예전처럼 카메라에서 22m
+  assert.match(src, /this\.species \? THREE\.MathUtils\.clamp\(\(11 - \(HERO_POS \? HERO_POS\.distanceTo\(this\.group\.position\)/, '주민 이름표는 가까이에서만');
+  assert.match(src, /: THREE\.MathUtils\.clamp\(\(22 - d\) \/ 7, 0, 1\)\) \* near/, '접속자 이름표는 멀리까지');
 });

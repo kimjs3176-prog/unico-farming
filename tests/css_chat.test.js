@@ -45,9 +45,12 @@ test('좁은 데스크톱 창: 올린 채팅이 가운데 안내(E)를 덮지 �
 test('넓은 화면(마우스): 채팅은 💬 동그라미로 접힘, 입력칸은 보이지만 않게 (T 의 focus() 가 그대로), 폰·태블릿은 그대로', () => {
   for (const env of [DESK, DESK2, WIDE]) {
     assert.equal(value(env, '.chat:not(:focus-within):not(.peek) .chat-bubble', 'display'), 'grid');
-    assert.equal(value(env, '.chat:not(:focus-within):not(.peek) .chat-bubble', 'width'), '40px');
-    // 입력칸: display·visibility 로 숨기지 않음 (보이지만 않게: 투명·잘라 냄)
-    const sel = '.chat:not(:focus-within) input';
+    assert.equal(value(env, '.chat:not(:focus-within):not(.peek) .chat-bubble', 'width'), '44px');
+    // 접힌 동그라미는 행동 막대와 같은 바닥선
+    assert.equal(value(env, '.chat:not(:focus-within):not(.peek)', 'bottom'), '16px');
+    // 입력칸: display·visibility 로 숨기지 않음 (보이지만 않게: 투명·잘라 냄). 펼쳐 보여 주는 동안(.peek)은 숨기지 않음 (바로 눌러 답하기)
+    const sel = '.chat:not(:focus-within):not(.peek) input';
+    assert.equal(value(env, '.chat:not(:focus-within) input', 'opacity'), undefined, '.peek 에도 입력칸을 숨기는 규칙이 없음');
     assert.equal(value(env, sel, 'opacity'), '0');
     assert.equal(value(env, sel, 'clip-path'), 'inset(50%)');
     assert.equal(value(env, sel, 'display'), undefined);
@@ -60,5 +63,9 @@ test('넓은 화면(마우스): 채팅은 💬 동그라미로 접힘, 입력칸
   assert.match(chat, /this\.chatBubble\.onclick = \(\) => this\.chatInput\.focus\(\)/);
   assert.match(chat, /if \(!mine && this\.game\.net\?\.connected\)/, '접속 중일 때만 새 말에 펼침');
   assert.match(chat, /6000/);
+  // 접혀 있는 동안 새 글: 빨간 점, 펼치면 지움
+  assert.match(chat, /this\.chatBubble\?\.classList\.add\('unread'\)/);
+  assert.match(chat, /classList\.remove\('unread'\)/);
+  assert.equal(value(DESK, '.chat-bubble.unread::after', 'background'), '#d9443b');
   assert.match(read('src/main.js'), /justPressed\('KeyT'\)\) this\.ui\.chatInput\.focus\(\)/, 'T 키는 입력칸 focus');
 });

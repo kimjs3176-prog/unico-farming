@@ -5,14 +5,14 @@
 .hud-top > * { pointer-events: auto; }
 
 /* 플레이어 배지: 얼굴 동그라미 + 경험치 고리(--xp %) + 'Lv N' 이름표 */
-.hud-top .p-badge { position: relative; flex: none; width: 52px; height: 58px; padding: 0; margin: 0; border-radius: 50%; display: block; }
+.hud-top .p-badge { position: relative; flex: none; width: 52px; height: 64px; padding: 0; margin: 0; border-radius: 50%; display: block; }
 .p-badge .pb-ring { position: absolute; left: 0; top: 0; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center;
-  background: conic-gradient(var(--leaf) max(4deg, calc(var(--xp, 0) * 1%)), rgba(139,94,52,0.28) 0); }
+  background: conic-gradient(var(--leaf) calc(var(--xp, 0) * 1%), rgba(255,206,84,0.5) 0); } /* 바탕 고리(옅은 금빛)는 0 XP 에도 보임, 채움 최소 3% 는 hud.js */
 .p-badge .pb-face { width: 44px; height: 44px; border-radius: 50%; overflow: hidden; position: relative; display: block; }
-/* 원본 그림(256px)에서 얼굴만: 가로 150% 로 키워 가운데 위쪽 */
-.p-badge .pb-face .p2 { position: absolute; width: 150%; height: 150%; left: -25%; top: -12%; display: block; }
+/* 원본 그림(256px)에서 머리만: 120% 로 키워 뿔 끝까지 동그라미 안에 */
+.p-badge .pb-face .p2 { position: absolute; width: 120%; height: 120%; left: -10%; top: 3%; display: block; }
 .p-badge .pb-lv { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); padding: 1px 8px; border-radius: 999px; font-size: 13px; line-height: 1.25; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.p-badge .pb-xp { position: absolute; left: calc(100% + 6px); top: 60px; padding: 2px 8px; border-radius: 8px; font-size: 12px; white-space: nowrap; opacity: 0; transform: translateY(-4px); transition: opacity 0.15s, transform 0.15s; pointer-events: none; font-variant-numeric: tabular-nums; }
+.p-badge .pb-xp { position: absolute; left: calc(100% + 6px); top: 66px; padding: 2px 8px; border-radius: 8px; font-size: 12px; white-space: nowrap; opacity: 0; transform: translateY(-4px); transition: opacity 0.15s, transform 0.15s; pointer-events: none; font-variant-numeric: tabular-nums; }
 .p-badge.show-xp .pb-xp { opacity: 1; transform: none; }
 @media (hover: hover) { .p-badge:hover .pb-xp, .p-badge:focus-visible .pb-xp { opacity: 1; transform: none; } }
 .hud-top .p-badge:hover:not(:disabled) { transform: scale(1.04); }
@@ -28,6 +28,8 @@
 .purse .money { font-size: 20px; min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
 .money { font-weight: 900; display: inline-block; }
 .money.bump { animation: bump 0.4s cubic-bezier(.3,1.8,.5,1); }
+.purse.bump { animation: purse-bump 0.28s cubic-bezier(.3,1.8,.5,1); } /* 코인이 닿을 때마다 지갑이 톡 */
+@keyframes purse-bump { 0% { transform: scale(1); } 45% { transform: scale(1.12); } 100% { transform: scale(1); } }
 @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
 
 /* 달력: 미니맵 액자 위에 붙은 나무 판 (미니맵 폭과 같음) */
@@ -41,7 +43,7 @@
 .calendar .cal-temp { font-size: 15px; font-variant-numeric: tabular-nums; }
 .hud-top .calendar:hover:not(:disabled) { transform: none; filter: brightness(1.03); }
 
-/* 오른쪽 버튼: 가방 · 퀘스트 · 설정 (달력 왼쪽, 44px 동그라미). 단축키 글자는 올리거나 키보드로 고를 때만 */
+/* 오른쪽 버튼: 가방 · 퀘스트 · 설정 · 도움말 (달력 왼쪽, 44px 동그라미). 단축키 글자는 올리거나 키보드로 고를 때만 */
 .hud-right { position: absolute; top: 18px; right: calc(12px + 150px + 12px); display: flex; gap: 8px; }
 .hud-right .hud-btn { position: relative; width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 20px; display: grid; place-items: center; }
 .hud-right .hud-btn.bump { animation: bump 0.4s cubic-bezier(.3,1.8,.5,1); }
@@ -60,26 +62,31 @@ body.cine .hud-right, body.cine .boost-chip, body.cine .p-badge, body.cine .cale
 
 /* 함께 있는 사람 수 (나 말고 누가 있을 때만, 채팅 위). 채팅 조각(.online)보다 세게 */
 .online.online-pill { display: inline-flex; align-items: center; gap: 4px; width: fit-content; padding: 3px 10px; border-radius: 999px; background: rgba(35,25,22,0.55); color: #fff; font-family: var(--display); font-size: 13px; text-shadow: none; }
+/* 키 안내(E·스페이스 등)는 터치 화면에서 숨김 (minigame_frame.js 시작 단추, input.js touchUI 와 같은 조건) */
+@media (pointer: coarse) { .hint-kbd { display: none; } }
 /* 가방으로 날아가는 아이템 */
 .fly { position: fixed; z-index: 40; font-size: 30px; pointer-events: none; transition: transform 0.75s cubic-bezier(.5,-0.4,.7,1), opacity 0.75s; filter: drop-shadow(0 3px 2px rgba(0,0,0,0.25)); }
-/* 지갑으로 날아가는 코인: 작고 빠르게 (낮음 품질은 그림자 없음 — hud.js 가 filter 를 끔) */
-.fly.coin { font-size: 22px; transition: transform 0.6s cubic-bezier(.45,-0.35,.6,1); }
+/* 지갑으로 날아가는 코인: 위로 튀었다가 곡선으로 (경로·크기는 hud.js 의 animate), 안쪽 글자는 빙글 (낮음 품질은 빛 없음 — hud.js 가 filter 를 끔) */
+.fly.coin { font-size: 30px; line-height: 1; transition: none; filter: drop-shadow(0 0 4px rgba(255,214,90,0.9)) drop-shadow(0 2px 1px rgba(120,70,0,0.35)); }
+.fly.coin i { display: inline-block; font-style: normal; animation: coin-spin 0.3s linear infinite; }
+@keyframes coin-spin { 0% { transform: scaleX(1); } 50% { transform: scaleX(0.25); } 100% { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .fly.coin i { animation: none; } }
 .coin-plus { position: fixed; z-index: 41; pointer-events: none; font-family: var(--display); font-size: 18px; color: #a8650a; text-shadow: 0 1px 0 #fff, 0 0 4px #fff; white-space: nowrap; animation: coin-plus 0.85s ease-out forwards; }
 @keyframes coin-plus { 0% { opacity: 0; transform: translateY(4px); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-18px); } }
 
 /* 초당 프레임 표시 (환경설정에서 켜기): 오른쪽 아래 (미니맵 아래는 알림 자리) */
 .fps-chip { position: absolute; right: calc(12px + var(--sar)); bottom: calc(12px + var(--sab)); background: rgba(35,25,22,0.7); color: #fff; font-size: 12px; padding: 3px 9px; border-radius: 10px; display: none; pointer-events: none; font-variant-numeric: tabular-nums; }
 
-/* ---------------- 모바일: 위쪽은 한 줄 (배지·지갑 왼쪽, 달력 + 미니맵 오른쪽), 가방 하나는 미니맵 아래 ----------------
-   퀘스트는 목표 칩으로, 설정은 ☰ 메뉴로. (theme/hud.css 끝의 같은 조건 블록이 테마 색칠 값을 다시 잡아 줌 — 함께 고칠 것)
+/* ---------------- 모바일: 위쪽은 한 줄 (배지·지갑 왼쪽, 달력 + 미니맵 오른쪽), 가방·설정은 미니맵 아래 ----------------
+   퀘스트는 목표 칩으로, 가방·설정은 미니맵 아래. (theme/hud.css 끝의 같은 조건 블록이 테마 색칠 값을 다시 잡아 줌 — 함께 고칠 것)
    가장자리 값은 노치·홈 막대 안전 영역(--sal/--sar/--sat/--sab)만큼 안쪽으로 */
 @media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
   .hud-top { top: calc(4px + var(--sat)); left: calc(4px + var(--sal)); right: calc(4px + var(--sar)); gap: 5px; }
-  .hud-top .p-badge { width: 46px; height: 52px; }
+  .hud-top .p-badge { width: 46px; height: 57px; }
   .p-badge .pb-ring { width: 46px; height: 46px; }
   .p-badge .pb-face { width: 40px; height: 40px; }
   .p-badge .pb-lv { font-size: 12px; padding: 0 6px; }
-  .p-badge .pb-xp { top: 54px; left: 0; }
+  .p-badge .pb-xp { top: 59px; left: 0; }
   .purse { margin-top: 7px; height: 30px; padding: 0 9px 0 6px; gap: 3px; border-radius: 15px; }
   .purse .coin-ico { font-size: 16px; }
   .purse .money { font-size: 16px; min-width: 3ch; }
@@ -87,17 +94,18 @@ body.cine .hud-right, body.cine .boost-chip, body.cine .p-badge, body.cine .cale
   .calendar .cal-w { display: none; } /* 폰은 '봄 1일' 만 */
   .calendar .cal-l1 { justify-content: flex-start; }
   .calendar .cal-s { font-size: 13px; }
-  .calendar .cal-l2 { gap: 2px; }
+  .calendar .cal-l2 { gap: 4px; justify-content: center; }
   .calendar .cal-t { font-size: 14px; }
-  .calendar .cal-wx { font-size: 13px; }
-  .calendar .cal-temp { font-size: 13px; }
-  .hud-right { top: calc(var(--map-b, 140px) + 14px); right: calc(4px + var(--sar) + 21px); }
-  .hud-right .quest-btn, .hud-right .set-btn { display: none; }
+  .calendar .cal-wx { font-size: 14px; margin-left: 0; }
+  .calendar .cal-temp { display: none; } /* 폰은 시각·날씨 그림만 (기온은 날씨 창·읽어 주기 글에) */
+  .hud-right { top: calc(var(--map-b, 140px) + 14px); right: calc(4px + var(--sar)); width: 86px; justify-content: space-between; gap: 0; }
+  .hud-right .hud-btn { width: 40px; height: 40px; font-size: 18px; }
+  .hud-right .quest-btn, .hud-right .help-btn { display: none; } /* 설정(⚙)은 남김: 폰에서 그래픽 품질·소리·글자 크기로 가는 길 */
   .hud-right .hud-btn::after { content: ''; position: absolute; inset: -3px; }
+  .fly.coin { font-size: 24px; }
   .boost-chip { right: calc(4px + var(--sar) + 43px); top: calc(var(--map-b, 140px) - 11px); font-size: 12px; padding: 0 7px; }
   .online.online-pill { display: none; } /* 휴대폰은 채팅 줄을 접어 두므로 */
   .fps-chip { right: calc(96px + var(--sar)); bottom: auto; top: calc(var(--hud-b, 40px) + 4px); } /* 미니맵 왼쪽 (아래는 알림 자리, 오른쪽 아래는 E 버튼) */
 }
-/* 아주 좁은 폰·글자를 키운 세로 폰: 달력 기온을 뺌 (시각·날씨 그림만) */
-@media (max-width: 340px) { .calendar .cal-temp { display: none; } }
-@media (max-width: 440px) { body.ui-big .calendar .cal-temp { display: none; } body.ui-big .hud-top { gap: 3px; } }
+/* 글자를 키운 세로 폰: 위쪽 줄 간격을 좁힘 */
+@media (max-width: 440px) { body.ui-big .hud-top { gap: 3px; } }

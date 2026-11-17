@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { unlocksAt, nextUnlockLevel, unlocksBetween, nextUnlockLine, cardAction, MAX_LEVEL, KINDS } from '../src/game/sim/unlocks.js';
+import { DECOR } from '../src/game/sim/decor.js';
 import { CROPS } from '../src/game/sim/crops.js';
 
 test('Lv.2: 양배추·토마토 씨앗이 먼저, 직판장·비옷·꾸미기·아늑한 집', () => {
@@ -41,4 +42,10 @@ test('여러 레벨을 한 번에 올라도 사이 레벨 해금을 모두 종�
   assert.deepEqual(cardAction([{ kind: 'decor' }]), { label: '🪑 꾸미기', open: 'decor' });
   assert.equal(cardAction([{ kind: 'rod' }]), null);
   assert.deepEqual(unlocksBetween(6, 7), []);
+});
+
+test('카드 그림이 장터 단추(🛒)와 겹치지 않음: 외바퀴 수레는 다른 그림', () => {
+  for (let lv = 2; lv <= MAX_LEVEL; lv++) for (const u of unlocksAt(lv)) assert.notEqual(u.icon, '🛒', `Lv.${lv} ${u.name}`);
+  const cart = DECOR.find((d) => d.id === 'cart');
+  if (cart) assert.ok(unlocksAt(cart.lv).some((u) => u.name === cart.name && u.icon !== '🛒'));
 });

@@ -2,7 +2,7 @@
 // (브라우저 없이 같은 선택자끼리만 단순 계산 — 규칙 목록·화면 크기는 tests/lib/css_env.js)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { value, read, PHONE, LAND, DESK, DESK2, WIDE } from './lib/css_env.js';
+import { value, read, PHONE, LAND, DESK, DESK2, WIDE, TABLET } from './lib/css_env.js';
 
 const px = (v) => parseFloat(String(v ?? '').replace(/^calc\(/, '')) || 0;
 
@@ -16,8 +16,13 @@ test('테마(theme.css)가 모바일 압축 값을 다시 덮지 않음: 배지�
     assert.equal(value(env, '.minimap', 'border-width'), '2px');
     assert.equal(value(env, '.hud-top .calendar', 'border-width'), '2px');
     assert.equal(value(env, '.actionbar', 'padding'), '3px');
-    // 폰: 가방 하나만 미니맵 아래 (퀘스트는 목표 칩, 설정은 ☰)
+    // 폰: 가방·설정이 미니맵 아래 (퀘스트는 목표 칩, 도움말은 넓은 화면만) — 설정은 폰에서 그래픽 품질·소리로 가는 길이라 숨기지 않음
     assert.equal(value(env, '.hud-right .quest-btn', 'display'), 'none');
+    assert.equal(value(env, '.hud-right .help-btn', 'display'), 'none');
+    assert.equal(value(env, '.hud-right .set-btn', 'display'), undefined, '폰에서도 설정 단추가 보임');
+    assert.equal(value(env, '.hud-right', 'width'), '86px', '두 단추가 미니맵 폭 안에');
+    assert.ok(2 * px(value(env, '.hud-right .hud-btn', 'width')) <= 86);
+    assert.equal(value(env, '.calendar .cal-temp', 'display'), 'none', '폰 달력은 시각·날씨 그림만 (잘리지 않게)');
     assert.match(value(env, '.hud-right', 'top'), /var\(--map-b/);
   }
   for (const env of [DESK, WIDE]) {
@@ -29,8 +34,15 @@ test('테마(theme.css)가 모바일 압축 값을 다시 덮지 않음: 배지�
     assert.equal(value(env, '.hud-right .quest-btn', 'display'), undefined);
     assert.equal(value(env, '.hud-right .hud-btn', 'width'), '44px');
   }
-  // 경험치 고리: 0 XP 에도 바탕 고리 + 4도, 지갑 숫자는 최소 폭(ch)·고정폭 숫자
-  assert.match(value(DESK, '.p-badge .pb-ring', 'background'), /conic-gradient\(var\(--leaf\) max\(4deg, calc\(var\(--xp, 0\) \* 1%\)\)/);
+  // 경험치 고리: 0 XP 에도 옅은 금빛 바탕 고리, 채움은 --xp % (조금이라도 있으면 hud.js 가 3% 부터), 지갑 숫자는 최소 폭(ch)·고정폭 숫자
+  assert.match(value(DESK, '.p-badge .pb-ring', 'background'), /conic-gradient\(var\(--leaf\) calc\(var\(--xp, 0\) \* 1%\), rgba\(255,206,84,0\.5\) 0\)/);
+  assert.match(read('src/ui/hud.js'), /pct = pct0 > 0 \? Math\.max\(3, pct0\) : 0/);
+  // 이름표는 고리와 30% 쯤만 겹침 (고리 52px, 배지 64px)
+  assert.equal(value(DESK, '.hud-top .p-badge', 'height'), '64px');
+  // 키 안내(.hint-kbd)는 터치 화면에서 숨김 (미니게임 시작 단추)
+  assert.equal(value(PHONE, '.hint-kbd', 'display'), 'none');
+  assert.equal(value(TABLET, '.hint-kbd', 'display'), 'none');
+  assert.equal(value(DESK, '.hint-kbd', 'display'), undefined);
   assert.match(value(DESK, '.purse .money', 'min-width'), /^\dch$/);
   assert.match(value(PHONE, '.purse .money', 'min-width'), /^\dch$/);
   assert.equal(value(DESK, '.purse .money', 'font-variant-numeric'), 'tabular-nums');
@@ -91,7 +103,8 @@ test('달력 두 줄이 폭 안에 들어감: 폰 86px (08:00 ☀️ 22°), 넓�
     const bw = px(value(env, '.hud-top .calendar', 'border-width') || '3px');
     const inner = w - 2 * bw - padX(value(env, '.hud-top .calendar', 'padding'));
     const g2 = px(value(env, '.calendar .cal-l2', 'gap'));
-    const l2 = textW('08:00', px(value(env, '.calendar .cal-t', 'font-size'))) + textW('☀', px(value(env, '.calendar .cal-wx', 'font-size'))) + textW('22°', px(value(env, '.calendar .cal-temp', 'font-size'))) + 2 * g2;
+    const temp = value(env, '.calendar .cal-temp', 'display') === 'none' ? 0 : textW('22°', px(value(env, '.calendar .cal-temp', 'font-size'))) + g2;
+    const l2 = textW('08:00', px(value(env, '.calendar .cal-t', 'font-size'))) + textW('☀', px(value(env, '.calendar .cal-wx', 'font-size'))) + temp + g2;
     assert.ok(l2 <= inner + 0.5, `${env.w}: 둘째 줄 ${l2.toFixed(1)} > ${inner.toFixed(1)}`);
     const wk = value(env, '.calendar .cal-w', 'display') === 'none' ? 0 : textW('7/7', px(value(env, '.calendar .cal-w', 'font-size'))) + 6;
     const l1 = textW('🌸 봄 7일', px(value(env, '.calendar .cal-s', 'font-size'))) + wk;

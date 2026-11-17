@@ -43,11 +43,11 @@ export const MarketPanel = {
       }
       return r;
     };
-    // 팔았을 때: 판 단추에서 코인이 장터 위쪽 코인으로 날아감 (닿을 때마다 숫자가 오름), 알림은 한 장에 합계로
+    // 팔았을 때: 판 단추에서 코인이 장터 위쪽 코인으로 날아감 (닿을 때마다 숫자가 오름), 알림은 한 장에 합계로 — 눈이 코인을 따라가게 마지막 코인이 닿은 뒤에
     const sold = (got, btn) => {
       if (!(got > 0)) return;
-      if (this.flyToCoin) this.flyToCoin(got, btn.getBoundingClientRect()); else g.audio.play('coin');
-      this.toast(`💰 +${got} 코인`, { type: 'reward', key: 'sell', amount: got, fmt: ({ amount }) => `💰 판매 +${amount.toLocaleString()} 코인` });
+      const note = () => this.toast(`💰 +${got} 코인`, { type: 'reward', key: 'sell', amount: got, fmt: ({ amount }) => `💰 판매 +${amount.toLocaleString()} 코인` });
+      if (this.flyToCoin) this.flyToCoin(got, btn.getBoundingClientRect(), note); else { g.audio.play('coin'); note(); }
     };
     const render = () => {
       const scroll = body.scrollTop;

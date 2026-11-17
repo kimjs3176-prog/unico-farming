@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { HudUI, xpPct, claimableCount, seasonLine, coinCount, splitCoins, COIN_SAFETY, COIN_STAGGER, COIN_FLIGHT } from '../src/ui/hud.js';
+import { HudUI, xpPct, claimableCount, seasonLine, coinCount, splitCoins, coinArc, COIN_SAFETY, COIN_STAGGER, COIN_FLIGHT, LV_CHEER_AT, LV_CARD_AFTER } from '../src/ui/hud.js';
+import { RIBBON_MS } from '../src/ui/levelup.js';
 import { Quests, QUESTS } from '../src/game/sim/quests.js';
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
@@ -117,4 +118,54 @@ test('레벨 축하: 레벨이 오른 것을 매 프레임 봄 (퀘스트·체�
   const koat = read('src/ui/koat_ui.js');
   assert.match(koat, /if \(g\.quests\.level === lv0\) reward\(g, 3\)/);
   assert.doesNotMatch(koat, /g\.quests\.xp \+= r\.xp;\s*\n\s*g\.player\.setTitle\?\.\(r\.title\);\s*\n\s*g\.audio\.play\('levelup'\)/);
+});
+
+test('코인 길: 출발 (0,0) → 지갑, 처음엔 위로 튀고, 크기 0.6 → 1.15 → 0.8', () => {
+  const k = coinArc(300, -200, 0, 9);
+  assert.equal(k.length, 10);
+  const xy = (f) => f.transform.match(/translate\((-?[\d.]+)px, (-?[\d.]+)px\) scale\(([\d.]+)\)/).slice(1).map(Number);
+  assert.deepEqual(xy(k[0]), [0, 0, 0.6]);
+  const [ex, ey, es] = xy(k[9]);
+  assert.equal(ex, 300); assert.equal(ey, -200); assert.ok(Math.abs(es - 0.8) < 1e-6);
+  assert.ok(Math.max(...k.map((f) => xy(f)[2])) >= 1.1, '가운데쯤 크게');
+  // 지갑이 아래에 있어도 처음엔 위로 튐 (포물선)
+  const down = coinArc(100, 150, 0, 9);
+  assert.ok(xy(down[2])[1] < 0);
+  assert.equal(k[9].offset, 1);
+});
+
+test('코인 날리기: 마지막 코인이 닿은 뒤 onDone 한 번 (장터 알림을 그때)', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const dom = fakeDom();
+  try {
+    let done = 0;
+    const money = dom.el();
+    const ui = { ...HudUI, panel: null, coinTarget: { querySelector: () => money }, game: { quality: { level: 'high' }, economy: { money: 500 }, audio: { play() {} } } };
+    ui.flyToCoin(45, null, () => done++);
+    t.mock.timers.tick(COIN_FLIGHT - 10);
+    assert.equal(done, 0, '날아가는 동안은 아직');
+    for (let k = 0; k < COIN_SAFETY; k += 5) t.mock.timers.tick(5);
+    assert.equal(done, 1);
+  } finally { dom.restore(); t.mock.timers.reset(); }
+});
+
+test('레벨업 차례: 리본 → 만세 → 리본이 사라진 뒤 카드, 컷신 중이면 리본도 끝난 뒤', () => {
+  assert.ok(LV_CHEER_AT + LV_CARD_AFTER >= RIBBON_MS, '카드는 리본과 겹치지 않음');
+  const hud = read('src/ui/hud.js');
+  assert.match(hud, /if \(!cine\) this\._levelRibbon\(after\)/);
+  assert.match(hud, /if \(p\.ribbon\) \{ p\.ribbon = false; this\._levelRibbon\(p\.after\)/);
+  assert.match(hud, /if \(!p\.cheered\) \{ p\.cheered = true; reward\(g, 3/);
+  assert.match(hud, /querySelector\('\.lvl-ribbon:not\(\.skill\)'\)\?\.remove\(\)/);
+  // 컷신 중에는 리본도 숨김 (CSS)
+  assert.match(read('src/ui/css/levelup.css'), /body\.cine \.lvl-card, body\.cine \.lvl-ribbon \{ opacity: 0/);
+  // 숙련도 리본과 같은 말을 하는 알림은 리본이 없을 때만
+  for (const f of ['src/game/view/farmcraft_view.js', 'src/game/view/ranch_view.js']) {
+    assert.match(read(f), /if \(g\.ui\.skillLevelUp\) g\.ui\.skillLevelUp\([^\n]*\n\s*else \{ g\.audio\.play\('win'\); g\.ui\.toast\(/, f);
+  }
+});
+
+test('도움말·설정 단추가 화면에 붙음 (폰은 CSS 가 도움말만 숨김), 배지 얼굴은 색이 바뀌면 다시 그림', () => {
+  const hud = read('src/ui/hud.js');
+  assert.match(hud, /right\.append\(this\.btnBag, this\.btnQuest, this\.btnSettings, this\.btnHelp\)/);
+  assert.match(hud, /this\._facePal !== pu\.palette/);
 });

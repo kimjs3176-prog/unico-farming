@@ -53,6 +53,7 @@ export const ChatUI = {
     this.chatBubble.setAttribute('aria-label', '채팅 열기 (T)');
     this.chatBubble.title = '채팅 (T)';
     this.chatBubble.onclick = () => this.chatInput.focus();
+    this.chatInput.addEventListener('focus', () => this.chatBubble.classList.remove('unread'));
     this.chat.append(this.online, this.chatLog, this.chatInput, this.chatBubble);
     root.append(this.chat);
   },
@@ -63,6 +64,8 @@ export const ChatUI = {
     this.chatLog.append(d);
     while (this.chatLog.children.length > 30) this.chatLog.firstChild.remove();
     this.chatLog.scrollTop = this.chatLog.scrollHeight;
+    // 접혀 있는 동안 남의 글이 오면 💬 에 빨간 점 (펼치면 지움)
+    if (!mine && document.activeElement !== this.chatInput) this.chatBubble?.classList.add('unread');
     // 함께 있는 사람이 말하면 접힌 채팅을 6초 동안 펼쳐 보여 줌 (혼자일 때 나오는 안내 글로는 펼치지 않음)
     if (!mine && this.game.net?.connected) {
       this.chat.classList.add('peek');

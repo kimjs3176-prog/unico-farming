@@ -23,44 +23,72 @@
 }
 @keyframes lvl-fade { 0%, 100% { opacity: 0; } 12%, 84% { opacity: 1; } }
 
-/* 해금 카드: 창이 아님 (창 아래 층, 버튼만 눌림), 저절로 닫힘 */
-.lvl-card { position: absolute; left: 50%; top: calc(var(--hud-b, 70px) + 64px); z-index: 9; transform: translateX(-50%);
+/* 리본이 떠 있는 동안 같은 자리(위쪽 가운데)의 한 번 팁 카드는 잠깐 비킴 */
+#ui:has(> .lvl-ribbon) > .tip-card { opacity: 0; pointer-events: none; }
+
+/* 해금 카드: 창이 아님 (창 아래 층, 버튼만 눌림), 저절로 닫힘.
+   화면 가운데 캐릭터(만세)를 가리지 않게 넓은 화면은 왼쪽 목표 카드 아래 (--obj-b: 목표 카드 아래 끝, levelup.js 가 잼) */
+.lvl-card { position: absolute; left: calc(12px + var(--sal)); top: calc(var(--obj-b, calc(var(--hud-b, 70px) + 80px)) + 12px); z-index: 9;
   width: min(calc(92vw / var(--ui-zoom, 1)), 380px); padding: 12px 14px 12px; border-radius: 18px; color: var(--wood-d, #6a4024);
   background: linear-gradient(180deg, #fffdf7 0%, #f6efe0 100%);
   box-shadow: 0 0 0 3px var(--wood-hi, #f0c995), 0 0 0 6px var(--wood, #9a6438), 0 0 0 8px var(--wood-d, #6a4024), 0 14px 26px rgba(20,14,10,0.3);
   animation: lvl-card-in 0.42s cubic-bezier(.3,1.5,.5,1) both; word-break: keep-all; overflow-wrap: anywhere; }
 .lvl-card.out { animation: lvl-card-out 0.26s ease-in both; }
-.lvl-head { display: flex; align-items: center; gap: 10px; margin: 0 26px 8px 0; }
+.lvl-head { display: flex; align-items: center; gap: 10px; margin: 0 30px 8px 0; }
 .lvl-big { font-family: var(--display); font-size: 26px; color: #fff; padding: 2px 12px; border-radius: 12px; background: linear-gradient(180deg, #ffe08a, var(--gold) 55%, #eaa91d); text-shadow: 0 2px 0 #a8650a; box-shadow: 0 3px 0 var(--gold-d, #c98a12); }
 .lvl-t { font-family: var(--display); font-size: 18px; color: var(--ink); }
-.lvl-row { display: flex; gap: 8px; align-items: baseline; padding: 5px 0; border-top: 1px dashed rgba(154,100,56,0.3); }
-.lvl-kind { flex: none; width: 64px; font-size: 12px; color: #7a5536; }
+.lvl-row { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px dashed rgba(154,100,56,0.3); }
+.lvl-kind { flex: none; width: 64px; font-size: 13px; font-weight: 600; color: #6a4024; }
 .lvl-items { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 15px; color: var(--ink); }
-.lvl-it i { font-style: normal; margin-right: 3px; }
+.lvl-it { display: inline-flex; align-items: center; gap: 5px; }
+/* 물건 그림: 크림색 둥근 타일 (목록이 아니라 보상 공개처럼) */
+.lvl-it i { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; font-style: normal; font-size: 17px; line-height: 1;
+  background: linear-gradient(180deg, #fffaf0, #f3e3c4); box-shadow: inset 0 0 0 1.5px rgba(154,100,56,0.35), 0 2px 0 rgba(154,100,56,0.25); }
 .lvl-next { font-size: 14px; color: var(--ink); padding: 4px 0; }
-.lvl-next.small { font-size: 12px; color: #7a5536; padding: 6px 0 0; }
+.lvl-next.small { font-size: 13px; color: #6a4024; padding: 6px 0 0; }
 .lvl-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
 .lvl-card .lvl-foot button { padding: 7px 14px; font-size: 15px; }
 .lvl-card .lvl-x { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; padding: 0; border-radius: 50%; font-size: 14px; }
-@keyframes lvl-card-in { 0% { opacity: 0; transform: translate(-50%, -14px) scale(0.92); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
-@keyframes lvl-card-out { to { opacity: 0; transform: translate(-50%, -10px) scale(0.96); } }
+@keyframes lvl-card-in { 0% { opacity: 0; transform: translateX(-24px) scale(0.94); } 100% { opacity: 1; transform: none; } }
+@keyframes lvl-card-out { to { opacity: 0; transform: translateX(-16px) scale(0.97); } }
 @media (prefers-reduced-motion: reduce) {
   .lvl-ribbon { animation: lvl-fade 1.8s linear both; transform: translateX(-50%); }
   .lvl-card, .lvl-card.out { animation: none; }
 }
-body.cine .lvl-card { opacity: 0; pointer-events: none; }
+body.cine .lvl-card, body.cine .lvl-ribbon { opacity: 0; pointer-events: none; }
 
-/* 모바일: 리본·카드를 작게, 카드는 화면 폭에 맞춤 */
+/* 모바일: 리본·카드를 작게 */
 @media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
   .lvl-ribbon { top: calc(var(--hud-b, 52px) + 4px); padding: 4px 26px 6px; }
   .lvl-ribbon b { font-size: 26px; }
   .lvl-ribbon small { font-size: 12px; }
   .lvl-ribbon.skill { top: calc(var(--hud-b, 52px) + 44px); }
   .lvl-ribbon.skill b { font-size: 17px; }
-  .lvl-card { top: calc(var(--hud-b, 52px) + 52px); width: min(calc(100vw / var(--ui-zoom, 1) - 24px - var(--sal) - var(--sar)), 380px); padding: 10px 12px; }
+  .lvl-card { padding: 10px 12px; }
   .lvl-big { font-size: 21px; }
   .lvl-t { font-size: 15px; }
   .lvl-kind { width: 52px; }
-  .lvl-items { font-size: 14px; }
+  .lvl-items { font-size: 14px; gap: 3px 8px; }
+  .lvl-row { padding: 3px 0; }
+  .lvl-it i { width: 24px; height: 24px; font-size: 15px; border-radius: 8px; }
 }
-@media (max-height: 500px) and (pointer: coarse) { .lvl-card { top: calc(var(--sat) + 8px); } }
+/* 세로 폰: 위쪽은 목표 칩·팁·알림 자리라 리본은 아래 버튼(E·☰) 위로, 카드는 그 위에 붙는 아래 판 (가운데 캐릭터가 보이게 높이 제한) */
+@media (max-width: 600px) {
+  .lvl-ribbon { top: auto; bottom: calc(var(--sab) + 150px); }
+  .lvl-ribbon.skill { top: auto; bottom: calc(var(--sab) + 92px); }
+  .lvl-card { top: auto; bottom: calc(var(--sab) + 84px); left: calc(12px + var(--sal)); right: calc(12px + var(--sar)); width: auto; max-width: 380px; margin: 0 auto;
+    max-height: calc(44vh / var(--ui-zoom, 1)); overflow-y: auto; overscroll-behavior: contain; }
+  .lvl-card .lvl-foot { margin-top: 4px; }
+  /* 낮게: 종류 이름을 빼고 그림 타일을 한 덩어리로 흘림 (캐릭터가 카드 위로 보이게) */
+  .lvl-head { margin-bottom: 4px; }
+  .lvl-row { display: inline-flex; border-top: 0; padding: 2px 10px 2px 0; vertical-align: top; }
+  .lvl-kind { display: none; }
+  .lvl-items { gap: 3px 10px; }
+  .lvl-next.small { padding-top: 4px; font-size: 12.5px; }
+  @keyframes lvl-card-in { 0% { opacity: 0; transform: translateY(24px) scale(0.96); } 100% { opacity: 1; transform: none; } }
+  @keyframes lvl-card-out { to { opacity: 0; transform: translateY(16px) scale(0.97); } }
+}
+/* 가로 폰: 왼쪽 위 (가운데 캐릭터를 비킴), 보이는 높이 안에서 스크롤 */
+@media (max-height: 500px) and (pointer: coarse) {
+  .lvl-card { top: calc(var(--sat) + 8px); width: min(calc(46vw / var(--ui-zoom, 1)), 360px); max-height: calc((100vh - 16px) / var(--ui-zoom, 1) - var(--sat) - var(--sab)); overflow-y: auto; }
+}

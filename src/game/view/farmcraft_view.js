@@ -112,10 +112,10 @@ export class FarmCraftView {
   levelUp(lv) {
     const g = this.game;
     const unlock = Object.entries(RECIPES).filter(([, r]) => r.level === lv).map(([k]) => `${ITEMS[k].emoji} ${ITEMS[k].name}`);
-    if (g.ui.skillLevelUp) g.ui.skillLevelUp(`🌾 밭농사 Lv.${lv}!`, unlock);
-    else g.audio.play('win');
     reward(g, 2, { sound: null });
-    g.ui.toast(`🌾 밭농사 숙련도 Lv.${lv}! 작물 품질이 더 좋아져요${unlock.length ? ` · 새 가공: ${unlock.join(', ')}` : ''}`, { type: 'reward', key: 'farmlv' });
+    // 리본이 같은 말을 하므로 알림은 리본이 없을 때만 (두 번 겹쳐 보이지 않게)
+    if (g.ui.skillLevelUp) g.ui.skillLevelUp(`🌾 밭농사 Lv.${lv}!`, unlock);
+    else { g.audio.play('win'); g.ui.toast(`🌾 밭농사 숙련도 Lv.${lv}! 작물 품질이 더 좋아져요${unlock.length ? ` · 새 가공: ${unlock.join(', ')}` : ''}`, { type: 'reward', key: 'farmlv' }); }
     g.onEvent('farmlv', lv);
   }
 

@@ -192,6 +192,8 @@ let CHAR_Q = null;
 const charQ = () => CHAR_Q ?? globalThis.game?.quality?.level ?? 'high';
 // 프레임 번호: 내 캐릭터(labelAlways)가 매 프레임 한 번 올림 → 다른 캐릭터가 최근에 화면에 그려졌는지 판단
 let TICK = 0;
+/** 내 캐릭터 위치 (주민 이름표를 카메라 줌과 상관없이 내 곁에서만 보이게) */
+let HERO_POS = null;
 /** 원본 몸으로 바꾼 마지막 프레임 (한 프레임에 하나만) */
 let SWAP_TICK = -1;
 /** 화면 밖 캐릭터의 자세 계산 간격(초), 낮음에서 아주 먼(40m 넘는) 캐릭터의 간격 */
@@ -1689,7 +1691,7 @@ export class Unico {
   }
 
   update(dt, camera) {
-    if (this.labelAlways) TICK++;
+    if (this.labelAlways) { TICK++; HERO_POS = this.group.position; }
     // 언덕: 장면에 바로 놓인 캐릭터는 지면 높이를 따라감 (트랙터 탑승 등 다른 물체에 붙으면 제외)
     // 수영: 몸이 물에 잠김 (잠수 중에는 더 깊이). 자세를 몰아서 계산하는 동안에도 매 프레임
     const sinkT = this.swimming ? (this.action === 'dive' ? -0.68 - Math.sin(Math.min(1, this.actionT / 1.3) * Math.PI) * 1.3 : -0.68) : 0;
@@ -1721,7 +1723,8 @@ export class Unico {
       const near = THREE.MathUtils.clamp((d - 1.8) / 1.6, 0, 1);
       if (this.emote) this.emote.visible = near > 0.3;
       if (this.label && !this.labelAlways) {
-      const a = THREE.MathUtils.clamp((14 - d) / 4, 0, 1) * near; // 주민 이름표는 가까이(10m 안)에서만
+      // 주민 동물 이름표는 내 캐릭터 곁에서만 (7m 안, 11m 에서 사라짐 — 줌을 멀리 빼도 옆 주민은 보임), 다른 접속자·유니콘 주민은 예전처럼 카메라에서 22m
+      const a = (this.species ? THREE.MathUtils.clamp((11 - (HERO_POS ? HERO_POS.distanceTo(this.group.position) : d - 9)) / 4, 0, 1) : THREE.MathUtils.clamp((22 - d) / 7, 0, 1)) * near;
       this.label.material.opacity = a;
       this.label.visible = a > 0.02;
       }
