@@ -1,6 +1,6 @@
 /** 퀘스트 / 레벨 / 업적 */
 export const QUESTS = [
-  { id: 'till1',     title: '첫 밭 갈기',          desc: '빈 밭에서 E 를 눌러 밭을 갈아보세요',      event: 'till',     goal: 1, reward: { money: 30, xp: 20 } },
+  { id: 'till1',     title: '첫 밭 갈기',          desc: '빈 밭에서 E 를 눌러 밭을 갈아보세요',      descTouch: '빈 밭을 톡 누르거나 노란 E 버튼으로 밭을 갈아 보세요', event: 'till',     goal: 1, reward: { money: 30, xp: 20 } },
   { id: 'plant3',    title: '당근 심기',            desc: '갈아둔 밭에 씨앗 3개를 심으세요',          event: 'plant',    goal: 3, reward: { money: 40, xp: 30 } },
   { id: 'water3',    title: '물 주기',              desc: '자라는 작물에 물을 3번 주세요',           event: 'water',    goal: 3, reward: { money: 30, xp: 25 } },
   { id: 'harvest5',  title: '첫 수확',              desc: '작물을 5개 수확하세요',                   event: 'harvest',  goal: 5, reward: { money: 80, xp: 60 } },
@@ -16,7 +16,7 @@ export const QUESTS = [
   { id: 'shake3',    title: '과일 나무',            desc: '과일 나무를 3번 흔들어 보세요',            event: 'shake',    goal: 3, reward: { money: 60, xp: 40 } },
   { id: 'friend2',   title: '이웃사촌',             desc: '주민 한 명과 하트 2개 친구가 되세요',       event: 'hearts',   goal: 2, reward: { money: 150, xp: 100 }, absolute: true },
   { id: 'book10',    title: '꼬마 박물학자',        desc: '도감에 10종을 등록하세요',                 event: 'book',     goal: 10, reward: { money: 300, xp: 200 }, absolute: true },
-  { id: 'koat1',     title: 'KOAT 체험관 방문',      desc: '체험관 부스에서 체험해 첫 스탬프를 받으세요 (🏢 버튼)', event: 'koatstamp', goal: 1, reward: { money: 100, xp: 60 } },
+  { id: 'koat1',     title: 'KOAT 체험관 방문',      desc: '체험관 부스에서 체험해 첫 스탬프를 받으세요 (🏢 버튼)', descTouch: '🏢 체험관 버튼으로 체험관에 가서 첫 스탬프를 받으세요', event: 'koatstamp', goal: 1, reward: { money: 100, xp: 60 } },
   { id: 'koat6',     title: 'KOAT 스탬프 투어',      desc: '6개 본부 체험 스탬프를 모두 모으세요',    event: 'koatall',  goal: 6, reward: { money: 300, xp: 200 }, absolute: true },
   { id: 'explore4',  title: '언덕 탐험가',          desc: '언덕 꼭대기 전망대 4곳을 모두 올라 보세요', event: 'lookout',  goal: 4, reward: { money: 250, xp: 180 }, absolute: true },
   { id: 'chest3',    title: '보물 사냥꾼',          desc: '언덕·숲 가장자리의 숨은 보물 상자 3개 열기', event: 'chest',    goal: 3, reward: { money: 150, xp: 120 } },
@@ -37,7 +37,7 @@ export const QUESTS = [
   { id: 'order3',    title: '로컬푸드 납품',        desc: '주문 게시판의 주문을 3건 납품하세요',          event: 'order',    goal: 3, reward: { money: 200, xp: 150 } },
   { id: 'fest1',     title: '수확 축제',            desc: '7일마다 열리는 유니코 수확 축제 날을 맞이하세요',  event: 'festival', goal: 1, reward: { money: 120, xp: 80 } },
   { id: 'sleep1',    title: '첫 단잠',              desc: '저녁 6시 이후 유니코 집 침대에서 잠을 자 보세요',  event: 'sleep',    goal: 1, reward: { money: 80, xp: 60 } },
-  { id: 'greet1',    title: '반가워요',             desc: '다른 플레이어 가까이에서 E → 👋 인사하기',          event: 'greet',    goal: 1, reward: { money: 60, xp: 50 } },
+  { id: 'greet1',    title: '반가워요',             desc: '다른 플레이어 가까이에서 E → 👋 인사하기',          descTouch: '다른 플레이어 가까이에서 E 버튼 → 👋 인사하기', event: 'greet',    goal: 1, reward: { money: 60, xp: 50 } },
   { id: 'five3',     title: '하이파이브 세 번',     desc: '다른 플레이어와 하이파이브를 3번 하세요',            event: 'highfive', goal: 3, reward: { money: 150, xp: 120 } },
   { id: 'friend1',   title: '첫 친구',              desc: '다른 플레이어와 친구가 되세요 (⭐ 친구 추가)',       event: 'friend',   goal: 1, absolute: true, reward: { money: 120, xp: 100 } },
   { id: 'decor1',    title: '첫 꾸미기',            desc: '🪑 꾸미기에서 소품을 하나 골라 농장에 놓아 보세요',  event: 'decor',    goal: 1, absolute: true, reward: { money: 80, xp: 60 } },
@@ -56,6 +56,8 @@ export const QUESTS = [
   { id: 'rich',      title: '천 원의 농부',         desc: '보유 금액 1,000 코인 달성',               event: 'money',    goal: 1000, reward: { money: 200, xp: 150 }, absolute: true },
   { id: 'plow30',    title: '밭갈이 달인',          desc: '트랙터를 한 번 타고 밭을 30칸 이상 갈기',   event: 'plowbest', goal: 30, reward: { money: 250, xp: 200 }, absolute: true },
   { id: 'ride5',     title: '마을 드라이브',        desc: '트랙터·자전거·농장 카트 같은 마을 탈것에 5번 타 보세요', event: 'ride', goal: 5, reward: { money: 60, xp: 40 } },
+  // 첫 장(첫 농사)의 마지막: 첫 수확(당근 6개 안팎)으로 끝낼 수 있게 3개
+  { id: 'sell3',     title: '첫 장터 거래',        desc: '장터 여우에게 농산물 3개를 팔아 보세요',  event: 'sell',     goal: 3, reward: { money: 40, xp: 30 } },
 ];
 
 export const LEVELS = [0, 100, 250, 500, 900, 1500, 2400, 3600, 5200, 7500];
@@ -108,5 +110,10 @@ export class Quests {
   }
 
   toJSON() { return { progress: this.progress, claimed: this.claimed, xp: this.xp }; }
-  load(d) { if (d) Object.assign(this, { progress: d.progress || {}, claimed: d.claimed || {}, xp: d.xp || 0 }); }
+  load(d) {
+    if (!d) return;
+    Object.assign(this, { progress: d.progress || {}, claimed: d.claimed || {}, xp: d.xp || 0 });
+    // 첫 장터 거래(나중에 생김): 이미 3개 넘게 판 저장은 다 한 것으로
+    if (!this.progress.sell3 && (this.progress.sell10 || 0) >= 3) this.progress.sell3 = 3;
+  }
 }

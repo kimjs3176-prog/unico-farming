@@ -5,3 +5,20 @@
 .quest .bar { height: 6px; background: #e5e5e5; border-radius: 3px; overflow: hidden; margin-top: 4px; }
 .quest .bar i { display: block; height: 100%; background: var(--teal); }
 .mg-records { margin-top: 6px; }
+/* 장(chapter) 구성: 받을 보상 → 지금 장 → 다음 장 → 업적 */
+.qrows > h3.qhead { margin: 10px 0 6px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.qrows > h3.qhead:first-child { margin-top: 2px; }
+.qrows > h3.qhead.gift { color: #b7791f; }
+.qprog { font-size: 13px; padding: 1px 8px; border-radius: 999px; background: #efe4cc; color: #7a5b3a; }
+.quest .qmain { flex: 1; min-width: 0; }
+.quest.claimed { opacity: 0.62; padding-top: 6px; padding-bottom: 6px; border-left-color: var(--leaf); }
+.quest.claimed .nm { font-size: 14px; }
+.quest.pinned { border-left-color: var(--gold); box-shadow: inset 0 0 0 2px rgba(250,192,62,0.55); }
+.quest .qpin { min-width: 36px; padding: 4px 6px; font-size: 15px; filter: grayscale(1); opacity: 0.55; }
+.quest .qpin.on { filter: none; opacity: 1; }
+.quest .qtag { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: #e3f1fb; color: #2f6f9a; font-size: 11px; vertical-align: 2px; }
+.quest.qlock { border-left-color: #cbbfa8; color: #8a7a66; font-size: 14px; flex-direction: column; align-items: flex-start; gap: 2px; }
+.quest.qlock small { display: block; font-size: 12px; color: #a39580; }
+details.qach { margin-top: 10px; }
+details.qach > summary { cursor: pointer; font-family: var(--display); font-size: 16px; padding: 6px 2px; list-style-position: inside; }
+details.qach > .rows { margin-top: 4px; }

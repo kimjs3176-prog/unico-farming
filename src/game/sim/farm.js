@@ -130,6 +130,43 @@ export class FarmSim {
     return out;
   }
 
+  /** 자라는 속도 배수 (wet: 물이 있는가). 계절 배수 growthMult 는 3D판 view 에서 연결, 없으면 1 */
+  rateOf(p, wet, loose = p.loose > 0) {
+    return (wet ? 1 : 0.3) * this.boost * this.weatherMult * this.buildMult * (p.weeds ? 0.5 : 1) * (loose ? 1.25 : 1) * (p.fert ? FERT_SPEED : 1) * (this.growthMult ? this.growthMult(p.crop) : 1);
+  }
+
+  /** 다 익기까지 남은 초 (지금 상태 그대로 둘 때): 물이 마르는 때·부드러운 흙이 끝나는 때를 나눠 셈. 다 익음 0, 안 자람 null */
+  eta(i) {
+    const p = this.plots[i];
+    if (p.state === 'ready') return 0;
+    if (p.state !== 'growing') return null;
+    const per = 1 / CROPS[p.crop].growTime;
+    const always = Math.floor(i / this.cols) < this.sprinklerRows; // 스프링클러 줄은 늘 젖어 있음
+    let left = 1 - p.progress, t = 0, water = always ? Infinity : Math.max(0, p.water), loose = Math.max(0, p.loose || 0);
+    for (let k = 0; k < 3 && left > 0; k++) {
+      const r = this.rateOf(p, water > 0, loose > 0) * per;
+      if (r <= 0) return null;
+      const span = Math.min(water > 0 ? water : Infinity, loose > 0 ? loose : Infinity); // 다음 바뀌는 때까지
+      const need = left / r;
+      if (need <= span) return t + need;
+      left -= r * span; t += span; water -= span; loose -= span;
+    }
+    return t + left / (this.rateOf(p, false, false) * per);
+  }
+
+  /** 가장 먼저 익는 밭: { i, eta, dry(물이 마른 자라는 밭이 있나), readyCount }. 자라는 밭이 없으면 i = -1 */
+  soonest() {
+    let i = -1, eta = Infinity, dry = false, readyCount = 0;
+    this.plots.forEach((p, k) => {
+      if (p.state === 'ready') { readyCount++; return; }
+      if (p.state !== 'growing') return;
+      if (p.water <= 0 && Math.floor(k / this.cols) >= this.sprinklerRows) dry = true;
+      const e = this.eta(k);
+      if (e !== null && e < eta) { eta = e; i = k; }
+    });
+    return { i, eta: i >= 0 ? eta : null, dry, readyCount };
+  }
+
   stage(i) {
     const p = this.plots[i];
     if (p.state === 'ready') return 2;
@@ -143,12 +180,12 @@ export class FarmSim {
       if (!p.weeds && this.weedChance > 0 && p.progress > 0.08 && this.rng() < this.weedChance * dt) { p.weeds = true; this.emit('weeds', i); }
       // 스프링클러: 물이 마른 밭에 자동으로
       if (p.water <= 0 && Math.floor(i / this.cols) < this.sprinklerRows) { p.water = WATER_DURATION * this.waterMult; this.emit('sprinkle', i); }
-      const rate = (p.water > 0 ? 1 : 0.3) * this.boost * this.weatherMult * this.buildMult * (p.weeds ? 0.5 : 1) * (p.loose > 0 ? 1.25 : 1) * (p.fert ? FERT_SPEED : 1);
+      const rate = this.rateOf(p, p.water > 0);
       if (p.loose > 0) p.loose = Math.max(0, p.loose - dt);
       // 관리 점수: 물이 있었던 시간 (잡초가 있으면 절반만)
       p.careT = (p.careT || 0) + dt;
       p.careOk = (p.careOk || 0) + (p.water > 0 ? (p.weeds ? 0.5 : 1) : 0) * dt;
-      p.progress += (dt / CROPS[p.crop].growTime) * rate * (this.growthMult ? this.growthMult(p.crop) : 1); // 계절 (3D판 view 에서 연결, 없으면 1)
+      p.progress += (dt / CROPS[p.crop].growTime) * rate;
       p.water = Math.max(0, p.water - dt);
       if (p.progress >= 1) {
         p.progress = 1; p.state = 'ready';
