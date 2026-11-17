@@ -46,7 +46,7 @@ srv.listen(0, async () => {
     for (let n = tw.nextNode(); n; n = tw.nextNode()) {
       if (!n.textContent.trim()) continue;
       const el = n.parentElement, cs = getComputedStyle(el);
-      if (cs.visibility === 'hidden' || +cs.opacity === 0 || el.closest('[hidden]')) continue;
+      if (cs.visibility === 'hidden' || +cs.opacity === 0 || el.closest('[hidden]') || el.closest('details:not([open]) > :not(summary)')) continue; // 접힌 details 안은 안 그려짐
       const rg = document.createRange(); rg.selectNodeContents(n);
       for (const r of rg.getClientRects()) if (r.width > 1 && r.height > 1) boxes.push({ el, r, t: n.textContent.trim().slice(0, 20) });
     }
