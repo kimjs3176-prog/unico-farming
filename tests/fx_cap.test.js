@@ -45,7 +45,7 @@ test('FX: 상한에 걸린 별 터지기는 개수를 줄여 고른 고리로 (�
 });
 
 // ---------------------------------------------------------------- 떠오르는 글자: 가방으로 날리기 끄기
-test('FX.pop: {fly:false} 면 가방 날리기(onPop)를 부르지 않음 (수확 별은 떠오르기만)', () => {
+test('FX.pop: to 가 없으면 가방 날리기(onPop)를 부르지 않음 (수확 별·하트는 떠오르기만)', () => {
   SURF.seeCam.value.set(0, 5, 10);
   const ctx = { measureText: (t) => ({ width: t.length * 20 }), clearRect() {}, beginPath() {}, moveTo() {}, arcTo() {}, closePath() {}, fill() {}, fillText() {} };
   const had = globalThis.document;
@@ -56,8 +56,10 @@ test('FX.pop: {fly:false} 면 가방 날리기(onPop)를 부르지 않음 (수�
   fx.pop(0, 0, '⭐⭐', { fly: false });
   assert.deepEqual(flown, []);
   assert.ok(fx.items.some((it) => !it.kind), '글자는 그대로 떠오름');
-  fx.pop(0, 0, '🥕');
-  assert.deepEqual(flown, ['🥕'], '기본은 예전처럼 날아감');
+  fx.pop(0, 0, '💕');
+  assert.deepEqual(flown, [], '기본은 떠오르기만 (물건이 아닌 것은 가방으로 날아가지 않음)');
+  fx.pop(0, 0, '🥕', { to: 'bag' });
+  assert.deepEqual(flown, ['🥕'], "to:'bag' 일 때만 가방으로");
   if (had) globalThis.document = had; else delete globalThis.document;
 });
 

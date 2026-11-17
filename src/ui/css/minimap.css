@@ -1,7 +1,7 @@
 /* 미니맵·큰 지도 (minimap.js) */
 /* 미니맵 */
-.minimap { position: absolute; right: 12px; top: calc(var(--hud-b, 52px) + 4px); width: 150px; height: 150px; border-radius: 16px; box-shadow: var(--shadow); border: 3px solid rgba(255,255,255,0.9); }
-@media (max-width: 600px) { .minimap { width: 100px; height: 100px; } }
+/* 미니맵은 위쪽 달력 바로 아래에 붙음 (--cal-b: 달력 아래 끝, hud.js 가 잼 — 두 나무 테가 겹쳐 한 액자로 보이게) */
+.minimap { position: absolute; right: 12px; top: calc(var(--cal-b, 82px) + 6px); width: 150px; height: 150px; border-radius: 16px; box-shadow: var(--shadow); border: 3px solid rgba(255,255,255,0.9); }
 
 /* 큰 지도 (미니맵 클릭 / M) */
 .minimap { cursor: pointer; transition: transform 0.15s; }
@@ -18,7 +18,7 @@
 
 /* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */
 @media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
-  .minimap { right: calc(4px + var(--sar)); top: calc(var(--hud-b, 40px) + 4px); width: 76px; height: 76px; border-radius: 10px; border-width: 2px; }
+  .minimap { right: calc(4px + var(--sar)); top: calc(var(--cal-b, 46px) + 4px); width: 86px; height: 86px; border-radius: 10px; border-width: 2px; }
   .map-places button { min-height: 38px; }
 }
 /* ---------------- 낮은 창 (가로 폰 + 낮은 데스크톱 창) ---------------- */

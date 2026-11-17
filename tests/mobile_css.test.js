@@ -13,7 +13,7 @@ test('데스크톱 값은 그대로 (모바일 규칙이 새지 않음)', () => 
     assert.equal(value(env, '.prompt', 'white-space'), 'nowrap');
     assert.equal(value(env, '.prompt', 'bottom'), '120px');
     assert.equal(value(env, '.actionbar button', 'font-size'), '11px');
-    assert.equal(value(env, '.chip .xpbar', 'width'), '76px');
+    assert.equal(value(env, '.hud-top .calendar', 'width'), '150px'); // 달력은 미니맵 폭
     assert.equal(value(env, '.decor-bar', 'bottom'), '174px');
     assert.equal(value(env, '.soc-reqs', 'bottom'), '178px');
     assert.equal(value(env, '.map-panel', 'display'), undefined);
@@ -65,8 +65,8 @@ test('가로 폰: 스마트팜·논 패널이 떠도 알림·배너가 가려지
   assert.equal(value(LAND, '#ui:has(> .smart-panel) > .toasts', 'transform'), 'none');
   assert.equal(value(LAND, '#ui:has(> .smart-panel) > .event-banner', 'transform'), 'none');
   assert.match(value(LAND, '#ui:has(> .smart-panel) .toast', 'max-width'), /452px/);
-  // 패널 왼쪽 끝(오른쪽 88px + 폭 340px)보다 알림 오른쪽 끝이 왼쪽에: 8 + (W - 452) <= W - 428
-  assert.match(value(LAND, '.smart-panel', 'right'), /^calc\(88px/);
+  // 패널 왼쪽 끝(오른쪽 98px + 폭 340px)보다 알림 오른쪽 끝이 왼쪽에: 8 + (W - 452) <= W - 438 (미니맵 86px + 여백)
+  assert.match(value(LAND, '.smart-panel', 'right'), /^calc\(98px/);
   assert.match(value(LAND, '.smart-panel', 'width'), /^min\(340px/);
   // 세로 폰·데스크톱은 그대로
   for (const env of [PHONE, DESK]) {

@@ -7,6 +7,7 @@ import { touchUI } from '../input.js';
 import { josa } from '../sim/josa.js';
 import { ProduceFactory } from './farm_produce.js';
 import { SeedChip } from '../../ui/seed_chip.js';
+import { reward, harvestTier, harvestSound } from '../reward.js';
 
 /** 경작지 3D 표현 + 근접 상호작용 */
 // 갈지 않은 밭: 거친 흙 (지면 페인트 위에 살짝 진하게)
@@ -423,16 +424,17 @@ export class FarmView {
     for (const o of it.hid) o.visible = false;
   }
 
-  /** 수확물이 머리 위에 닿는 순간: 축하 소리·별 */
+  /** 수확물이 머리 위에 닿는 순간: 축하 소리·별 (큰 팡파르는 거대 작물만, 동작은 가방에 넣은 뒤 _endItem 에서) */
   _apex(head) {
     const it = this.item, g = this.game, r = it.r;
     const special = r.stars === 3 || r.giant;
-    g.audio.play(special ? 'levelup' : 'harvest');
+    g.audio.play(harvestSound(r));
+    g.juice?.haptic?.(15);
     g.fx.burst(head.x, head.y, head.z, special ? 0xffd75a : 0xfff3a0, special ? 14 : 6);
     if (r.giant) { g.juice.shake(0.25); g.fx.burst(head.x, head.y, head.z, 0xfff3a0, 26); }
     if (special) g.juice.pop(g.player.group, 0.2);
     // 별은 수확물 위에서 천천히 떠오르기만 (가방으로는 작물만, 수확물을 가리지 않게)
-    if (r.stars > 1) g.fx.pop(head.x, head.z, '⭐'.repeat(r.stars), { fly: false, y: head.y + 1.05, vy: 0.35 });
+    if (r.stars > 1) g.fx.pop(head.x, head.z, '⭐'.repeat(r.stars), { y: head.y + 1.05, vy: 0.35 });
   }
 
   _endItem() {
@@ -446,6 +448,8 @@ export class FarmView {
     if (it.phase !== 'wait') {
       if (!g.cinema?.locked) for (const o of it.hid || []) o.visible = true; // 컷신이 숨긴 상태는 건드리지 않음
       if (it.phase === 'hold' && !it.lifted && !g.home?.inside && (u.action === 'pull' || !u.action)) u.playAction('lift', 0.6); // 일찍 끝나도 번쩍은 꼭
+      // 가방에 넣은 뒤 등급에 맞는 기쁨 (별 하나·둘 끄덕, 별 셋 주먹 불끈, 거대 작물 만세). 소리는 머리 위에서 이미 남
+      else if (!g.home?.inside && (u.action === 'lift' || !u.action)) reward(g, harvestTier(it.r), { sound: null });
     }
     g.ui.flyToBag?.(CROPS[it.r.crop].emoji, pos);
   }

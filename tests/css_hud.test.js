@@ -6,94 +6,97 @@ import { value, read, PHONE, LAND, DESK, DESK2, WIDE } from './lib/css_env.js';
 
 const px = (v) => parseFloat(String(v ?? '').replace(/^calc\(/, '')) || 0;
 
-test('테마(theme.css)가 모바일 압축 값을 다시 덮지 않음', () => {
+test('테마(theme.css)가 모바일 압축 값을 다시 덮지 않음: 배지·지갑·달력·미니맵 크기', () => {
   for (const env of [PHONE, LAND]) {
-    // 레벨: 휴대폰은 28px 막대 대신 숫자를 두른 고리 (막대·경험치 글은 숨김)
-    assert.equal(value(env, '.chip .xpbar', 'display'), 'none');
-    assert.equal(value(env, '.chip .xp', 'display'), 'none');
-    assert.equal(value(env, '.lv-chip .lv-ring', 'display'), 'inline-grid');
-    assert.match(value(env, '.lv-chip .lv-ring', 'background'), /conic-gradient\(var\(--leaf\) max\(4deg, calc\(var\(--xp, 0\) \* 1%\)\), rgba\(139,94,52,0\.32\) 0\)/, '0 XP 에도 바탕 고리 + 4도');
-    assert.equal(value(env, '.weather-chip .w-l', 'display'), 'none', '휴대폰 날씨: 그림 + 기온');
-    assert.equal(value(env, '.weather-chip .w-t', 'display'), undefined);
-    assert.equal(value(env, '.actionbar', 'padding'), '3px');
+    assert.equal(value(env, '.p-badge .pb-face', 'width'), '40px', '폰 얼굴 40px');
+    assert.equal(value(env, '.purse .money', 'font-size'), '16px');
+    assert.equal(value(env, '.hud-top .calendar', 'width'), '86px');
+    assert.equal(value(env, '.minimap', 'width'), '86px', '달력과 미니맵 폭이 같음 (한 액자)');
+    assert.equal(value(env, '.calendar .cal-w', 'display'), 'none', "폰은 '봄 1일' 만 (1/7 없음)");
     assert.equal(value(env, '.minimap', 'border-width'), '2px');
+    assert.equal(value(env, '.hud-top .calendar', 'border-width'), '2px');
+    assert.equal(value(env, '.actionbar', 'padding'), '3px');
+    // 폰: 가방 하나만 미니맵 아래 (퀘스트는 목표 칩, 설정은 ☰)
+    assert.equal(value(env, '.hud-right .quest-btn', 'display'), 'none');
+    assert.match(value(env, '.hud-right', 'top'), /var\(--map-b/);
   }
-  // 넓은 화면은 그대로 숫자 + 막대
   for (const env of [DESK, WIDE]) {
-    assert.equal(value(env, '.lv-chip .lv-ring', 'display'), 'contents');
-    assert.equal(value(env, '.chip .xpbar', 'display'), undefined);
+    assert.equal(value(env, '.p-badge .pb-face', 'width'), '44px', '넓은 화면 얼굴 44px');
+    assert.equal(value(env, '.purse .money', 'font-size'), '20px');
+    assert.equal(value(env, '.hud-top .calendar', 'width'), '150px');
+    assert.equal(value(env, '.minimap', 'width'), '150px');
+    assert.equal(value(env, '.calendar .cal-w', 'display'), undefined);
+    assert.equal(value(env, '.hud-right .quest-btn', 'display'), undefined);
+    assert.equal(value(env, '.hud-right .hud-btn', 'width'), '44px');
   }
-  // 꾸미기 막대: 세로 폰은 이름 한 줄 + 단추 한 줄, 가로 폰은 세로 막대 (단추가 줄바꿈되지 않음)
-  assert.equal(value(PHONE, '.decor-bar', 'flex-wrap'), 'wrap');
-  assert.equal(value(PHONE, '.decor-what', 'flex'), '1 0 100%');
-  assert.equal(value(LAND, '.decor-bar', 'flex-wrap'), 'nowrap');
-  assert.equal(value(LAND, '.decor-what', 'flex'), '0 0 auto');
+  // 경험치 고리: 0 XP 에도 바탕 고리 + 4도, 지갑 숫자는 최소 폭(ch)·고정폭 숫자
+  assert.match(value(DESK, '.p-badge .pb-ring', 'background'), /conic-gradient\(var\(--leaf\) max\(4deg, calc\(var\(--xp, 0\) \* 1%\)\)/);
+  assert.match(value(DESK, '.purse .money', 'min-width'), /^\dch$/);
+  assert.match(value(PHONE, '.purse .money', 'min-width'), /^\dch$/);
+  assert.equal(value(DESK, '.purse .money', 'font-variant-numeric'), 'tabular-nums');
+  // 미니맵은 달력 바로 아래 (달력 아래 끝 --cal-b)
+  for (const env of [DESK, PHONE]) assert.match(value(env, '.minimap', 'top'), /^calc\(var\(--cal-b/);
+  // 단축키 글자는 올리거나 키보드로 고를 때만
+  assert.equal(value(DESK, '.hud-btn .kc', 'opacity'), '0');
+  assert.equal(value(DESK, '.hud-btn:focus-visible .kc', 'opacity'), '1');
+  // 컷신에는 배지·달력·버튼을 숨기는 규칙이 hud.css 에
+  assert.equal(value(DESK, 'body.cine .calendar', 'opacity'), '0');
 });
 
-test('휴대폰 글자 아래한도: 칩 13px 이상 · 돈 15px 이상, 데스크톱은 그대로', () => {
+test('휴대폰 글자 아래한도: HUD 숫자 14px 이상 · 다른 글 12px 이상, 데스크톱은 더 큼', () => {
   for (const env of [PHONE, LAND, { w: 360, h: 800, coarse: true }, { w: 800, h: 360, coarse: true }]) {
-    assert.ok(px(value(env, '.chip', 'font-size')) >= 13, `${env.w}x${env.h} 칩`);
-    assert.ok(px(value(env, '.weather-chip', 'font-size')) >= 13);
-    assert.ok(px(value(env, '.chip .money', 'font-size')) >= 15, '돈');
-    assert.ok(px(value(env, '.hud-right b', 'font-size')) >= 13, '퀘스트 수');
+    assert.ok(px(value(env, '.purse .money', 'font-size')) >= 14, `${env.w}x${env.h} 지갑`);
+    assert.ok(px(value(env, '.calendar .cal-t', 'font-size')) >= 14, '시각');
+    assert.ok(px(value(env, '.calendar .cal-s', 'font-size')) >= 13, '계절 줄');
+    assert.ok(px(value(env, '.calendar .cal-temp', 'font-size')) >= 12, '기온');
+    assert.ok(px(value(env, '.p-badge .pb-lv', 'font-size')) >= 12, '레벨 이름표');
   }
   for (const env of [DESK, DESK2]) {
-    assert.equal(value(env, '.chip', 'font-size'), '15px');
-    assert.equal(value(env, '.chip .money', 'font-size'), '17px');
+    assert.equal(value(env, '.purse .money', 'font-size'), '20px');
+    assert.equal(value(env, '.calendar .cal-t', 'font-size'), '22px');
   }
 });
 
-// 글자 대략 너비(em): 이 게임 글꼴(Jua)로 잰 칩 너비보다 3~11% 넉넉하게 (11px 칩 '🌸 봄 1/7' 46px, '🕒 3일차 10:04' 89px)
+// 글자 대략 너비(em): 이 게임 글꼴(Jua)로 잰 너비보다 조금 넉넉하게
 const EM = (ch) => (/[️‍]/.test(ch) ? 0 : /[가-힣]/.test(ch) ? 0.97 : /\p{Extended_Pictographic}/u.test(ch) ? 1.32
-  : /[0-9A-Za-z]/.test(ch) ? 0.55 : /[/]/.test(ch) ? 0.4 : 0.27);
+  : /[0-9A-Za-z]/.test(ch) ? 0.55 : /[/°]/.test(ch) ? 0.4 : 0.27);
 const textW = (s, fs) => [...s].reduce((a, ch) => a + EM(ch) * fs, 0);
+const padX = (v) => { const p = String(v || 0).split(/\s+/).map(px); return p.length === 1 ? p[0] * 2 : p[1] + (p[3] ?? p[1]); };
 
-/** 보이는지: 글자를 키우면(body.ui-big) 따로 숨기는 규칙도 봄 */
-const shown = (env, big, sel) => !((big && value(env, `body.ui-big ${sel}`, 'display') === 'none') || value(env, sel, 'display') === 'none');
-
-/** 칩 하나 너비 = 테두리 + 안쪽 여백 + 내용(사이 간격 포함) */
-function chipW(env, big, sel, parts) {
-  const fs = px(value(env, sel, 'font-size') || value(env, '.chip', 'font-size'));
-  const padv = String(value(env, sel, 'padding') || value(env, '.chip', 'padding')).split(/\s+/).map(px);
-  const padX = padv.length === 1 ? padv[0] * 2 : padv[1] + (padv[3] ?? padv[1]);
-  const bw = px(value(env, '.chip', 'border-width'));
-  const gap = px(value(env, '.chip', 'gap'));
-  const items = parts.filter((p) => !p.sel || shown(env, big, p.sel)).map((p) => p.w ?? textW(p.text, p.fs ?? fs));
-  const w = 2 * bw + padX + items.reduce((a, b) => a + b, 0) + gap * Math.max(0, items.length - 1);
-  return Math.max(w, px(value(env, sel, 'min-width')));
-}
-
-/** 위쪽 칩 줄 너비 (보통 내용: 12,345코인·10:04·봄 1/7·맑음·Lv.1) */
-function chipRow(env, big) {
-  const ring = px(value(env, '.lv-chip .lv-ring', 'width'));
-  const chips = [
-    chipW(env, big, '.chip', [{ text: '🪙' }, { text: '12,345', fs: px(value(env, '.chip .money', 'font-size')) }]),
-    chipW(env, big, '.chip', [{ text: '🕒', sel: '.clock-chip .ico' }, { text: '3일차', sel: '.clock-chip .day' }, { text: '10:04' }]),
-    chipW(env, big, '.chip', [{ text: '🌸 봄 1/7' }]),
-    chipW(env, big, '.weather-chip', [{ text: '☀️' }, { text: '22°', sel: '.weather-chip .w-t' }, { text: '맑음', sel: '.weather-chip .w-l' }]),
-    chipW(env, big, '.chip', [{ text: 'Lv.', sel: '.lv-chip .lv-t' }, { text: '1' }].map((p) => (p.text === '1' && ring ? { w: ring } : p))),
-  ];
+/** 위쪽 한 줄: 배지 + 지갑(12,345) + 달력 */
+function topRow(env, big) {
+  const badge = px(value(env, '.hud-top .p-badge', 'width'));
+  const mfs = px(value(env, '.purse .money', 'font-size'));
+  const money = Math.max(textW('12,345', mfs), parseFloat(value(env, '.purse .money', 'min-width')) * 0.55 * mfs);
+  const purse = 4 + padX(value(env, '.purse', 'padding')) + textW('🪙', px(value(env, '.purse .coin-ico', 'font-size'))) + px(value(env, '.purse', 'gap')) + money;
+  const cal = px(value(env, '.hud-top .calendar', 'width'));
   const gap = px((big && value(env, 'body.ui-big .hud-top', 'gap')) || value(env, '.hud-top', 'gap'));
-  return chips.reduce((a, b) => a + b, 0) + gap * (chips.length - 1);
+  return badge + purse + cal + gap * 2;
 }
 
-test('휴대폰 위쪽 칩 줄: 360x800·800x360 에서 글자 1배·1.25배 모두 한 줄 (가로 폰은 오른쪽 단추까지)', () => {
+test('휴대폰 위쪽 한 줄: 360x800·800x360 에서 글자 1배·1.25배 모두 배지·지갑·달력이 한 줄', () => {
   for (const [w, h] of [[360, 800], [800, 360]]) {
     const env = { w, h, coarse: true };
     for (const zoom of [1, 1.25]) {
-      const big = zoom > 1;
       const room = w / zoom - px(value(env, '.hud-top', 'left')) - px(value(env, '.hud-top', 'right'));
-      let row = chipRow(env, big);
-      if (w > h) { // 가로 폰: 가방·퀘스트·설정·도움말 단추도 같은 줄
-        const bw = Math.max(px(value(env, '.hud-right button', 'min-width')), textW('🎒', px(value(env, '.hud-right button', 'font-size'))) + 12);
-        row += px(value(env, '.hud-top', 'gap')) + 4 * bw + 3 * px(value(env, '.hud-right', 'gap'));
-      }
+      const row = topRow(env, zoom > 1);
       assert.ok(row <= room, `${w}x${h} 글자 ${zoom}배: 줄 ${row.toFixed(1)}px > 자리 ${room.toFixed(1)}px`);
     }
   }
-  // 1.25배 세로 폰은 시계 그림·'Lv.' 글을 빼야 들어감 (빼지 않으면 넘침 = 이 시험이 실제로 재고 있음)
-  const env = { w: 360, h: 800, coarse: true };
-  assert.ok(chipRow(env, false) > 360 / 1.25 - 8);
+});
+
+test('달력 두 줄이 폭 안에 들어감: 폰 86px (08:00 ☀️ 22°), 넓은 화면 150px (🌸 봄 7일 7/7 · 08:00 ☀️ 22°)', () => {
+  for (const env of [PHONE, LAND, DESK]) {
+    const w = px(value(env, '.hud-top .calendar', 'width'));
+    const bw = px(value(env, '.hud-top .calendar', 'border-width') || '3px');
+    const inner = w - 2 * bw - padX(value(env, '.hud-top .calendar', 'padding'));
+    const g2 = px(value(env, '.calendar .cal-l2', 'gap'));
+    const l2 = textW('08:00', px(value(env, '.calendar .cal-t', 'font-size'))) + textW('☀', px(value(env, '.calendar .cal-wx', 'font-size'))) + textW('22°', px(value(env, '.calendar .cal-temp', 'font-size'))) + 2 * g2;
+    assert.ok(l2 <= inner + 0.5, `${env.w}: 둘째 줄 ${l2.toFixed(1)} > ${inner.toFixed(1)}`);
+    const wk = value(env, '.calendar .cal-w', 'display') === 'none' ? 0 : textW('7/7', px(value(env, '.calendar .cal-w', 'font-size'))) + 6;
+    const l1 = textW('🌸 봄 7일', px(value(env, '.calendar .cal-s', 'font-size'))) + wk;
+    assert.ok(l1 <= inner + 0.5, `${env.w}: 첫 줄 ${l1.toFixed(1)} > ${inner.toFixed(1)}`);
+  }
 });
 
 test('덜 중요한 글은 #7a5536: 칩 바탕과 4.5:1 이상, 본문 갈색보다 옅음', () => {

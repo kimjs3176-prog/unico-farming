@@ -5,6 +5,8 @@
  *  - mgResult: 점수 카운트업, 별 3개가 하나씩 켜짐, 신기록 리본, 꽃가루, [다시 하기]
  *  - mgTick: 남은 시간 5초부터 째깍 소리 + 빨간 깜빡임
  */
+import { reward, minigameTier } from '../game/reward.js';
+
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 
 /** 기존에 따로 저장하던 기록 키는 그대로 사용 */
@@ -127,7 +129,9 @@ export function mgResult(g, o) {
         grade.textContent = GRADE[stars];
         grade.classList.add('show');
         if (stars >= 2) confetti(p, stars === 3 ? 40 : 20);
-        if (isNew) g.audio.play('levelup');
+        // 결과 보상: 통과는 주먹 불끈, 별 셋·새 기록은 만세 (소리도 등급대로)
+        const tier = minigameTier(stars, isNew);
+        if (tier) reward(g, tier);
       }, 220 * stars + 200);
     }
   };

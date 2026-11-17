@@ -4,6 +4,7 @@ import { josa } from '../../game/sim/josa.js';
 import { COSTUMES } from '../../game/sim/costume.js';
 import { CROPS, PRODUCTS, FEED_PRICE } from '../../game/sim/crops.js';
 import { ITEMS } from '../../game/sim/items.js';
+import { reward, BUY_SOUND } from '../../game/reward.js';
 
 /** 장터 창 메서드 (UI.prototype 에 합쳐짐) */
 export const MarketPanel = {
@@ -37,16 +38,22 @@ export const MarketPanel = {
       for (const [n, fn] of opts) {
         const bt = h('button', '', `${n}개`);
         bt.disabled = eco.money < price * n;
-        bt.onclick = () => { if (fn(n)) { g.audio.play('coin'); saveSoon(); render(); } };
+        bt.onclick = () => { if (fn(n)) { g.audio.play(BUY_SOUND); saveSoon(); render(); } };
         r.append(bt);
       }
       return r;
+    };
+    // 팔았을 때: 판 단추에서 코인이 장터 위쪽 코인으로 날아감 (닿을 때마다 숫자가 오름), 알림은 한 장에 합계로
+    const sold = (got, btn) => {
+      if (!(got > 0)) return;
+      if (this.flyToCoin) this.flyToCoin(got, btn.getBoundingClientRect()); else g.audio.play('coin');
+      this.toast(`💰 +${got} 코인`, { type: 'reward', key: 'sell', amount: got, fmt: ({ amount }) => `💰 판매 +${amount.toLocaleString()} 코인` });
     };
     const render = () => {
       const scroll = body.scrollTop;
       const cur = this.marketTab;
       top.innerHTML = '';
-      const coin = h('div', 'mk-coin', `🪙 <b class="money">${eco.money.toLocaleString()}</b> 코인${eco.festival ? ` <span class="mk-ev fest">🎉 수확 축제 · 모두 ${eco.festival.mult}배</span>` : ''}${eco.event ? ` <span class="mk-ev">🔥 ${eco.event.name}</span>` : ''}`);
+      const coin = h('div', 'mk-coin', `🪙 <b class="money">${Math.max(0, eco.money - (this.coinHold || 0)).toLocaleString()}</b> 코인${eco.festival ? ` <span class="mk-ev fest">🎉 수확 축제 · 모두 ${eco.festival.mult}배</span>` : ''}${eco.event ? ` <span class="mk-ev">🔥 ${eco.event.name}</span>` : ''}`);
       const tabs = h('div', 'mk-tabs');
       for (const [id, label] of TABS) {
         const n = id === 'sell' ? sellables().filter(([k]) => eco.count(k) > 0).length : 0;
@@ -92,10 +99,10 @@ export const MarketPanel = {
           const trend = tr > 0 ? '<span class="trend-up">▲</span>' : tr < 0 ? '<span class="trend-down">▼</span>' : '<span class="trend-flat">–</span>';
           const ev = eco.event?.item === k ? ' 🔥' : '';
           const r = h('div', `row mk-row${have ? '' : ' none'}`, `<span class="ic">${c.emoji}</span><span class="nm">${c.name}${ev} <span class="qty">보유 ${have}</span></span><span class="pr">${eco.sellPrice(k)}🪙 ${trend}</span>`);
-          if (have > 1) { const b1 = h('button', '', '1개'); b1.onclick = () => { const got = eco.sell(k, 1); g.onEvent('sell', 1); g.audio.play('coin'); this.toast(`+${got} 코인`); saveSoon(); render(); }; r.append(b1); }
+          if (have > 1) { const b1 = h('button', '', '1개'); b1.onclick = () => { const got = eco.sell(k, 1); g.onEvent('sell', 1); sold(got, b1); saveSoon(); render(); }; r.append(b1); }
           const b = h('button', 'gold', have > 1 ? `전부 ${(eco.sellPrice(k) * have).toLocaleString()}` : '판매');
           b.disabled = have <= 0;
-          b.onclick = () => { const got = eco.sell(k, have); g.onEvent('sell', have); g.audio.play('coin'); this.toast(`+${got} 코인`); saveSoon(); render(); };
+          b.onclick = () => { const got = eco.sell(k, have); g.onEvent('sell', have); sold(got, b); saveSoon(); render(); };
           r.append(b);
           rows.append(r);
         }
@@ -106,7 +113,7 @@ export const MarketPanel = {
           foot.style.display = '';
           foot.append(h('span', 'mk-total', `가방 속 판매 가능 <b>${total.toLocaleString()}🪙</b>`));
           const ab = h('button', 'gold', '🧺 모두 판매하기');
-          ab.onclick = () => { const n = sellables().reduce((a, [k]) => a + eco.count(k), 0); const got = eco.sellAll(); g.onEvent('sell', n); g.audio.play('coin'); this.toast(`+${got} 코인`); saveSoon(); render(); };
+          ab.onclick = () => { const n = sellables().reduce((a, [k]) => a + eco.count(k), 0); const got = eco.sellAll(); g.onEvent('sell', n); sold(got, ab); saveSoon(); render(); };
           foot.append(ab);
         }
       } else if (cur === 'cos') {
@@ -121,7 +128,7 @@ export const MarketPanel = {
           const r = h('div', `row mk-row${owned ? '' : ' none-soft'}`, `<span class="ic">${c.icon}</span><span class="nm">${c.name}${wearing ? ' <span class="qty">입는 중</span>' : owned ? ' <span class="qty">보유</span>' : ''}<br><small>✨ ${c.perkText} · ${c.desc}</small></span><span class="pr">${owned ? '' : price}</span>`);
           if (owned) {
             const b = h('button', wearing ? 'ghost' : 'gold', wearing ? '벗기' : '입기');
-            b.onclick = () => { cs.wear(wearing ? null : c.id); g.applyLook(); g.audio.play('pop', 0.7); if (!wearing) { g.player.unico.playAction('cheer', 0.9); this.toast(`${c.icon} ${c.name} · ${c.perkText}`); } render(); };
+            b.onclick = () => { cs.wear(wearing ? null : c.id); g.applyLook(); if (!wearing) { reward(g, 1); this.toast(`${c.icon} ${c.name} · ${c.perkText}`); } else g.audio.play('pop', 0.7); render(); };
             r.append(b);
           } else if (why && !/모자라요/.test(why)) {
             const b = h('button', 'locked', `🔒 ${why.replace('부터 살 수 있어요', ' 해금').replace('체험관 스탬프 6개를 모으면 받아요', '스탬프 6개').replace('수확 축제 날에만 팔아요', '축제 날에만')}`);
@@ -134,7 +141,7 @@ export const MarketPanel = {
               if (!cost) return;
               eco.money -= cost; eco.stats.spent += cost;
               cs.wear(c.id); g.applyLook();
-              g.audio.play('levelup'); g.player.unico.playAction('cheer', 1.2);
+              g.audio.play(BUY_SOUND); reward(g, 2); // 의상 사기: 중간 보상
               this.toast(`${c.icon} ${c.name}${josa(c.name, '을/를')} 샀어요! 바로 입었어요 · ${c.perkText}`);
               g.onEvent('costume', cs.owned.size);
               saveSoon();
@@ -153,12 +160,12 @@ export const MarketPanel = {
         const SPR = [400, 800, 1300];
         const sr = sim.sprinklerRows;
         const spr = h('div', 'row mk-row', `<span class="ic">💦</span><span class="nm">스프링클러 <span class="qty">${sr}/3줄</span><br><small>설치한 줄은 물이 마르면 자동으로 물을 줘요</small></span><span class="pr">${sr < 3 ? `${SPR[sr]}🪙` : '완료'}</span>`);
-        if (sr < 3) { const bt = h('button', 'gold', `${sr + 1}번째 줄 설치`); bt.disabled = eco.money < SPR[sr]; bt.onclick = () => { if (eco.money < SPR[sim.sprinklerRows]) return; eco.money -= SPR[sim.sprinklerRows]; eco.stats.spent += SPR[sim.sprinklerRows]; sim.sprinklerRows++; g.audio.play('levelup'); this.toast(`💦 밭 ${sim.sprinklerRows}번째 줄에 스프링클러를 설치했어요!`); g.onEvent('sprinkler', sim.sprinklerRows); saveSoon(); render(); }; spr.append(bt); }
+        if (sr < 3) { const bt = h('button', 'gold', `${sr + 1}번째 줄 설치`); bt.disabled = eco.money < SPR[sr]; bt.onclick = () => { if (eco.money < SPR[sim.sprinklerRows]) return; eco.money -= SPR[sim.sprinklerRows]; eco.stats.spent += SPR[sim.sprinklerRows]; sim.sprinklerRows++; g.audio.play(BUY_SOUND); this.toast(`💦 밭 ${sim.sprinklerRows}번째 줄에 스프링클러를 설치했어요!`); g.onEvent('sprinkler', sim.sprinklerRows); saveSoon(); render(); }; spr.append(bt); }
         fac.append(spr);
         if (fc) {
           const jp = fc.proc.nextJarPrice;
           const jr = h('div', 'row mk-row', `<span class="ic">🏺</span><span class="nm">장독 추가 <span class="qty">${fc.proc.jars}/4개</span><br><small>밭 서쪽 장독대에서 김치·잼·주스를 동시에 더 담가요</small></span><span class="pr">${jp ? `${jp}🪙` : '완료'}</span>`);
-          if (jp) { const bt = h('button', 'gold', '장독 사기'); bt.disabled = eco.money < jp; bt.onclick = () => { if (eco.money < jp || !fc.proc.buyJar()) return; eco.money -= jp; eco.stats.spent += jp; g.audio.play('levelup'); this.toast('🏺 장독대에 장독을 하나 더 놓았어요!'); saveSoon(); render(); }; jr.append(bt); }
+          if (jp) { const bt = h('button', 'gold', '장독 사기'); bt.disabled = eco.money < jp; bt.onclick = () => { if (eco.money < jp || !fc.proc.buyJar()) return; eco.money -= jp; eco.stats.spent += jp; g.audio.play(BUY_SOUND); this.toast('🏺 장독대에 장독을 하나 더 놓았어요!'); saveSoon(); render(); }; jr.append(bt); }
           fac.append(jr);
         }
         body.append(fac);

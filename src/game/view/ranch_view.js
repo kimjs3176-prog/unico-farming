@@ -8,6 +8,7 @@ import { signTexture, attachSign } from './koat_view.js';
 import { LAYOUT } from '../world.js';
 import { PRODUCTS, ANIMALS } from '../sim/crops.js';
 import { makeLabel } from '../label.js';
+import { BUY_SOUND } from '../reward.js';
 
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 const BABY = { cow: '송아지', sheep: '어린 양', chicken: '병아리' };
@@ -332,8 +333,8 @@ export class RanchView {
     // 여우·늑대가 울타리에 붙어 있으면 동물들이 겁먹어 생산이 멈추고 그쪽을 바라봄
     const threat = g.pests?.ranchThreat;
     if (threat) for (const e of this._all || []) { e.rest = 'look'; e.wait = Math.max(e.wait, 1); }
-    for (const r of S.tick(threat ? 0 : dt, day)) g.ui.toast(`${ANIMALS[r.type].emoji} ${r.name}의 ${PRODUCTS[r.product].name}${josa(PRODUCTS[r.product].name, '이/가')} 준비됐어요!`);
-    for (const a of S.lastGrown) { g.ui.toast(`🎉 ${BABY[a.type]} ${a.name}${josa(a.name, '이/가')} 다 자랐어요!`); g.audio.play('levelup'); }
+    for (const r of S.tick(threat ? 0 : dt, day)) g.ui.toast(`${ANIMALS[r.type].emoji} ${r.name}의 ${PRODUCTS[r.product].name}${josa(PRODUCTS[r.product].name, '이/가')} 준비됐어요!`, { type: 'info', key: 'ranch-ready' });
+    for (const a of S.lastGrown) { g.ui.toast(`🎉 ${BABY[a.type]} ${a.name}${josa(a.name, '이/가')} 다 자랐어요!`); g.audio.play('win', 0.8); }
     if (S.lastAutoFed.length && !this._autoTip) { this._autoTip = true; g.ui.toast('🌾 여물통 자동 급이: 배고픈 동물이 알아서 사료를 먹었어요'); }
     // 목장 가공소 숙성
     for (const i of this.work.tick(dt)) { const id = this.work.slots[i]?.id; if (id) g.ui.toast(`🧀 ${ITEMS[id].name}${josa(ITEMS[id].name, '이/가')} 다 됐어요! 목장 가공소에서 꺼내세요`); }
@@ -401,7 +402,7 @@ export class RanchView {
     const g = this.game;
     g.fx.pop(e.m.position.x, e.m.position.z, r.heartUp ? '💖' : '💕');
     if (r.heartUp) {
-      g.audio.play('levelup', 0.7);
+      g.audio.play('win', 0.8);
       g.ui.toast(`💖 ${e.a.name}${josa(e.a.name, '와/과')} 더 친해졌어요! 하트 ${r.hearts}개${r.hearts === 3 ? ' · 이제 생산물이 2개씩!' : r.hearts === 4 ? ' · 가끔 특별한 생산물을 줘요!' : ''}`);
       g.onEvent('animalheart', Math.max(...this.sim.animals.map((a) => this.sim.hearts(a))));
     } else g.ui.toast(`${what} ${e.a.name} 기분이 좋아 보여요 ${'♥'.repeat(r.hearts)}`);
@@ -426,8 +427,9 @@ export class RanchView {
     const lv = this.sim.level;
     if (this._lv && lv > this._lv) {
       const g = this.game;
-      g.audio.play('levelup');
       const unlock = Object.entries(RANCH_RECIPES).filter(([, r]) => r.level === lv).map(([k]) => ITEMS[k].name);
+      if (g.ui.skillLevelUp) g.ui.skillLevelUp(`🐄 목장 Lv.${lv}!`, Object.entries(RANCH_RECIPES).filter(([, r]) => r.level === lv).map(([k]) => `${ITEMS[k].emoji} ${ITEMS[k].name}`));
+      else g.audio.play('win');
       g.ui.toast(`🐄 목장 숙련도 Lv.${lv}!${unlock.length ? ` 목장 가공소에서 ${unlock.join(', ')}${josa(unlock.join(', '), '을/를')} 만들 수 있어요` : ''}`);
     }
     this._lv = lv;
@@ -493,7 +495,7 @@ export class RanchView {
           this.sync();
           const e = this.ents.find((x) => x.a === a);
           g.fx.burst(e.m.position.x, 0.6, e.m.position.z, 0xfff3a0, 16);
-          g.audio.play('levelup');
+          g.audio.play(BUY_SOUND);
           g.ui.toast(`🎉 ${BABY[type]} ${a.name}${josa(a.name, '이/가')} 목장에 왔어요! 쓰다듬어 주면 더 빨리 자라요`);
           g.onEvent('buyanimal');
           render();
@@ -506,11 +508,11 @@ export class RanchView {
       const fac = h('div', 'rows');
       const nb = BARN[S.barn + 1];
       const br = h('div', 'row', `<span>🏚️</span><span class="nm">축사 증축 <span class="qty">${S.barn + 1}/${BARN.length}단계</span><br><small>소·양 ${BARN[S.barn].big}마리, 닭 ${BARN[S.barn].small}마리까지${nb ? ` → ${nb.big} / ${nb.small}` : ''}</small></span><span class="pr">${nb ? `${nb.price}🪙` : '완료'}</span>`);
-      if (nb) { const b = h('button', 'gold', '증축'); b.disabled = eco.money < nb.price; b.onclick = () => { if (eco.money < nb.price || !S.upgradeBarn()) return; eco.money -= nb.price; eco.stats.spent += nb.price; g.audio.play('levelup'); g.ui.toast('🏚️ 축사를 넓혔어요! 가축을 더 들일 수 있어요'); render(); }; br.append(b); }
+      if (nb) { const b = h('button', 'gold', '증축'); b.disabled = eco.money < nb.price; b.onclick = () => { if (eco.money < nb.price || !S.upgradeBarn()) return; eco.money -= nb.price; eco.stats.spent += nb.price; g.audio.play(BUY_SOUND); g.ui.toast('🏚️ 축사를 넓혔어요! 가축을 더 들일 수 있어요'); render(); }; br.append(b); }
       fac.append(br);
       const wp = this.work.nextJarPrice;
       const wr = h('div', 'row', `<span>🧀</span><span class="nm">가공소 숙성 칸 <span class="qty">${this.work.jars}/4</span></span><span class="pr">${wp ? `${wp}🪙` : '완료'}</span>`);
-      if (wp) { const b = h('button', 'gold', '추가'); b.disabled = eco.money < wp; b.onclick = () => { if (eco.money < wp || !this.work.buyJar()) return; eco.money -= wp; eco.stats.spent += wp; g.audio.play('levelup'); render(); }; wr.append(b); }
+      if (wp) { const b = h('button', 'gold', '추가'); b.disabled = eco.money < wp; b.onclick = () => { if (eco.money < wp || !this.work.buyJar()) return; eco.money -= wp; eco.stats.spent += wp; g.audio.play(BUY_SOUND); render(); }; wr.append(b); }
       fac.append(wr);
       body.append(fac);
       p.append(body);
@@ -542,13 +544,13 @@ export class RanchView {
     if (r.gold) g.economy.addItem(r.gold, 1);
     g.onEvent('collect', r.amount);
     if (r.gold) g.onEvent('rgold');
-    g.audio.play(r.gold ? 'levelup' : 'harvest');
+    g.audio.play(r.gold ? 'win' : 'harvest');
     this._face(e);
     g.player.unico.playAction(e.a.type === 'chicken' ? 'plant' : 'pull', 0.8);
     g.ui.toast(`${P.emoji} ${e.a.name}의 ${P.name} ×${r.amount}${r.gold ? ` + ✨ ${ITEMS[r.gold].name}!` : ''}${r.amount > 1 ? ' (♥3 보너스)' : ''}`);
     g.juice.pop(e.m, 0.2);
-    g.fx.pop(e.m.position.x, e.m.position.z, r.gold ? '✨' : P.emoji);
-    if (r.gold) g.fx.burst(e.m.position.x, 1, e.m.position.z, 0xffe27a, 18);
+    g.fx.pop(e.m.position.x, e.m.position.z, P.emoji, { to: 'bag' });
+    if (r.gold) { g.fx.pop(e.m.position.x + 0.4, e.m.position.z, ITEMS[r.gold].emoji, { to: 'bag', y: 1.6, burst: false }); g.fx.burst(e.m.position.x, 1, e.m.position.z, 0xffe27a, 18); }
     this._levelCheck();
   }
 }

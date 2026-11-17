@@ -95,9 +95,9 @@ export class SeasonView {
     this.updateFall(dt);
   }
 
+  /** HUD 달력의 계절 줄 ('🌸 봄 1일') */
   hud() {
-    const c = this.game.ui.seasonChip;
-    if (c) c.textContent = `${this.cur.icon} ${this.cur.name} ${this.cur.dayIn}/7`;
+    this.game.ui.setSeason?.(this.cur.icon, this.cur.name, this.cur.dayIn);
   }
 
   apply(s, announce) {

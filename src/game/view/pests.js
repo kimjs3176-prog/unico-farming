@@ -178,7 +178,7 @@ export class Pests {
     this._flee(p, true);
     const coins = p.kind === 'crow' ? 15 : p.kind === 'fox' ? 30 : 50;
     g.economy.earn(coins);
-    g.fx.pop(p.root.position.x, p.root.position.z, '💨');
+    g.fx.pop(p.root.position.x, p.root.position.z, '💨', { to: 'coin', amount: coins }); // 바람은 떠오르기만, 코인은 지갑으로
     g.ui.toast(`👋 ${p.name}를 쫓아냈어요! 밭과 목장을 지켰어요 +${coins}🪙`);
     g.onEvent('shoo');
   }

@@ -6,6 +6,7 @@ import { ITEMS } from '../sim/items.js';
 import { Composter, Processor, Orders, RECIPES, COMPOST_MAX, COMPOST_PER, ORDER_ALL_BONUS } from '../sim/farmcraft.js';
 import { FARM_LEVELS } from '../sim/farm.js';
 import { makeLabel } from '../label.js';
+import { reward } from '../reward.js';
 
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 const info = (k) => CROPS[k] || PRODUCTS[k] || ITEMS[k];
@@ -107,12 +108,14 @@ export class FarmCraftView {
     if (sim.level > lv) this.levelUp(sim.level);
   }
 
+  /** 밭농사 숙련도 레벨업: 작은 청록 리본에 새 가공품 (카드 없음) + 주먹 불끈 */
   levelUp(lv) {
     const g = this.game;
-    g.audio.play('levelup');
-    g.player.unico.playAction('cheer', 1.5);
-    const unlock = Object.entries(RECIPES).filter(([, r]) => r.level === lv).map(([k]) => ITEMS[k].name);
-    g.ui.toast(`🌾 밭농사 숙련도 Lv.${lv}! 작물 품질이 더 좋아져요${unlock.length ? ` · 새 가공: ${unlock.join(', ')}` : ''}`);
+    const unlock = Object.entries(RECIPES).filter(([, r]) => r.level === lv).map(([k]) => `${ITEMS[k].emoji} ${ITEMS[k].name}`);
+    if (g.ui.skillLevelUp) g.ui.skillLevelUp(`🌾 밭농사 Lv.${lv}!`, unlock);
+    else g.audio.play('win');
+    reward(g, 2, { sound: null });
+    g.ui.toast(`🌾 밭농사 숙련도 Lv.${lv}! 작물 품질이 더 좋아져요${unlock.length ? ` · 새 가공: ${unlock.join(', ')}` : ''}`, { type: 'reward', key: 'farmlv' });
     g.onEvent('farmlv', lv);
   }
 
@@ -241,8 +244,9 @@ export class FarmCraftView {
           const res = O.deliver(i, g.world.day, g.quests.level, this.farmLevel, (k, n) => eco.take(k, n));
           if (!res) return;
           eco.earn(res.reward + res.allBonus);
+          g.ui.flyToCoin?.(res.reward + res.allBonus, b.getBoundingClientRect());
           this.addXp(res.xp);
-          g.audio.play('coin'); g.player.unico.playAction('cheer', 1.2);
+          reward(g, 2, { sound: null }); // 주문 납품: 중간 보상 (소리는 코인이 닿을 때)
           g.ui.toast(`📦 ${o.from}에 ${o.name} ${o.n}개 납품! +${res.reward}🪙${res.allBonus ? ` · 🎉 오늘 주문 모두 완료 보너스 +${res.allBonus}🪙` : ''}`);
           g.onEvent('order');
           render();
@@ -283,7 +287,7 @@ export function processorPanel(g, o) {
           eco.addItem(id, 1);
           o.addXp(15);
           g.audio.play('harvest'); g.player.unico.playAction('pull', 0.7);
-          const at = o.anchor?.(i); if (at) g.fx.pop(at.x, at.z, ITEMS[id].emoji);
+          const at = o.anchor?.(i); if (at) g.fx.pop(at.x, at.z, ITEMS[id].emoji, { to: 'bag' });
           g.ui.toast(`${ITEMS[id].emoji} ${ITEMS[id].name} 완성! 장터에서 ${eco.sellPrice(id)}🪙에 팔거나 주문에 납품할 수 있어요`);
           g.onEvent(o.event);
           render();

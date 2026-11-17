@@ -7,6 +7,7 @@ const THRESH_BAND = [0.55, 0.9]; // 알맞은 드럼 속도
 import { RiceSim, RICE_STAGES, WATER_MAX, thresh } from '../sim/rice.js';
 import { LAYOUT } from '../world.js';
 import { ITEMS } from '../sim/items.js';
+import { reward } from '../reward.js';
 
 const CLUMPS = 5; // 한 논에 5x5 포기
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _c = new THREE.Color();
@@ -159,12 +160,15 @@ export class RiceView {
       case 'drain': this.sim.drain(i); g.audio.play('click'); u.playAction('think', 0.8); g.ui.toast('💧 물꼬를 터서 물을 뺐어요'); break;
       case 'weed': this.sim.weed(i); g.audio.play('dig'); u.playAction('hoe', 1.25); g.fx.pop(this.paddies[i].x, this.paddies[i].z, '🌿'); break;
       case 'harvest': {
+        const lv0 = this.sim.skillLevel;
         const r = this.sim.harvest(i);
         if (!r) return;
         this.batches.push({ n: r.amount, q: r.quality });
         g.economy.addItem('paddy', r.amount);
-        g.audio.play('harvest'); u.playAction('cheer', 1.5); g.juice.pop(u.group, 0.2);
-        g.fx.pop(this.paddies[i].x, this.paddies[i].z, '🌾');
+        // 등급 ★★★ 벼는 주먹 불끈, 나머지는 끄덕 (소리는 수확 소리 그대로)
+        reward(g, RiceSim.grade(r.quality) >= 3 ? 2 : 1, { sound: 'harvest' }); g.juice.pop(u.group, 0.2); g.juice?.haptic?.(15);
+        g.fx.pop(this.paddies[i].x, this.paddies[i].z, '🌾', { to: 'bag' });
+        if (this.sim.skillLevel > lv0) g.ui.skillLevelUp?.(`🌾 논농사 Lv.${this.sim.skillLevel}!`);
         g.ui.toast(`🌾 벼 ${r.amount}단 수확! 예상 등급 ${'★'.repeat(RiceSim.grade(r.quality))} · 숙련도 Lv.${this.sim.skillLevel} · 탈곡장에서 쌀로 만드세요`);
         break;
       }
@@ -235,8 +239,7 @@ export class RiceView {
     g.player.frozen = false;
     g.player.unico.clearAction();
     g.ui.hideThresh?.();
-    g.onEvent('thresh');
-    g.audio.play('win');
+    g.onEvent('thresh'); // 소리·기쁨은 결과 창(별 수)에서
     const lines = Object.entries(made).map(([gr, n]) => `🍚 ${ITEMS['rice_' + gr].name} × ${n}`);
     mgResult(g, {
       id: 'thresh', icon: '⚙️', title: '탈곡 완료', score: Math.round(Math.min(1, eff) * 100), unit: '%', th: [40, 70, 90],

@@ -33,3 +33,12 @@
   .chat, body.ui-big .chat { bottom: 110px; }
   .chat:not(:focus-within) input { position: absolute; opacity: 0; pointer-events: none; height: 0; padding: 0; border: 0; }
 }
+/* ---------------- 넓은 화면(마우스): 채팅은 평소 💬 동그라미로 접힘 ----------------
+   T·말하기 버튼·동그라미를 누르면 입력칸에 초점 → :focus-within 으로 펼침, 접속 중 새 말이 오면 .peek 로 6초 펼침.
+   입력칸은 display/visibility 로 숨기지 않음 (보이지만 않게: 초점은 그대로 받음) */
+.chat-bubble { display: none; }
+@media (min-width: 601px) and (pointer: fine) {
+  .chat:not(:focus-within):not(.peek) { width: fit-content; }
+  .chat:not(:focus-within):not(.peek) .log, .chat:not(:focus-within) input { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; clip-path: inset(50%); }
+  .chat:not(:focus-within):not(.peek) .chat-bubble { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; font-size: 19px; }
+}
