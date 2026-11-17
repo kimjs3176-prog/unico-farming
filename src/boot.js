@@ -97,6 +97,11 @@ export function bootCode(e, stage = 'load') {
   return stage === 'start' ? 'E-START' : 'E-BOOT';
 }
 
+/** 다른 기기에서 열 수 없는 내 컴퓨터 주소인가 (접속 QR 을 숨김) */
+export function isLocalHost(host = '') {
+  return /^(localhost|127\.|\[?::1\]?$)/.test(String(host));
+}
+
 /** 줄 끝에서 쪼개지면 어색한 말 (도트(2.5D) 버전 등) */
 const NOWRAP = /도트\(2\.5D\) 버전/g;
 
@@ -114,10 +119,12 @@ export function bootErrorCard(code, err, opt = {}) {
   const lt = document.getElementById('loading-text'), btn = document.getElementById('start-btn');
   const pixelHint = code === 'E-GL' ? card.querySelector('a[href="./pixel.html"]')?.closest('.hint') : null; // 큰 단추와 겹치는 작은 링크
   // 오류 안내와 겨루는 첫 화면 꾸밈(기능 칩·조작 안내)도 숨김
-  const hidden = [card.querySelector('.bar'), card.querySelector('.name-row'), pixelHint, card.querySelector('.feature-row'), card.querySelector('.hint.keys')].filter(Boolean);
+  const keys = card.querySelector('.hint.keys');
+  const hidden = [card.querySelector('.bar'), card.querySelector('.name-row'), pixelHint, card.querySelector('.feature-row'), keys?.closest?.('.howto') || keys].filter(Boolean);
   const was = { text: lt?.textContent, css: lt?.style.cssText, label: btn?.textContent, onclick: btn?.onclick, disabled: btn?.disabled, disp: hidden.map((el) => el.style.display), card: card.style.cssText };
   for (const el of hidden) el.style.display = 'none';
   card.classList?.add('boot-error');
+  document.getElementById?.('loading')?.classList?.remove('ready'); // 다시 시도 안내 중에는 '준비 완료' 모양을 거둠
   // 좁은 화면에서도 양옆 16px 여백 (기본 92vw + 안쪽 여백은 412px 화면에서 거의 끝까지 참)
   card.style.boxSizing = 'border-box';
   card.style.width = 'min(calc(100vw - 32px), 440px)';
@@ -246,6 +253,12 @@ export async function boot(Game) {
     const info = loadSaveInfo();
     saved = info.data ?? (info.status === 'broken' ? loadBackup()?.data : null); // 못 읽은 기록이면 백업의 이름·위치
     nick.value = saved?.name || randomName();
+    // 🎲: 이름 아무거나 (눌러도 입력칸 글자만 바뀜)
+    const dice = document.getElementById('nick-dice');
+    if (dice) dice.onclick = () => {
+      nick.value = randomName();
+      dice.classList.remove('roll'); void dice.offsetWidth; dice.classList.add('roll');
+    };
     assets = new Assets();
     // 글자를 넘겨야 그 글자가 든 한글 조각을 받음 (글자 없이 부르면 라틴 조각만 받아 이름표가 대체 글꼴로 구워짐)
     const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua', `${LABEL_TEXT} ${nick.value}`), document.fonts?.load?.("20px 'Unico Coin'", '🪙')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
@@ -258,8 +271,12 @@ export async function boot(Game) {
   clearTimeout(slowT);
   assets.loadDeferred(saved?.player).catch(() => {}); // 첫 화면에 필요 없는 모델(늑대·산여우·주민 원본 몸·KOAT 네 발 원본)은 닉네임을 고르는 동안 뒤에서, 원본 몸은 저장 위치에서 가까운 주민부터
   if (lt) lt.textContent = '준비 완료! 닉네임을 정하고 입장하세요';
+  document.getElementById('loading')?.classList.add('ready'); // 다 받음: 진행 막대를 접고 입장 단추를 앞으로
   // 로그인 화면 접속 QR (휴대폰으로 같은 게임에 바로 들어오기, 좁은 화면·터치 기기에서는 숨김)
-  try { const q = joinQrBox(); q.classList.add('login-qr'); document.getElementById('loading')?.append(q); } catch { /* QR 없이도 입장 가능 */ }
+  // 내 컴퓨터 주소(localhost·127.x·::1)는 다른 기기에서 열 수 없으므로 QR 을 띄우지 않음
+  if (!isLocalHost(location.hostname)) {
+    try { const q = joinQrBox(); q.classList.add('login-qr'); document.getElementById('loading')?.append(q); } catch { /* QR 없이도 입장 가능 */ }
+  }
   btn.disabled = false;
   btn.textContent = '입장하기';
   let started = false;

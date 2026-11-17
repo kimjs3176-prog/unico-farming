@@ -38,6 +38,18 @@ export function reducedMotion() {
   try { return typeof matchMedia !== 'undefined' && (rmq ||= matchMedia('(prefers-reduced-motion: reduce)')).matches; } catch { return false; }
 }
 
+// 진동(햅틱): 안드로이드 등 navigator.vibrate 가 있는 기기만 (iPhone 은 없음 → 조용히 무시)
+const HAPTIC_KEY = 'unico.haptics';
+/** 이 기기가 진동을 낼 수 있나 */
+export function canVibrate(nav = typeof navigator !== 'undefined' ? navigator : null) {
+  return !!nav && typeof nav.vibrate === 'function';
+}
+/** 진동 설정 (기본 켜짐, 소리 설정처럼 이 브라우저에 따로 저장 — 그래픽 설정과 섞지 않음) */
+export const hapticPrefs = {
+  get() { try { return globalThis.localStorage?.getItem(HAPTIC_KEY) !== '0'; } catch { return true; } },
+  set(on) { try { globalThis.localStorage?.setItem(HAPTIC_KEY, on ? '1' : '0'); } catch { /* 저장 못 해도 이번 판은 그대로 */ } },
+};
+
 const _v = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
 
 export class Juice {
@@ -50,6 +62,15 @@ export class Juice {
     this._kick = null; // { dir|null, m, t }
     this._fov = null; // { d, t }
     this._applied = null; // 지난 프레임에 카메라에 더한 값 (카메라를 아무도 다시 놓지 않았으면 되돌림)
+  }
+
+  /**
+   * 짧은 진동 (ms 또는 [진동, 쉼, 진동…]). 설정이 꺼졌거나 오토플레이 중이면 생략
+   * 계약: 터치 버튼 상호작용 8 · 수확·낚기 15 · 입질 [10, 40, 20]
+   */
+  haptic(p = 8, nav = typeof navigator !== 'undefined' ? navigator : null) {
+    if (!canVibrate(nav) || !hapticPrefs.get() || globalThis.game?.autoplay?.on) return false;
+    try { return nav.vibrate(p) !== false; } catch { return false; }
   }
 
   /** 흔들림·밀림을 써도 되나 */
