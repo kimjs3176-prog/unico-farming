@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="유니코 팜" />
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦄</text></svg>" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
@@ -36,13 +36,20 @@
         <p class="title-ribbon"><span>한국농업기술진흥원과 함께하는 농업 메타버스</span></p>
       </div>
       <div class="loading-card">
-        <div class="feature-row"><span>🌾 논농사</span><span>🎣 낚시</span><span>🚜 트랙터</span><span>📡 스마트팜</span><span>🏢 KOAT 체험관</span></div>
-        <p id="loading-text">농장 준비 중…</p>
+        <div class="feature-row"><span>🌾 논농사</span><span>🎣 낚시</span><span>📡 스마트팜</span><span>🏢 KOAT 체험관</span></div>
+        <p id="loading-text" aria-live="polite">농장 준비 중…</p>
         <div class="bar"><div id="loading-bar"></div></div>
-        <label class="name-row">닉네임 <input id="nickname" maxlength="12" placeholder="유니코" /></label>
+        <div class="name-row">
+          <label for="nickname">닉네임</label>
+          <input id="nickname" maxlength="12" placeholder="유니코" autocomplete="nickname" enterkeyhint="go" />
+          <button type="button" id="nick-dice" class="nick-dice" title="이름 아무거나" aria-label="이름 아무거나 고르기">🎲</button>
+        </div>
         <button id="start-btn" disabled>입장하기</button>
         <p class="hint"><a href="./pixel.html" class="pixel-link">🎮 도트(2.5D) 버전으로 하기 →</a></p>
-        <p class="hint keys">키보드: WASD/방향키 이동 · E 상호작용<br/>마우스·터치: 클릭/탭으로 이동·상호작용 · 드래그로 시점 · 휠/두 손가락 줌</p>
+        <details class="howto">
+          <summary>🕹️ 조작법</summary>
+          <p class="hint keys"><span class="k-kb">WASD/방향키 이동 · E 상호작용 · 클릭으로 이동 · 드래그로 시점 · 휠 줌</span><span class="k-touch">탭해서 이동·상호작용 · 왼쪽 아래 조이스틱 · 드래그로 시점 · 두 손가락 줌</span></p>
+        </details>
       </div>
       <div class="title-friends" aria-hidden="true"></div>
     </div>

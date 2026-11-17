@@ -68,7 +68,7 @@ export class SeedChip {
     if (bump) { this.el.classList.remove('bump'); void this.el.offsetWidth; this.el.classList.add('bump'); }
   }
 
-  /** 자리 잡기: 터치 E 버튼이 보이면 그 왼쪽(윗변 맞춤, 8px 띄움), 아니면 안내 말풍선 오른쪽 */
+  /** 자리 잡기: 터치 E 버튼이 보이면 그 왼쪽(가운데 맞춤, 8px 띄움), 아니면 안내 말풍선 오른쪽 */
   _place() {
     const ui = this.game.ui, el = this.el;
     const z = +getComputedStyle(el).zoom || 1; // #ui 아래는 --ui-zoom 으로 커짐 → 화면 px 를 CSS px 로
@@ -76,7 +76,7 @@ export class SeedChip {
     if (btn && btn.width > 0) {
       el.classList.add('on-btn');
       el.style.left = `${(btn.left - 8) / z}px`;
-      el.style.top = `${btn.top / z}px`;
+      el.style.top = `${(btn.top + Math.max(0, (btn.height - el.getBoundingClientRect().height) / 2)) / z}px`; // E 버튼과 가운데 맞춤 (아래 동사 알약과 겹치지 않게 옆으로 8px)
       return;
     }
     el.classList.remove('on-btn');

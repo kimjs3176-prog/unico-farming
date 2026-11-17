@@ -4,6 +4,7 @@ import {
   makeInspectRound, makeCarbonRound, scoreRun, scoreConveyor, makeConveyor,
 } from '../game/sim/koat.js';
 import { touchUI } from '../game/input.js';
+import { reward } from '../game/reward.js';
 
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -92,7 +93,7 @@ export function installKoatUI(UI) {
           const stamp = h('div', 'koat-stampfx', `<span>${d.emoji}</span><b>${d.name.replace('본부', '')}</b><small>KOAT</small>`);
           p.append(stamp);
           setTimeout(() => { g.audio.play('bump', 0.8); g.juice.shake(0.2); confetti(p, 36); }, 330);
-          g.player.unico.playAction('cheer', 1.6);
+          reward(g, 2, { sound: null }); // 새 스탬프: 주먹 불끈 (쾅 소리는 위에서)
         } else if (stars >= 2) confetti(p, 18);
       }, 200 * stars + 250);
     };
@@ -397,10 +398,12 @@ export function installKoatUI(UI) {
         const r = book.claim();
         if (!r) return;
         g.economy.earn(r.money);
+        g.ui.flyToCoin?.(r.money, b.getBoundingClientRect());
+        const lv0 = g.quests.level;
         g.quests.xp += r.xp;
         g.player.setTitle?.(r.title);
-        g.audio.play('levelup');
-        g.player.unico.playAction('cheer', 2);
+        // 투어 완주: 큰 보상. 이 경험치로 레벨이 오르면 레벨업 축하(HUD)가 대신 함 (팡파르가 겹치지 않게)
+        if (g.quests.level === lv0) reward(g, 3);
         this.toast(`🏅 칭호 “${r.title}” 획득! +${r.money}🪙 +${r.xp}XP`);
         this.openKoatDesk();
       };

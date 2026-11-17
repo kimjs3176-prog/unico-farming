@@ -36,11 +36,12 @@ export class UI {
   }
 
   // ---------------------------------------------------------------- 패널
-  closePanel() { this.panel?.remove(); this.panel = null; this.game.input.enabled = true; this.game.player.frozen = this.game.ride.driving || this.game.smartfarm.active; }
+  // 창이 건 멈춤('panel')만 풂: 대화·컷신·운전 같은 다른 까닭의 멈춤은 그대로
+  closePanel() { this.panel?.remove(); this.panel = null; this.game.input.enabled = true; this.game.player.unhold?.('panel'); }
   openPanel(title) {
     this.closePanel();
     this.game.input.enabled = false;
-    this.game.player.frozen = true;
+    this.game.player.hold?.('panel');
     const p = h('div', 'panel');
     const head = h('h2', '', `${title} <button class="ghost close" aria-label="닫기">✕</button>`);
     head.querySelector('.close').onclick = () => this.closePanel();

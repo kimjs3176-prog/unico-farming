@@ -137,8 +137,10 @@ export class Audio {
     o.start(t); o2.start(t); o.stop(t + dur + 0.05); o2.stop(t + 0.2);
   }
 
-  play(name, vol = 1) {
+  /** 효과음. opts.freq: 음 높이를 바꿀 수 있는 소리('coin')의 기준 음 (코인이 하나씩 닿을 때 반음씩 올림) */
+  play(name, vol = 1, opts = {}) {
     const v = 0.16 * vol;
+    const det = () => 1 + (Math.random() - 0.5) * 0.06; // ±3% (같은 소리가 연달아 나도 덜 기계적)
     switch (name) {
       case 'click': return this.pluck(1568, v * 0.45, 0, undefined, 0.18);
       case 'dig': this.noise(0.18, v * 1.2, { freq: 420, q: 0.8 }); return this.tone(110, 0.16, 'triangle', v * 0.8, -40, { lp: 900, rev: 0.1 });
@@ -147,12 +149,28 @@ export class Audio {
       case 'stroke': return this.noise(0.2, v * 0.8, { type: 'bandpass', freq: 1100 + Math.random() * 700, q: 0.9 });
       case 'water': this.noise(0.35, v * 0.7, { type: 'highpass', freq: 2200, q: 0.4 }); this.pluck(1175, v * 0.4, 0.05, undefined, 0.3); return this.pluck(1568, v * 0.35, 0.14, undefined, 0.3);
       case 'harvest': this.pluck(784, v, 0); this.pluck(988, v, 0.08); return this.pluck(1319, v, 0.16);
-      case 'coin': this.pluck(1976, v * 0.7, 0, undefined, 0.35); return this.pluck(2637, v * 0.6, 0.07, undefined, 0.45);
-      case 'win': return [523, 659, 784, 1046, 1319].forEach((f, i) => this.pluck(f, v, i * 0.09, undefined, 1.2));
+      case 'coin': { const f = opts.freq || 1976; this.pluck(f, v * 0.7, 0, undefined, 0.35); return this.pluck(f * 1.335, v * 0.6, 0.07, undefined, 0.45); }
+      // 작은 보상(1단계): 맑은 두 음 (주울 때)
+      case 'pickup': { const k = det(); this.pluck(1319 * k, v * 0.7, 0, undefined, 0.3); return this.pluck(1760 * k, v * 0.65, 0.07, undefined, 0.4); }
+      // 사기·넓히기: 계산대 두 음 + 동전 짤랑
+      case 'buy': this.pluck(1568, v * 0.6, 0, undefined, 0.3); this.pluck(2093, v * 0.6, 0.08, undefined, 0.4); return this.noise(0.12, v * 0.5, { type: 'highpass', freq: 3000, q: 0.6, at: 0.14 });
+      // 중간 보상(2단계): 5도 차이 종 두 번 + 6kHz 반짝임
+      case 'win': {
+        const bell = (f, at) => { this.pluck(f, v, at, undefined, 1.4); this.tone(f * 2.76, 0.5, 'sine', v * 0.12, 0, { at, rev: 0.4 }); };
+        bell(1046, 0); bell(1568, 0.16);
+        return this.noise(0.5, v * 0.35, { type: 'highpass', freq: 6000, q: 0.5, at: 0.18 });
+      }
+      // 퀘스트 완료: 세 음 오름 + 반짝
+      case 'quest': [784, 988, 1319].forEach((f, i) => this.pluck(f, v * 0.85, i * 0.09, undefined, 0.8)); return this.noise(0.35, v * 0.3, { type: 'highpass', freq: 6000, q: 0.5, at: 0.22 });
       case 'bump': this.noise(0.22, v * 1.3, { type: 'lowpass', freq: 300 }); return this.tone(70, 0.25, 'sine', v, -25, { rev: 0.05 });
       case 'engine': return this.tone(65, 0.7, 'sawtooth', v * 0.45, 30, { lp: 400, rev: 0.05 });
       case 'thunder': this.noise(2.2, v * 2.2, { type: 'lowpass', freq: 180, q: 0.5 }); return this.noise(1.2, v * 1.4, { type: 'lowpass', freq: 600, q: 0.5, at: 0.1 });
-      case 'levelup': return [523, 659, 784, 1046, 1319, 1568].forEach((f, i) => this.pluck(f, v * 1.1, i * 0.07, undefined, 1.4));
+      // 큰 보상(3단계): 삼각파 바닥음 + 화음 패드 위로 오르는 여섯 음
+      case 'levelup':
+        this.tone(131, 1.6, 'triangle', v * 0.55, 0, { lp: 900, rev: 0.4 });
+        for (const f of [262, 330, 392]) this.tone(f, 1.8, 'triangle', v * 0.16, 0, { at: 0.05, lp: 1800, rev: 0.6 });
+        [523, 659, 784, 1046, 1319, 1568].forEach((f, i) => this.pluck(f, v * 1.1, i * 0.07, undefined, 1.4));
+        return this.noise(0.8, v * 0.25, { type: 'highpass', freq: 6000, q: 0.5, at: 0.42 });
       case 'pop': return this.pluck(1319, v * 0.6, 0, undefined, 0.25);
       case 'caw': this.tone(620, 0.16, 'sawtooth', v * 0.12, -260, { lp: 1800, rev: 0.2 }); return this.tone(560, 0.18, 'sawtooth', v * 0.1, -240, { lp: 1600, at: 0.22, rev: 0.2 });
       case 'howl': return this.tone(330, 1.6, 'sine', v * 0.18, 140, { lp: 1200, rev: 0.5 });

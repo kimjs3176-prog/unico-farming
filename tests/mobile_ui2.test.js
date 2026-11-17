@@ -47,10 +47,36 @@ test('전체 화면 단추: 켜져도 오토플레이의 켜짐 표시(on: 강�
   assert.match(blk, /창 모드/, '켜지면 이름만 바뀜');
 });
 
+test('☰ 메뉴: 환경설정·도움말 칸, 빨간 점은 새 버튼·받을 보상(hasClaimable)', () => {
+  const src = read('src/ui/actionbar.js').toString();
+  assert.match(src, /\['⚙️', '설정', \(\) => this\.openSettings\(\)\], \['❓', '도움말', \(\) => this\.openHelp\(\)\]/);
+  assert.match(src, /classList\.add\('mob-only'\)/);
+  assert.match(src, /this\.hasClaimable\?\.\(\)/);
+  // 환경설정 창에도 도움말 줄, 진동은 기기에 있을 때만
+  const st = read('src/ui/panels/settings.js').toString();
+  assert.match(st, /canVibrate\(\) \?/);
+  assert.match(st, /\.gfx-help'\)\.onclick = \(\) => this\.openHelp\(\)/);
+});
+
+test('터치 E 버튼: 할 것이 없을 때 누르면 도리도리 + 작은 딸깍, 상호작용하면 짧은 진동', () => {
+  const src = read('src/ui/prompt.js').toString();
+  assert.match(src, /if \(mode === 'idle'\) this\.nopeTap\(\)/);
+  assert.match(src, /game\.juice\?\.haptic\?\.\(8\)/);
+  assert.match(src, /play\?\.\('click', 0\.35\)/);
+});
+
 test('선물 되돌리기: 오늘 횟수·누적 기록이 0 아래로 내려가지 않음', () => {
   const s = new SocialSim();
   s.noteGift();
   s.undoGift(); s.undoGift();
   assert.equal(s.gifts, 0);
   assert.equal(s.stats.giftsSent, 0);
+});
+
+test('터치 E 버튼: 흐린 상태로 누르면 정말 아무 일 없음 (낚시 기다리는 중에 줄을 당기지 않음)', () => {
+  const src = read('src/ui/prompt.js').toString();
+  assert.match(src, /if \(mode === 'idle'\) \{ this\.nopeTap\(\); return; \}/);
+  const i = src.indexOf("if (mode === 'idle') { this.nopeTap(); return; }"), j = src.indexOf('game.input.interactTap = true;', i);
+  assert.ok(i > 0 && j > i, 'idle 확인이 interactTap 보다 먼저');
+  assert.match(src, /mash: !!g\.rice\?\.threshing/);
 });

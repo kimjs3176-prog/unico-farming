@@ -5,6 +5,7 @@ import { LAYOUT } from '../world.js';
 import { DecorSim, DECOR, DECOR_BY_ID, DECOR_CATS, DECOR_MAX, outsideZones, snapAhead } from '../sim/decor.js';
 import { saveGame } from '../save.js';
 import { touchUI } from '../input.js';
+import { reward, BUY_SOUND } from '../reward.js';
 
 /**
  * 농장 꾸미기 화면 (규칙은 sim/decor.js)
@@ -177,8 +178,8 @@ export class DecorView {
       if (cost < 0) return;
       if (cost > 0) { g.economy.spend(cost); }
       this.build();
-      g.audio.play('pop'); g.fx?.burst(s.x, 0.4, s.z, 0xfff1c4, 6);
-      g.player.unico.playAction('cheer', 0.8);
+      g.audio.play(cost > 0 ? BUY_SOUND : 'pop'); g.fx?.burst(s.x, 0.4, s.z, 0xfff1c4, 6);
+      reward(g, 1, { sound: null }); // 놓기: 작은 보상 (끄덕)
       g.onEvent('decor', this.sim.count);
       saveGame(g);
       this._bar(); // 보관함 수·가격 갱신

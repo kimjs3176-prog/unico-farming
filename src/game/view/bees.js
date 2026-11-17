@@ -3,6 +3,7 @@ import { LAYOUT } from '../world.js';
 import { heightAt } from '../terrain.js';
 import { makeLabel } from '../label.js';
 import { radialTexture } from '../world.js';
+import { reward } from '../reward.js';
 
 const FILL_TIME = 150; // 꿀이 가득 차는 데 걸리는 시간(초, 낮·맑은 날 기준)
 
@@ -66,9 +67,8 @@ export class Bees {
     const g = this.game;
     h.honey = 0;
     g.economy.addProduct('honey', 1);
-    g.audio.play('harvest');
-    g.player.unico.playAction('heart', 1);
-    g.fx.pop(h.x, h.z, '🍯');
+    reward(g, 1, { sound: 'harvest' });
+    g.fx.pop(h.x, h.z, '🍯', { to: 'bag' });
     g.fx.burst(h.x, heightAt(h.x, h.z) + 1, h.z, 0xffc53a, 10);
     g.ui.toast('🍯 달콤한 꿀 1병을 거뒀어요! 장터에서 팔 수 있어요');
     g.onEvent('honey');

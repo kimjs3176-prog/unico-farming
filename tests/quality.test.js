@@ -124,3 +124,15 @@ test('UI text size: three steps, invalid or missing values fall back to normal',
   assert.equal(uiScaleOf({ uiScale: 1.2 }), 1.15, '가장 가까운 단계로');
   assert.equal(uiScaleOf({ uiScale: 9 }), 1.3);
 });
+
+test('낮음: 폰 화면은 화면 크기에 맞춰 선명하게 (예전 0.75배 고정 → 뿌옇게), 큰 PC 화면은 0.75배까지만', async () => {
+  const { lowPixelRatio, LOW_PIXELS } = await import('../src/game/quality.js');
+  const phone = resolveQuality(applyPreset(base, 'low'), 3, 390 * 844);
+  assert.ok(phone.pixelRatio >= 1.3 && phone.pixelRatio <= 1.5, `폰 ${phone.pixelRatio}`);
+  assert.ok(phone.pixelRatio ** 2 * 390 * 844 <= LOW_PIXELS * 1.01, '그리는 픽셀 수는 예산 안');
+  assert.equal(resolveQuality(applyPreset(base, 'low'), 1, 1920 * 1080).pixelRatio, 0.75, 'PC 1080p 는 예전과 같음');
+  assert.equal(resolveQuality(applyPreset(base, 'low'), 1, 390 * 844).pixelRatio, 1, 'dpr 1 화면은 1배를 넘지 않음');
+  assert.equal(lowPixelRatio(3, 100 * 100), 1.5, '작은 화면도 1.5배 상한');
+  // 사용자 지정 해상도 슬라이더는 그대로 곱해짐
+  assert.ok(Math.abs(resolveQuality({ ...base, preset: 'custom', post: false, ao: false, scale: 0.5 }, 3, 390 * 844).pixelRatio - phone.pixelRatio * 0.5) < 1e-9);
+});

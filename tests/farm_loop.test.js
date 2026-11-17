@@ -223,7 +223,7 @@ test('수확: 포기는 먼저 위로 쭉 늘어나며 흔들리다(당기기) �
   assert.equal(F.item.phase, 'hold');
   assert.equal(pops.length, 1, '머리 위에 닿을 때 별 (보호 기간 별 2개)');
   assert.match(pops[0][0], /^(⭐){2,3}$/);
-  assert.equal(pops[0][1].fly, false);
+  assert.equal(pops[0][1].to, undefined, '별은 떠오르기만 (가방으로 날아가지 않음)');
   assert.ok(pops[0][1].y > F.item.m.position.y + 0.8, '별은 수확물 위 (가리지 않게)');
   assert.ok(F.item.m.scale.x > F.item.s * 1.1, "닿는 순간 '짠' 하고 크게");
   run(F, g, 0.2);

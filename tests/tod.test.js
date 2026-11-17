@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { timeOfDay } from '../src/game/sim/tod.js';
+import { timeOfDay, nightFactor } from '../src/game/sim/tod.js';
 
 const at = (h) => timeOfDay(h / 24);
 
@@ -41,4 +41,23 @@ test('시간대 색: 넘긴 객체를 다시 채워도 새로 만든 값과 같�
   const a = at(12), b = at(12);
   assert.notEqual(a, b, '넘기지 않으면 호출마다 새 객체');
   assert.notEqual(a.sun, b.sun);
+});
+
+test('시간대 색: 밤은 달빛 — 푸르게 기울고 채도가 낮아 풀이 청록빛으로', () => {
+  for (const h of [0, 2, 4.5, 20.5, 23]) {
+    const n = at(h);
+    assert.deepEqual(n.tint.map((v) => +v.toFixed(3)), [0.78, 0.86, 1.12], `${h}시 색 보정`);
+    assert.equal(+n.sat.toFixed(3), 0.78, `${h}시 채도`);
+    assert.ok(n.tint[2] / n.tint[1] > 1.25, '파랑이 초록보다 확실히 강함');
+  }
+  const noon = at(12);
+  assert.ok(noon.sat > 1.1 && noon.tint.every((v) => Math.abs(v - 1) < 0.02), '한낮은 그대로');
+});
+
+test('밤 정도: 낮(햇빛 0.55 이상)은 정확히 0, 깜깜하면 1, 그 사이는 매끄럽게', () => {
+  for (const d of [0.55, 0.6, 0.8, 1]) assert.equal(nightFactor(d), 0, `daylight ${d}`);
+  for (const d of [0, 0.03, 0.05]) assert.equal(nightFactor(d), 1, `daylight ${d}`);
+  let prev = 1;
+  for (let d = 0; d <= 1.0001; d += 0.01) { const v = nightFactor(d); assert.ok(v <= prev + 1e-9 && v >= 0 && v <= 1); prev = v; }
+  assert.ok(Math.abs(nightFactor(0.3) - 0.5) < 1e-9, '가운데는 절반');
 });

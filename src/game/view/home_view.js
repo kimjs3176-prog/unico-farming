@@ -8,6 +8,7 @@ import { buildRoom, IO } from './home_interior.js';
 import { SURF, enhanceMaterial } from '../surface.js';
 import { ITEMS } from '../sim/items.js';
 import { saveGame } from '../save.js';
+import { reward, BUY_SOUND } from '../reward.js';
 
 /**
  * 유니코 집 (밭 남쪽): 문 앞에서 E → 집 창
@@ -483,8 +484,7 @@ export class HomeView {
   _applyCos(c) {
     const g = this.game;
     g.applyLook();
-    g.audio.play(c ? 'levelup' : 'pop', c ? 0.5 : 0.6);
-    g.player.unico.playAction('cheer', 0.9);
+    reward(g, 1, { sound: c ? 'pickup' : 'pop' }); // 옷 갈아입기: 작은 보상
     if (c) g.ui.toast(`${c.icon} ${c.name} · ${c.perkText}`);
     g.onEvent('outfit');
     saveGame(g);
@@ -538,7 +538,8 @@ export class HomeView {
     g.ui.closePanel();
     this.build();
     if (this.inside) { const e = this.room.entry; g.player.position.set(IO.x + e.x, IO.y, IO.z + e.z); this.room.group.visible = true; g.followCam.distance = [9.5, 10.5, 12][this.sim.level]; }
-    g.audio.play('levelup');
+    g.audio.play(BUY_SOUND);
+    reward(g, 2); // 집 넓히기: 중간 보상
     g.juice.pop(this.root, 0.25);
     g.fx.burst(this.root.position.x, 2.5, this.root.position.z, 0xfff3a0, 34);
     g.ui.toast(`🏡 집을 '${this.sim.info.name}'으로 넓혔어요! ${this.sim.info.desc}`);
@@ -568,7 +569,7 @@ export class HomeView {
         // 어두운 사이 자정이 지나 world 가 이미 날을 넘겼으면 다시 넘기지 않음 (우편함·임대 수입·시세가 두 번 처리되지 않게)
         if (r.newDay && w.day < r.day) { w.day = r.day; w.onNewDay?.(r.day); }
         if (this.inside) { const b = this.room.spots.find((x) => x.key === 'bed'); if (b) g.player.position.set(IO.x + b.x, IO.y, IO.z + b.z); }
-        g.player.unico.playAction('cheer', 1.2);
+        reward(g, 1, { sound: null }); // 개운한 기지개 대신 콩콩
         g.ui.toast(`☀️ ${w.day}일차 아침! 푹 자서 개운해요 · 오늘 하루 걷는 속도 +15%`);
         g.onEvent('sleep');
         saveGame(g);

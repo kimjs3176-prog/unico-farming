@@ -19,6 +19,28 @@ export const LAKE_HINT = (id) => {
   return it.rarity >= 2 ? '힘이 세서 힘겨루기가 필요해요' : '흔해요';
 };
 
+/** 낚시터 첫 방문 컷신 스텝 (화면 구도 시험이 그대로 돌려 봄): 대사마다 낚시꾼 얼굴이 대화창 위에 보이거나, 규칙 설명은 부두를 비춤 */
+export function lakeIntroSteps(g) {
+  const K = LAYOUT.lake, fe = g.npcs.list.find((e) => e.id === 'fisher'), fisher = fe?.u;
+  const F = { speaker: fisher, name: `🎣 ${fe?.name ?? villagerName('fisher')}`, color: '#3170c9', emote: 'wave' };
+  const pe = K.pier[1];
+  return [
+    { cam: [[K.x + 9, 7.5, K.z - 9], [K.x, 0, K.z + 1], 2.0] }, // 호수 전경 (대사 없이)
+    { face: fisher, toward: [K.x, K.z], emote: 'wave' },
+    { say: [{ ...F, text: '어서 와! 여기는 유니코 낚시터야. 연못에서는 못 보는 물고기들이 산단다 🎣' }] },
+    { cam: [[K.x - 3.5, 2.6, pe.z0 - 2.5], [K.x, 0.3, pe.z1 + 1.5], 2.0] },
+    { say: [{ ...F, text: '부두 끝이나 물가에서 낚싯대를 던져 봐. 큰 녀석이 물면 힘겨루기가 시작돼!' }] },
+    { say: [{ ...F, text: '꾹 눌러서 감고, 줄이 빨갛게 팽팽해지거나 물고기가 몸부림치면 잠깐 놓아 줘. 지치면 그때 확 감는 거야!' }] },
+    { face: fisher, toward: [K.shop.x, K.shop.z], emote: 'present' },
+    { say: [{ ...F, emote: 'present', text: '떡밥이랑 더 좋은 낚싯대는 내 가게에서 팔아. 기록판에는 매일 바뀌는 의뢰가 붙어 있으니 꼭 확인하고!' }] },
+    { run: () => {
+      g.economy.addItem('bait', 3);
+      g.audio.play('coin');
+      g.ui.toast('🪱 환영 선물로 떡밥 3개를 받았어요! (떡밥이 있으면 자동으로 써요)');
+    } },
+  ];
+}
+
 /**
  * 유니코 낚시터 (남서쪽 호수)
  *  - 부두·나룻배·물가 장식은 World._lake (정적 병합), 여기서는 움직이거나 상호작용하는 것
@@ -91,7 +113,9 @@ export class LakeView {
       game.audio.play('splash', on ? 0.9 : 0.4);
       if (on) {
         game.onEvent('swim');
-        if (!game.flags.swimTip) { game.flags.swimTip = true; game.ui.toast('🏊 첨벙! 헤엄치는 중이에요. 물속에서 반짝이는 곳에 가면 잠수해서 보물을 찾을 수 있어요 (E)'); }
+        const t = '🏊 첨벙! 헤엄치는 중이에요. 물속에서 반짝이는 곳에 가면 잠수해서 보물을 찾을 수 있어요 (E)';
+        if (game.ui.tip) game.ui.tip('swim', t); // 한 번만 뜨는 팁 (예전 swimTip 표시는 tip.js 가 옮김)
+        else if (!game.flags.swimTip) { game.flags.swimTip = true; game.ui.toast(t); }
       }
     };
     // 헤엄: 팔을 저을 때마다 좌우 번갈아 물을 퍼 올리고, 발차기 물보라 + 첨벙 소리
@@ -147,12 +171,12 @@ export class LakeView {
     this.splash(p.x, p.z, 1.1); // 물 위로 푸하!
     g.audio.play('splash', 0.5);
     const r = Math.random();
-    let text;
+    let text, to = { to: 'bag' }; // 가방으로 날아가는 것 / 코인은 지갑으로
     if (r < 0.07) { g.economy.addItem('pearl', 1); text = `${ITEMS.pearl.emoji} 반짝반짝 ${ITEMS.pearl.name}!`; g.audio.play('levelup'); }
     else if (r < 0.62) { g.economy.addItem('clam', 1); text = `${ITEMS.clam.emoji} ${ITEMS.clam.name}`; g.audio.play('coin'); }
-    else if (r < 0.82) { const n = 30 + Math.floor(Math.random() * 6) * 10; g.economy.earn(n); text = `🪙 물에 빠진 동전 ${n}`; g.audio.play('coin'); }
+    else if (r < 0.82) { const n = 30 + Math.floor(Math.random() * 6) * 10; g.economy.earn(n); text = `🪙 물에 빠진 동전 ${n}`; to = { to: 'coin', amount: n }; g.audio.play('coin'); }
     else { g.economy.addItem('fish_snail', 1); const rec = g.collection.add('fish_snail', { size: 4 + Math.round(Math.random() * 3), day: g.world.day }); text = `🐌 우렁이${rec.isNew ? ' (도감 등록!)' : ''}`; g.afterCollect?.(); g.audio.play('harvest'); }
-    g.fx.pop(p.x, p.z, text.split(' ')[0]);
+    g.fx.pop(p.x, p.z, text.split(' ')[0], to);
     g.ui.toast(`🤿 잠수해서 ${text}${josa(text, '을/를')} 찾았어요!`);
     g.onEvent('dive');
   }
@@ -266,27 +290,8 @@ export class LakeView {
     return best;
   }
 
-  /** 첫 방문 컷신: 호수를 비추고 낚시꾼이 규칙 설명, 환영 선물 떡밥 */
-  intro() {
-    const g = this.game, K = LAYOUT.lake;
-    const fisher = g.npcs.list.find((e) => e.id === 'fisher')?.u;
-    const F = { speaker: fisher, name: `🎣 ${g.npcs.list.find((e) => e.id === 'fisher')?.name ?? villagerName('fisher')}`, color: '#3170c9', emote: 'wave' };
-    const pe = K.pier[1];
-    g.cinema.play([
-      { cam: [[K.x + 9, 7.5, K.z - 9], [K.x, 0, K.z + 1], 2.4] },
-      { say: [{ ...F, text: '어서 와! 여기는 유니코 낚시터야. 연못에서는 못 보는 물고기들이 산단다 🎣' }] },
-      { cam: [[K.x - 3.5, 2.6, pe.z0 - 2.5], [K.x, 0.3, pe.z1 + 1.5], 2.0] },
-      { say: [{ ...F, text: '부두 끝이나 물가에서 낚싯대를 던져 봐. 큰 녀석이 물면 힘겨루기가 시작돼!' }] },
-      { say: [{ ...F, text: '꾹 눌러서 감고, 줄이 빨갛게 팽팽해지거나 물고기가 몸부림치면 잠깐 놓아 줘. 지치면 그때 확 감는 거야!' }] },
-      { cam: [[K.shop.x - 4.2, 2.4, K.shop.z - 2.4], [K.shop.x, 1.2, K.shop.z], 1.8] },
-      { say: [{ ...F, text: '떡밥이랑 더 좋은 낚싯대는 내 가게에서 팔아. 기록판에는 매일 바뀌는 의뢰가 붙어 있으니 꼭 확인하고!' }] },
-      { run: () => {
-        g.economy.addItem('bait', 3);
-        g.audio.play('coin');
-        g.ui.toast('🪱 환영 선물로 떡밥 3개를 받았어요! (떡밥이 있으면 자동으로 써요)');
-      } },
-    ]);
-  }
+  /** 첫 방문 컷신: 낚시꾼이 호수를 등지고 인사 → 부두에서 규칙 → 가게 쪽에서 떡밥 선물 */
+  intro() { return this.game.cinema.play(lakeIntroSteps(this.game)); }
 
   // ------------------------------------------------------------ 가게
   openShop() {

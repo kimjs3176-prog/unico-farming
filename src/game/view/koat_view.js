@@ -114,7 +114,8 @@ export class KoatView {
       // 담당 유니코: 가까이 오면 바라보고, 가끔 손님 맞이 동작
       const np = b.npc.group.position;
       const dn = Math.hypot(np.x - playerPos.x, np.z - playerPos.z);
-      b.npc.facing = dn < 6 ? Math.atan2(playerPos.x - np.x, playerPos.z - np.z) : b.rot;
+      if (b.npc.faceLock != null) b.npc.facing = b.npc.faceLock; // 컷신·대화 구도 (cinema.release 가 풂)
+      else b.npc.facing = dn < 6 ? Math.atan2(playerPos.x - np.x, playerPos.z - np.z) : b.rot;
       b.idle += dt;
       if (b.idle > 9) { b.idle = Math.random() * 3; b.npc.playAction(dn < 6 ? 'heart' : 'present', 1.8); }
       b.npc.update(dt, cam);
@@ -122,7 +123,8 @@ export class KoatView {
     if (this.drone) { this.drone.position.y = 2.9 + Math.sin(this.t * 2) * 0.15; this.drone.traverse((o) => { if (/^Rotor/.test(o.name)) o.rotation.y += dt * 40; }); }
     const dp = this.desk.group.position;
     const dd = Math.hypot(dp.x - playerPos.x, dp.z - playerPos.z);
-    this.desk.facing = dd < 6 ? Math.atan2(playerPos.x - dp.x, playerPos.z - dp.z) : 0;
+    if (this.desk.faceLock != null) this.desk.facing = this.desk.faceLock;
+    else this.desk.facing = dd < 6 ? Math.atan2(playerPos.x - dp.x, playerPos.z - dp.z) : 0;
     this.desk.update(dt, cam);
     if (dd < 2.4 && (!best || dd < best.d)) best = { d: dd, label: `🏢 KOAT 안내데스크 · 스탬프 ${this.book.count}/${DIVISIONS.length}`, key: 'koat', onInteract: () => this.game.ui.openKoatDesk() };
     return best;
@@ -132,7 +134,12 @@ export class KoatView {
   record(id, score) {
     const g = this.game;
     const r = this.book.record(id, score);
-    if (r.passed) { g.economy.earn(Math.round((50 + Math.round(score / 2)) * (g.costume?.mult('koat_coins') ?? 1))); g.audio.play('win'); g.player.unico.playAction('cheer', 1.6); }
+    if (r.passed) {
+      g.economy.earn(Math.round((50 + Math.round(score / 2)) * (g.costume?.mult('koat_coins') ?? 1)));
+      const done = r.newStamp && this.book.count >= DIVISIONS.length, pp = g.player.position; // 스탬프 투어 완주는 한 단계 더 큰 축하
+      if (g.reward) g.reward(done ? 3 : 2, { x: pp.x, z: pp.z, label: '🏅' }); else g.audio.play('win');
+      g.player.unico.playAction('cheer', 1.6);
+    }
     else { g.audio.play('bump'); g.player.unico.playAction('think', 1.2); }
     if (r.newStamp) { g.onEvent('koatstamp', 1); g.onEvent('koatall', this.book.count); }
     return r;

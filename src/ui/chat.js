@@ -1,4 +1,5 @@
 // 채팅: 접속 표시·기록·입력칸 (휴대폰 키보드가 열려도 HUD 가 밀리지 않게)
+// 넓은 화면은 평소 💬 동그라미로 접혀 있음 (T·💬 버튼·누르기로 펼침, 접속 중 새 말이 오면 6초 동안 펼쳐 보여 줌)
 import { h, esc } from './dom.js';
 import { touchUI } from '../game/input.js';
 
@@ -12,7 +13,7 @@ export const ChatUI = {
     this.online = h('div', 'online', '🟢 오프라인 모드');
     this.chatLog = h('div', 'log');
     this.chatInput = h('input');
-    this.chatInput.placeholder = '채팅 (Enter)';
+    this.chatInput.placeholder = '채팅 (Enter 로 보내기)';
     this.chatInput.maxLength = 80;
     this.chatInput.enterKeyHint = 'send'; // 휴대폰 키보드의 Enter 키가 '보내기'로
     this.chatInput.autocomplete = 'off';
@@ -47,7 +48,13 @@ export const ChatUI = {
     };
     vv?.addEventListener('resize', followVV);
     vv?.addEventListener('scroll', followVV);
-    this.chat.append(this.online, this.chatLog, this.chatInput);
+    // 접힌 채팅: 💬 동그라미 (입력칸은 숨기지 않고 보이지만 않게 → T 키·말하기 버튼의 focus() 가 그대로 됨)
+    this.chatBubble = h('button', 'ghost chat-bubble', '💬');
+    this.chatBubble.setAttribute('aria-label', '채팅 열기 (T)');
+    this.chatBubble.title = '채팅 (T)';
+    this.chatBubble.onclick = () => this.chatInput.focus();
+    this.chatInput.addEventListener('focus', () => this.chatBubble.classList.remove('unread'));
+    this.chat.append(this.online, this.chatLog, this.chatInput, this.chatBubble);
     root.append(this.chat);
   },
 
@@ -57,5 +64,13 @@ export const ChatUI = {
     this.chatLog.append(d);
     while (this.chatLog.children.length > 30) this.chatLog.firstChild.remove();
     this.chatLog.scrollTop = this.chatLog.scrollHeight;
+    // 접혀 있는 동안 남의 글이 오면 💬 에 빨간 점 (펼치면 지움)
+    if (!mine && document.activeElement !== this.chatInput) this.chatBubble?.classList.add('unread');
+    // 함께 있는 사람이 말하면 접힌 채팅을 6초 동안 펼쳐 보여 줌 (혼자일 때 나오는 안내 글로는 펼치지 않음)
+    if (!mine && this.game.net?.connected) {
+      this.chat.classList.add('peek');
+      clearTimeout(this._chatPeek);
+      this._chatPeek = setTimeout(() => this.chat.classList.remove('peek'), 6000);
+    }
   },
 };

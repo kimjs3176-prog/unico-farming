@@ -78,10 +78,16 @@ export class FX {
     }
   }
 
-  /** 떠오르는 글자. fly:false 면 가방으로 날아가지 않음 (수확 별처럼 보여 주기만). y·vy 로 시작 높이·떠오르는 속도 */
-  pop(x, z, text, { fly = true, y = 1.2, vy = 1.6 } = {}) {
-    this.burst(x, y - 0.2, z);
-    if (fly) this.onPop?.(text, new THREE.Vector3(x, y, z));
+  /**
+   * 떠오르는 글자. 기본은 떠오르기만 (하트·별·음표처럼 물건이 아닌 것)
+   * o.to: 'bag' 이면 가방으로 날아감(가방에 실제로 들어온 물건만), 'coin' 이면 o.amount 코인이 지갑으로 날아감
+   * o.y·o.vy 로 시작 높이·떠오르는 속도, o.burst:false 면 반짝임 없음
+   */
+  pop(x, z, text, o = {}) {
+    const { to = null, y = 1.2, vy = 1.6, burst = true } = o;
+    if (burst) this.burst(x, y - 0.2, z);
+    if (to === 'bag') this.onPop?.(text, new THREE.Vector3(x, y, z), o);
+    else if (to === 'coin') this.onCoin?.(o.amount || 0, new THREE.Vector3(x, y, z));
     const s = makeLabel(text, { bg: 'rgba(0,0,0,0)', size: 56, scale: 0.012 });
     s.material.depthWrite = false;
     s.onBeforeRender = skipOverride;

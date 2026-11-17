@@ -192,6 +192,8 @@ let CHAR_Q = null;
 const charQ = () => CHAR_Q ?? globalThis.game?.quality?.level ?? 'high';
 // 프레임 번호: 내 캐릭터(labelAlways)가 매 프레임 한 번 올림 → 다른 캐릭터가 최근에 화면에 그려졌는지 판단
 let TICK = 0;
+/** 내 캐릭터 위치 (주민 이름표를 카메라 줌과 상관없이 내 곁에서만 보이게) */
+let HERO_POS = null;
 /** 원본 몸으로 바꾼 마지막 프레임 (한 프레임에 하나만) */
 let SWAP_TICK = -1;
 /** 화면 밖 캐릭터의 자세 계산 간격(초), 낮음에서 아주 먼(40m 넘는) 캐릭터의 간격 */
@@ -971,11 +973,11 @@ export function legAngle(u, beta, A) {
 }
 
 /** 행복 ^^ 눈이 되는 동작, 입을 벌리는 동작, 강아지가 반가워 꼬리를 세게 흔드는 동작 */
-const HAPPY = new Set(['cheer', 'heart', 'rub', 'groom', 'backpat', 'wag']);
-const OPEN_MOUTH = new Set(['cheer', 'heart', 'wag']);
+const HAPPY = new Set(['cheer', 'heart', 'rub', 'groom', 'backpat', 'wag', 'glad', 'fistpump']);
+const OPEN_MOUTH = new Set(['cheer', 'heart', 'wag', 'glad']);
 // 유니콘(주인공·KOAT 담당·접속자): ^^ 눈이 되는 동작, 입을 벌리는 동작
-const HERO_HAPPY = new Set(['cheer', 'heart', 'wave', 'lift']);
-const HERO_OPEN = new Set(['cheer', 'heart', 'wave', 'lift', 'megaphone']);
+const HERO_HAPPY = new Set(['cheer', 'heart', 'wave', 'lift', 'glad', 'fistpump']);
+const HERO_OPEN = new Set(['cheer', 'heart', 'wave', 'lift', 'megaphone', 'glad', 'fistpump']);
 const WAG_GLAD = new Set(['talk', 'heart', 'cheer', 'wave']);
 
 const BLOB_GEO = new THREE.CircleGeometry(0.62, 28);
@@ -1099,7 +1101,7 @@ function makeProp(kind) {
   return g;
 }
 
-const EMOTE_ICON = { startle: '❗', cheer: '🎉', heart: '❤️', wave: '👋', think: '❓', water: '💧', tablet: '📱', present: '📊', megaphone: '📣', lab: '🧪' };
+const EMOTE_ICON = { startle: '❗', cheer: '🎉', fistpump: '✨', heart: '❤️', wave: '👋', think: '❓', water: '💧', tablet: '📱', present: '📊', megaphone: '📣', lab: '🧪' };
 
 export class Unico {
   /** 그래픽 품질 단계 알려 주기 ('low' | 'medium' | 'high') — 낮음이면 NPC·다른 접속자를 가볍게 그림. 비우면 게임 품질을 따라감 */
@@ -1689,7 +1691,7 @@ export class Unico {
   }
 
   update(dt, camera) {
-    if (this.labelAlways) TICK++;
+    if (this.labelAlways) { TICK++; HERO_POS = this.group.position; }
     // 언덕: 장면에 바로 놓인 캐릭터는 지면 높이를 따라감 (트랙터 탑승 등 다른 물체에 붙으면 제외)
     // 수영: 몸이 물에 잠김 (잠수 중에는 더 깊이). 자세를 몰아서 계산하는 동안에도 매 프레임
     const sinkT = this.swimming ? (this.action === 'dive' ? -0.68 - Math.sin(Math.min(1, this.actionT / 1.3) * Math.PI) * 1.3 : -0.68) : 0;
@@ -1721,7 +1723,8 @@ export class Unico {
       const near = THREE.MathUtils.clamp((d - 1.8) / 1.6, 0, 1);
       if (this.emote) this.emote.visible = near > 0.3;
       if (this.label && !this.labelAlways) {
-      const a = THREE.MathUtils.clamp((22 - d) / 7, 0, 1) * near;
+      // 주민 동물 이름표는 내 캐릭터 곁에서만 (7m 안, 11m 에서 사라짐 — 줌을 멀리 빼도 옆 주민은 보임), 다른 접속자·유니콘 주민은 예전처럼 카메라에서 22m
+      const a = (this.species ? THREE.MathUtils.clamp((11 - (HERO_POS ? HERO_POS.distanceTo(this.group.position) : d - 9)) / 4, 0, 1) : THREE.MathUtils.clamp((22 - d) / 7, 0, 1)) * near;
       this.label.material.opacity = a;
       this.label.visible = a > 0.02;
       }
@@ -1971,6 +1974,21 @@ export class Unico {
           // 더 올리면 손이 볼·머리 뒤에 겹쳐 '으쓱'처럼 보임)
           if (sp) { AL.rotation.set(0.15, 0, -1.8 + Math.sin(a * 18) * 0.08); AR.rotation.set(0.15, 0, 1.8 - Math.sin(a * 18) * 0.08); }
           else if (bp) { AL.rotation.set(-0.35, 0, -1.85 + Math.sin(a * 18) * 0.15); AR.rotation.set(-0.35, 0, 1.85 - Math.sin(a * 18) * 0.15); }
+          break;
+        }
+        case 'glad': { // 작은 보상: 콩콩 두 번 + 고개 까딱 + 팔 살짝 벌림 (0.6초 주기라 길게 받아도 같은 모양 반복)
+          const u = (a % 0.6) / 0.6, j = Math.abs(Math.sin(u * TWO_PI));
+          bodyY += j * 0.06; headPitch = -0.15 * j;
+          const k = Math.min(1, a / 0.12);
+          if (bp) { AL.rotation.set(-0.15, 0, -1.2 * k); AR.rotation.set(-0.15, 0, 1.2 * k); }
+          break;
+        }
+        case 'fistpump': { // 중간 보상: 오른팔 번쩍 + 주먹 쥐고 흔들기, 처음에 한 번 폴짝 (1초 주기)
+          const u = a % 1, hop = Math.max(0, Math.sin(Math.min(1, u / 0.35) * Math.PI));
+          const pump = Math.max(0, Math.sin(a * 14)), k = Math.min(1, a / 0.1);
+          bodyY += hop * 0.1; headPitch = -0.2 * k; headRoll = -0.06 * k;
+          for (const l of legs) l.rotation.x = hop * (bp ? 0.2 : 0.3);
+          if (bp) { AR.rotation.set((-0.9 - pump * 0.3) * k, 0, (2.05 - pump * 0.2) * k); AL.rotation.set(0.15 * k, 0, -0.45 * k); }
           break;
         }
         case 'wave': { // 손 흔들기

@@ -2,6 +2,7 @@ import { josa } from '../game/sim/josa.js';
 import { LAYOUT } from '../game/world.js';
 import { HILLS } from '../game/terrain.js';
 import { touchUI } from '../game/input.js';
+import { BUSY_TRAVEL, BUSY_TOAST } from '../game/game_travel.js';
 
 /** 빠른 이동 장소 (지도 아래 버튼) — x,z 는 도착 지점(길 위) */
 export const PLACES = [
@@ -125,6 +126,7 @@ export class Minimap {
   openBig() {
     const g = this.game, ui = g.ui;
     if (ui.panel?.dataset.kind === 'map') return ui.closePanel();
+    if (g.busy?.()) return ui.toast(BUSY_TRAVEL, BUSY_TOAST);
     const p = ui.openPanel('🗺️ 지도 — 가고 싶은 곳을 누르세요');
     p.dataset.kind = 'map';
     p.classList.add('map-panel');
@@ -159,10 +161,11 @@ export class Minimap {
   /** 지정한 곳으로 이동 (막힌 곳이면 가장 가까운 빈자리로) */
   travel(x, z, name) {
     const g = this.game;
+    if (g.busy?.()) return g.ui.toast(BUSY_TRAVEL, BUSY_TOAST);
     if (g.ride.driving || g.smartfarm.active || g.nature.fishing || g.rice.threshing || g.lake?.diving || g.farm.job) return g.ui.toast('지금은 이동할 수 없어요');
     const pos = g.findOpenSpot(x, z);
     this.pick = pos;
-    g.teleport(pos.x, pos.z);
+    if (g.teleport(pos.x, pos.z) === false) return;
     g.ui.toast(name ? `${name}${josa(name, '으로/로')} 이동했어요` : '✨ 이동했어요');
   }
 }

@@ -1,3 +1,22 @@
-/* 튜토리얼 안내 — W2-A 가 채움 (coach.js) */
+/* 튜토리얼 안내 (coach.js) — 휴대폰 첫 조작 안내: 화면 위에 겹치는 반투명 그림, 누르기는 통과 */
 /* 주의: theme.css 가 이 파일 뒤에 읽혀 button(.gold·.ghost)·.panel·.panel h2(::after)·.panel h3 을 다시 칠함 → 같은 세기면 테마가 이김.
    덮으려면 클래스 하나 더: .panel.coach h2, .coach button.gold (.row 배경은 테마가 !important) */
+.coach { position: absolute; inset: 0; pointer-events: none; z-index: 6; animation: coach-in 0.45s ease-out both; }
+.coach.out { animation: coach-out 0.4s ease-in both; }
+body.cine .coach, body.talking .coach { display: none; }
+.coach b { display: table; margin: 8px auto 0; padding: 4px 12px; border-radius: 999px; background: rgba(0,0,0,0.45); font-family: var(--display); font-weight: 400; font-size: 14px; color: #fff; text-align: center; white-space: nowrap; }
+/* 왼쪽 아래: 유령 조이스틱 */
+.coach-joy { position: absolute; left: calc(12% + var(--sal, 0px)); bottom: 30%; width: 110px; }
+.coach-joy .ring { display: block; width: 110px; height: 110px; border-radius: 50%; border: 3px dashed rgba(255,255,255,0.85); background: rgba(255,255,255,0.18); box-sizing: border-box; }
+.coach-joy .dot { position: absolute; left: 33px; top: 33px; width: 44px; height: 44px; border-radius: 50%; background: rgba(250,192,62,0.92); box-shadow: 0 0 0 6px rgba(250,192,62,0.3); animation: coach-drag 1.8s ease-in-out infinite; }
+/* 오른쪽 절반: 화면을 끌어 둘러보기 (옅은 영역 + 좌우로 움직이는 손) */
+.coach-look { position: absolute; right: calc(4% + var(--sar, 0px)); top: 34%; width: 42%; max-width: 220px; padding: 14px 0 10px; border: 2px dashed rgba(255,255,255,0.55); border-radius: 22px; background: rgba(255,255,255,0.1); text-align: center; }
+.coach-look .track { display: block; width: 64%; height: 4px; margin: 18px auto 0; border-radius: 2px; background: rgba(255,255,255,0.55); }
+.coach-look .hand { position: absolute; left: 50%; top: 4px; margin-left: -16px; font-style: normal; font-size: 32px; line-height: 1; animation: coach-swipe 1.6s ease-in-out infinite; }
+/* 가운데 설명 */
+.coach-cap { position: absolute; left: 50%; bottom: calc(15% + var(--sab, 0px)); transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 8px 14px; border-radius: 14px; background: rgba(62,44,28,0.72); color: #fff8e6; font-family: var(--display); font-size: 14px; text-align: center; white-space: nowrap; }
+@keyframes coach-drag { 0%, 100% { transform: translate(0, 0); } 30% { transform: translate(0, -26px); } 60% { transform: translate(24px, -6px); } }
+@keyframes coach-swipe { 0%, 100% { transform: translateX(-30px); } 50% { transform: translateX(30px); } }
+@keyframes coach-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes coach-out { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .coach-joy .dot, .coach-look .hand { animation: none; } }

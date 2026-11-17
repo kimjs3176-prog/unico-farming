@@ -6,6 +6,7 @@ import { fovFor } from './camera.js';
 import { Unico } from './unico.js';
 import { PostFX } from './postfx.js';
 import { saveSettings, resolveQuality, uiScaleOf } from './quality.js';
+import { shadowRadiusFor } from './shadow_soft.js';
 
 export const GameGfx = {
   /** 환경설정에서 그래픽 설정을 바꿨을 때 (저장 + 즉시 적용) */
@@ -27,6 +28,7 @@ export const GameGfx = {
     // 그림자: 끄기/켜기, 해상도 바꾸면 그림자 맵 다시 만들기
     const sun = this.world.sun;
     sun.castShadow = q.shadows !== 'off';
+    sun.shadow.radius = shadowRadiusFor(q.level); // 낮음 = 1탭(계단 없는 경계, 비용은 예전과 같음), 보통·높음 = 5탭 반그림자
     if (sun.shadow.mapSize.x !== q.shadowMap) {
       sun.shadow.mapSize.set(q.shadowMap, q.shadowMap);
       sun.shadow.map?.dispose();
@@ -78,6 +80,9 @@ export const GameGfx = {
 
   resize() {
     const w = innerWidth, h = innerHeight;
+    // 낮음 단계는 화면 넓이로 해상도를 정함 → 창 크기가 바뀌면 다시 맞춤 (가로·세로 돌리기는 넓이가 같아 그대로)
+    const pr = this.gfx && this.withSaver(resolveQuality(this.gfx)).pixelRatio;
+    if (pr && Math.abs(pr - this.renderer.getPixelRatio()) > 0.01) { this.renderer.setPixelRatio(pr); this.quality.pixelRatio = pr; }
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.fov = fovFor(w / h); // 세로 폰: 주변이 보이도록 시야를 넓힘

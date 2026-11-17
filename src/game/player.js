@@ -63,7 +63,7 @@ export class Player {
     this.markT = 0;
     this.group.position.set(0, 0, 9);
     this.velocity = new THREE.Vector3();
-    this.frozen = false; // 미니게임/UI 중 이동 금지
+    this._holds = new Set(); // 이동을 막는 까닭들 ('panel'·'dlg'·'cine'·'legacy') — 하나라도 있으면 멈춤
     this.speedMult = 1; // 집에서 푹 자고 일어난 날 +15% (home_view)
     this.swimming = false;
     this.hidden = false;
@@ -71,6 +71,13 @@ export class Player {
   }
 
   get position() { return this.group.position; }
+
+  /** 이동 막기/풀기 (까닭별): 창을 닫아도 대화·컷신이 건 멈춤은 그대로 */
+  hold(k) { (this._holds ||= new Set()).add(k); }
+  unhold(k) { this._holds?.delete(k); }
+  get frozen() { return (this._holds?.size ?? 0) > 0; }
+  /** 예전 방식 (낚시·잠수·농사 일·잠·양몰이 등): 'legacy' 하나로 */
+  set frozen(v) { if (v) this.hold('legacy'); else this.unhold('legacy'); }
 
   /** 칭호 (KOAT 스탬프 투어 완주 등) */
   setTitle(title) {

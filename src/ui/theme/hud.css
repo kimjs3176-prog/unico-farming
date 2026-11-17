@@ -1,26 +1,40 @@
-/* 테마: 위쪽 HUD 칩·버튼, 미니맵 나무 액자, 채팅 입력칸 */
-/* ---------------- 상단 HUD: 나무 테 이름표 ---------------- */
-.chip { background: linear-gradient(180deg, #fffdf7 0%, #f6efe0 100%); border: 2px solid var(--wood-l); border-radius: 12px;
-  box-shadow: inset 0 1px 0 #fff, var(--chip-shadow); color: var(--wood-d); font-variant-numeric: tabular-nums; }
-.chip .money { color: #a8650a; text-shadow: 0 1px 0 #fff3c4; }
+/* 테마: 위쪽 HUD 배지·지갑·달력·버튼, 미니맵 나무 액자, 채팅 입력칸 (크기·자리는 css/hud.css) */
+/* ---------------- 플레이어 배지: 나무 테 동그라미 + 청록 이름표 ---------------- */
+.hud-top .p-badge { background: none; box-shadow: none; text-shadow: none; color: var(--wood-d); }
+.p-badge .pb-ring { box-shadow: 0 0 0 2px var(--wood-d), 0 3px 0 2px var(--wood-d), 0 6px 12px rgba(20,14,10,0.25); }
+.p-badge .pb-face { background: #fffdf6; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.8); }
+.p-badge .pb-lv { background: linear-gradient(180deg, var(--teal-hi), var(--teal) 60%, var(--teal-d)); color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,0.25); box-shadow: 0 0 0 2px #fff, 0 2px 0 2px var(--teal-dd); font-family: var(--display); }
+.p-badge .pb-xp { background: rgba(35,25,22,0.82); color: #fff; font-family: var(--display); }
+/* ---------------- 코인 지갑 ---------------- */
+.purse { background: linear-gradient(180deg, #fffdf7 0%, #f6efe0 100%); border: 2px solid var(--wood-l); box-shadow: inset 0 1px 0 #fff, var(--chip-shadow); font-family: var(--display); }
+.purse .money { color: #a8650a; text-shadow: 0 1px 0 #fff3c4; font-weight: 400; }
+/* ---------------- 달력: 미니맵 액자와 같은 나무 테 ---------------- */
+.hud-top .calendar { background: linear-gradient(180deg, #fffdf7 0%, #f3e8d2 100%); color: var(--wood-d); text-shadow: none;
+  border: 3px solid var(--wood-hi); box-shadow: 0 0 0 3px var(--wood), 0 0 0 5px var(--wood-d), 0 -2px 12px rgba(20,14,10,0.18); font-family: var(--display); }
+.hud-top .calendar:active:not(:disabled) { box-shadow: 0 0 0 3px var(--wood), 0 0 0 5px var(--wood-d); }
+.calendar .cal-w { color: #7a5536; }
+.calendar .cal-t { color: var(--ink); }
 /* 덜 중요한 글: 본문 갈색(--brown)보다 옅지만 바탕(#f6efe0)과 6:1 */
 .chip small { color: #7a5536; }
-.chip .xpbar { width: 76px; height: 10px; background: #e9dcc5; border-radius: 5px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.18); }
-.chip .xpbar i { background: linear-gradient(180deg, #9be07b, var(--leaf) 60%, #4f9c35); border-radius: 5px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.45); transition: width 0.4s cubic-bezier(.3,1.3,.5,1); }
-.weather-chip { box-shadow: inset 0 1px 0 #fff, var(--chip-shadow); text-shadow: none; }
-.hud-right button { border-radius: 12px; }
+/* ---------------- 오른쪽 둥근 버튼 ---------------- */
+.hud-right .hud-btn { border-radius: 50%; }
+.hud-btn .kc { background: var(--wood-d); color: #fff; font-family: var(--display); }
+/* 성장 부스트 알약 */
+.boost-chip { background: linear-gradient(180deg, #e9ffd9, #c8efa9); color: #2f6b1d; box-shadow: 0 0 0 2px #fff, 0 2px 0 2px #6dbb4f; font-family: var(--display); }
 
-/* 미니맵: 나무 액자 */
-.minimap { border: 3px solid var(--wood-hi); box-shadow: 0 0 0 3px var(--wood), 0 0 0 5px var(--wood-d), 0 8px 18px rgba(20,14,10,0.3); border-radius: 14px; }
+/* 미니맵: 나무 액자 (위쪽은 달력과 이어지게 모서리를 작게) */
+.minimap { border: 3px solid var(--wood-hi); box-shadow: 0 0 0 3px var(--wood), 0 0 0 5px var(--wood-d), 0 8px 18px rgba(20,14,10,0.3); border-radius: 5px 5px 14px 14px; }
 /* 채팅 입력 */
 .chat input { border-radius: 12px; border: 2px solid rgba(255,255,255,0.9); box-shadow: 0 3px 8px rgba(20,14,10,0.15); }
 .chat input:focus { outline: 3px solid #ffd76a; outline-offset: 1px; }
+.chat .chat-bubble { border-radius: 50%; }
 
 /* ---------------- 모바일 (css/ 조각의 모바일 블록과 같은 조건 — 함께 고칠 것) ----------------
    위의 테마 규칙은 미디어쿼리 없이 css/ 조각 다음에 읽히므로 모바일 압축 값을 덮어씀 → 여기서 다시 잡음 */
 @media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
-  .hud-right button { border-radius: 10px; }
-  .minimap { border-width: 2px; border-radius: 10px; box-shadow: 0 0 0 2px var(--wood), 0 0 0 3px var(--wood-d), 0 4px 10px rgba(20,14,10,0.3); }
+  .hud-top .calendar { border-width: 2px; box-shadow: 0 0 0 2px var(--wood), 0 0 0 3px var(--wood-d), 0 -2px 8px rgba(20,14,10,0.18); }
+  .p-badge .pb-ring { box-shadow: 0 0 0 2px var(--wood-d), 0 2px 0 2px var(--wood-d), 0 4px 8px rgba(20,14,10,0.25); }
+  .minimap { border-width: 2px; border-radius: 4px 4px 10px 10px; box-shadow: 0 0 0 2px var(--wood), 0 0 0 3px var(--wood-d), 0 4px 10px rgba(20,14,10,0.3); }
 }
 /* 터치 화면: 눌렀다 뗀 뒤 :hover 가 남아 버튼이 커진 채로 있지 않게 (누르는 동안 효과는 그대로) */
 @media (hover: none) {

@@ -175,7 +175,7 @@ export class NatureView {
     let extra = '';
     const r = Math.random();
     if (r < 0.15) { const bug = Math.random() < 0.5 ? 'bug_beetle' : 'bug_ladybug'; g.economy.addItem(bug, 1); g.collection.add(bug, { day: g.world.day }); g.onEvent('bug'); extra = ` 앗, ${ITEMS[bug].emoji} ${ITEMS[bug].name}도 떨어졌어요!`; }
-    else if (r < 0.25) { g.economy.earn(100); extra = ' 💰 나무에서 100코인 주머니가 떨어졌어요!'; }
+    else if (r < 0.25) { g.economy.earn(100); g.ui.flyToCoin?.(100, new THREE.Vector3(tr.x ?? g.player.position.x, 2, tr.z ?? g.player.position.z)); extra = ' 💰 나무에서 100코인 주머니가 떨어졌어요!'; }
     g.ui.toast(`${ITEMS[tr.fruit].emoji} ${ITEMS[tr.fruit].name} ×3${rec.isNew ? ' (도감 등록!)' : ''}.${extra}`);
     g.afterCollect?.();
   }
@@ -190,7 +190,7 @@ export class NatureView {
     g.audio.play('harvest');
     g.player.unico.facing = Math.atan2(b.g.position.x - g.player.position.x, b.g.position.z - g.player.position.z);
     g.player.unico.playAction('net', 0.7);
-    g.fx.pop(b.g.position.x, b.g.position.z, ITEMS[b.kind].emoji);
+    g.fx.pop(b.g.position.x, b.g.position.z, ITEMS[b.kind].emoji, { to: 'bag' });
     g.ui.toast(`${ITEMS[b.kind].emoji} ${ITEMS[b.kind].name}${josa(ITEMS[b.kind].name, '을/를')} 잡았다!${rec.isNew ? ' 📖 도감 등록!' : ''}`);
     g.afterCollect?.();
   }
@@ -285,7 +285,7 @@ export class NatureView {
     const base = 0.06 + Math.sin(f.t * 3) * 0.01;
     if (ev === 'nibble') { this.bobber.userData.dip = 0.25; g.audio.play('click', 0.3); this.splash(0.6); }
     if (ev === 'bite') {
-      this.bobber.userData.dip = 1; this.splash(1.6); g.audio.play('bump', 0.6);
+      this.bobber.userData.dip = 1; this.splash(1.6); g.audio.play('bump', 0.6); g.juice?.haptic?.([10, 40, 20]);
       this.alert = makeLabel('❗', { bg: 'rgba(0,0,0,0)', size: 72, scale: 0.01 });
       this.alert.position.copy(this.spot).add(new THREE.Vector3(0, 0.9, 0));
       g.world.scene.add(this.alert);

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { HILLS, CHESTS, heightAt } from '../terrain.js';
 import { CROPS } from '../sim/crops.js';
 import { ITEMS } from '../sim/items.js';
+import { reward } from '../reward.js';
 
 /**
  * 언덕 탐험: 꼭대기 전망대(처음 오르면 파노라마 연출 + 보상), 비탈의 숨은 보물 상자(하루 한 번)
@@ -79,7 +80,8 @@ export class ExploreView {
         if (!first) return;
         this.seen[H.id] = true;
         g.economy.earn(100);
-        g.audio.play('levelup');
+        g.audio.play('win');
+        g.ui.flyToCoin?.(100, new THREE.Vector3(L.x, hy + 1.2, L.z));
         g.fx.burst(L.x, hy + 1.2, L.z, 0xfff3a0, 18);
         g.ui.toast(`🔭 ${H.name} 전망대 첫 방문! +100🪙 (${count}/${HILLS.length})`);
         g.onEvent('lookout', count);
@@ -92,23 +94,22 @@ export class ExploreView {
     const g = this.game, eco = g.economy;
     this.opened[c.id] = g.world.day;
     const r = Math.random();
-    let text;
-    if (r < 0.5) { const n = 60 + Math.floor(Math.random() * 11) * 10; eco.earn(n); text = `🪙 ${n} 코인`; }
+    let text, icon, coins = 0;
+    if (r < 0.5) { coins = 60 + Math.floor(Math.random() * 11) * 10; eco.earn(coins); text = `🪙 ${coins} 코인`; icon = '🪙'; }
     else if (r < 0.78) {
       const crops = Object.keys(CROPS).filter((k) => CROPS[k].unlockLevel <= g.quests.level);
       const k = crops[Math.floor(Math.random() * crops.length)];
       eco.addSeeds(k, 3);
-      text = `${CROPS[k].emoji} ${CROPS[k].name} 씨앗 3개`;
+      text = `${CROPS[k].emoji} ${CROPS[k].name} 씨앗 3개`; icon = CROPS[k].emoji;
     } else {
       const k = ['fruit_apple', 'fruit_peach', 'fruit_pear', 'fruit_persimmon'][Math.floor(Math.random() * 4)];
       eco.addItem(k, 2);
-      text = `${ITEMS[k].emoji} ${ITEMS[k].name} 2개`;
+      text = `${ITEMS[k].emoji} ${ITEMS[k].name} 2개`; icon = ITEMS[k].emoji;
     }
-    g.audio.play('coin');
-    g.audio.play('win', 0.6);
-    g.player.unico.playAction('cheer', 1.2);
+    // 보물 상자는 중간 보상 (주먹 불끈 + 종소리). 코인은 지갑으로, 물건은 가방으로 — 상자에서 나온 실제 것이 날아감
+    reward(g, 2, { x: c.x, z: c.z });
     g.fx.burst(c.x, c.m.position.y + 0.6, c.z, 0xffd75a, 20);
-    g.fx.pop(c.x, c.z, '🎁');
+    g.fx.pop(c.x, c.z, icon, coins ? { to: 'coin', amount: coins, y: c.m.position.y + 1 } : { to: 'bag', y: c.m.position.y + 1 });
     g.ui.toast(`🎁 보물 상자에서 ${text}${josa(text, '을/를')} 찾았어요! (내일 다시 채워져요)`);
     g.onEvent('chest');
   }

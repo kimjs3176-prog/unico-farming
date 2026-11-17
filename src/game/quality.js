@@ -6,14 +6,14 @@
  */
 
 export const PRESETS = {
-  low: { scale: 0.75, shadows: 'low', grass: 0.3, post: false, ao: false, tiltShift: false },
+  low: { scale: 1, shadows: 'low', grass: 0.3, post: false, ao: false, tiltShift: false },
   medium: { scale: 1, shadows: 'medium', grass: 0.65, post: true, ao: false, tiltShift: false },
   high: { scale: 1, shadows: 'high', grass: 1, post: true, ao: true, tiltShift: true },
 };
 export const LEVELS = ['low', 'medium', 'high'];
 export const PRESET_INFO = {
   auto: { name: '자동', desc: '기기에 맞춰 시작하고, 화면이 끊기면 알아서 한 단계씩 낮춰요' },
-  low: { name: '낮음', desc: '저사양 PC·오래된 노트북용. 해상도 75%, 가벼운 그림자, 후처리·환경 반사 끔' },
+  low: { name: '낮음', desc: '저사양 PC·휴대폰용. 화면 크기에 맞춘 해상도, 가벼운 그림자, 후처리·환경 반사 끔' },
   medium: { name: '보통', desc: '일반 노트북용. 그림자·블룸·안티앨리어싱, 주변광 차폐 끔' },
   high: { name: '높음', desc: '게임용 PC용. 주변광 차폐·미니어처 초점까지 모든 효과' },
   custom: { name: '사용자 지정', desc: '세부 항목을 직접 고른 상태' },
@@ -66,11 +66,23 @@ export function applyPreset(s, preset) {
   return { ...s, ...PRESETS[level], preset };
 }
 
-/** 설정 → 렌더러가 쓰는 품질 값 */
-export function resolveQuality(s, dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1) {
+/**
+ * 후처리 없는 단계(낮음)의 픽셀 배율: 그리는 픽셀 수를 LOW_PIXELS 쯤으로 맞춤.
+ *  예전에는 '배율 1 × 75%' 로 고정이라 폰(390×844, dpr 3)에서 292×633 으로 그려 3.7배로 늘려 보여 줌 → 뿌옇게 보임.
+ *  지금: 폰 세로 화면 ≈ 1.35배(약 60만 픽셀), 큰 PC 화면은 예전처럼 0.75배까지만 내림, 화면 dpr·1.5배를 넘지 않음
+ */
+export const LOW_PIXELS = 600_000;
+export function lowPixelRatio(dpr, area) {
+  const want = Math.sqrt(LOW_PIXELS / Math.max(1, area));
+  return Math.min(Math.max(0.75, Math.min(dpr, 1.5)), Math.max(0.75, want));
+}
+const viewArea = () => (typeof innerWidth === 'number' && innerWidth > 0 ? innerWidth * innerHeight : 1920 * 1080);
+
+/** 설정 → 렌더러가 쓰는 품질 값 (area: 화면 CSS 픽셀 넓이, 낮음 단계의 해상도를 정할 때만 씀) */
+export function resolveQuality(s, dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, area = viewArea()) {
   const d = s.preset === 'auto' || PRESETS[s.preset] ? { ...s, ...PRESETS[s.preset === 'auto' ? s.autoLevel : s.preset] } : s;
   const sh = SHADOWS[d.shadows] || SHADOWS.medium;
-  const maxDpr = d.ao ? 2 : d.post ? 1.5 : 1;
+  const maxDpr = d.ao ? 2 : d.post ? 1.5 : lowPixelRatio(dpr, area);
   const level = s.preset === 'auto' ? s.autoLevel : PRESETS[s.preset] ? s.preset : d.post ? (d.ao ? 'high' : 'medium') : 'low';
   return {
     level,

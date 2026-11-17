@@ -19,7 +19,8 @@
 .dlg-choices:empty { display: none; }
 .dlg-choices button { text-align: left; font-size: 15px; padding: 8px 12px; background: var(--cream); color: var(--brown); border: 2px solid var(--panel-edge); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .dlg-choices button:hover:not(:disabled) { border-color: var(--dlg-accent, #30b6aa); background: #fff; }
-.dlg-choices button:disabled { opacity: 0.5; }
+.dlg-choices button:disabled { opacity: 0.72; background: #f1ece4; border-style: dashed; filter: grayscale(0.5); }
+.dlg-choices button:disabled small { opacity: 1; color: #8a5a2b; font-weight: bold; } /* 못 고르는 까닭은 또렷하게 */
 .dlg-choices .k { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: var(--dlg-accent, #30b6aa); color: var(--dlg-on, #fff); font-size: 13px; }
 .dlg-choices small { width: 100%; padding-left: 30px; opacity: 0.7; font-size: 12px; }
 @media (max-width: 600px) { .dlg { bottom: 150px; padding: 10px 12px; gap: 10px; } .dlg-portrait { width: 76px; height: 76px; } .dlg-text { font-size: 16px; } }
@@ -76,3 +77,25 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
   .dlg-choices .k { display: none; } /* 숫자 키 표시는 터치에서 쓸모없음 */
   .dlg-choices small { padding-left: 0; font-size: 11px; }
 }
+
+/* 대화 중: 위 HUD·행동 막대·지도·채팅을 흐리게, 누를 수 없게 (화면 E 버튼은 대사 넘기기라 그대로) */
+/* 자동 칩(.auto-chip)은 빼 둠: 오토플레이가 대사를 넘기는 중에도 눌러서 끌 수 있게 */
+body.talking:not(.cine) :is(.hud-top, .actionbar, .minimap, .objective, .chat, .fps-chip) { opacity: 0.35; pointer-events: none; transition: opacity 0.3s; }
+
+/* 이름 카드 (대화창 안): 지금 이름 + [좋아!] / [✏️ 바꾸기] → 바꾸기를 누르면 글 상자 */
+.dlg-name-card { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dlg-name-card .nm { flex: 1 1 140px; min-width: 0; display: flex; align-items: center; gap: 8px; font-family: var(--display); font-size: 22px; color: var(--brown); background: #fff; border: 3px solid var(--dlg-accent, #30b6aa); border-radius: 14px; padding: 6px 14px; min-height: 50px; box-sizing: border-box; }
+.dlg-name-card .ic { font-style: normal; font-size: 20px; flex: 0 0 auto; }
+/* 바꾸기 상태: 같은 틀 안에 글 상자 + 글자 수 (아이콘 그대로) */
+.dlg-name-card .nm-edit { box-shadow: 0 0 0 4px color-mix(in srgb, var(--dlg-accent, #30b6aa) 25%, transparent); cursor: text; }
+.dlg-name-card .nm-edit input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; color: inherit; padding: 0; }
+.dlg-name-card .cnt { width: auto; padding: 0; flex: 0 0 auto; font-family: inherit; font-size: 13px; opacity: 0.6; }
+.dlg-choices .dlg-name-card button.ghost { background: var(--cream); color: var(--brown); }
+/* 이름 카드: 대사 바로 밑에 붙임 (빈 줄 높이 없이) */
+.dlg.has-input .dlg-text { min-height: 0; }
+.dlg.has-input .dlg-choices { margin-top: 8px; }
+@media (pointer: coarse) { .dlg-name-card .k { display: none; } } /* 터치에서는 숫자 키 표시 빼기 */
+.dlg-name-card .btns { display: flex; gap: 8px; flex: 0 0 auto; }
+.dlg-choices .dlg-name-card button { min-height: 44px; font-size: 16px; padding: 8px 14px; }
+.dlg-choices .dlg-name-card button.gold { background: var(--gold); color: var(--ink); border-color: #d9a21c; box-shadow: 0 3px 0 #d9a21c; }
+@media (max-width: 600px) { .dlg-name-card .nm { font-size: 20px; flex-basis: 100%; } .dlg-name-card .btns { flex: 1 1 100%; } .dlg-name-card .btns button { flex: 1; justify-content: center; } }

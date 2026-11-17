@@ -5,3 +5,54 @@
 .quest .bar { height: 6px; background: #e5e5e5; border-radius: 3px; overflow: hidden; margin-top: 4px; }
 .quest .bar i { display: block; height: 100%; background: var(--teal); }
 .mg-records { margin-top: 6px; }
+/* 장(chapter) 구성: 받을 보상 → 지금 장 → 다음 장 → 업적 */
+.qrows > h3.qhead { margin: 10px 0 6px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.qrows > h3.qhead:first-child { margin-top: 2px; }
+.qrows > h3.qhead.gift { color: #b7791f; }
+.qprog { font-size: 13px; padding: 1px 8px; border-radius: 999px; background: #efe4cc; color: #7a5b3a; }
+.quest .qmain { flex: 1; min-width: 0; }
+.quest.claimed { opacity: 0.62; padding-top: 6px; padding-bottom: 6px; border-left-color: var(--leaf); }
+.quest.claimed .nm { font-size: 14px; }
+.quest.pinned { border-left-color: var(--gold); box-shadow: inset 0 0 0 2px rgba(250,192,62,0.55); }
+.quest .qtag { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: #e3f1fb; color: #2f6f9a; font-size: 11px; vertical-align: 2px; }
+.quest.qlock { border-left-color: #cbbfa8; color: #8a7a66; font-size: 14px; flex-direction: column; align-items: flex-start; gap: 2px; }
+.quest.qlock small { display: block; font-size: 12px; color: #8a7a66; }
+details.qach { margin-top: 10px; }
+details.qach > summary { cursor: pointer; font-family: var(--display); font-size: 16px; padding: 6px 2px; list-style-position: inside; }
+details.qach > .rows { margin-top: 4px; }
+/* 추적 단추: 글자 있는 테두리 알약, 추적 중이면 금빛 (누르는 곳 44px) */
+.quest .qpin { min-width: 0; min-height: 44px; padding: 0 12px; font-size: 13px; border-radius: 999px; border: 2px solid #c9b48e; background: transparent; color: #7a5b3a; box-shadow: none; text-shadow: none; white-space: nowrap; flex: none; }
+.quest .qpin.on { border-color: var(--gold-d, #d9a21c); background: linear-gradient(180deg, #ffe08a, var(--gold)); color: var(--brown); }
+/* 받은 퀘스트: 한 줄로 접힘 */
+details.qdone { margin: 6px 0 2px; }
+details.qdone > summary { cursor: pointer; font-size: 14px; color: #6b8f4e; padding: 6px 2px; list-style-position: inside; }
+details.qdone > .rows { margin-top: 2px; }
+/* 다음 장(잠김): 제목 줄 + 진행 줄 */
+.quest.qlock .nm { font-size: 14px; white-space: normal; }
+.quest.qlock small { white-space: nowrap; }
+
+/* 장 완료 카드 (objective.js chapterCard): 장 도장 + 별 터짐 + 선물 칸 + 다음 장 단추 (transform·opacity 만 움직임) */
+.panel.chcard { text-align: center; width: min(calc(90vw / var(--ui-zoom, 1)), 380px); }
+.panel.chcard h2 { justify-content: center; }
+.panel.chcard h2 .close { display: none; }
+.chcard .ch-badge { position: relative; width: 108px; height: 108px; margin: 6px auto 10px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffe9a8, var(--gold) 70%); border: 4px solid #fff6dc; box-shadow: 0 0 0 4px var(--gold-d, #d9a21c), 0 6px 0 rgba(107,74,46,0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--brown); transform: rotate(-8deg); animation: ch-stamp 0.55s cubic-bezier(.3,1.6,.5,1) both; }
+.chcard .ch-badge .ch-n { font-family: var(--display); font-size: 30px; line-height: 1; }
+.chcard .ch-badge b { font-size: 15px; font-weight: 400; margin-top: 2px; }
+.chcard .ch-burst { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+.chcard .ch-burst i { position: absolute; left: -6px; top: -6px; width: 12px; height: 12px; background: var(--gold); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); opacity: 0; transform: rotate(var(--a)) translateY(0) scale(0.4); animation: ch-star 0.9s ease-out 0.25s both; animation-delay: calc(0.25s + var(--d)); }
+.chcard .ch-burst i:nth-child(2n) { background: #7cc6ff; }
+.chcard .ch-burst i:nth-child(3n) { background: #ff9fb3; }
+.chcard .ch-title { font-family: var(--display); font-size: 19px; color: var(--teal-t, #17736b); margin-bottom: 12px; }
+.chcard .ch-tiles { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.chcard .ch-tile { width: 92px; padding: 8px 4px 6px; border-radius: 16px; background: #fff8e6; border: 2px solid #efd9a6; display: flex; flex-direction: column; align-items: center; gap: 1px; animation: ch-tile 0.4s cubic-bezier(.3,1.5,.5,1) both; }
+.chcard .ch-tile:nth-child(2) { animation-delay: 0.08s; }
+.chcard .ch-tile:nth-child(3) { animation-delay: 0.16s; }
+.chcard .ch-tile .ic { font-size: 28px; line-height: 1.1; }
+.chcard .ch-tile b { font-size: 17px; color: var(--brown); }
+.chcard .ch-tile small { font-size: 11.5px; color: #8a7a66; }
+.chcard .ch-next { margin-top: 12px; font-size: 13px; color: #8a7a66; }
+.chcard button.ch-go { display: block; width: 100%; min-height: 48px; margin-top: 12px; font-size: 17px; }
+@keyframes ch-stamp { 0% { transform: scale(1.8) rotate(-24deg); opacity: 0; } 100% { transform: scale(1) rotate(-8deg); opacity: 1; } }
+@keyframes ch-star { 0% { opacity: 0; transform: rotate(var(--a)) translateY(0) scale(0.4); } 25% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--a)) translateY(-86px) scale(1); } }
+@keyframes ch-tile { from { opacity: 0; transform: translateY(10px) scale(0.9); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .chcard .ch-badge, .chcard .ch-tile { animation: none; } .chcard .ch-burst { display: none; } }

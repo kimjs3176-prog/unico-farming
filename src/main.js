@@ -55,6 +55,7 @@ import { SeasonView } from './game/view/season_view.js';
 import { DecorView } from './game/view/decor_view.js';
 import { DIVISIONS } from './game/sim/koat.js';
 import { boot, pushBackGuard } from './boot.js';
+import { patchShadowChunk } from './game/shadow_soft.js';
 import { GameGfx } from './game/game_gfx.js';
 import { GameSave } from './game/game_save.js';
 import { GameStory } from './game/game_story.js';
@@ -74,9 +75,10 @@ class Game {
     this.governor = new FpsGovernor();
     this.renderer.setPixelRatio(this.quality.pixelRatio);
     this.renderer.shadowMap.enabled = true;
-    // three r182 는 PCFSoftShadowMap 을 실제로 1탭(Basic) 그림자로 그림 → 같은 결과·비용을 그대로 명시 (버전을 올려도 몰래 비싸지지 않게)
-    // three 버전을 올릴 때는 모바일 그림자 비용(프레임 시간)을 다시 잴 것. type 은 부팅 때만 정함 (바꾸면 모든 재질을 다시 컴파일)
-    this.renderer.shadowMap.type = THREE.BasicShadowMap;
+    // 그림자: PCF(하드웨어 비교 샘플) + shadow_soft.js 의 1탭 갈래 → 낮음은 Basic 과 같은 1번 읽기로 계단 없는 경계, 보통·높음은 5탭 반그림자
+    // three 버전을 올릴 때는 patchShadowChunk 가 true 인지(tests/shadow_soft.test.js)와 모바일 그림자 비용을 다시 잴 것. type 은 부팅 때만 정함 (바꾸면 모든 재질을 다시 컴파일)
+    patchShadowChunk();
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.95;
@@ -140,17 +142,19 @@ class Game {
     this.pointer = new PointerNav(this);
     this.autoplay = new AutoPlay(this);
     this.guide = new Guide(this);
-    this.fx.onPop = (t, p) => { if (!/[❤️🌿]/u.test(t)) this.ui.flyToBag(t, p); };
+    this.fx.onPop = (t, p) => this.ui.flyToBag(t, p); // 가방행은 pop 의 { to: 'bag' } 로만 (HUD 가 첫 프레임에 onCoin 도 연결)
     this.world.onNewDay = (day) => {
       const ev = this.economy.newDay(day);
       this.ranch.sim.newDay(day);
       this.town.newDay();
       this.home.newDay();
       this.social.newDay(day);
-      this.ui.toast(`🌅 ${day}일차 아침! 장터 시세가 바뀌었어요`);
-      if (ev) this.ui.toast('📈 ' + ev.name);
+      // 아침 알림은 한 장으로 (시세·사건·내일 축제), 오늘 축제는 따로
+      const morning = [`🌅 ${day}일차 아침! 장터 시세가 바뀌었어요`];
+      if (ev) morning.push('📈 ' + ev.name);
+      if (!this.economy.festival && Economy.isFestival(day + 1)) morning.push('🎪 내일은 유니코 수확 축제! 수확물을 모아 두면 더 비싸게 팔 수 있어요');
+      this.ui.toast(morning.join(' · '), { type: 'info', key: 'day' });
       if (this.economy.festival) { this.ui.toast(this.economy.festival.name + ' (장터에서 팔면 이득!)'); this.audio.play('levelup'); this.onEvent('festival'); }
-      else if (Economy.isFestival(day + 1)) this.ui.toast('🎪 내일은 유니코 수확 축제! 수확물을 모아 두면 더 비싸게 팔 수 있어요');
     };
     this.saveTimer = 0;
     this.resize();
@@ -307,6 +311,9 @@ class Game {
     setTimeout(tick, 2500);
   }
 
+  /** 대화·컷신 중인가: 단축키·지도 이동·체험관 이동을 막음 (Esc 로 창 닫기는 그대로) */
+  busy() { return !!(this.cinema?.locked || this.dialogue?.active); }
+
   /** 지금 옷차림 (옷장 소품 + 코스튬) */
   outfitNow() {
     const o = this.home.sim.outfit || {};
@@ -379,13 +386,15 @@ class Game {
       }
     } else if (this.governor.frames === 0) this.ui.updateFps?.(this.governor.fps);
     const input = this.input;
-    if (input.justPressed('KeyI')) this.ui.panel ? this.ui.closePanel() : this.ui.openInventory();
-    if (input.justPressed('KeyQ')) this.ui.panel ? this.ui.closePanel() : this.ui.openQuests();
     if (input.justPressed('Escape') && this.ui.panel) this.ui.closePanel();
-    if (input.justPressed('KeyT')) this.ui.chatInput.focus();
-    if (input.justPressed('KeyP') && !this.ui.panel) this.autoplay.toggle(); // 오토플레이
-    if (input.justPressed('Space')) this.tryJump(); // 점프 (탈곡·낚시·탈것처럼 Space 를 쓰는 동안은 tryJump 가 막음)
-    if (input.pressed.has('KeyM') && (!this.ui.panel || this.ui.panel.dataset.kind === 'map')) this.minimap.openBig(); // 지도 열기/닫기
+    if (!this.busy()) { // 대화·컷신 중에는 단축키로 창을 열지 않음
+      if (input.justPressed('KeyI')) this.ui.panel ? this.ui.closePanel() : this.ui.openInventory();
+      if (input.justPressed('KeyQ')) this.ui.panel ? this.ui.closePanel() : this.ui.openQuests();
+      if (input.justPressed('KeyT')) this.ui.chatInput.focus();
+      if (input.justPressed('KeyP') && !this.ui.panel) this.autoplay.toggle(); // 오토플레이
+      if (input.justPressed('Space')) this.tryJump(); // 점프 (탈곡·낚시·탈것처럼 Space 를 쓰는 동안은 tryJump 가 막음)
+      if (input.pressed.has('KeyM') && (!this.ui.panel || this.ui.panel.dataset.kind === 'map')) this.minimap.openBig(); // 지도 열기/닫기
+    } else if (input.justPressed('KeyP') && this.autoplay.on) this.autoplay.toggle(false); // 오토플레이가 넘기는 대화 중에도 P 로 끌 수 있게 (켜기는 안 됨)
 
     const pp = this.player.position;
     if (!this._warmedDeferred) this.warmDeferred(); // 뒤에서 받는 동물: 도착한 프레임에 셰이더 준비 (목장이 1초마다 풀어 놓기 전에)
@@ -494,6 +503,7 @@ class Game {
       }
     }
     this.guide.update(dt);
+    if (!this.ride.driving) this.storyTick(pp); // 처음 가는 곳 안내 (목장 팁·체험관 컷신)
     this.ui.updateHud();
     // 비 오는 날 자동 물주기 (3초마다 점검)
     if (this.world.weatherKind === 'rain' || this.world.weatherKind === 'storm') {

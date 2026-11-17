@@ -2,7 +2,7 @@
 // (브라우저 없이 같은 선택자끼리만 단순 계산 — 규칙 목록·화면 크기는 tests/lib/css_env.js)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { RULES, mediaMatches, value, PHONE, LAND, DESK } from './lib/css_env.js';
+import { RULES, mediaMatches, value, read, PHONE, LAND, DESK } from './lib/css_env.js';
 import { PromptUI, promptKey } from '../src/ui/prompt.js';
 
 test('세로 폰: ☰ 를 펼치면 안내 말풍선·자동 칩이 두 줄 막대 위로, 올라간 E 버튼을 비킴', () => {
@@ -94,4 +94,73 @@ test('setPrompt: 숨길 때 글을 지우지 않고, 대상 종류(key)가 바�
   ui.setPrompt({ label: '🐶 콩이 쓰다듬기', onInteract() {} });
   assert.deepEqual(anims, [150], '열쇠 없이 다른 대상으로 바뀌면 톡');
   assert.equal(promptKey({ label: '꿀 12.5%' }), promptKey({ label: '꿀 80%' }));
+});
+
+// ---- 터치 E 버튼: 아이콘 + 동사, 할 것이 없으면 흐리게 (터치 화면에서만)
+test('터치 E 버튼 CSS: 흐림·동사 알약은 터치에서만, 움직임은 transform·opacity 만 + 움직임 줄이기에서 꺼짐', () => {
+  assert.equal(value(DESK, '.touch-btn[data-mode="idle"]', 'opacity'), undefined, '데스크톱에는 새지 않음');
+  for (const env of [PHONE, LAND]) {
+    assert.equal(value(env, '.touch-btn[data-mode="idle"]', 'opacity'), '0.72', '밝은 흙 위에서도 사라지지 않게');
+    assert.equal(value(env, '.touch-btn[data-mode="idle"]', 'scale'), '0.92');
+    assert.match(value(env, '.touch-btn[data-mode="idle"]', 'box-shadow'), /0 0 0 3px/, '흰 테두리로 모양 유지');
+    assert.match(value(env, '.touch-btn[data-mode="idle"]', 'filter'), /grayscale/);
+    assert.equal(value(env, '.touch-btn .tb-verb', 'white-space'), 'nowrap');
+    assert.equal(value(env, '.touch-btn .tb-verb', 'font-size'), '10px');
+    assert.equal(value(env, '.touch-btn .tb-ico', 'font-size'), '22px', '58px 폰 버튼은 22px');
+    assert.equal(value(env, '.touch-btn', 'display'), 'block', '기존 표시 규칙 그대로');
+  }
+  assert.equal(value({ w: 820, h: 1180, coarse: true }, '.touch-btn .tb-ico', 'font-size'), '26px');
+  assert.match(value(PHONE, '.touch-btn.pop', 'animation'), /^tbPop /);
+  assert.equal(value({ ...PHONE, reducedMotion: true }, '.touch-btn.pop', 'animation'), undefined);
+  assert.equal(value({ ...PHONE, reducedMotion: true }, '.touch-btn[data-mode="urgent"]', 'animation'), undefined);
+  // 키프레임은 transform·opacity 만 (그리기 비용 없음)
+  const css = read('src/ui/css/prompt.css');
+  for (const name of ['tbPop', 'tbRing', 'tbUrgent', 'tbNope']) {
+    const m = css.match(new RegExp(`@keyframes ${name} \\{(.*)\\}`));
+    assert.ok(m, name);
+    const props = [...m[1].matchAll(/([a-z-]+):/g)].map((x) => x[1]);
+    assert.ok(props.every((p) => p === 'transform' || p === 'opacity'), `${name}: ${props}`);
+  }
+});
+
+test('setPrompt (터치): E 버튼에 동사·아이콘, 바뀔 때만 DOM, 말풍선은 [E] 대신 같은 동사', () => {
+  const keepMM = globalThis.matchMedia;
+  globalThis.matchMedia = (q) => ({ matches: /coarse/.test(q) });
+  try {
+    const cls = new Set(['prompt', 'hidden']);
+    const el = { innerHTML: '', classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), toggle: (c, on) => (on ? cls.add(c) : cls.delete(c)) }, animate() {} };
+    let writes = 0;
+    const span = () => ({ set textContent(v) { writes++; this._t = v; }, get textContent() { return this._t; } });
+    const tcls = new Set();
+    const tb = { dataset: {}, firstChild: span(), lastChild: span(), attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, classList: { add: (c) => tcls.add(c), remove: (c) => tcls.delete(c) } };
+    const ui = { ...PromptUI, prompt: el, touchBtn: tb, game: { dialogue: { active: false }, farm: { seedChoice: () => ({ crop: 'carrot' }) } } };
+    ui.setPrompt(null);
+    assert.equal(tb.dataset.mode, 'idle');
+    ui.setPrompt({ label: '밭 갈기', key: 'till', onInteract() {} });
+    assert.equal(tb.dataset.mode, 'go');
+    assert.equal(tb.firstChild.textContent, '⛏️');
+    assert.equal(tb.lastChild.textContent, '갈기');
+    assert.equal(tb.attrs['aria-label'], '갈기');
+    assert.ok(tcls.has('pop'), '할 것 없음 → 대상: 톡');
+    assert.match(el.innerHTML, /^밭 갈기/, '글에 이미 갈기가 있으면 알약을 또 붙이지 않음');
+    assert.doesNotMatch(el.innerHTML, /kbd/);
+    assert.doesNotMatch(el.innerHTML, /<kbd>E<\/kbd>/);
+    const w = writes;
+    for (let i = 0; i < 5; i++) ui.setPrompt({ label: '밭 갈기', key: 'till', onInteract() {} });
+    assert.equal(writes, w, '같으면 DOM 을 고치지 않음');
+    ui.setPrompt({ label: '🥕 당근 심기', key: 'plant', onInteract() {} });
+    assert.equal(tb.firstChild.textContent, '🥕', '고른 씨앗 아이콘');
+    // 대화 중: main.js 는 null 을 넘기지만 대화창을 직접 봄
+    ui.game.dialogue.active = true;
+    ui.setPrompt(null);
+    assert.equal(tb.dataset.mode, 'next');
+    assert.equal(tb.lastChild.textContent, '다음');
+    ui.game.dialogue.active = false;
+    // 입질: 키보드 안내 '(E / 탭)' 은 빼고, 글에 이미 '당기기' 가 있으니 알약도 생략
+    ui.game.nature = { fishing: { phase: 'wait' }, fsim: { state: 'bite' } };
+    ui.setPrompt({ label: '❗ 지금 당기기! (E / 탭)', key: 'fishing', onInteract() {} });
+    assert.equal(tb.dataset.mode, 'urgent');
+    assert.doesNotMatch(el.innerHTML, /E \/ 탭|kbd/);
+    assert.match(el.innerHTML, /^❗ 지금 당기기!/);
+  } finally { globalThis.matchMedia = keepMM; }
 });

@@ -1,6 +1,7 @@
 // 환경설정(그래픽 품질·글자 크기)·도움말 창
 import { h } from '../dom.js';
 import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf } from '../../game/quality.js';
+import { canVibrate, hapticPrefs } from '../../game/juice.js';
 
 /** 세부 항목이 어느 프리셋과 똑같은지 (아니면 사용자 지정) */
 function matchPreset(s) {
@@ -35,10 +36,17 @@ export const SettingsPanel = {
         <label class="gfx-row check"><input type="checkbox" data-k="showFps" ${s.showFps ? 'checked' : ''}> 화면에 FPS 표시</label>
         <h3>🔤 글자·버튼 크기</h3>
         <div class="gfx-presets ui-scales">${UI_SCALES.map((u) => `<button class="gfx-preset ${uiScaleOf(s) === u.v ? 'on' : ''}" data-ui="${u.v}" style="font-size:${Math.round(14 * u.v)}px"><b>${u.name}</b></button>`).join('')}</div>
-        <p class="gfx-tip">💡 끊긴다면: 품질 '낮음' → 해상도 낮추기 → 그림자 끄기 순으로 시도해 보세요. 설정은 이 브라우저에 저장돼요.</p>`);
+        ${canVibrate() ? `<h3>📳 진동</h3>
+        <label class="gfx-row check"><input type="checkbox" data-pref="haptics" ${hapticPrefs.get() ? 'checked' : ''}> 진동 (수확·입질·버튼을 누를 때 살짝)</label>` : ''}
+        <p class="gfx-tip">💡 끊긴다면: 품질 '낮음' → 해상도 낮추기 → 그림자 끄기 순으로 시도해 보세요. 설정은 이 브라우저에 저장돼요.</p>
+        <button class="ghost gfx-help" style="margin-top:6px">❓ 도움말 · 조작법 보기</button>`);
       p.append(body);
       body.querySelectorAll('.gfx-preset[data-p]').forEach((b) => (b.onclick = () => { g.setGraphics(applyPreset(g.gfx, b.dataset.p)); render(); }));
       body.querySelectorAll('[data-ui]').forEach((b) => (b.onclick = () => { g.setGraphics({ ...g.gfx, uiScale: +b.dataset.ui }); g.audio.play('click'); render(); }));
+      // 진동: 그래픽 설정과 따로 저장 (프리셋 비교에 섞이지 않게)
+      const hp = body.querySelector('[data-pref="haptics"]');
+      if (hp) hp.onchange = () => { hapticPrefs.set(hp.checked); if (hp.checked) g.juice?.haptic?.(15); };
+      body.querySelector('.gfx-help').onclick = () => this.openHelp();
       body.querySelectorAll('[data-k]').forEach((el) => {
         const k = el.dataset.k;
         const commit = () => {
@@ -66,13 +74,14 @@ export const SettingsPanel = {
       '🗺️ <b>지도</b> 오른쪽 위 미니맵을 누르거나 M 키 → 큰 지도에서 원하는 곳이나 장소 버튼을 누르면 바로 이동',
       '🌱 <b>농사</b> 밭 근처에서 E: 갈기 → 씨앗 심기 → 물 주기 → 수확. 물을 주면 3배 빨리 자라요',
       '🛒 <b>장터</b> 북쪽 장터 여우에게 씨앗·사료를 사고 작물을 팔아요. 시세는 매일 바뀌고 수요 이벤트가 생겨요',
-      '🚜 <b>트랙터</b> 60초 밭갈이 미니게임. 키보드 W/S/A/D·SPACE 또는 화면의 ◀ ▶ ▲ ▼·쟁기 버튼 (바위 주의)',
+      '🚜 <b>탈것</b> 마을의 트랙터·자전거·농장 카트 앞에서 E 로 타요. 트랙터는 쟁기를 내려(SPACE·🪓 버튼) 밭을 갈 수 있어요',
       '📱 <b>스마트팜</b> 서쪽 비닐하우스 센서에서 환경제어 미니게임 → 성공하면 작물 성장 부스트',
       '🐄 <b>목장</b> 동쪽 울타리 안 동물에게 사료를 주면 달걀·우유·양털이 생겨요. 말·당나귀·알파카와 반려견 콩이는 쓰다듬을 수 있어요',
       '📜 <b>퀘스트</b> Q 키. 보상을 받으면 레벨이 오르고 새 작물이 해금돼요',
       '🌦️ <b>날씨</b> 내 위치의 실제 날씨가 반영돼요. 비가 오면 밭에 자동으로 물이 뿌려지고, 눈이 오면 작물이 천천히 자라요 (상단 날씨 칩을 눌러 확인·체험)',
-      '🏢 <b>KOAT 체험관</b> 하단 🏢 버튼 또는 북동쪽 광장. 6개 본부(기술사업·벤처창업·종자사업·스마트농업·농기계검정·농업환경분석) 부스에서 미니게임으로 하는 일을 체험하고 스탬프를 모아요',
-      '🌐 <b>메타버스</b> 같은 서버의 다른 유니코가 보이고 채팅할 수 있어요 (좌하단)',
+      '🏢 <b>KOAT 체험관</b> 북동쪽 광장 (첫 수확을 하면 하단 🏢 버튼이 열려요). 6개 본부(기술사업·벤처창업·종자사업·스마트농업·농기계검정·농업환경분석) 부스에서 미니게임으로 하는 일을 체험하고 스탬프를 모아요',
+      '✨ <b>새 버튼</b> 해 보면 하나씩 열려요: 🛒 장터(여우에게 처음 팔면) · 📖 도감(물고기·곤충을 처음 잡으면) · 🏢 체험관(첫 수확) · 🪑 꾸미기(레벨 3) · 🤖 자동(첫 수확·첫 판매 보상을 받으면, P 키)',
+      '🌐 <b>메타버스</b> 서버에 접속하면 다른 유니코가 보이고 💬 말하기·🦄 행동·🏡 농장 방 버튼과 채팅이 나타나요 (좌하단)',
       '💾 자동 저장(10초) · 로컬 브라우저 저장',
     ].map((t) => {
       const m = t.match(/^(\S+)\s+<b>(.*?)<\/b>\s*(.*)$/);
