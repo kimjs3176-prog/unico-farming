@@ -8,7 +8,7 @@ export function showTouchCoach(g) {
   if (typeof document === 'undefined') return null;
   const root = document.getElementById('ui') || document.body;
   const el = h('div', 'coach', '<div class="coach-joy"><i class="ring"></i><i class="dot"></i><b>끌어서 이동</b></div>'
-    + '<div class="coach-look"><i class="swipe">↔</i><b>끌어서 둘러보기</b></div>'
+    + '<div class="coach-look"><i class="track"></i><i class="hand">👆</i><b>끌어서 둘러보기</b></div>'
     + '<div class="coach-cap">👆 땅·밭을 톡 누르면 걸어가서 바로 해요</div>');
   el.setAttribute('aria-hidden', 'true');
   root.append(el);

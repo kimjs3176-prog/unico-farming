@@ -129,3 +129,57 @@ test('길잡이 한마디와 어디로: 지금 퀘스트에 맞춤', () => {
   tick(g, 0.2);
   assert.match(g.guide.hint(), /보상/);
 });
+
+test('📌 다른 퀘스트를 고정해도 첫 농사 퀘스트는 저절로 받음 (알림에 적힌 코인이 실제로 들어옴)', () => {
+  const g = fakeGame();
+  g.quests.progress.till1 = 1; g.quests.claim('till1');
+  g.flags.pinQuest = 'water3';
+  g.quests.progress.plant3 = 3;
+  tick(g, 1.2);
+  assert.ok(g.quests.claimed.plant3);
+  assert.equal(g.economy.money, QUESTS.find((q) => q.id === 'plant3').reward.money);
+  assert.equal(g.flags.pinQuest, 'water3', '고정은 그대로');
+});
+
+test('레벨업: 보상 연출이 없으면 글 알림', () => {
+  const g = fakeGame();
+  g.quests.xp = 95; g.quests.progress.fish1 = 1;
+  g.claimQuest('fish1');
+  assert.ok(g.toasts.some((t) => /레벨 2 달성/.test(t)));
+  const g2 = fakeGame();
+  g2.reward = () => {};
+  g2.quests.xp = 95; g2.quests.progress.fish1 = 1;
+  g2.claimQuest('fish1');
+  assert.ok(!g2.toasts.some((t) => /레벨/.test(t)), '연출이 있으면 그쪽에서');
+});
+
+test('장 카드는 저장(flags)에 남아 새로고침 뒤에도 뜸, 카드가 뜨기 전·뜬 동안은 다음 목표를 숨김', () => {
+  const g = fakeGame();
+  for (const id of CHAPTERS[0].ids) { g.quests.progress[id] = 99; g.quests.claim(id); }
+  g.guide.onClaimed('sell3');
+  assert.deepEqual(g.flags.chapterCard, [1]);
+  g.ui.panel = {};
+  tick(g, 0.3);
+  assert.equal(g.obj, null, '카드 차례: 목표 숨김');
+  // 새로고침: flags 만 남음
+  g.guide = new Guide(g);
+  g.ui.panel = null;
+  tick(g, 0.3);
+  assert.equal(g.results.length, 1);
+  assert.equal(g.flags.chapterCard, undefined, '보여 준 카드는 지움');
+  assert.equal(g.obj.id, 'koat1');
+});
+
+test('뒷장 핵심 퀘스트를 먼저 끝내도 그 장 선물은 앞 장을 마칠 때', () => {
+  const g = fakeGame();
+  const c2 = CHAPTERS[1];
+  for (const id of c2.ids) { g.quests.progress[id] = 99; g.quests.claim(id); }
+  g.guide.onClaimed(c2.ids[0]);
+  assert.ok(!g.flags.chapterDone?.[2], '1장이 아직');
+  const m0 = g.economy.money;
+  for (const id of CHAPTERS[0].ids) { g.quests.progress[id] = 99; g.quests.claim(id); }
+  g.guide.onClaimed('sell3');
+  assert.ok(g.flags.chapterDone[1] && g.flags.chapterDone[2]);
+  assert.equal(g.economy.money - m0, CHAPTERS[0].reward.money + c2.reward.money);
+  assert.deepEqual(g.flags.chapterCard, [1, 2]);
+});

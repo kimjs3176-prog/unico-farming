@@ -42,7 +42,7 @@ test('마른 밭·스프링클러 줄·김맨 흙·퇴비·계절 배수도 반�
 
 test('soonest: 가장 먼저 익는 밭, 마른 밭 있음, 다 익은 수', () => {
   const s = sim0();
-  assert.deepEqual(s.soonest(), { i: -1, eta: null, dry: false, readyCount: 0 });
+  assert.deepEqual(s.soonest(), { i: -1, eta: null, dry: false, readyCount: 0, growingCount: 0, expect: 0 });
   s.till(2); s.plant(2, 'carrot'); s.water(2);
   s.till(3); s.plant(3, 'carrot');
   let r = s.soonest();
@@ -54,4 +54,6 @@ test('soonest: 가장 먼저 익는 밭, 마른 밭 있음, 다 익은 수', () 
   r = s.soonest();
   assert.equal(r.readyCount, 1);
   assert.equal(r.i, 2);
+  assert.equal(r.growingCount, 2);
+  assert.equal(r.expect, 3 * CROPS.carrot.yield, '자라는 2칸 + 익은 1칸');
 });

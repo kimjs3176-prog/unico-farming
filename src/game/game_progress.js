@@ -39,7 +39,11 @@ export const GameProgress = {
     this.economy.earn(r.reward.money);
     this.audio.play(r.levelUp ? 'levelup' : 'coin');
     if (!quiet) this.ui.toast(`🎁 +${r.reward.money} 코인, +${r.reward.xp} XP`);
-    if (r.levelUp) this.player.unico.playAction('cheer', 2); // 레벨업 축하 카드는 HUD 쪽에서
+    if (r.levelUp) {
+      this.player.unico.playAction('cheer', 2);
+      // 레벨업 카드(보상 연출)가 없으면 글로라도 알림
+      if (!this.reward) this.ui.toast(`⬆️ 레벨 ${r.level} 달성! 장터에서 새 씨앗을 확인하세요`);
+    }
     if (this.flags?.pinQuest === id) delete this.flags.pinQuest;
     this.guide?.onClaimed?.(id);
     this.onEvent('money', this.economy.money);

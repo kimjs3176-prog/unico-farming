@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { FarmSim } from '../src/game/sim/farm.js';
 import { Quests, QUESTS } from '../src/game/sim/quests.js';
 import { LAYOUT } from '../src/game/world.js';
-import { farmTarget, fmtEta, Guide } from '../src/game/guide.js';
+import { farmTarget, fmtEta, Guide, harvestShort } from '../src/game/guide.js';
 
 /** 밭 6×3 (farm_view 와 같은 칸 간격 2.4) */
 function fakeGame() {
@@ -60,8 +60,14 @@ test('갈고 나면 다음 빈 밭, 심기는 갈아 둔 밭 → 물 주기는 �
 test('수확: 다 익은 칸, 없으면 자라는 칸은 고리만. 씨앗이 없으면 장터 여우', () => {
   const g = fakeGame(), st = { i: -1 }, sim = g.farm.sim;
   sim.till(1); sim.plant(1, 'carrot'); sim.water(1);
+  // 1칸(2개)만 자람 → 첫 수확 5개에 모자람: 더 심을 칸 (빈 칸)
+  assert.deepEqual(harvestShort(g), { short: 3, plots: 2 });
+  const m0 = farmTarget('harvest5', g, st);
+  assert.equal(m0.ringOnly, false); assert.equal(g.farm.sim.plots[m0.i].state, 'empty');
+  for (const i of [2, 3]) { sim.till(i); sim.plant(i, 'carrot'); sim.water(i); }
+  assert.equal(harvestShort(g).short, 0);
   const t = farmTarget('harvest5', g, st);
-  assert.equal(t.i, 1); assert.equal(t.ringOnly, true);
+  assert.ok([1, 2, 3].includes(t.i)); assert.equal(t.ringOnly, true);
   sim.till(9); sim.plant(9, 'carrot'); sim.plots[9].state = 'ready';
   assert.equal(farmTarget('harvest5', g, st).ringOnly, false);
   assert.equal(farmTarget('harvest5', g, st).i, 9);

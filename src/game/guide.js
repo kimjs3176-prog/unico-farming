@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { pickTracked, CHAPTERS, QMETA, chapterProgress } from './sim/chapters.js';
+import { pickTracked, CHAPTERS, chapterProgress, currentChapter } from './sim/chapters.js';
+import { QUESTS } from './sim/quests.js';
 import { CROPS } from './sim/crops.js';
 import { josa } from './sim/josa.js';
 import { LAYOUT } from './world.js';
@@ -14,6 +15,18 @@ export const FARM_TUTORIAL = new Set(['till1', 'plant3', 'water3', 'harvest5', '
 const ETA_QUESTS = new Set(['harvest5', 'star3', 'giant1', 'fert3']);
 
 const petName = (g) => g.pet?.sim?.name || '콩이';
+const BY_ID = Object.fromEntries(QUESTS.map((q) => [q.id, q]));
+
+/**
+ * 첫 수확 목표까지 모자란 수 (지금 자라는·익은 밭을 다 거둬도): { short, plots } — plots: 더 심을 칸 수
+ * 칸마다 기본 수확량(★★)으로 셈
+ */
+export function harvestShort(g) {
+  const def = BY_ID.harvest5, Q = g.quests;
+  const count = Math.min(def.goal, Q.progress.harvest5 || 0);
+  const short = Math.max(0, def.goal - count - g.farm.sim.soonest().expect);
+  return { short, plots: Math.ceil(short / CROPS.carrot.yield) };
+}
 
 /** 남은 초 → '35초' / '1분 20초' (20초 넘으면 5초 단위) */
 export function fmtEta(s) {
@@ -101,6 +114,8 @@ export function farmTarget(id, g, st = { i: -1 }) {
     case 'harvest5': case 'star3': case 'giant1': {
       let i = pick((p) => p.state === 'ready');
       if (i >= 0) return tile(i);
+      // 다 거둬도 목표에 모자라면 더 심기부터
+      if (id === 'harvest5' && harvestShort(g).short > 0) { const t = plantFlow(); if (t) return t; }
       i = pick(dry);
       if (i >= 0) return tile(i);
       i = pick(growing);
@@ -153,6 +168,8 @@ const HINTS = {
   harvest5: (g) => {
     const s = g.farm.sim.soonest(), pet = petName(g);
     if (s.readyCount) return '다 익었어! 얼른 수확하자 🥕';
+    const sh = harvestShort(g);
+    if (sh.short > 0) return `다 거둬도 ${sh.short}개 모자라. 당근을 ${sh.plots}칸 더 심자 🌱`;
     if (s.dry) return '밭이 말랐어! 물을 다시 주면 더 빨리, 더 좋게 자라 💧';
     if (s.eta !== null) return `약 ${fmtEta(s.eta)} 뒤면 다 익어. 그동안 ${pet}${josa(pet, '와/과')} 놀아 줄래? 🐕`;
     return '당근 씨앗을 심고 물을 주면 금방 자라!';
@@ -185,12 +202,15 @@ export class Guide {
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.05, 40), gold(0.7));
     this.ring.rotation.x = -Math.PI / 2;
     this.ring.position.y = 0.05;
-    // 밭 한 칸 표시: 밭 흰 테두리(1.22~1.32) 안쪽 금빛 네모
-    this.square = new THREE.Mesh(new THREE.RingGeometry(1.08, 1.18, 4, 1, Math.PI / 4), gold(0.95));
+    // 밭 한 칸 표시: 밭 흰 테두리(1.22~1.32) 안쪽 금빛 네모 (휴대폰에서도 보이게 테두리 폭 약 0.2m)
+    this.square = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.19, 4, 1, Math.PI / 4), gold(0.95));
     this.square.rotation.x = -Math.PI / 2;
-    this.square.position.y = 0.04;
+    this.square.position.y = 0.12; // 두둑 위로 살짝
     this.square.renderOrder = 3;
-    this.square.material.depthTest = false; // 갈아 둔 두둑·작물에 가려지지 않게 (얇은 테두리라 위에 그려도 괜찮음)
+    this.square.material.polygonOffset = true;
+    this.square.material.polygonOffsetFactor = -2;
+    this.square.material.polygonOffsetUnits = -2;
+    // 가까이(8m 안)만 깊이 무시 → 작물에 안 가리고, 멀면 건물·언덕 뒤로 숨음 (update)
     this.marker = new THREE.Group();
     this.marker.add(this.beam, this.gem, this.ring, this.square);
     this.marker.visible = false;
@@ -214,7 +234,7 @@ export class Guide {
     this._tile = false;
     this._st = { i: -1 }; // 밭 칸 유지
     this._auto = null; this._autoT = 0;
-    this._cards = []; // 보여 줄 장 완료 카드
+    this._card = null; // 열려 있는 장 완료 카드 (창)
     this._pulse = 0;
   }
 
@@ -245,31 +265,39 @@ export class Guide {
     return true;
   }
 
-  /** 보상을 받은 뒤: 장을 다 끝냈으면 선물 주고 카드 예약 (한 번만) */
-  onClaimed(id) {
-    const g = this.game, m = QMETA[id];
-    if (!m) return;
-    const c = CHAPTERS.find((x) => x.n === m.ch);
-    const pr = chapterProgress(g.quests, c);
-    if (!pr.total || pr.done < pr.total) return;
+  /**
+   * 보상을 받은 뒤: 끝낸 장의 선물을 주고 카드 예약 (장마다 한 번)
+   * 앞 장을 다 마쳐야 그 장 선물 (뒷장 퀘스트를 먼저 끝내면 앞 장을 마칠 때 같이 줌)
+   * 카드는 flags.chapterCard 에 저장 → 보여 주기 전에 새로고침해도 다시 뜸
+   */
+  onClaimed() {
+    const g = this.game, q = g.quests, cur = currentChapter(q);
     const fl = (g.flags.chapterDone ||= {});
-    if (fl[c.n]) return;
-    fl[c.n] = true;
-    g.economy.earn(c.reward.money);
-    for (const [k, n] of Object.entries(c.reward.seeds || {})) g.economy.inventory.seeds[k] = (g.economy.inventory.seeds[k] || 0) + n;
-    this._cards.push(c);
+    for (const c of CHAPTERS) {
+      if (cur && c.n > cur.n) break;
+      if (fl[c.n]) continue;
+      const pr = chapterProgress(q, c);
+      if (!pr.total || pr.done < pr.total) continue;
+      fl[c.n] = true;
+      g.economy.earn(c.reward.money);
+      for (const [k, n] of Object.entries(c.reward.seeds || {})) g.economy.inventory.seeds[k] = (g.economy.inventory.seeds[k] || 0) + n;
+      (g.flags.chapterCard ||= []).push(c.n);
+      g.saveTimer = Math.max(g.saveTimer || 0, 9);
+    }
   }
 
   _showCard(c) {
     const g = this.game;
     const next = CHAPTERS.find((x) => x.n === c.n + 1);
+    if (g.reward) g.reward(3, { label: '📖' }); else g.audio.play('win');
+    if (g.ui.chapterCard) { this._card = g.ui.chapterCard(c, next); return; }
     const seeds = Object.entries(c.reward.seeds || {}).map(([k, n]) => `${CROPS[k].emoji} ${CROPS[k].name} 씨앗 ${n}개`).join(' · ');
-    if (g.reward) g.reward(3, { label: '📖' }); else g.audio.play('levelup');
     g.ui.result(`📖 ${c.n}장 「${c.title}」 완료!`, [
       `🎁 장 완료 선물 +${c.reward.money}🪙`,
       seeds && `🌱 씨앗 꾸러미: ${seeds}`,
       next ? `다음 장: ${next.n}장 「${next.title}」` : '모든 장을 마쳤어요! 이제 사계절 농부예요 🎉',
     ].filter(Boolean));
+    this._card = g.ui.panel || null;
   }
 
   update(dt) {
@@ -283,7 +311,7 @@ export class Guide {
     this.gem.scale.set(pk, 1.4 * pk, pk);
     const s = 1 + Math.sin(this.t * 3) * 0.08;
     this.ring.scale.set(s, s, s);
-    this.square.material.opacity = 0.7 + Math.sin(this.t * 3.4) * 0.25;
+    this.square.material.opacity = 0.8 + Math.sin(this.t * 3.4) * 0.18;
     const sq = 1 + 0.06 * this._pulse * Math.sin(this.t * 14);
     this.square.scale.set(sq, sq, sq);
     const pp = g.ride?.driving ? g.ride.riderGroup.position : g.player.position;
@@ -299,14 +327,24 @@ export class Guide {
     const free = !g.cinema?.locked && !g.dialogue?.active;
     // 휴대폰 첫 조작 안내 (한 번)
     if (free && g.flags.intro && !g.flags.touchCoach && !g.ui.panel && !g.autoplay?.on && touchUI()) { g.flags.touchCoach = true; showTouchCoach(g); }
-    // 장 완료 카드: 창·대화가 없을 때
-    if (this._cards.length && free && !g.ui.panel && !this._auto) this._showCard(this._cards.shift());
+    // 장 완료 카드: 창·대화가 없을 때 (보여 준 뒤 저장 목록에서 뺌)
+    if (this._card && g.ui.panel !== this._card) this._card = null;
+    const cards = g.flags.chapterCard;
+    if (cards?.length && !this._card && free && !g.ui.panel && !this._auto) {
+      const c = CHAPTERS.find((x) => x.n === cards[0]);
+      cards.shift();
+      if (!cards.length) delete g.flags.chapterCard;
+      g.saveTimer = Math.max(g.saveTimer || 0, 9);
+      if (c) this._showCard(c);
+    }
     let cur = this.current();
-    // 첫 농사 자동 보상: 도장 찍고 0.7초 뒤 (컷신·대화가 끝난 다음)
-    if (cur?.complete && AUTO_CLAIM.has(cur.id)) {
-      if (this._auto !== cur.id) { this._auto = cur.id; this._autoT = 0; g.ui.stampObjective?.(); }
+    // 첫 농사 자동 보상: 도장 찍고 0.7초 뒤 (컷신·대화가 끝난 다음). 따라가는 퀘스트가 아니어도 (📌 고정 중이어도) 받음
+    const q = g.quests;
+    const autoId = cur?.complete && AUTO_CLAIM.has(cur.id) ? cur.id : [...AUTO_CLAIM].find((id) => !q.claimed[id] && q.isComplete(BY_ID[id])) || null;
+    if (autoId) {
+      if (this._auto !== autoId) { this._auto = autoId; this._autoT = 0; if (cur?.id === autoId) g.ui.stampObjective?.(); }
       this._autoT += step;
-      if (this._autoT >= 0.7 && free) { this._auto = null; g.claimQuest(cur.id, { quiet: true }); cur = this.current(); }
+      if (this._autoT >= 0.7 && free) { this._auto = null; g.claimQuest(autoId, { quiet: true }); cur = this.current(); }
     } else this._auto = null;
     // 가리킬 곳
     let tgt = null, tile = false, ringOnly = false;
@@ -326,7 +364,11 @@ export class Guide {
     let extra = null;
     if (cur && !cur.complete && ETA_QUESTS.has(cur.id.split(':')[0])) {
       const s = g.farm.sim.soonest();
-      if (s.i >= 0 || s.readyCount) extra = { eta: s.eta, dry: s.dry, ready: s.readyCount, pet: petName(g) };
+      // 첫 수확: 다 거둬도 모자라면 남은 시간 대신 'n칸 더 심기'
+      const sh = cur.id === 'harvest5' ? harvestShort(g) : null;
+      const seeds = Object.values(g.economy.inventory.seeds).some((n) => n > 0);
+      if (sh?.short > 0 && (s.i >= 0 || s.readyCount)) extra = { more: sh.plots, seeds, ready: s.readyCount };
+      else if (s.i >= 0 || s.readyCount) extra = { eta: s.eta, dry: s.dry, ready: s.readyCount, pet: petName(g) };
     }
     this.target = tgt;
     this._tile = tile;
@@ -336,6 +378,7 @@ export class Guide {
       dist = Math.hypot(tgt.x - pp.x, tgt.z - pp.z);
       this.marker.visible = true;
       this.square.visible = tile;
+      this.square.material.depthTest = dist > 8;
       this.ring.visible = !tile && dist > 2.5;
       this.gem.visible = !ringOnly && (tile || dist > 2.5);
       // 빛기둥: 4m 밖에서만, 가까울수록 흐리고 낮게 (장터를 가리지 않게)
@@ -360,6 +403,11 @@ export class Guide {
       const fwd = Math.atan2(-Math.sin(fc.yaw), -Math.cos(fc.yaw));
       ang = -(toT - fwd) * 180 / Math.PI;
     } else { this.marker.visible = false; this.chevron.visible = false; }
+    // 첫 농사 동안: 머리 위 '나' 화살표는 숨김 (이름표가 이미 있어 '여기로' 표시와 헷갈림)
+    const hideArrow = !!(tgt && cur && FARM_TUTORIAL.has(cur.id.split(':')[0]));
+    if (g.player?.arrow && (hideArrow || this._arrowHid)) { g.player.arrow.visible = !hideArrow; this._arrowHid = hideArrow; }
+    // 장 완료 카드가 뜰 차례·떠 있는 동안은 다음 목표를 숨겼다가 닫으면 펼쳐 보여 줌
+    if (this._card || g.flags.chapterCard?.length) { g.ui.setObjective(null); return; }
     g.ui.setObjective(cur, dist, ang, extra);
   }
 }

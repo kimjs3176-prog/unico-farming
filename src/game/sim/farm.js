@@ -154,17 +154,22 @@ export class FarmSim {
     return t + left / (this.rateOf(p, false, false) * per);
   }
 
-  /** 가장 먼저 익는 밭: { i, eta, dry(물이 마른 자라는 밭이 있나), readyCount }. 자라는 밭이 없으면 i = -1 */
+  /**
+   * 가장 먼저 익는 밭: { i, eta, dry(물이 마른 자라는 밭이 있나), readyCount, growingCount, expect }. 자라는 밭이 없으면 i = -1
+   * expect: 자라는·익은 밭을 다 거두면 얻을 수 (★★ 기본 수확량, 대왕 ×3)
+   */
   soonest() {
-    let i = -1, eta = Infinity, dry = false, readyCount = 0;
+    let i = -1, eta = Infinity, dry = false, readyCount = 0, growingCount = 0, expect = 0;
     this.plots.forEach((p, k) => {
+      if (p.state === 'ready' || p.state === 'growing') expect += Math.max(1, CROPS[p.crop]?.yield || 1) * (p.giant ? 3 : 1);
       if (p.state === 'ready') { readyCount++; return; }
       if (p.state !== 'growing') return;
+      growingCount++;
       if (p.water <= 0 && Math.floor(k / this.cols) >= this.sprinklerRows) dry = true;
       const e = this.eta(k);
       if (e !== null && e < eta) { eta = e; i = k; }
     });
-    return { i, eta: i >= 0 ? eta : null, dry, readyCount };
+    return { i, eta: i >= 0 ? eta : null, dry, readyCount, growingCount, expect };
   }
 
   stage(i) {
