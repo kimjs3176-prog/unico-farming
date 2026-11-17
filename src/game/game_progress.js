@@ -3,6 +3,7 @@
 import { CATEGORY_NAMES } from './sim/items.js';
 import { AUTO_CLAIM } from './guide.js';
 import { touchUI } from './input.js';
+import { reward } from './reward.js';
 
 export const GameProgress = {
   /** 도감 등록 후: 진행 퀘스트, 카테고리 완성 보상 */
@@ -10,8 +11,7 @@ export const GameProgress = {
     this.onEvent('book', Object.keys(this.collection.entries).length);
     for (const r of this.collection.claimCompletions()) {
       this.economy.earn(r.money);
-      const reward = this.reward; // 보상 등급 연출 (없으면 예전 소리)
-      if (reward) reward.call(this, 3, { label: '🏅' }); else this.audio.play('levelup');
+      reward(this, 3, { label: '🏅' }); // 3단계 보상 연출 (만세·팡파르)
       this.ui.result('🏅 도감 완성!', [`${CATEGORY_NAMES[r.cat] || r.cat} 도감을 모두 채웠어요!`, `보상 +${r.money}🪙`]);
     }
   },
@@ -37,12 +37,13 @@ export const GameProgress = {
     const r = this.quests.claim(id);
     if (!r) return null;
     this.economy.earn(r.reward.money);
-    this.audio.play(r.levelUp ? 'levelup' : 'coin');
+    // 레벨업 축하(리본·팡파르·만세·해금 카드)는 HUD 가 레벨 변화를 보고 한 번만 함 → 여기서는 코인 소리만
+    const hudCheers = typeof this.ui?.celebrateLevel === 'function';
+    this.audio.play(r.levelUp && !hudCheers ? 'levelup' : 'coin');
     if (!quiet) this.ui.toast(`🎁 +${r.reward.money} 코인, +${r.reward.xp} XP`);
-    if (r.levelUp) {
+    if (r.levelUp && !hudCheers) {
       this.player.unico.playAction('cheer', 2);
-      // 레벨업 카드(보상 연출)가 없으면 글로라도 알림
-      if (!this.reward) this.ui.toast(`⬆️ 레벨 ${r.level} 달성! 장터에서 새 씨앗을 확인하세요`);
+      this.ui.toast(`⬆️ 레벨 ${r.level} 달성! 장터에서 새 씨앗을 확인하세요`); // 축하 카드가 없을 때만 글로 알림
     }
     if (this.flags?.pinQuest === id) delete this.flags.pinQuest;
     this.guide?.onClaimed?.(id);

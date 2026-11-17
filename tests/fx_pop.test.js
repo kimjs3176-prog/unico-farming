@@ -46,7 +46,7 @@ const ROUTES = {
   'src/game/view/pests.js': [["'💨'", 'coin']],
   'src/game/view/herding.js': [["'🐑'", 'float']],
   'src/game/view/ride_view.js': [["'🎉'", 'float'], ['PLOW_COIN', 'float']],
-  'src/game/view/pet.js': [["'🐾'", 'any'], ["'🎵'", 'any'], ["'✨'", 'any'], ["'🪙'", 'any'], ['emoji)', 'any'], ["'💕'", 'any']],
+  'src/game/view/pet.js': [["'🐾'", 'any'], ["'🎵'", 'any'], ["'✨'", 'any'], ["'🪙'", 'any'], ['emoji)', 'any'], ["'💕'", 'any'], ['icon, to)', 'any'], ['emoji, { fly', 'float']],
   'src/game/view/lake_view.js': [["text.split(' ')[0]", 'any']],
   'src/game/reward.js': [['o.label', 'float']],
 };

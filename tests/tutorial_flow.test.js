@@ -147,7 +147,7 @@ test('레벨업: 보상 연출이 없으면 글 알림', () => {
   g.claimQuest('fish1');
   assert.ok(g.toasts.some((t) => /레벨 2 달성/.test(t)));
   const g2 = fakeGame();
-  g2.reward = () => {};
+  g2.ui.celebrateLevel = () => {};
   g2.quests.xp = 95; g2.quests.progress.fish1 = 1;
   g2.claimQuest('fish1');
   assert.ok(!g2.toasts.some((t) => /레벨/.test(t)), '연출이 있으면 그쪽에서');

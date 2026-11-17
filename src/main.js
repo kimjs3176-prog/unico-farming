@@ -132,7 +132,7 @@ class Game {
     this.pointer = new PointerNav(this);
     this.autoplay = new AutoPlay(this);
     this.guide = new Guide(this);
-    this.fx.onPop = (t, p) => { if (!/[❤️🌿]/u.test(t)) this.ui.flyToBag(t, p); };
+    this.fx.onPop = (t, p) => this.ui.flyToBag(t, p); // 가방행은 pop 의 { to: 'bag' } 로만 (HUD 가 첫 프레임에 onCoin 도 연결)
     this.world.onNewDay = (day) => {
       const ev = this.economy.newDay(day);
       this.ranch.sim.newDay(day);
