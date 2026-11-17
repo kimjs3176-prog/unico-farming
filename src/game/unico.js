@@ -4,7 +4,7 @@ import { heightAt } from './terrain.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeLabel } from './label.js';
 import { enhanceMaterial } from './surface.js';
-import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, RIGS, bonePos, SLOTS, registerRig, unicoDecoderReady } from './unico_mesh.js';
+import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, RIGS, bonePos, SLOTS, registerRig, unicoDecoderReady, ARM_K } from './unico_mesh.js';
 import { costumeShape } from './unico_costume.js';
 import { SPECIES, labelHeights } from './species.js';
 
@@ -1032,7 +1032,8 @@ function applyPalette(root, id) {
 // 감정표현 → 머리 위 아이콘
 // 행동별 손에 드는 도구 (두 발 캐릭터 오른손)
 const PROP_OF = { hoe: 'hoe', water: 'can', net: 'net', cast: 'rod', fishwait: 'rod', reel: 'rod', brush: 'brush' };
-const HAND_R = [0.16, -0.34, 0.045]; // 오른팔 뼈 기준 손 위치
+const HAND_R = [0.16, -0.34, 0.045]; // 오른팔 뼈 기준 손 위치 (주민 동물)
+const HAND_R_HERO = HAND_R.map((v) => v * ARM_K); // 두 발 유니코: 팔이 ARM_K 배로 짧아 손도 그만큼 어깨 쪽
 
 /** 손 도구 (팔 뼈 로컬 좌표: 팔을 내리고 있을 때 -y 가 손끝 방향, +z 가 앞) */
 function makeProp(kind) {
@@ -1352,7 +1353,7 @@ export class Unico {
     if (!this.biped) return null;
     if (!this.props[kind]) {
       const m = makeProp(kind);
-      m.position.set(...HAND_R);
+      m.position.set(...(this.species ? HAND_R : HAND_R_HERO));
       m.visible = false;
       this.arms[1].add(m);
       this.props[kind] = m;
