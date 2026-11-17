@@ -37,7 +37,8 @@ export class AutoPlay {
     const g = this.g;
     // 첫 수확·첫 판매 보상을 받기 전에는 잠김 (P 키로도 건너뛸 수 없게, 행사용 ?kiosk=1 은 바로)
     if (v && !this.on && !autoAllowed(g.flags, hudParams(globalThis.location?.search || ''))) {
-      g.ui?.toast?.('🤖 자동은 첫 수확과 첫 판매 보상을 받으면 열려요');
+      // 새 버튼 안내가 이어지는 중이면 잠김 안내는 겹쳐 띄우지 않음 (딸깍만)
+      if (!g.ui?.coachBusy?.()) g.ui?.toast?.('🤖 자동은 첫 수확과 첫 판매 보상을 받으면 열려요');
       g.audio?.play?.('click', 0.35);
       return;
     }

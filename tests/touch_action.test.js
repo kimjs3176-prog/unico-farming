@@ -1,7 +1,7 @@
 // 터치 E 버튼: 무엇을 할지(모드·아이콘·동사) + 진동 설정
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { touchAction, touchSig, firstEmoji, ACTION } from '../src/ui/touch_action.js';
+import { touchAction, touchSig, firstEmoji, touchLabel, verbInLabel, ACTION } from '../src/ui/touch_action.js';
 import { Juice, canVibrate, hapticPrefs } from '../src/game/juice.js';
 
 const go = (key, label = '') => ({ key, label, onInteract: () => {} });
@@ -16,7 +16,8 @@ test('할 것이 없거나 기다리기만 하는 안내는 idle', () => {
   assert.equal(touchAction({ key: 'wait', label: '당근 성장 중 40%', onInteract: () => {} }, null).mode, 'idle');
   assert.equal(touchAction({ key: 'hive', label: '🐝 꿀 모으는 중' }, null).mode, 'idle');
   assert.equal(touchAction({ key: 'hive', label: '🐝 꿀 모으는 중' }, null).icon, '🐝', '흐린 버튼에도 무엇인지 보임');
-  assert.equal(touchAction(go('hoeing', '⛏️ 호미질 중…'), null).mode, 'idle');
+  // 호미질 중 누름은 다음 칸으로 이어지므로 흐리지 않음 (onInteract 가 없어도)
+  assert.deepEqual(touchAction({ key: 'hoeing', label: '⛏️ 호미질 중…' }, null), { mode: 'go', icon: '⛏️', verb: '이어서' });
 });
 
 test('낚시: 입질이면 urgent 당기기!, 힘겨루기면 hold 꾹 누르기, 기다리는 중은 idle', () => {
@@ -77,4 +78,27 @@ test('진동: 기기에 있고 설정이 켜져 있을 때만, 오토플레이 �
     // 진동이 오류를 내도 게임은 계속
     assert.equal(j.haptic(8, { vibrate: () => { throw new Error('x'); } }), false);
   } finally { globalThis.localStorage = keepLs; globalThis.game = keepGame; }
+});
+
+test('탈곡 중: 누를 때마다 연타 (안내에 onInteract 가 없어도 흐리지 않음)', () => {
+  assert.deepEqual(touchAction({ key: 'thresh', label: '👊 더 빨리 연타!' }, null, { mash: true }), { mode: 'go', icon: '👊', verb: '연타!' });
+  assert.equal(touchAction({ key: 'thresh', label: '탈곡기 (벼를 수확해 오세요)' }, null, {}).mode, 'idle');
+});
+
+test('터치 말풍선 글: 키보드 안내를 빼고, 동사가 이미 있으면 알약을 또 붙이지 않음', () => {
+  assert.equal(touchLabel('지금 당기기! (E / 탭)'), '지금 당기기!');
+  assert.equal(touchLabel('❗ 지금 당기기! (E / 탭)'), '❗ 지금 당기기!');
+  assert.equal(touchLabel('빈 밭에서 E 를 눌러 갈기'), '빈 밭에서 눌러 갈기');
+  assert.equal(touchLabel('🐄 소 (E)'), '🐄 소');
+  assert.equal(touchLabel('KOAT 체험관'), 'KOAT 체험관', '영문 낱말은 그대로');
+  assert.equal(verbInLabel('갈기', '밭 갈기'), true);
+  assert.equal(verbInLabel('당기기!', '❗ 지금 당기기!'), true);
+  assert.equal(verbInLabel('대화', '🦊 여우'), false);
+  assert.equal(verbInLabel('', '아무 글'), false);
+});
+
+test('첫 이모지: 같은 글은 기억해 두고 같은 답 (매 프레임 다시 쪼개지 않음)', () => {
+  for (let i = 0; i < 200; i++) assert.equal(firstEmoji(`🐝 꿀 ${i % 70}%`), '🐝');
+  assert.equal(firstEmoji('🐝 꿀 5%'), '🐝');
+  assert.equal(firstEmoji('글만'), '');
 });

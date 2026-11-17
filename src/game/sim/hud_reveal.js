@@ -10,10 +10,17 @@ export const NET_KEYS = ['emote', 'talk', 'rooms'];
 export const COACH = {
   market: '🛒 장터 버튼이 생겼어요! 이제 어디서든 사고팔 수 있어요',
   book: '📖 도감이 열렸어요! 모은 물고기·곤충을 볼 수 있어요',
-  koat: 'KOAT 체험관이 열렸어요! 🏢 버튼으로 가 보세요',
+  koat: '🏢 KOAT 체험관이 열렸어요! 메뉴의 체험관 버튼으로 가 보세요',
   decor: '🪑 꾸미기가 열렸어요! 소품으로 농장을 꾸며 보세요',
-  auto: '🤖 자동 버튼이 생겼어요! 바쁠 땐 유니코에게 맡겨 보세요 (P 키)',
+  auto: '🤖 자동 버튼이 생겼어요! 바쁠 땐 유니코에게 맡겨 보세요',
 };
+
+/** 안내 글 (키보드가 있으면 단축키를 덧붙임, 휴대폰에는 키 이야기를 하지 않음) */
+export function coachText(k, touch = false) {
+  const t = COACH[k];
+  if (!t) return '';
+  return k === 'auto' && !touch ? `${t} (P 키)` : t;
+}
 
 /** 주소 쿼리 → 행사용 바로 열기 (?koat=1 체험관, ?kiosk=1 체험관·자동) */
 export function hudParams(search = '') {

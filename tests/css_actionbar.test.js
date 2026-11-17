@@ -20,9 +20,26 @@ test('단계적 공개: [hidden] 버튼은 어느 화면에서나 숨김, ☰ �
 });
 
 test('오프라인이면 채팅 숨김, ☰ 빨간 점, 세로 폰 ☰ 칸 수는 --ab-cols', () => {
-  assert.equal(value(DESK, '#ui.net-off > .chat', 'display'), 'none');
+  // 오프라인: 접속 줄은 숨기고 입력칸은 접어 둠 (T 로 들어가면 다시 보임 — 혼잣말은 됨)
+  assert.equal(value(DESK, '#ui.net-off > .chat', 'display'), undefined, '채팅 전체를 없애지 않음');
+  assert.equal(value(DESK, '#ui.net-off > .chat > .online', 'display'), 'none');
+  assert.equal(value(DESK, '#ui.net-off > .chat:not(:focus-within) input', 'opacity'), '0');
   assert.equal(value(PHONE, '.bar-toggle.dot::after', 'border-radius'), '50%');
   assert.match(value(PHONE, '#ui.bar-open .actionbar', 'grid-template-columns'), /var\(--ab-cols, 5\)/);
   assert.equal(value(LAND, '#ui.bar-open .actionbar', 'grid-template-columns'), undefined, '가로 폰은 한 줄 그대로');
   assert.equal(value({ ...PHONE, reducedMotion: true }, '.actionbar button.bounce span', 'animation'), undefined);
+});
+
+test('넓은 화면: 버튼이 3개 미만이면 작은 둥근 아이콘 묶음(.few), 휴대폰 ☰ 에는 쓰지 않음', () => {
+  assert.equal(value(DESK, '.actionbar.few button', 'font-size'), '0');
+  assert.equal(value(DESK, '.actionbar.few button span', 'border-radius'), '50%');
+  for (const env of [PHONE, LAND]) assert.equal(value(env, '.actionbar.few button', 'font-size'), undefined);
+});
+
+test('휴대폰 ☰ NEW 딱지: 기본 규칙 다음에 안쪽 모서리 (top 1px, 9px 글자)', () => {
+  for (const env of [PHONE, LAND]) {
+    assert.equal(value(env, '.actionbar button.is-new::after', 'top'), '1px');
+    assert.equal(value(env, '.actionbar button.is-new::after', 'font-size'), '9px');
+  }
+  assert.equal(value(DESK, '.actionbar button.is-new::after', 'top'), '-5px');
 });

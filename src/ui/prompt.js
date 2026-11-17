@@ -2,7 +2,7 @@
 import { h, esc, blurTextInput } from './dom.js';
 import { touchUI } from '../game/input.js';
 import { CROPS } from '../game/sim/crops.js';
-import { touchAction, touchSig } from './touch_action.js';
+import { touchAction, touchSig, touchLabel, verbInLabel } from './touch_action.js';
 
 /** 안내 대상 열쇠: p.key 가 없으면 글에서 숫자·%·점을 뺀 것 (진행률만 바뀌면 같은 대상) */
 export function promptKey(p) {
@@ -20,7 +20,12 @@ export const PromptUI = {
   buildPrompt() {
     const game = this.game, root = this.root;
     this.prompt = h('div', 'prompt hidden', '');
-    this.prompt.addEventListener('pointerdown', (e) => { if (this.currentPrompt?.onInteract) { e.preventDefault(); game.input.interactTap = true; } });
+    this.prompt.addEventListener('pointerdown', (e) => {
+      if (!this.currentPrompt?.onInteract) return;
+      e.preventDefault();
+      if (this.touchBtn?.dataset.mode === 'idle' && touchUI()) return this.nopeTap(); // E 버튼과 같게: 흐린 상태면 아무 일 없음
+      game.input.interactTap = true;
+    });
     root.append(this.prompt);
     // 모바일
     this.joy = h('div', 'joystick', '<i></i>');
@@ -34,10 +39,11 @@ export const PromptUI = {
       e?.preventDefault?.();
       blurTextInput(); // 채팅 키보드가 열려 있으면 닫기
       const mode = this.touchBtn.dataset.mode;
-      if (mode === 'idle') this.nopeTap();
-      else if (mode === 'go' || mode === 'urgent') game.juice?.haptic?.(8);
+      if (game.dialogue?.active) { if (mode === 'idle') this.nopeTap(); else game.dialogue.advance(); return; }
+      // 흐린 버튼은 정말 아무 일도 하지 않음 (낚시 기다리는 중에 눌러 줄을 당겨 버리지 않게)
+      if (mode === 'idle') { this.nopeTap(); return; }
+      if (mode === 'go' || mode === 'urgent') game.juice?.haptic?.(8);
       if (mode === 'hold' && game.nature) game.nature.holdBtn = true; // 힘겨루기: 누르고 있는 동안 감기
-      if (game.dialogue?.active) { game.dialogue.advance(); return; }
       game.input.interactTap = true;
     };
     const release = () => { if (game.nature) game.nature.holdBtn = false; };
@@ -66,7 +72,7 @@ export const PromptUI = {
   /** 터치 버튼에 넘길 덧붙임 정보: 낚시 입질·힘겨루기, 심을 씨앗·거둘 작물 */
   _touchExtra(p) {
     const g = this.game, f = g.nature?.fishing;
-    const x = { bite: !!(f && f.phase === 'wait' && g.nature.fsim?.state === 'bite'), reel: f?.phase === 'fight' };
+    const x = { bite: !!(f && f.phase === 'wait' && g.nature.fsim?.state === 'bite'), reel: f?.phase === 'fight', mash: !!g.rice?.threshing };
     if (p?.key === 'plant') x.seedEmoji = CROPS[g.farm?.seedChoice?.()?.crop]?.emoji;
     else if (p?.key === 'harvest') x.cropEmoji = CROPS[g.farm?.sim?.plots?.[g.farm.near]?.crop]?.emoji;
     return x;
@@ -109,9 +115,10 @@ export const PromptUI = {
     const wasOff = this._promptOff !== false;
     if (wasOff) { this._promptOff = false; el.classList.remove('hidden'); }
     el.classList.toggle('clickable', !!p.onInteract);
-    // 키보드는 [E], 터치는 버튼과 같은 동사 (사용자가 정한 동물·반려견 이름 등은 esc)
-    const key = p.onInteract ? (a ? (a.verb ? `<kbd class="tv">${esc(a.verb)}</kbd> ` : '') : '<kbd>E</kbd> ') : '';
-    const html = key + esc(p.label) + (p.onInteract ? ' <span class="tapme">👆</span>' : '');
+    // 키보드는 [E], 터치는 버튼과 같은 동사 — 글에 이미 동사가 있으면 생략, 키보드 안내 '(E / 탭)' 은 뺌 (사용자가 정한 이름 등은 esc)
+    const label = a ? touchLabel(p.label) : p.label;
+    const key = p.onInteract ? (a ? (a.verb && !verbInLabel(a.verb, label) ? `<kbd class="tv">${esc(a.verb)}</kbd> ` : '') : '<kbd>E</kbd> ') : '';
+    const html = key + esc(label) + (p.onInteract ? ' <span class="tapme">👆</span>' : '');
     if (html !== this.promptHtml) { el.innerHTML = html; this.promptHtml = html; }
     const pk = promptKey(p);
     if (pk !== this._promptKey) {

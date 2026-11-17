@@ -100,7 +100,9 @@ test('setPrompt: 숨길 때 글을 지우지 않고, 대상 종류(key)가 바�
 test('터치 E 버튼 CSS: 흐림·동사 알약은 터치에서만, 움직임은 transform·opacity 만 + 움직임 줄이기에서 꺼짐', () => {
   assert.equal(value(DESK, '.touch-btn[data-mode="idle"]', 'opacity'), undefined, '데스크톱에는 새지 않음');
   for (const env of [PHONE, LAND]) {
-    assert.equal(value(env, '.touch-btn[data-mode="idle"]', 'opacity'), '0.5');
+    assert.equal(value(env, '.touch-btn[data-mode="idle"]', 'opacity'), '0.72', '밝은 흙 위에서도 사라지지 않게');
+    assert.equal(value(env, '.touch-btn[data-mode="idle"]', 'scale'), '0.92');
+    assert.match(value(env, '.touch-btn[data-mode="idle"]', 'box-shadow'), /0 0 0 3px/, '흰 테두리로 모양 유지');
     assert.match(value(env, '.touch-btn[data-mode="idle"]', 'filter'), /grayscale/);
     assert.equal(value(env, '.touch-btn .tb-verb', 'white-space'), 'nowrap');
     assert.equal(value(env, '.touch-btn .tb-verb', 'font-size'), '10px');
@@ -140,7 +142,8 @@ test('setPrompt (터치): E 버튼에 동사·아이콘, 바뀔 때만 DOM, 말�
     assert.equal(tb.lastChild.textContent, '갈기');
     assert.equal(tb.attrs['aria-label'], '갈기');
     assert.ok(tcls.has('pop'), '할 것 없음 → 대상: 톡');
-    assert.match(el.innerHTML, /<kbd class="tv">갈기<\/kbd> 밭 갈기/);
+    assert.match(el.innerHTML, /^밭 갈기/, '글에 이미 갈기가 있으면 알약을 또 붙이지 않음');
+    assert.doesNotMatch(el.innerHTML, /kbd/);
     assert.doesNotMatch(el.innerHTML, /<kbd>E<\/kbd>/);
     const w = writes;
     for (let i = 0; i < 5; i++) ui.setPrompt({ label: '밭 갈기', key: 'till', onInteract() {} });
@@ -152,5 +155,12 @@ test('setPrompt (터치): E 버튼에 동사·아이콘, 바뀔 때만 DOM, 말�
     ui.setPrompt(null);
     assert.equal(tb.dataset.mode, 'next');
     assert.equal(tb.lastChild.textContent, '다음');
+    ui.game.dialogue.active = false;
+    // 입질: 키보드 안내 '(E / 탭)' 은 빼고, 글에 이미 '당기기' 가 있으니 알약도 생략
+    ui.game.nature = { fishing: { phase: 'wait' }, fsim: { state: 'bite' } };
+    ui.setPrompt({ label: '❗ 지금 당기기! (E / 탭)', key: 'fishing', onInteract() {} });
+    assert.equal(tb.dataset.mode, 'urgent');
+    assert.doesNotMatch(el.innerHTML, /E \/ 탭|kbd/);
+    assert.match(el.innerHTML, /^❗ 지금 당기기!/);
   } finally { globalThis.matchMedia = keepMM; }
 });

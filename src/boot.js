@@ -124,7 +124,9 @@ export function bootErrorCard(code, err, opt = {}) {
   const was = { text: lt?.textContent, css: lt?.style.cssText, label: btn?.textContent, onclick: btn?.onclick, disabled: btn?.disabled, disp: hidden.map((el) => el.style.display), card: card.style.cssText };
   for (const el of hidden) el.style.display = 'none';
   card.classList?.add('boot-error');
-  document.getElementById?.('loading')?.classList?.remove('ready'); // 다시 시도 안내 중에는 '준비 완료' 모양을 거둠
+  const loadingEl = document.getElementById?.('loading');
+  was.ready = !!loadingEl?.classList?.contains?.('ready');
+  loadingEl?.classList?.remove('ready'); // 다시 시도 안내 중에는 '준비 완료' 모양을 거둠
   // 좁은 화면에서도 양옆 16px 여백 (기본 92vw + 안쪽 여백은 412px 화면에서 거의 끝까지 참)
   card.style.boxSizing = 'border-box';
   card.style.width = 'min(calc(100vw - 32px), 440px)';
@@ -199,6 +201,7 @@ export function bootErrorCard(code, err, opt = {}) {
     for (const n of add) n.remove();
     hidden.forEach((el, i) => { el.style.display = was.disp[i]; });
     card.classList?.remove('boot-error');
+    if (was.ready) loadingEl?.classList?.add('ready'); // 되돌릴 때 '준비 완료' 모양도 (진행 막대가 다시 나오지 않게)
     card.style.cssText = was.card;
     if (lt) { lt.textContent = was.text; lt.style.cssText = was.css; }
     if (btn) { btn.textContent = was.label; btn.onclick = was.onclick; btn.disabled = was.disabled; }

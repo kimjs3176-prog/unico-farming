@@ -1,8 +1,8 @@
 // 터치 E 버튼이 지금 무엇을 할지: 모드·아이콘·짧은 동사 (DOM 없이 계산만)
-// mode: go(하기) · idle(할 것 없음, 흐리게) · next(대화 넘기기) · urgent(지금 당기기!) · hold(꾹 누르기)
+// mode: go(하기) · idle(할 것 없음, 흐리게 — 눌러도 아무 일 없음) · next(대화 넘기기) · urgent(지금 당기기!) · hold(꾹 누르기)
 
-/** 눌러도 아무 일 없는 안내 (기다리기·자는 중·호미질 중 등) */
-export const PASSIVE = new Set(['wait', 'sleep', 'tree', 'hoeing', 'hive', 'driving', 'diving']);
+/** 눌러도 아무 일 없는 안내 (기다리기·자는 중 등). 호미질 중은 누르면 다음 칸을 이어서 하므로 빠짐 */
+export const PASSIVE = new Set(['wait', 'sleep', 'tree', 'hive', 'driving', 'diving']);
 
 /** 안내 열쇠 → [아이콘, 동사]. 아이콘이 null 이면 안내 글의 첫 이모지 */
 export const ACTION = {
@@ -22,13 +22,31 @@ export const ACTION = {
 
 const EMOJI = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
 let seg = null;
+// 매 프레임 같은 글을 다시 쪼개지 않게 (휴대폰 GC 줄이기): 글 → 결과, 조금만 기억
+const emojiMemo = new Map();
 /** 글에서 첫 이모지 한 덩어리 (조합 이모지·변형 선택자 포함) */
 export function firstEmoji(s) {
   const str = String(s ?? '');
   if (!str) return '';
+  const hit = emojiMemo.get(str);
+  if (hit !== undefined) return hit;
   try { seg ||= typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('ko', { granularity: 'grapheme' }) : false; } catch { seg = false; }
   const parts = seg ? Array.from(seg.segment(str), (x) => x.segment) : Array.from(str);
-  return parts.find((g) => EMOJI.test(g)) || '';
+  const out = parts.find((g) => EMOJI.test(g)) || '';
+  if (emojiMemo.size >= 64) emojiMemo.clear();
+  emojiMemo.set(str, out);
+  return out;
+}
+
+/** 터치용 안내 글: 키보드 안내 '(E / 탭)'·'E 를' 빼기 */
+export function touchLabel(label) {
+  return String(label ?? '').replace(/\s*\((?:E|E\s*\/\s*탭|탭)\)\s*/g, ' ').replace(/E\s*를\s*/g, '').replace(/\s{2,}/g, ' ').trim();
+}
+
+/** 말풍선 글에 이미 동사가 들어 있나 ('!' 는 빼고 비교) → 동사 알약을 또 붙이지 않음 */
+export function verbInLabel(verb, label) {
+  const v = String(verb ?? '').replace(/!/g, '').trim();
+  return !!v && String(label ?? '').includes(v);
 }
 
 const IDLE = { mode: 'idle', icon: '✋', verb: '' };
@@ -36,15 +54,17 @@ const IDLE = { mode: 'idle', icon: '✋', verb: '' };
 /**
  * @param p 지금 안내 ({ key, label, onInteract } 또는 null)
  * @param dlg 대화창 ({ active, choosing })
- * @param extra { bite, reel, seedEmoji, cropEmoji }
+ * @param extra { bite, reel, mash, seedEmoji, cropEmoji }
  */
 export function touchAction(p, dlg, extra = {}) {
   if (dlg?.active) return dlg.choosing ? { mode: 'idle', icon: '💬', verb: '' } : { mode: 'next', icon: '▶', verb: '다음' };
   if (extra.bite) return { mode: 'urgent', icon: '❗', verb: '당기기!' };
   if (extra.reel) return { mode: 'hold', icon: '🎣', verb: '꾹 누르기' };
+  if (extra.mash) return { mode: 'go', icon: '👊', verb: '연타!' }; // 탈곡: 누를 때마다 한 번
   if (!p) return IDLE;
   const key = p.key == null ? '' : String(p.key);
-  if (key === 'fishing') return { mode: 'idle', icon: '🎣', verb: '' }; // 찌를 기다리는 중
+  if (key === 'fishing') return { mode: 'idle', icon: '🎣', verb: '' }; // 찌를 기다리는 중 (누르면 놓치므로 막음)
+  if (key === 'hoeing') return { mode: 'go', icon: '⛏️', verb: '이어서' }; // 누르면 끝난 뒤 다음 칸
   if (!p.onInteract || PASSIVE.has(key)) return { ...IDLE, icon: firstEmoji(p.label) || IDLE.icon };
   const a = ACTION[key];
   if (a) {

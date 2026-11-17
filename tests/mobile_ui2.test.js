@@ -72,3 +72,11 @@ test('선물 되돌리기: 오늘 횟수·누적 기록이 0 아래로 내려가
   assert.equal(s.gifts, 0);
   assert.equal(s.stats.giftsSent, 0);
 });
+
+test('터치 E 버튼: 흐린 상태로 누르면 정말 아무 일 없음 (낚시 기다리는 중에 줄을 당기지 않음)', () => {
+  const src = read('src/ui/prompt.js').toString();
+  assert.match(src, /if \(mode === 'idle'\) \{ this\.nopeTap\(\); return; \}/);
+  const i = src.indexOf("if (mode === 'idle') { this.nopeTap(); return; }"), j = src.indexOf('game.input.interactTap = true;', i);
+  assert.ok(i > 0 && j > i, 'idle 확인이 interactTap 보다 먼저');
+  assert.match(src, /mash: !!g\.rice\?\.threshing/);
+});

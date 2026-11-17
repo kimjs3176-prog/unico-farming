@@ -1,7 +1,8 @@
 // 아래 행동 막대·☰ 버튼·행동 메뉴·자동 진행 칩·전체 화면·사진 찍기
 import { h } from './dom.js';
 import { isMobileDevice } from '../game/quality.js';
-import { COACH, hudParams, initHud, newReveals, isVisible } from '../game/sim/hud_reveal.js';
+import { coachText, hudParams, initHud, newReveals, isVisible } from '../game/sim/hud_reveal.js';
+import { touchUI } from '../game/input.js';
 
 /** iPhone·iPad 인가 (iPadOS 사파리는 'Macintosh' 로 알려서 터치 점 수로 가림) */
 export function isIOS(nav = typeof navigator !== 'undefined' ? navigator : null) {
@@ -34,6 +35,7 @@ export const ActionbarUI = {
     const mk = (icon, label, fn, k) => {
       const b = h('button', '', `<span>${icon}</span>${label}`);
       b.onclick = fn;
+      b.setAttribute('aria-label', label); // 버튼이 적을 때 글자를 숨겨도 이름은 남게
       if (k) { b.dataset.k = k; this.hudBtns[k] = b; b.hidden = !isVisible(k, game.flags?.hud, game.net?.connected); }
       this.bar.append(b);
       return b;
@@ -189,6 +191,9 @@ export const ActionbarUI = {
       // 휴대폰 ☰ 칸 수: 보이는 버튼 수에 맞춰 두 줄 이하 (5칸 이상)
       const cols = String(Math.max(5, Math.ceil(this.bar.querySelectorAll('button:not([hidden])').length / 2)));
       if (cols !== this._abCols) { this._abCols = cols; this.bar.style.setProperty('--ab-cols', cols); }
+      // 넓은 화면: 버튼이 3개 미만이면 나무 선반 대신 작은 둥근 아이콘 묶음 (빈 선반처럼 보이지 않게)
+      const few = this.bar.querySelectorAll('button:not([hidden]):not(.mob-only)').length < 3;
+      if (few !== this._abFew) { this._abFew = few; this.bar.classList.toggle('few', few); }
       this.root.classList.toggle('net-off', !net); // 오프라인: 채팅·접속 줄 숨김
       this._syncDot();
     } catch { /* 공개 상태를 못 읽어도 게임은 계속 */ }
@@ -204,9 +209,26 @@ export const ActionbarUI = {
     const collapsed = this.barToggle && getComputedStyle(this.barToggle).display !== 'none' && !this.root.classList.contains('bar-open');
     if (collapsed) this._pendingBounce.push(b);
     else { b.classList.remove('bounce'); void b.offsetWidth; b.classList.add('bounce'); }
-    if (COACH[k]) this.toast(COACH[k]);
+    const msg = coachText(k, touchUI());
+    if (msg) this.coach(msg);
     this.game.audio?.play?.('pop', 0.6);
   },
+
+  /** 열림 안내는 한 번에 하나씩 (2.6초 간격, 기다리는 것은 3개까지) */
+  coach(text) {
+    const q = (this._coachQ ||= []);
+    if (q.length >= 3) return;
+    q.push(text);
+    if (!this._coachT) this._coachNext();
+  },
+  _coachNext() {
+    const t = this._coachQ?.shift();
+    if (t == null) { this._coachT = 0; return; }
+    this.toast(t);
+    this._coachT = typeof setTimeout === 'function' ? setTimeout(() => this._coachNext(), 2600) : 0;
+  },
+  /** 열림 안내가 떠 있거나 기다리는 중 (자동 잠김 안내는 이때 띄우지 않음) */
+  coachBusy() { return !!this._coachT || !!this._coachQ?.length; },
 
   /** 오토플레이 상태 표시: text=null 이면 숨김 */
   setAuto(text, on) {

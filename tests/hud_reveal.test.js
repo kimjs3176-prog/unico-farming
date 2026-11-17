@@ -73,3 +73,31 @@ test('도움말이 공개 순서를 알려 줌', () => {
   assert.match(src, /첫 수확을 하면 하단 🏢 버튼이 열려요/);
   assert.match(src, /🤖 자동\(첫 수확·첫 판매 보상을 받으면/);
 });
+
+test('열림 안내: 모두 그림으로 시작, 자동의 P 키는 키보드에서만', async () => {
+  const { COACH, coachText } = await import('../src/game/sim/hud_reveal.js');
+  for (const [k, t] of Object.entries(COACH)) assert.match(t, /^\p{Extended_Pictographic}/u, k);
+  assert.match(coachText('auto', false), /\(P 키\)$/);
+  assert.doesNotMatch(coachText('auto', true), /P 키/);
+  assert.equal(coachText('koat', true), COACH.koat);
+  assert.equal(coachText('nope', false), '');
+});
+
+test('열림 안내는 하나씩 (2.6초 간격, 최대 3개), 그동안 자동 잠김 안내는 띄우지 않음', async () => {
+  const { ActionbarUI } = await import('../src/ui/actionbar.js');
+  const shown = [], timers = [];
+  const keepST = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms) => { timers.push([fn, ms]); return timers.length; };
+  try {
+    const ui = { ...ActionbarUI, toast: (t) => shown.push(t) };
+    for (const t of ['a', 'b', 'c', 'd', 'e']) ui.coach(t);
+    assert.deepEqual(shown, ['a']);
+    assert.equal(ui.coachBusy(), true);
+    assert.equal(timers[0][1], 2600);
+    while (timers.length) timers.shift()[0]();
+    assert.deepEqual(shown, ['a', 'b', 'c', 'd'], '기다리는 것은 3개까지');
+    assert.equal(ui.coachBusy(), false);
+  } finally { globalThis.setTimeout = keepST; }
+  const src = read('src/game/autoplay.js');
+  assert.match(src, /if \(!g\.ui\?\.coachBusy\?\.\(\)\) g\.ui\?\.toast/);
+});

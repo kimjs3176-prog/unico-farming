@@ -77,11 +77,13 @@
 }
 /* 조작법: 접어 둔 작은 알약 (눌러서 펼침). 터치 기기는 터치 안내만, 마우스·키보드는 키보드 안내만 */
 .howto { margin: 6px 0 0; }
-.howto summary { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; list-style: none; font-family: var(--display); font-size: 13px; color: var(--brown);
-  padding: 3px 12px; border-radius: 999px; background: rgba(107, 74, 46, 0.08); user-select: none; }
+/* 기능 칩과 같은 흰 알약 + 오른쪽 ▾ (펼치면 뒤집힘). 브라우저 기본 삼각형은 숨김 */
+.howto summary { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; list-style: none; font-family: var(--display); font-size: 13px; color: var(--brown);
+  padding: 3px 12px; border-radius: 999px; background: #fff; border: 2px solid var(--panel-edge); box-shadow: 0 2px 0 var(--panel-edge); user-select: none; }
 .howto summary::-webkit-details-marker { display: none; }
-.howto summary::before { content: '▸'; transition: transform 0.15s; }
-.howto[open] summary::before { transform: rotate(90deg); }
+.howto summary::marker { content: ''; }
+.howto summary::after { content: '▾'; font-size: 11px; transition: transform 0.15s; }
+.howto[open] summary::after { transform: rotate(180deg); }
 .howto summary:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
 .hint.keys span { display: block; }
 .hint.keys .k-touch { display: none; }
@@ -107,3 +109,9 @@
 .title-butterfly .wr { animation-name: flapr; }
 @keyframes flapl { to { transform: scaleX(0.25); } }
 @keyframes flapr { to { transform: scaleX(0.25); } }
+/* 키 큰 세로 폰: 친구들을 아래 밭 위에 세우고, 헛간은 작게 카드와 친구들 사이 언덕에 (서로 가리지 않게, 빈 들판 띠가 남지 않게) */
+@media (max-width: 480px) and (min-height: 760px) {
+  .sky-deco .barn { z-index: 4; left: 5%; bottom: 102px; width: 120px; height: 99px; } /* 앞 언덕(h2) 위로 */
+  .title-wrap { padding-bottom: 96px; }
+  .title-friends { position: fixed; left: 0; right: 0; bottom: max(26px, calc(env(safe-area-inset-bottom, 0px) + 14px)); margin: 0; z-index: 6; }
+}
