@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { LAYOUT, cellKey } from './world.js';
 import { heightAt } from './terrain.js';
+import { SURF } from './surface.js';
+import { nightFactor } from './sim/tod.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries as mergeGeo } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -12,6 +14,9 @@ const DAY_TOP = new THREE.Color(0x4f9ff0), DAY_HZ = new THREE.Color(0xd6eeff);
 const DUSK_TOP = new THREE.Color(0x4a3f8a), DUSK_HZ = new THREE.Color(0xf7b27a);
 const NIGHT_TOP = new THREE.Color(0x0a1230), NIGHT_HZ = new THREE.Color(0x1f2c52);
 const MOTE_DUSK = new THREE.Color(0xffb35a);
+// 밤 수면 밝기 배율(선형): 달빛 아래 어두운 남색 물
+const NIGHT_WATER = new THREE.Color().setRGB(0.13, 0.17, 0.31, THREE.LinearSRGBColorSpace);
+const LAMP_SLOTS = 4; // 물에 비치는 가로등 수
 
 /** 하늘 돔(그라데이션), 구름, 지평선 언덕, 잔디 인스턴싱, 연못 물결 — 분위기 레이어 */
 export class Scenery {
@@ -135,6 +140,7 @@ export class Scenery {
       sh.uniforms.uWind = this.windStrength;
       sh.uniforms.uPush = this.pushers;
       sh.uniforms.uGFar = this.grassFar;
+      sh.uniforms.uWet = SURF.wet;
       sh.vertexShader = 'uniform float uTime; uniform float uWind; uniform vec3 uPush[4]; uniform vec3 uGFar; varying float vGH;\n' + sh.vertexShader.replace('#include <begin_vertex>',
         `#include <begin_vertex>
          vGH = clamp(position.y / 0.26, 0.0, 1.0);
@@ -148,9 +154,11 @@ export class Scenery {
          }
          // 거리 제한(저사양): 끝 ${GRASS_FADE}m 동안 포기가 밑동 쪽으로 줄어들며 사라짐 (칸이 툭 끊기지 않게)
          if (uGFar.y > 0.0) transformed *= 1.0 - smoothstep(uGFar.y - ${GRASS_FADE.toFixed(1)}, uGFar.y, distance(instanceMatrix[3].xz, uGFar.xz));`);
-      sh.fragmentShader = 'varying float vGH;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      sh.fragmentShader = 'varying float vGH; uniform float uWet;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
          diffuseColor.rgb *= mix(0.42, 1.18, vGH);
-         diffuseColor.rgb += vec3(0.06, 0.07, 0.0) * smoothstep(0.7, 1.0, vGH);`);
+         diffuseColor.rgb += vec3(0.06, 0.07, 0.0) * smoothstep(0.7, 1.0, vGH);
+         diffuseColor.rgb *= 1.0 - 0.2 * uWet; // 비에 젖은 풀: 땅과 함께 어둡게`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+         roughnessFactor *= 1.0 - 0.3 * uWet;`);
     };
     const COUNT = 9000; // 최대치로 위치를 뽑고 품질 설정에 따라 앞쪽 일부만 그림 (setDensity)
     const mats = [], cols = [];
@@ -253,6 +261,15 @@ export class Scenery {
     if (this.flowers) this.flowers.count = Math.round(this.flowerTotal * Math.min(1, 0.25 + d * 0.75) * (this.seasonFlowers ?? 1)); // 계절: 겨울엔 들꽃 없음
   }
 
+  /** 물에 비칠 가로등 불빛 자리 (World 가 한 번 넣음): 연못·호수 가까운 것만 최대 4개 */
+  setWaterLamps(heads) {
+    const near = (h) => [LAYOUT.pond, LAYOUT.lake].some((w) => Math.hypot(h.x - w.x, h.z - w.z) < w.r + 2.5);
+    const list = heads.filter(near).slice(0, LAMP_SLOTS);
+    this.lampsU ||= { value: Array.from({ length: LAMP_SLOTS }, () => new THREE.Vector3(0, -99, 0)) };
+    this.lampsU.value.forEach((v, i) => (list[i] ? v.copy(list[i]) : v.set(0, -99, 0)));
+    return list.length;
+  }
+
   /** 수면에 파문 (amp 0.2 잔잔 ~ 1.5 크게 첨벙) */
   addRipple(x, z, amp = 1) {
     if (!this.ripples) return;
@@ -280,12 +297,18 @@ export class Scenery {
       uRain: (this.rainU ||= { value: 0 }), uDay: (this.dayU ||= { value: 1 }), sunDir: (this.sunU ||= { value: new THREE.Vector3(0.4, 0.8, 0.3) }),
       deep: { value: new THREE.Color(0x1f6f9e) }, shallow: { value: new THREE.Color(0x7fd3e8) },
       skyCol: { value: new THREE.Color(0xd6eeff) },
+      // 밤 분위기: 수면 밝기 배율, 밤 정도, 가로등 불빛 자리 (품질을 바꿔 다시 만들어도 같은 값 유지)
+      uLit: (this.litU ||= { value: new THREE.Color(1, 1, 1) }), uNight: (this.nightU ||= { value: 0 }),
+      uLamps: (this.lampsU ||= { value: Array.from({ length: LAMP_SLOTS }, () => new THREE.Vector3(0, -99, 0)) }),
     };
     this.waterShared = shared;
     // 수면: 바람 방향 물결 5겹(해석적 기울기) + 잔물결 노이즈 + 파문·빗방울 고리 → 법선,
     // 깊이색·물속 산란·물가 거품(얼룩진 띠)·햇빛 반짝임 (반사 있는 고사양/보통, 없는 저사양 공통)
     const COMMON = /* glsl */`
-      uniform float uTime, uClock, uRain, uDay; uniform vec3 deep, shallow, skyCol, sunDir;
+      uniform float uTime, uClock, uRain, uDay, uNight; uniform vec3 deep, shallow, skyCol, sunDir, uLit;
+      uniform vec3 uLamps[${LAMP_SLOTS}];
+      // 물가 거품 색: 밤에는 수면과 함께 어두워지되 조금 더 밝게 (물가 선이 보이게)
+      vec3 foamCol(){ return vec3(0.97, 0.99, 1.0) * mix(uLit, vec3(1.0), 0.15); }
       uniform vec4 uRip[${RIPPLES}];
       varying vec3 vW; varying vec3 vPool; // xy: 중심(x,z), z: 반지름
       float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -338,6 +361,7 @@ export class Scenery {
         vec3 base = mix(shallow, deep * (radius > 5.0 ? 0.85 : 1.0), depth);
         // 물결 마루에 햇빛이 비쳐 살짝 밝아지는 산란
         base += vec3(0.05, 0.16, 0.14) * clamp(s.z * 14.0 + 0.3, 0.0, 1.0) * uDay * (1.0 - depth * 0.4);
+        base *= uLit; // 밤·땅거미: 물이 빛나지 않게 주변과 같이 어둡게
         // 물가 거품: 노이즈로 얼룩진 띠가 밀려왔다 빠짐
         float surge = 0.5 + 0.5 * sin(uTime * 1.3 - d * 2.0);
         float band = smoothstep(0.75 + surge * 0.25, 0.05, edgeD + (vnoise(vW.xz * 2.6 + uTime * 0.25) - 0.5) * 0.45);
@@ -347,7 +371,29 @@ export class Scenery {
         vec3 L = normalize(sunDir);
         float sd = max(dot(reflect(-V, N), L), 0.0);
         float glit = pow(sd, 220.0) * smoothstep(0.74, 0.86, vnoise(vW.xz * 18.0 + uTime * 1.7)) * 3.2;
-        return base + (pow(sd, 48.0) * 0.45 + glit) * uDay * vec3(1.0, 0.96, 0.85);
+        // 밤: 달빛 반짝임은 푸르고 약하게
+        vec3 glintCol = mix(vec3(1.0, 0.96, 0.85), vec3(0.75, 0.85, 1.0), uNight) * mix(uDay, 0.16, uNight);
+        // 가로등이 물에 비친 따뜻한 빛줄기: 가로등 → 카메라 쪽으로 길게, 물결 따라 흔들리고 끊김
+        if (uNight > 0.01) {
+          float ls = 0.0;
+          for (int i = 0; i < ${LAMP_SLOTS}; i++) {
+            vec3 lp = uLamps[i];
+            if (lp.y < 0.0) continue;
+            vec2 toCam = cameraPosition.xz - lp.xz; float dc = length(toCam); toCam /= max(dc, 1e-3);
+            vec2 sideV = vec2(-toCam.y, toCam.x);
+            vec2 rel = vW.xz - lp.xz;
+            float along = dot(rel, toCam);
+            // 반사 중심: 등 높이와 카메라 높이 비율만큼 등에서 카메라 쪽 (거울상)
+            float mid = dc * lp.y / (lp.y + max(cameraPosition.y - vW.y, 0.3));
+            float lat = dot(rel, sideV) + dot(slope, sideV) * 2.2;
+            float w = 0.1 + 0.015 * abs(along - mid);
+            float body = exp(-lat * lat / (w * w)) * exp(-abs(along - mid) * 1.1 / (1.0 + mid * 0.1));
+            float dash = 0.6 + 0.4 * sin(along * 9.0 + dot(slope, toCam) * 12.0 - uTime * 2.0);
+            ls += body * dash;
+          }
+          base += vec3(1.0, 0.5, 0.16) * ls * 1.1 * uNight;
+        }
+        return base + (pow(sd, 48.0) * 0.45 + glit) * glintCol;
       }`;
     const geo = mergeGeo(waters.map((W) => {
       const c = new THREE.CircleGeometry(W.r, W.r > 5 ? 80 : 64).translate(W.x, -W.z, 0); // 수면은 x 축으로 -90° 눕힘 → 로컬 y = -월드 z
@@ -372,7 +418,7 @@ export class Scenery {
               vec4 uv = vUv; uv.xy += slope * 0.35 * uv.w; // 물결만큼 반사가 일렁임
               vec3 refl = texture2DProj(tDiffuse, uv).rgb;
               vec3 c = mix(base, refl * 0.95, clamp(fres * 0.9 + 0.12, 0.0, 0.9));
-              c = mix(c, vec3(0.97, 0.99, 1.0), foam * 0.7);
+              c = mix(c, foamCol(), foam * 0.7);
               gl_FragColor = vec4(c, 1.0);
               #include <tonemapping_fragment>
               #include <colorspace_fragment>
@@ -386,12 +432,14 @@ export class Scenery {
         vertexShader: `attribute vec3 pool; varying vec3 vW; varying vec3 vPool; void main(){ vPool = pool; vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
         fragmentShader: `${COMMON}
           void main(){ float fres, foam; vec2 slope; vec3 base = waterBase(fres, foam, slope);
-            vec3 c = mix(base, skyCol, clamp(fres * 0.8, 0.0, 0.85)); c = mix(c, vec3(0.97, 0.99, 1.0), foam * 0.7); gl_FragColor = vec4(c, 1.0);
+            vec3 c = mix(base, skyCol, clamp(fres * 0.8, 0.0, 0.85)); c = mix(c, foamCol(), foam * 0.7); gl_FragColor = vec4(c, 1.0);
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
           }`,
       }));
     }
+    // 반사 수면은 유니폼을 복제해 만듦 → 공유 값(시간·날씨·밤빛·파문)을 다시 이어 줘야 매 프레임 바뀐 값이 들어감
+    if (water.isReflector) Object.assign(water.material.uniforms, shared);
     water.rotation.x = -Math.PI / 2;
     water.position.set(0, 0.03, 0);
     this.world.scene.add(water);
@@ -503,6 +551,15 @@ export class Scenery {
       this.moteU.uAlpha.value = (0.28 + u.dusk.value * 0.5) * (1 - u.night.value) * (1 - weather.precip) * (1 - weather.cloud * 0.6);
     }
     if (this.waterShared) this.waterShared.skyCol.value.copy(u.horizon.value).lerp(u.top.value, 0.4);
+    if (this.litU) {
+      // 수면 밝기: 낮(daylight ≥ 0.55)은 정확히 흰색(그대로), 밤은 달빛 남색, 땅거미엔 노을빛 조금, 번개엔 번쩍
+      const nk = nightFactor(daylight);
+      const duskK = u.dusk.value * 0.25 * Math.min(1, Math.max(0, (0.6 - daylight) / 0.3));
+      const lit = this.litU.value.setRGB(1, 1, 1).lerp(NIGHT_WATER, nk).lerp(u.glow.value, duskK);
+      const flash = this.world.precip?.flash || 0;
+      if (flash > 0) lit.addScalar(flash * 0.6);
+      this.nightU.value = nk;
+    }
     for (const m of this.ridges || []) m.uniforms.horizon.value.copy(u.horizon.value).lerp(u.glow.value, u.dusk.value * 0.25);
     // 구름: 노을이면 아랫면이 물듦
     const tint = (this._tint ||= new THREE.Color()).setHex(0xffffff).lerp(u.glow.value, u.dusk.value * 0.55);

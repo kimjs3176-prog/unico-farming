@@ -3,8 +3,8 @@ import { heightAt, HILLS, CHESTS } from './terrain.js';
 import { Scenery } from './scenery.js';
 import { Precipitation } from './precip.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { enhanceMaterial, SURF, setSurfaceDetail, leafAttrValue } from './surface.js';
-import { timeOfDay } from './sim/tod.js';
+import { enhanceMaterial, SURF, setSurfaceDetail, leafAttrValue, easeWet } from './surface.js';
+import { timeOfDay, nightFactor } from './sim/tod.js';
 import { Birds } from './birds.js';
 import { whenFontReady } from './label.js';
 import { shadowRadiusFor } from './shadow_soft.js';
@@ -133,6 +133,8 @@ const DAY_LENGTH = 360; // 실제 초 = 게임 하루
 // 애니메이션·상호작용이 있어 병합하면 안 되는 모델
 const DYNAMIC = new Set(['windmill', 'tower_windmill', 'drone', 'smartfarm', 'fruit_tree', 'thresher', 'tractor', 'hen', 'cloud']);
 const GREY = new THREE.Color(0x9aa4ae);
+// 밤 달빛: 하늘빛은 푸르게, 땅 반사는 초록 대신 남색, 주변광도 푸르스름하게
+const MOON = new THREE.Color(0x9db4ff), NIGHT_GROUND = new THREE.Color(0x2c3a52), DAY_GROUND = new THREE.Color(0x6f9a4a), NIGHT_AMB = new THREE.Color(0xa9bcff), WHITE = new THREE.Color(0xffffff);
 const DAY_SKY = new THREE.Color(0xbfe4ff), DUSK_SKY = new THREE.Color(0xf4b183), NIGHT_SKY = new THREE.Color(0x1d2a4a);
 const WEATHER_KEYS = ['cloud', 'precip', 'fog', 'wind'];
 // 환경맵을 끈 저사양(quality.env === false): 주변광에 더할 값 = 이 배율 × 환경광 세기.
@@ -230,7 +232,10 @@ export class World {
     this._batchStatic();
     this.scenery = new Scenery(this);
     this.scenery.ridges = this.ridges;
+    this.scenery.setWaterLamps(this.lampHeads || []); // 물가 가로등 → 밤 수면 빛줄기
     this.precip = new Precipitation(this.scene);
+    // 빗방울 튀김 자리: 땅 높이, 물·건물·장애물 위는 건너뜀
+    this.precip.ground = (x, z) => (this.isBlocked(x, z, 0.15) ? null : heightAt(x, z));
     // 날씨: target 은 실시간 날씨, cur 은 부드럽게 따라가는 현재값
     this.weatherTarget = { kind: 'clear', cloud: 0.15, precip: 0, fog: 0, wind: 0.15 };
     this.weatherCur = { ...this.weatherTarget };
@@ -282,11 +287,15 @@ export class World {
     detail.repeat.set(1, 1);
     this.groundTime = { value: 0 };
     this.groundSnow = { value: 0 }; // 눈 덮임 (update 에서 snowCover)
+    this.groundWet = { value: 0 }; // 비에 젖음 (update 에서 SURF.wet)
+    this.groundPud = { value: 0 }; // 흙길 물웅덩이 (보통·고사양만 1)
     this.groundMat.onBeforeCompile = (sh) => {
       sh.uniforms.detailMap = { value: detail };
       sh.uniforms.uTime = this.groundTime;
       sh.uniforms.uSnow = this.groundSnow;
-      sh.fragmentShader = 'uniform sampler2D detailMap; uniform float uTime; uniform float uSnow;\n' + sh.fragmentShader.replace('#include <map_fragment>',
+      sh.uniforms.uWet = this.groundWet;
+      sh.uniforms.uPud = this.groundPud;
+      sh.fragmentShader = 'uniform sampler2D detailMap; uniform float uTime; uniform float uSnow; uniform float uWet; uniform float uPud;\n' + sh.fragmentShader.replace('#include <map_fragment>',
         `#include <map_fragment>
          vec3 d = texture2D(detailMap, vMapUv * 46.0).rgb;
          // 흙(길·밭·모래·광장: 칠한 색의 r ≥ g)에는 잔디 디테일의 밝기만 곱함 → 흙이 연두로 물들지 않음
@@ -302,7 +311,20 @@ export class World {
          // 흘러가는 구름 그림자 (넓고 부드럽게)
          vec2 cp = vMapUv * 5.2 + vec2(uTime * 0.011, uTime * 0.0045);
          float cn = sin(cp.x * 3.1 + sin(cp.y * 2.3)) * sin(cp.y * 2.7 + sin(cp.x * 1.7)) + 0.35 * sin(cp.x * 7.3 + cp.y * 5.1);
-         diffuseColor.rgb *= 1.0 - smoothstep(0.3, 0.85, cn) * 0.22;`);
+         diffuseColor.rgb *= 1.0 - smoothstep(0.3, 0.85, cn) * 0.22;
+         // 비에 젖은 땅: 흙은 진하게, 풀밭은 조금. 보통·고사양은 흙길 낮은 곳에 물웅덩이
+         float gWet = 0.0;
+         if (uWet > 0.001) {
+           gWet = uWet * mix(0.55, 1.0, bare);
+           diffuseColor.rgb *= mix(vec3(1.0), vec3(0.7, 0.72, 0.76), gWet);
+           if (uPud > 0.5) {
+             float pn = sin(vMapUv.x * 61.0 + sin(vMapUv.y * 43.0) * 2.1) * sin(vMapUv.y * 67.0 + sin(vMapUv.x * 37.0) * 1.7) + 0.4 * sin(vMapUv.x * 151.0 - vMapUv.y * 133.0);
+             float pud = bare * smoothstep(0.68, 0.86, pn) * smoothstep(0.4, 0.9, uWet);
+             diffuseColor.rgb *= mix(1.0, 0.55, pud);
+             gWet = max(gWet, pud * 1.4);
+           }
+         }`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+         roughnessFactor *= 1.0 - 0.35 * min(gWet, 1.0) - 0.45 * max(gWet - 1.0, 0.0) / 0.6;`);
     };
     // 연못 바닥 / 테두리 (물은 scenery 가 그림)
     const pondBed = new THREE.Mesh(new THREE.CircleGeometry(LAYOUT.pond.r, 48), new THREE.MeshStandardMaterial({ color: 0x3f7fa8, roughness: 0.9 }));
@@ -596,18 +618,30 @@ export class World {
     }
     // 소품 (가로등은 밤에 켜짐)
     this.lampGlows = [];
+    this.lampHeads = []; // 가로등 불빛 자리 (물에 비친 빛줄기)
     for (const [name, x, z, rot] of L.props) {
       const m = this.place(name, x, z, rot, 1, { r: name === 'lamp' ? 0.25 : name === 'bench' ? 0.7 : name === 'planter' ? 0.55 : 0.4 });
-      if (name === 'lamp') m.traverse((o) => { if (o.isMesh && o.material.emissiveIntensity > 0 && !this.lampGlows.includes(o.material)) this.lampGlows.push(o.material); });
+      if (name !== 'lamp') continue;
+      const head = new THREE.Box3();
+      m.updateMatrixWorld(true);
+      m.traverse((o) => {
+        if (!o.isMesh || !(o.material.emissiveIntensity > 0)) return;
+        if (!this.lampGlows.includes(o.material)) this.lampGlows.push(o.material);
+        head.expandByObject(o);
+      });
+      const hb = head.isEmpty() ? new THREE.Box3().setFromObject(m) : head;
+      const c = hb.getCenter(new THREE.Vector3());
+      this.lampHeads.push(new THREE.Vector3(c.x, head.isEmpty() ? hb.max.y * 0.92 : c.y, c.z));
     }
     // 밤 가로등 불빛 웅덩이: 바닥에 부드러운 따뜻한 빛 (실제 광원 대신 가산 혼합 원판 → 가벼움)
     const poolTex = radialTexture();
     this.lampPools = [];
+    const inWaterCircle = (x, z) => [L.pond, L.lake].some((w) => Math.hypot(x - w.x, z - w.z) < w.r);
     for (const [name, x, z] of L.props) {
-      if (name !== 'lamp') continue;
+      if (name !== 'lamp' || inWaterCircle(x, z)) continue; // 부두 위 가로등: 빛 웅덩이가 물 위에만 떠 보여서 빼고 수면 빛줄기로
       const pool = new THREE.Mesh(new THREE.PlaneGeometry(6.5, 6.5), new THREE.MeshBasicMaterial({ map: poolTex, color: 0xffc06a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
       pool.rotation.x = -Math.PI / 2;
-      pool.position.set(x, 0.04, z);
+      pool.position.set(x, 0.02, z); // 수면(0.03) 아래 → 물가 가로등 빛이 물 위로 번져 보이지 않음
       pool.renderOrder = 1;
       this.scene.add(pool);
       this.lampPools.push(pool);
@@ -659,15 +693,30 @@ export class World {
     hull.scale.set(0.62, 0.32, 1.45);
     const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.05, 6, 28), woodD);
     rim.rotation.x = Math.PI / 2; rim.scale.set(0.62, 1.45, 1);
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.28), wood);
-    seat.position.y = -0.06;
+    // 배 바닥은 수면(0.03)보다 6cm 위 → 배 안에 호수 물이 비치지 않음. 그 높이의 선체 폭에 맞춰 바닥을 넓힘
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.06, 0.28), wood);
+    seat.position.y = 0.0;
     const inner = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshStandardMaterial({ color: 0x5e3c22, roughness: 0.9 }));
-    inner.rotation.x = -Math.PI / 2; inner.scale.set(0.56, 1.36, 1); inner.position.y = -0.2;
-    boat.add(hull, rim, seat, inner);
+    inner.rotation.x = -Math.PI / 2; inner.scale.set(0.59, 1.39, 1); inner.position.y = -0.07;
+    // 노 한 자루: 배 길이 방향으로 좌석에 걸쳐 놓고 날은 뒤쪽 바닥 쪽으로
+    const oarGeo = mergeGeometries([
+      new THREE.CylinderGeometry(0.022, 0.022, 1.3, 6).rotateX(Math.PI / 2),
+      new THREE.BoxGeometry(0.12, 0.022, 0.32).translate(0, 0, 0.8),
+    ]);
+    const oar = new THREE.Mesh(oarGeo, wood);
+    oar.position.set(0.17, 0.0, 0.05); oar.rotation.set(0.07, 0.06, 0);
+    boat.add(hull, rim, seat, inner, oar);
     boat.position.set(K.pier[1].x0 - 1.0, 0.16, (K.pier[1].z0 + K.pier[1].z1) / 2 - 0.4);
     boat.rotation.y = 0.15;
     this.scene.add(boat);
     this.staticObjs.push(boat);
+    // 뱃머리에서 부두 기둥까지 느슨한 밧줄
+    boat.updateMatrixWorld(true);
+    const bow = new THREE.Vector3(0, 0.03, -1.43).applyMatrix4(boat.matrixWorld), post = new THREE.Vector3(K.pier[1].x0 + 0.05, 0.4, K.pier[1].z0 + 0.1); // 부두 첫 기둥
+    const sag = new THREE.QuadraticBezierCurve3(bow, bow.clone().lerp(post, 0.5).setY(0.1), post);
+    const rope = new THREE.Mesh(new THREE.TubeGeometry(sag, 8, 0.016, 4), new THREE.MeshStandardMaterial({ color: 0xc9a66b, roughness: 0.9 }) /* 짙은 나무와 같은 거칠기 → 같은 정적 묶음 */);
+    this.scene.add(rope);
+    this.staticObjs.push(rope);
     // 물가: 돌, 갈대, 연잎 (부두 자리는 비움)
     const nearPier = (x, z) => K.pier.some((b) => x > b.x0 - 1.2 && x < b.x1 + 1.2 && z > b.z0 - 1.2 && z < b.z1 + 1.2);
     for (let i = 0; i < 30; i++) {
@@ -973,7 +1022,8 @@ export class World {
     const daylight = THREE.MathUtils.clamp(elev * 2.2 + 0.25, 0, 1) * (1 - overcast * 0.35);
     this.daylight = daylight;
     this.sun.intensity = (0.15 + daylight * 2.2) * (1 - overcast * 0.8);
-    this.hemi.intensity = 0.1 + daylight * 1.0 + this.precip.flash * 2.5;
+    const nightK = this.nightK = nightFactor(daylight); // 0 낮 ~ 1 밤
+    this.hemi.intensity = 0.1 + daylight * 1.0 + nightK * 0.06 + this.precip.flash * 2.5; // 밤에도 폰 화면에서 읽히게 조금 밝게
     this.scene.environmentIntensity = 0.06 + daylight * 0.28; // 환경광도 밤에는 줄임
     // 눈: 지면이 점점 하얗게 덮임
     const snowCover = Math.max(W.kind === 'snow' ? Math.min(1, W.precip * 1.2) : 0, this.seasonSnow || 0); // 겨울엔 눈이 안 와도 소복이
@@ -981,7 +1031,9 @@ export class World {
     this.groundSnow.value = this.snowCover; // 눈 덮인 땅 (겨울·눈 오는 날): 바탕색을 바꿔 그림자·밤빛을 그대로 받음
     const tod = this.tod = timeOfDay(t, this._tod ||= { sun: [0, 0, 0], tint: [0, 0, 0], warmth: 0, sat: 0 }); // 시간대 빛 색 (같은 객체를 다시 채움)
     this.sun.color.setRGB(tod.sun[0], tod.sun[1], tod.sun[2]);
-    this.hemi.color.setHex(0xd8eeff).lerp(this.sun.color, 0.16).lerp(GREY, overcast * 0.6);
+    this.hemi.color.setHex(0xd8eeff).lerp(this.sun.color, 0.16).lerp(MOON, nightK * 0.75).lerp(GREY, overcast * 0.6);
+    this.hemi.groundColor.copy(DAY_GROUND).lerp(NIGHT_GROUND, nightK);
+    this.ambient.color.copy(WHITE).lerp(NIGHT_AMB, nightK);
     const sky = (this._sky ||= new THREE.Color());
     if (elev > 0.25) sky.copy(DAY_SKY);
     else if (elev > -0.1) sky.copy(DUSK_SKY).lerp(DAY_SKY, (elev + 0.1) / 0.35);
@@ -993,8 +1045,17 @@ export class World {
     this.scene.fog.far = THREE.MathUtils.lerp(110, 38, W.fog);
     const q = this.quality || {};
     this.precip.density = indoor ? 0 : (q.precip ?? 1); // 저사양은 입자 일부만, 집 안은 계산하지 않음
+    this.precip.thin = q.level === 'low';
+    this.precip.splash = q.level !== 'low' && !indoor;
+    this.precip.light = 0.5 + 0.5 * daylight;
+    this.precip.view = indoor ? null : SURF.seeCam.value; // 카메라 위치 (main 루프가 매 프레임 넣음)
     this.precip.set(W.kind, W.precip, W.wind);
     this.precip.update(dt, focus || ORIGIN);
+    // 젖음: 비가 오면 약 20초에 걸쳐 젖고, 그치면 약 80초에 걸쳐 마름 (처음 접속 때 이미 비면 바로)
+    const wetT = W.kind === 'rain' || W.kind === 'storm' ? Math.min(1, W.precip * 1.3) : 0;
+    SURF.wet.value = this._wetSeen || !this.weatherKind ? easeWet(SURF.wet.value, wetT, dt) : wetT;
+    if (this.weatherKind) this._wetSeen = true;
+    if (this.groundWet) { this.groundWet.value = SURF.wet.value; this.groundPud.value = q.level === 'low' ? 0 : 1; }
     const night = daylight < 0.4 ? 1 : 0;
     for (const m of this.lampMaterials) m.emissiveIntensity = 1 + night * 3;
     const dusk = THREE.MathUtils.clamp(1 - daylight * 1.6, 0, 1);

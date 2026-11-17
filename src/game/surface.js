@@ -9,6 +9,7 @@ import * as THREE from 'three';
 /** 모든 재질이 공유하는 시간·바람 (main 루프에서 갱신) */
 export const SURF = {
   time: { value: 0 }, wind: { value: 0.15 }, snow: { value: 0 },
+  wet: { value: 0 }, // 비에 젖음 0..1 (world.update 가 날씨 따라 천천히: 약 20초에 젖고 80초에 마름)
   floor: { value: 0 }, // 바닥 높이 (실내처럼 땅속 방에서는 그 방바닥 → 발치 접지 음영 기준)
   // 시야 구멍: 카메라와 캐릭터 사이를 가리는 물체를 캐릭터 둘레만 점묘로 투명하게 (카메라를 당기지 않음)
   seeCam: { value: new THREE.Vector3(0, 50, 0) }, seeTarget: { value: new THREE.Vector3() }, seeOn: { value: 1 },
@@ -17,6 +18,15 @@ export const SURF = {
   leafAmt: { value: new THREE.Vector4() }, // [활엽수, 단풍나무, 침엽수, 덤불]
   blossom: { value: 0 }, bloomA: { value: new THREE.Color(0xf27fae) }, bloomB: { value: new THREE.Color(0xffb6d2) },
 };
+
+/**
+ * 젖음 값 한 걸음: 젖을 때는 빠르게(약 20초), 마를 때는 천천히(약 80초) (순수 계산 → tests/wet.test.js)
+ */
+export function easeWet(cur, target, dt) {
+  const rate = target > cur ? 0.05 : 0.0125;
+  const step = Math.min(1, Math.max(0, dt) * rate * 3);
+  return cur + (target - cur) * step;
+}
 
 /** 계절 잎 역할 (셰이더 번호): 0 없음(작물·꽃·화분·실내 등은 물들지 않음) */
 export const LEAF_ROLE = { none: 0, canopy: 1, autumnal: 2, conifer: 3, shrub: 4, orchard: 5 };
@@ -131,6 +141,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
     sh.uniforms.uSurfTime = SURF.time;
     sh.uniforms.uSurfWind = SURF.wind;
     sh.uniforms.uSurfSnow = SURF.snow;
+    sh.uniforms.uSurfWet = SURF.wet;
     sh.uniforms.uSeeCam = SURF.seeCam;
     sh.uniforms.uSeeTarget = SURF.seeTarget;
     sh.uniforms.uSeeOn = SURF.seeOn;
@@ -173,7 +184,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
       vOP = position; // 바인드 포즈 기준 좌표: 뼈대 애니메이션에도 무늬가 몸에 붙어 다님
       vSN = normalize(mat3(modelMatrix) * objectNormal);`);
     const leafHead = leaf ? 'varying vec2 vLeaf; uniform vec3 uLeafA; uniform vec3 uLeafB; uniform vec3 uLeafR; uniform vec3 uLeafR2; uniform vec4 uLeafAmt; uniform float uBlossom; uniform vec3 uBloomA; uniform vec3 uBloomB;\n' : '';
-    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow; uniform float uSurfFloor; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn;\n' + leafHead + noise(SURF_DETAIL.oct) + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow; uniform float uSurfWet; uniform float uSurfFloor; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn;\n' + leafHead + noise(SURF_DETAIL.oct) + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       float snowW = 1.0;
       ${kind !== 'fur' ? `// 시야 구멍: 카메라→캐릭터 선분 가까이에 있는 조각을 점묘(dither)로 버림 (노이즈 계산보다 먼저: 버릴 조각은 계산 생략)
       if (uSeeOn > 0.5 && vSW.y > 0.35) {
@@ -198,8 +209,19 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
         float snowCov = min(1.0, uSurfSnow * snowW * smoothstep(0.45, 0.85, vSN.y) * smoothstep(0.25, 0.6, sfbm(vSW * 1.7) + uSurfSnow * 0.35 * snowW));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 1.0), snowCov);
       }` : ''}
+      float wetW = 0.0;
+      ${kind !== 'fur' ? `// 비 오는 날: 젖어서 어둡고 매끈하게 (윗면일수록 많이, 땅속 실내 방은 그대로)
+      if (uSurfWet > 0.001) {
+        wetW = uSurfWet * mix(0.35, 1.0, smoothstep(0.3, 0.85, vSN.y)) * step(-50.0, vSW.y) * ${kind === 'foliage' ? '0.45' : kind === 'metal' ? '0.6' : '1.0'};
+        vec3 wc = diffuseColor.rgb * vec3(0.97, 0.99, 1.03);
+        float wl = dot(wc, vec3(0.2126, 0.7152, 0.0722));
+        wc = mix(vec3(wl), wc, 1.12) * 0.8; // 젖은 면: 어둡고 살짝 진하게
+        diffuseColor.rgb = mix(diffuseColor.rgb, max(wc, 0.0), wetW);
+      }` : ''}
       ${contact ? 'k *= mix(0.62, 1.0, smoothstep(0.0, 0.32, vSW.y - uSurfFloor));' : ''}
       diffuseColor.rgb *= k;`);
+    if (kind !== 'fur') sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+      roughnessFactor *= 1.0 - 0.4 * wetW;`);
     if (rim > 0) {
       sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         float fres = pow(1.0 - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0), 3.0);
