@@ -76,3 +76,15 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
   .dlg-choices .k { display: none; } /* 숫자 키 표시는 터치에서 쓸모없음 */
   .dlg-choices small { padding-left: 0; font-size: 11px; }
 }
+
+/* 대화 중: 위 HUD·행동 막대·지도·채팅을 흐리게, 누를 수 없게 (화면 E 버튼은 대사 넘기기라 그대로) */
+body.talking:not(.cine) :is(.hud-top, .actionbar, .minimap, .objective, .chat, .fps-chip, .auto-chip) { opacity: 0.35; pointer-events: none; transition: opacity 0.3s; }
+
+/* 이름 카드 (대화창 안): 지금 이름 + [좋아!] / [✏️ 바꾸기] → 바꾸기를 누르면 글 상자 */
+.dlg-name-card { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dlg-name-card .nm, .dlg-name-card input { flex: 1 1 140px; min-width: 0; font-family: var(--display); font-size: 22px; color: var(--brown); background: #fff; border: 3px solid var(--dlg-accent, #30b6aa); border-radius: 14px; padding: 6px 14px; }
+.dlg-name-card input { outline: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--dlg-accent, #30b6aa) 25%, transparent); }
+.dlg-name-card .btns { display: flex; gap: 8px; flex: 0 0 auto; }
+.dlg-choices .dlg-name-card button { min-height: 44px; font-size: 16px; padding: 8px 14px; }
+.dlg-choices .dlg-name-card button.gold { background: var(--gold); color: var(--ink); border-color: #d9a21c; box-shadow: 0 3px 0 #d9a21c; }
+@media (max-width: 600px) { .dlg-name-card .nm, .dlg-name-card input { font-size: 20px; flex-basis: 100%; } .dlg-name-card .btns { flex: 1 1 100%; } .dlg-name-card .btns button { flex: 1; justify-content: center; } }

@@ -139,10 +139,12 @@ class Game {
       this.town.newDay();
       this.home.newDay();
       this.social.newDay(day);
-      this.ui.toast(`🌅 ${day}일차 아침! 장터 시세가 바뀌었어요`);
-      if (ev) this.ui.toast('📈 ' + ev.name);
+      // 아침 알림은 한 장으로 (시세·사건·내일 축제), 오늘 축제는 따로
+      const morning = [`🌅 ${day}일차 아침! 장터 시세가 바뀌었어요`];
+      if (ev) morning.push('📈 ' + ev.name);
+      if (!this.economy.festival && Economy.isFestival(day + 1)) morning.push('🎪 내일은 유니코 수확 축제! 수확물을 모아 두면 더 비싸게 팔 수 있어요');
+      this.ui.toast(morning.join(' · '), { type: 'info', key: 'day' });
       if (this.economy.festival) { this.ui.toast(this.economy.festival.name + ' (장터에서 팔면 이득!)'); this.audio.play('levelup'); this.onEvent('festival'); }
-      else if (Economy.isFestival(day + 1)) this.ui.toast('🎪 내일은 유니코 수확 축제! 수확물을 모아 두면 더 비싸게 팔 수 있어요');
     };
     this.saveTimer = 0;
     this.resize();
@@ -277,6 +279,9 @@ class Game {
     this.assets.loadDeferred?.().then(() => this.warmDeferred()).catch(() => {});
   }
 
+  /** 대화·컷신 중인가: 단축키·지도 이동·체험관 이동을 막음 (Esc 로 창 닫기는 그대로) */
+  busy() { return !!(this.cinema?.locked || this.dialogue?.active); }
+
   /** 지금 옷차림 (옷장 소품 + 코스튬) */
   outfitNow() {
     const o = this.home.sim.outfit || {};
@@ -349,12 +354,14 @@ class Game {
       }
     } else if (this.governor.frames === 0) this.ui.updateFps?.(this.governor.fps);
     const input = this.input;
-    if (input.justPressed('KeyI')) this.ui.panel ? this.ui.closePanel() : this.ui.openInventory();
-    if (input.justPressed('KeyQ')) this.ui.panel ? this.ui.closePanel() : this.ui.openQuests();
     if (input.justPressed('Escape') && this.ui.panel) this.ui.closePanel();
-    if (input.justPressed('KeyT')) this.ui.chatInput.focus();
-    if (input.justPressed('KeyP') && !this.ui.panel) this.autoplay.toggle(); // 오토플레이
-    if (input.pressed.has('KeyM') && (!this.ui.panel || this.ui.panel.dataset.kind === 'map')) this.minimap.openBig(); // 지도 열기/닫기
+    if (!this.busy()) { // 대화·컷신 중에는 단축키로 창을 열지 않음
+      if (input.justPressed('KeyI')) this.ui.panel ? this.ui.closePanel() : this.ui.openInventory();
+      if (input.justPressed('KeyQ')) this.ui.panel ? this.ui.closePanel() : this.ui.openQuests();
+      if (input.justPressed('KeyT')) this.ui.chatInput.focus();
+      if (input.justPressed('KeyP') && !this.ui.panel) this.autoplay.toggle(); // 오토플레이
+      if (input.pressed.has('KeyM') && (!this.ui.panel || this.ui.panel.dataset.kind === 'map')) this.minimap.openBig(); // 지도 열기/닫기
+    }
 
     const pp = this.player.position;
     if (!this._warmedDeferred) this.warmDeferred(); // 뒤에서 받는 동물: 도착한 프레임에 셰이더 준비 (목장이 1초마다 풀어 놓기 전에)
@@ -463,6 +470,7 @@ class Game {
       }
     }
     this.guide.update(dt);
+    if (!this.ride.driving) this.storyTick(pp); // 처음 가는 곳 안내 (목장 팁·체험관 컷신)
     this.ui.updateHud();
     // 비 오는 날 자동 물주기 (3초마다 점검)
     if (this.world.weatherKind === 'rain' || this.world.weatherKind === 'storm') {

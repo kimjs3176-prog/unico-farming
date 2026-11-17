@@ -7,6 +7,7 @@ import { PetSim, TRICKS, TRICK_TIME } from '../sim/pet.js';
 import { CROPS } from '../sim/crops.js';
 import { ITEMS } from '../sim/items.js';
 import { speakerShot, cheatYaw } from '../cutscene.js';
+import { sanitizeName } from '../../ui/dialogue.js';
 
 /**
  * 돌보기 구도: 콩이 얼굴(0.45m)을 정면에서 60° 옆, 2.4m 떨어진 무릎 높이(0.9m)에서 (세로 폰은 3.4m 까지 물러남), 렌즈 올림으로 대화창 위에.
@@ -184,7 +185,7 @@ export class Pet {
       this.digging = null;
       const f = this.sim.dig();
       g.audio.play('bark');
-      g.fx.pop(p.x, p.z, f.type === 'coin' ? '🪙' : f.type === 'seed' ? '🌱' : '🎁');
+      g.fx.pop(p.x, p.z, f.type === 'coin' ? '🪙' : f.type === 'seed' ? '🌱' : '🎁', { fly: false }); // 아직 받기 전: 떠오르기만
       g.ui.toast(`🐕 ${this.sim.name}${josa(this.sim.name, '이/가')} 땅을 파서 무언가를 찾았어요! 가까이 가서 받아 주세요`);
     }
     void playerPos;
@@ -194,12 +195,14 @@ export class Pet {
   takeFound() {
     const g = this.game, eco = g.economy, f = this.sim.take();
     if (!f) return;
-    let text;
-    if (f.type === 'coin') { eco.earn(f.n); text = `🪙 ${f.n} 코인`; }
+    let text, icon, to = { to: 'bag' };
+    if (f.type === 'coin') { eco.earn(f.n); text = `🪙 ${f.n} 코인`; icon = '🪙'; to = { to: 'coin', amount: f.n }; }
     else if (f.type === 'seed') {
       const ks = Object.keys(CROPS).filter((k) => CROPS[k].unlockLevel <= g.quests.level), k = ks[Math.floor(Math.random() * ks.length)];
-      eco.inventory.seeds[k] = (eco.inventory.seeds[k] || 0) + 2; text = `${CROPS[k].emoji} ${CROPS[k].name} 씨앗 2개`;
-    } else { eco.addItem('fruit_apple', 1); eco.addItem('pet_treat', 1); text = `${ITEMS.fruit_apple.emoji} 사과와 🦴 간식`; }
+      eco.inventory.seeds[k] = (eco.inventory.seeds[k] || 0) + 2; text = `${CROPS[k].emoji} ${CROPS[k].name} 씨앗 2개`; icon = CROPS[k].emoji;
+    } else { eco.addItem('fruit_apple', 1); eco.addItem('pet_treat', 1); text = `${ITEMS.fruit_apple.emoji} 사과와 🦴 간식`; icon = '🦴'; }
+    const p = this.e.m.position;
+    g.fx.pop(p.x, p.z, icon, to); // 받는 순간 가방(코인은 지갑)으로
     g.audio.play('coin');
     g.player.unico.playAction('heart', 1);
     g.ui.toast(`🐕 ${this.sim.name}${josa(this.sim.name, '이/가')} ${text}${josa(text, '을/를')} 물어 왔어요! 착하다~`);
@@ -245,9 +248,23 @@ export class Pet {
     else if (c === 'crop' && crop && eco.take(crop, 1)) this._fed(sim.feed('crop'), CROPS[crop].emoji);
     else if (c?.startsWith('trick:')) { this.trick = { id: c.slice(6), t: 0 }; g.audio.play('bark'); g.player.unico.playAction('present', 1); }
     else if (c === 'name') {
-      const n = (prompt('반려견 이름을 지어 주세요 (최대 6글자)', sim.name) || '').trim().slice(0, 6);
-      if (n) { sim.name = n; this._lt = ''; this._label(); g.ui.toast(`🐕 이제 이름은 '${n}'!`); }
+      // 브라우저 입력 창 대신 대화창 안 이름 카드 (인트로와 같은 것)
+      const n = await g.dialogue.say({ speaker: null, portrait: 'dog', name: `🐕 ${sim.name}`, color: '#e39a4a', text: '새 이름을 지어 줄까요? (6글자까지)', input: { value: sim.name, max: 6, icon: '🐕' } });
+      this.rename(n);
     }
+  }
+
+  /** 잠깐 멈춰 서기 (인트로 이름 카드 구도): 따라오기를 몇 초 쉬고 두리번 */
+  settle(s = 6) { if (!this.ok) return; this.petT = s; this.vel = 0; }
+
+  /** 이름 바꾸기 (다듬어서, 비면 그대로) */
+  rename(raw, { quiet = false } = {}) {
+    const sim = this.sim, n = sanitizeName(raw, sim.name, 6);
+    if (n === sim.name) return false;
+    sim.name = n; this._lt = ''; this._label();
+    if (!quiet) this.game.ui.toast(`🐕 이제 이름은 '${n}'!`);
+    this.game.audio?.play?.('pop', 0.6);
+    return true;
   }
 
   /** 돌보기 선택지: 첫 목록은 짧게(콩이가 대화창 위에 보이게), 재주는 따로 고르는 목록 → 고른 값 */
@@ -282,7 +299,7 @@ export class Pet {
     if (!r) return g.ui.toast('🐕 배가 불러서 더 못 먹겠대요');
     this.petT = 2; playClip(this.e, 'eat', 0.2);
     g.audio.play('plant');
-    g.fx.pop(p.x, p.z, emoji);
+    g.fx.pop(p.x, p.z, emoji, { fly: false }); // 먹은 것: 떠오르기만 (가방으로 날아가지 않게)
     g.ui.toast(`🐕 ${this.sim.name}${josa(this.sim.name, '이/가')} 맛있게 먹었어요! 배부름 +${r.hunger}, 애정 +${r.affection}`);
     g.onEvent?.('petfeed');
   }

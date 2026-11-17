@@ -2,18 +2,23 @@
 // main.js 에서 Object.assign(Game.prototype, …) 으로 붙임 (축약 메서드라 this 는 Game)
 import { LAYOUT } from './world.js';
 
+/** 대화·컷신 중 이동을 막을 때 알림 */
+export const BUSY_TRAVEL = '대화가 끝나면 이동할 수 있어요';
+
 export const GameTravel = {
   /** KOAT 체험관 입구로 이동 */
   goKoat() {
+    if (this.busy?.()) return this.ui.toast(BUSY_TRAVEL);
     if (this.ride.driving || this.smartfarm.active || this.nature.fishing || this.rice.threshing) return this.ui.toast('지금은 이동할 수 없어요');
     this.teleport(25, -24, { yaw: 0, pitch: 0.62, distance: 13, facing: Math.PI });
-    this.audio.play('levelup');
-    if (!this.flags.koatIntro) { this.flags.koatIntro = true; this.koatCutscene(); }
+    // 도착 팡파르는 없앰 (순간이동 소리만): 큰 축하 소리는 보상·레벨업에만
+    if (!this.flags.koatIntro) { if (!this._koatCine) this.koatCutscene(); } // 표시는 컷신 마지막 스텝에서 (잃어버리지 않게)
     else this.ui.toast('🏢 KOAT 체험관에 도착! 본부별 부스에서 체험하고 안내데스크에서 스탬프를 확인하세요');
   },
 
   /** 순간이동 (지도·체험관 버튼). 카메라는 현재 각도 유지가 기본 */
   teleport(x, z, { yaw, pitch, distance, facing } = {}) {
+    if (this.busy?.()) { this.ui.toast(BUSY_TRAVEL); return false; }
     this.home?.leave(true); // 집 안에서 지도로 이동하면 먼저 밖으로
     this.ui.closePanel();
     this.player.position.set(x, 0, z);
@@ -26,6 +31,7 @@ export const GameTravel = {
     this.followCam.first = true;
     this.fx.burst(x, 1.0, z, 0xbfe8ff, 16);
     this.audio.play('plant');
+    return true;
   },
 
   /** 막힌 자리(건물·연못·울타리)면 가까운 빈자리를 나선형으로 찾음 */

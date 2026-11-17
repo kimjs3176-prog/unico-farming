@@ -379,6 +379,10 @@ export class NPCs {
     const id = e.id, color = NPC_COLOR[id] || '#30b6aa';
     const who = () => ({ speaker: e.u, name: `${ROLE_ICON[id] || ''} ${e.name}`, color, sub: `우정 ${'❤️'.repeat(g.villagers.hearts(id))}${'🤍'.repeat(5 - g.villagers.hearts(id))}` });
     let line = e.lines[e.lineIdx++ % e.lines.length];
+    // 장터 여우 첫 대화: 장터 쓰는 법 한 줄 (한 번만)
+    if (id === 'merchant' && !g.flags.marketTip) { g.flags.marketTip = true; line = '처음 왔구나! 여기서 씨앗·사료를 사고 키운 작물을 팔 수 있어. 시세는 매일 바뀌니까 잘 보고 팔아!'; }
+    // 안내 강아지: 받을 보상·할 일이 있으면 그 귀띔부터
+    else if (id === 'guide') { const h = g.guide?.hint?.(); if (h) line = h; }
     let after = null;
     for (let guard = 0; guard < 8; guard++) {
       const req = g.villagers.requestFor(id, g.world.day, this.requestPool());
@@ -387,7 +391,10 @@ export class NPCs {
       if (!req.done) { const have = g.economy.count(req.item); choices.push({ label: `📝 부탁 들어주기`, note: `${g.villagers.describeRequest(req)} · 보유 ${have}/${req.n}`, value: 'req', disabled: have < req.n }); }
       choices.push({ label: '🎁 선물하기', note: v.lastGift === g.world.day ? '오늘은 이미 선물했어요' : '', value: 'gift', disabled: v.lastGift === g.world.day });
       if (id === 'merchant') choices.push({ label: '🛒 장터 열기', value: 'market' });
-      if (id === 'guide') choices.push({ label: '📜 할 일(퀘스트) 보기', value: 'quests' });
+      if (id === 'guide') {
+        if (typeof g.guide?.whereTo === 'function') choices.push({ label: '📍 어디로 가면 돼?', value: 'where' });
+        choices.push({ label: '📜 할 일(퀘스트) 보기', value: 'quests' });
+      }
       if (id === 'fisher') {
         const lr = g.angling.today(g.world.day);
         if (lr.done && !lr.claimed) choices.unshift({ label: '📋 의뢰 보고하기', note: `보상 ${lr.reward}🪙 + 떡밥 ${lr.bait}`, value: 'lakereq' });
@@ -401,7 +408,8 @@ export class NPCs {
         if (g.economy.take(req.item, req.n)) {
           const rr = g.villagers.fulfill(id);
           g.economy.earn(rr.reward);
-          g.audio.play('coin');
+          const ep = e.u.group.position;
+          if (g.reward) g.reward(2, { x: ep.x, z: ep.z, label: '🙏' }); else g.audio.play('coin');
           e.u.playAction('cheer', 1.2);
           this.applyRewards(e, rr);
           await g.dialogue.say({ ...who(), text: `정말 고마워! 덕분에 살았어 🙏 (+${rr.reward}🪙, 우정 +${rr.gained})`, emote: 'heart' });
@@ -416,6 +424,7 @@ export class NPCs {
     if (after === 'gift') g.ui.openGiftPicker(e);
     else if (after === 'market') g.ui.openMarket();
     else if (after === 'quests') g.ui.openQuests();
+    else if (after === 'where') g.guide.whereTo?.();
     else if (after === 'lakeshop') g.lake.openShop();
     else if (after === 'lakeboard') g.lake.openBoard();
   }
@@ -428,7 +437,8 @@ export class NPCs {
       if (rw.seeds) for (const [k, n] of Object.entries(rw.seeds)) g.economy.inventory.seeds[k] = (g.economy.inventory.seeds[k] || 0) + n;
       if (rw.item) for (const [k, n] of Object.entries(rw.item)) g.economy.addItem(k, n);
       g.ui.toast(`🎁 ${e.name}: "${rw.text}"`);
-      g.audio.play('levelup');
+      const ep = e.u.group.position;
+      if (g.reward) g.reward(3, { x: ep.x, z: ep.z, label: '💕' }); else g.audio.play('levelup');
     }
     const max = Math.max(...Object.keys(VILLAGERS).map((id) => g.villagers.hearts(id)));
     g.onEvent('hearts', max);

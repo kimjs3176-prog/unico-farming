@@ -135,7 +135,11 @@ export const GameSave = {
       }
     };
     const num = (v) => typeof v === 'number' && Number.isFinite(v);
-    step('flags', () => { this.flags = s.flags && typeof s.flags === 'object' ? s.flags : {}; });
+    step('flags', () => {
+      this.flags = s.flags && typeof s.flags === 'object' ? s.flags : {};
+      // 인트로를 이미 본 농장: 새로 생긴 첫 안내(장터·목장·반려견 소개)는 다시 띄우지 않음
+      if (this.flags.intro) for (const k of ['marketTip', 'ranchTip', 'petIntro']) this.flags[k] ??= true;
+    });
     step('farm', () => this.farm.sim.load(s.farm));
     step('farmView', () => this.farm.refreshAll());
     step('economy', () => this.economy.load(s.economy));

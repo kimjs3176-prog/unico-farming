@@ -81,6 +81,71 @@ export function facingAngle(yaw, at, cam) {
   return Math.abs(wrapA(Math.atan2(cam[0] - at.x, cam[2] - at.z) - yaw)) / DEG;
 }
 
+/** 캐릭터·반려견·좌표의 바닥 위치 {x, z} */
+export function posOf(o) {
+  if (!o) return null;
+  const p = o.group?.position ?? o.e?.m?.position ?? o.position ?? o;
+  return p && typeof p.x === 'number' ? p : null;
+}
+const isPet = (o) => !!o?.e?.m && !o.group;
+/** 얼굴 높이(m): 반려견 0.45, 주민은 몸 크기만큼 */
+export const faceY = (o) => (isPet(o) ? 0.45 : 1.3 * (o?.scale ?? 1));
+
+/**
+ * 말하는 쪽 얼굴 구도 { face } 스텝 → { pos, look, lift, yaw } (그 순간 위치로)
+ *  - with: 함께 담을 상대 (보통 나) → 두 사람 구도, 말하는 쪽 얼굴이 3/4 앞
+ *  - toward: [x, z] 소개하는 곳 → 그곳을 등지고 카메라 쪽을 보는 구도 (뒤로 그곳이 보임)
+ *  - 둘 다 없으면 지금 바라보는 쪽 2.5m 앞을 상대로
+ *  - avoid: 화면 밖으로 빼고 싶은 인물, blocked(x, z): 건물·소품 자리인가 (가리지 않는 각도·쪽을 고름)
+ *  yaw = 말하는 쪽 몸 방향 (카메라 쪽으로 돌림)
+ */
+export function faceShot(step, camPos, fov = 45, aspect = 1.6, blocked = null) {
+  const who = step.face, S = posOf(who);
+  if (!S) return null;
+  const pet = isPet(who), fS = faceY(who);
+  let L, faceL = null, theta = 30 * DEG, cheat = 60 * DEG;
+  const W = step.with && posOf(step.with);
+  if (W && Math.hypot(W.x - S.x, W.z - S.z) > 0.3) { L = W; faceL = faceY(step.with); theta = 35 * DEG; cheat = 20 * DEG; }
+  else if (step.toward) {
+    const dx = step.toward[0] - S.x, dz = step.toward[1] - S.z, d = Math.hypot(dx, dz) || 1;
+    L = { x: S.x - (dx / d) * 2.5, z: S.z - (dz / d) * 2.5 };
+  } else {
+    const f = who.facing ?? who.e?.m?.rotation.y ?? 0;
+    L = { x: S.x + Math.sin(f) * 2.5, z: S.z + Math.cos(f) * 2.5 };
+  }
+  // 지금 카메라가 있는 쪽으로 (반대쪽으로 크게 돌지 않게)
+  const fx = L.x - S.x, fz = L.z - S.z, fd = Math.hypot(fx, fz) || 1;
+  const side = (camPos.x - S.x) * (-fz / fd) + (camPos.z - S.z) * (fx / fd) >= 0 ? 1 : -1;
+  const tall = aspect < 1;
+  if (pet) cheat = 50 * DEG; // 반려견은 고개를 카메라 쪽으로 많이 (올려다보는 강아지)
+  const opts = pet
+    ? { theta: 60 * DEG, D: 2.6, maxD: 3.6, camY: 0.95, lookY: 0.45, lookMix: 0.15, faceS: fS, faceL: null }
+    : { theta, D: faceL ? (tall ? 5.0 : 4.4) : tall ? 6.0 : 5.4, maxD: 7, camY: fS + 0.35, lookY: faceL ? fS * 0.7 + faceL * 0.3 - 0.05 : fS - 0.1, lookMix: faceL ? 0.3 : 0, faceS: fS, faceL, fit: tall ? 0.75 : 0.8 };
+  // 후보: 지금 카메라 쪽 → 반대쪽, 각도 그대로 → ±20° → +40°. 점수 = 건물·소품 가림(blocked: 카메라 자리와 카메라→얼굴 선) + avoid 인물이 화면에 걸림
+  const A = step.avoid && posOf(step.avoid);
+  const score = (sh) => {
+    let n = 0;
+    if (blocked) {
+      if (blocked(sh.pos[0], sh.pos[2])) n += 3;
+      const L0 = Math.hypot(S.x - sh.pos[0], S.z - sh.pos[2]) || 1, tMax = Math.max(0, 1 - 1.3 / L0); // 말하는 쪽 1.3m 안(자기 자리)은 빼고
+      for (let k = 1; k <= 8; k++) { const t = (k / 8) * tMax; if (blocked(sh.pos[0] + (S.x - sh.pos[0]) * t, sh.pos[2] + (S.z - sh.pos[2]) * t)) n += 2; }
+    }
+    if (A && Math.abs(ndcX(sh.pos, sh.look, A, faceY(step.avoid), fov, aspect)) < 1.1) n += 5;
+    return n;
+  };
+  let sh = null, best = Infinity;
+  // toward 인데 그쪽이 다 막히면 마지막으로 소개하는 곳 쪽에서 (그곳은 카메라 뒤로 빠지지만 얼굴은 보임)
+  const Ls = step.toward && blocked ? [L, { x: 2 * S.x - L.x, z: 2 * S.z - L.z }] : [L];
+  search: for (const LL of Ls) for (const sd of [side, -side]) for (const dt of [0, 20, -20, 40]) {
+    const th = opts.theta + dt * DEG;
+    if (th < 5 * DEG) continue;
+    const c = speakerShot(LL, S, sd, { ...opts, theta: th, fov, aspect }), n = score(c);
+    if (n < best) { best = n; sh = c; sh.L = LL; }
+    if (n === 0) break search;
+  }
+  return { pos: sh.pos, look: sh.look, lift: true, yaw: cheatYaw(S, sh.L ?? L, sh.pos, cheat) };
+}
+
 /**
  * 렌즈 올림(카메라 view offset): 얼굴을 위 HUD 아래와 대화창 윗변 사이 빈 띠의 FACE_AT 지점에 둠 → 고개를 숙이지 않고도 얼굴이 대화창 위
  * boxTop = 대화창 윗변, hud = 위 HUD 아랫변 (둘 다 화면 위에서 비율). 반환 = 화면 높이 비율 (양수면 장면이 위로)
@@ -230,27 +295,73 @@ export class Cinematics {
   wait(s) { return new Promise((r) => { const end = performance.now() + s * 1000; const tick = () => (this.skipping || performance.now() >= end ? r() : requestAnimationFrame(tick)); tick(); }); }
 
   /**
-   * 컷신 실행. steps: { cam:[pos,look,dur,opts] } | { say:[lines] } | { wait:s } | { run:fn }
-   * 건너뛰면 남은 카메라·대기는 생략하고 run(상태 변경)만 실행
+   * 컷신 실행. steps: { cam:[pos,look,dur,opts] } | { face: 인물, with?, toward?: [x,z], dur? } | { say:[lines] }
+   *  | { ask: line, then?(값) } (이름 카드 같은 입력 — 건너뛰면 기본값) | { wait:s } | { run:fn }
+   * 건너뛰면 남은 카메라·대기는 생략하고 run(상태 변경)과 ask 기본값만 실행
+   * 다른 컷신이 도는 중이면 끝난 뒤 이어서 (버리지 않음). 도중에 오류가 나도 띠·멈춤·카메라는 풀림
    */
-  async play(steps) {
-    if (this.locked) return;
-    this.locked = true; this.skipping = false;
-    const g = this.game;
-    g.player.frozen = true;
-    g.ui.closePanel();
-    document.body.classList.add('cine');
+  play(steps) {
+    if (!this.locked) return this._play(steps);
+    return new Promise((res, rej) => (this.queue ||= []).push({ steps, res, rej }));
+  }
+
+  /** 컷신 동안 이름표를 숨길 캐릭터: 대사·얼굴 구도에 나오는 모두 + 나 + 반려견 */
+  _castOf(steps) {
+    const g = this.game, out = new Set([g.player?.unico]);
     for (const s of steps) {
-      if (s.run) { s.run(); continue; }
-      if (this.skipping) continue;
-      if (s.cam) { this.shot(...s.cam); if (s.hold !== false) await this.wait((s.cam[2] ?? 1.2) * (s.hold ?? 1)); }
-      else if (s.say) await g.dialogue.say(s.say);
-      else if (s.wait) await this.wait(s.wait);
+      for (const ln of [].concat(s.say || [], s.ask || [])) if (ln?.speaker) out.add(ln.speaker);
+      if (s.face && !isPet(s.face)) out.add(s.face);
+      if (s.with && !isPet(s.with)) out.add(s.with);
     }
-    document.body.classList.remove('cine');
-    this.release();
-    g.player.frozen = false;
-    this.locked = false;
-    g.governor?.reset(); // 컷신 동안의 프레임은 화질 자동 조절 측정에서 뺌 (끝난 뒤 새로 잼)
+    const pet = g.pet;
+    if (pet?.e?.m) out.add({ get label() { return pet.label; }, labelAlways: false });
+    return [...out].filter(Boolean);
+  }
+
+  async _play(steps) {
+    this.locked = true; this.skipping = false;
+    const g = this.game, P = g.player;
+    P.hold ? P.hold('cine') : (P.frozen = true);
+    try {
+      g.ui.closePanel();
+      document.body?.classList?.add('cine');
+      const cast = this._castOf(steps);
+      this.hideLabelsOf(...cast);
+      for (const s of steps) {
+        if (s.run) { s.run(); continue; }
+        if (s.ask) {
+          const ln = s.ask, def = ln.input?.value ?? null;
+          const v = this.skipping ? def : await g.dialogue.say(ln);
+          s.then?.(v ?? def);
+          continue;
+        }
+        if (this.skipping) continue;
+        if (s.cam) { this.shot(...s.cam); if (s.hold !== false) await this.wait((s.cam[2] ?? 1.2) * (s.hold ?? 1)); }
+        else if (s.face) {
+          const cam = g.camera, W0 = g.world, me = !s.with && P.unico !== s.face ? P.position : null; // 함께 담지 않는 나도 얼굴을 가리면 안 됨
+          const blocked = (x, z) => !!(W0?.isBlocked?.(x, z, 0.35) || (me && Math.hypot(x - me.x, z - me.z) < 0.75));
+          const f = faceShot(s, cam.position, cam.fov, cam.aspect, blocked);
+          if (f) {
+            if (!isPet(s.face)) this.faceLock(s.face, f.yaw);
+            else s.face.e.m.rotation.y = f.yaw; // 반려견: 멈춰 선 채(pet.settle) 카메라 쪽으로
+            const W = s.with && !isPet(s.with) ? posOf(s.with) : null, S = posOf(s.face);
+            if (W) this.faceLock(s.with, cheatYaw(W, S, f.pos, 12 * DEG)); // 듣는 쪽은 말하는 쪽을 보되 카메라로 살짝
+            if (s.emote) s.face.playAction?.(s.emote, 1.6);
+            const dur = s.dur ?? 1.4;
+            this.shot(f.pos, f.look, dur, { lift: true });
+            if (s.hold !== false) await this.wait(dur * (s.hold ?? 1));
+          }
+        } else if (s.say) await g.dialogue.say(s.say);
+        else if (s.wait) await this.wait(s.wait);
+      }
+    } finally {
+      document.body?.classList?.remove('cine');
+      this.release();
+      P.unhold ? P.unhold('cine') : (P.frozen = false);
+      this.locked = false;
+      g.governor?.reset(); // 컷신 동안의 프레임은 화질 자동 조절 측정에서 뺌 (끝난 뒤 새로 잼)
+      const next = this.queue?.shift();
+      if (next) this._play(next.steps).then(next.res, next.rej);
+    }
   }
 }
