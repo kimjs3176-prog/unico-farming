@@ -18,6 +18,10 @@ export function skipOverride(renderer, scene) {
   if (scene?.overrideMaterial) this.matrixWorld.makeScale(0, 0, 0);
 }
 
+/** 수확물 보여 주기 시간 (초): 흙 → 머리 위 / 머리 위에서 / 너무 멀어지면 바로 가방으로 (m) */
+export const ITEM_GET = { arc: 0.3, hold: 0.45, far: 14 };
+const easeOutBack = (k) => { const c = 1.70158; return 1 + (c + 1) * (k - 1) ** 3 + c * (k - 1) ** 2; };
+
 /** 간단 이펙트: 떠오르는 이모지, 물방울 */
 export class FX {
   constructor(scene, quality = null) {
@@ -125,6 +129,86 @@ export class FX {
     }
   }
 
+  /**
+   * 얻은 물건 보여 주기: mesh 가 from(없으면 지금 자리)에서 머리 위로 솟아 잠깐 머문 뒤 가방으로
+   * 한 번에 하나만 (새로 부르면 앞의 것은 바로 끝냄). 모든 품질에서 같은 시간.
+   * mesh 는 부른 쪽 것: 끝나면 장면에서 빼기만 하고 해제는 onDone 에서 (함께 쓰는 지오메트리를 지우지 않게)
+   * @param player { position, unico: { headG, label, playAction }, arrow }
+   * @param o { tier: 1~3 (2 이상이면 금빛 반짝임 많이), emoji: 가방으로 날릴 글자, scale, from,
+   *   delay: 이만큼(초) 뒤에 솟음 (뽑기·줍기 동작이 먼저 보이게), onSpawn(), onApex(head), onDone(pos) }
+   */
+  itemGet(mesh, player, o = {}) {
+    this.finishItem();
+    const from = (o.from || mesh.position).clone();
+    const s = o.scale ?? 1;
+    mesh.position.copy(from);
+    mesh.scale.setScalar(s * 0.4);
+    if (mesh.parent !== this.scene) this.scene.add(mesh);
+    const u = player?.unico;
+    const hid = [u?.label, player?.arrow].filter((x) => x?.visible); // 이름표·화살표가 물건을 가리지 않게
+    for (const x of hid) x.visible = false;
+    const wait = (o.delay || 0) > 0;
+    mesh.visible = !wait;
+    this.item = { mesh, player, o, from, s, t: 0, phase: wait ? 'wait' : 'arc', hid, head: new THREE.Vector3(), start: player?.position?.clone?.() };
+    if (!wait) o.onSpawn?.();
+    return this.item;
+  }
+
+  /** 진행 중인 물건 보여 주기를 바로 끝냄 (가방으로 날리고 onDone 한 번) */
+  finishItem() {
+    const it = this.item;
+    if (!it) return;
+    this.item = null;
+    const pos = it.mesh.position.clone();
+    it.mesh.parent?.remove(it.mesh);
+    it.mesh.visible = true;
+    for (const x of it.hid) x.visible = true;
+    if (it.o.emoji) this.onPop?.(it.o.emoji, pos, {});
+    it.o.onDone?.(pos);
+  }
+
+  /** 머리 위 자리 */
+  _headTop(P, out) {
+    const hg = P?.unico?.headG;
+    if (hg?.getWorldPosition) { hg.getWorldPosition(out); out.y += 0.9; }
+    else if (P?.position) out.set(P.position.x, P.position.y + 2.45, P.position.z);
+    return out;
+  }
+
+  _stepItem(dt) {
+    const it = this.item;
+    if (!it) return;
+    it.t += dt;
+    const P = it.player, m = it.mesh;
+    if (it.start && P?.position && Math.hypot(P.position.x - it.start.x, P.position.z - it.start.z) > ITEM_GET.far) return this.finishItem();
+    if (it.phase === 'wait') {
+      if (it.t < it.o.delay) return;
+      it.phase = 'arc'; it.t = 0; m.visible = true;
+      it.o.onSpawn?.();
+    }
+    const head = this._headTop(P, it.head);
+    if (it.phase === 'arc') {
+      const k = Math.min(1, it.t / ITEM_GET.arc), e = easeOutBack(k);
+      m.position.lerpVectors(it.from, head, e);
+      m.position.y += Math.sin(k * Math.PI) * 0.5;
+      m.scale.setScalar(it.s * (0.4 + 0.6 * Math.min(1, k * 1.6)));
+      m.rotation.set(0.25, m.rotation.y + dt * 6, 0);
+      if (k >= 1) {
+        it.phase = 'hold'; it.t = 0;
+        const big = (it.o.tier || 1) >= 2;
+        this.burst(head.x, head.y, head.z, big ? 0xffd75a : 0xfff3a0, big ? 14 : 6);
+        if (P?.unico?.playAction && !P.unico.riding && !P.unico.swimming) P.unico.playAction('lift', ITEM_GET.hold + 0.2);
+        it.o.onApex?.(head);
+      }
+    } else {
+      m.position.copy(head);
+      m.position.y += Math.sin(it.t * 9) * 0.04;
+      m.scale.setScalar(it.s * (1 + 0.15 * Math.max(0, 1 - it.t / 0.18))); // 닿는 순간 '짠'
+      m.rotation.set(0.25, m.rotation.y + dt * 2.5, 0.3 + Math.sin(it.t * 7) * 0.12);
+      if (it.t >= ITEM_GET.hold) this.finishItem();
+    }
+  }
+
   /** 수명이 끝난 효과: 입자는 풀로 돌려놓고, 글자는 해제 */
   _free(it) {
     const o = it.obj;
@@ -137,6 +221,7 @@ export class FX {
   }
 
   update(dt) {
+    this._stepItem(dt);
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
       it.life -= dt;

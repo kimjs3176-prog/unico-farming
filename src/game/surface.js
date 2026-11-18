@@ -12,7 +12,8 @@ export const SURF = {
   wet: { value: 0 }, // 비에 젖음 0..1 (world.update 가 날씨 따라 천천히: 약 20초에 젖고 80초에 마름)
   floor: { value: 0 }, // 바닥 높이 (실내처럼 땅속 방에서는 그 방바닥 → 발치 접지 음영 기준)
   // 시야 구멍: 카메라와 캐릭터 사이를 가리는 물체를 캐릭터 둘레만 점묘로 투명하게 (카메라를 당기지 않음)
-  seeCam: { value: new THREE.Vector3(0, 50, 0) }, seeTarget: { value: new THREE.Vector3() }, seeOn: { value: 1 },
+  // 구멍은 카메라 끝이 뾰족한 원뿔: 캐릭터 깊이에서 반지름 seeR(m) → 화면에서는 캐릭터 둘레만 둥글게 (곁의 울타리·가로등은 그대로)
+  seeCam: { value: new THREE.Vector3(0, 50, 0) }, seeTarget: { value: new THREE.Vector3() }, seeOn: { value: 1 }, seeR: { value: 1.5 },
   // 계절 잎 색 (view/season_view.js 가 계절마다 채움): 나무마다 a/b 반반, 활엽수 일부는 red/red2(녹슨 색)
   leafA: { value: new THREE.Color(0x3f9a35) }, leafB: { value: new THREE.Color(0x3f9a35) }, leafR: { value: new THREE.Color(0x3f9a35) }, leafR2: { value: new THREE.Color(0x3f9a35) },
   leafAmt: { value: new THREE.Vector4() }, // [활엽수, 단풍나무, 침엽수, 덤불]
@@ -26,6 +27,26 @@ export function easeWet(cur, target, dt) {
   const rate = target > cur ? 0.05 : 0.0125;
   const step = Math.min(1, Math.max(0, dt) * rate * 3);
   return cur + (target - cur) * step;
+}
+
+/** 시야 구멍 가운데를 따라가기 점(머리 높이 1.1m)보다 이만큼 낮춤 → 몸 가운데 */
+export const SEE_DROP = 0.4;
+
+/**
+ * 시야 구멍 비침 정도 0..1 (셰이더와 같은 식, 1 이면 완전히 비어 보임)
+ * cam·tgt: 카메라·따라가기 점, r: 캐릭터 깊이에서의 구멍 반지름
+ */
+export function seeFade(p, cam, tgt, r = SURF.seeR.value) {
+  if (p.y <= 0.35) return 0;
+  const sx = tgt.x - cam.x, sy = tgt.y - SEE_DROP - cam.y, sz = tgt.z - cam.z, L = Math.hypot(sx, sy, sz);
+  if (L < 1e-3) return 0;
+  const rx = p.x - cam.x, ry = p.y - cam.y, rz = p.z - cam.z;
+  const st = (rx * sx + ry * sy + rz * sz) / L;
+  if (st <= 0 || st >= L - 0.4) return 0;
+  const k = st / L, sR = r * k;
+  const sr = Math.hypot(rx - sx * k, ry - sy * k, rz - sz * k);
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  return (1 - ss(sR * 0.8, sR, sr)) * (1 - ss(L - 0.9, L - 0.4, st));
 }
 
 /** 계절 잎 역할 (셰이더 번호): 0 없음(작물·꽃·화분·실내 등은 물들지 않음) */
@@ -145,6 +166,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
     sh.uniforms.uSeeCam = SURF.seeCam;
     sh.uniforms.uSeeTarget = SURF.seeTarget;
     sh.uniforms.uSeeOn = SURF.seeOn;
+    sh.uniforms.uSeeR = SURF.seeR;
     sh.uniforms.uSurfFloor = SURF.floor;
     const leafAttr = !!m.userData.leafAttr, role = m.userData.leafRole || 0, leaf = kind === 'foliage' && (leafAttr || role > 0);
     if (leaf) {
@@ -184,18 +206,19 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
       vOP = position; // 바인드 포즈 기준 좌표: 뼈대 애니메이션에도 무늬가 몸에 붙어 다님
       vSN = normalize(mat3(modelMatrix) * objectNormal);`);
     const leafHead = leaf ? 'varying vec2 vLeaf; uniform vec3 uLeafA; uniform vec3 uLeafB; uniform vec3 uLeafR; uniform vec3 uLeafR2; uniform vec4 uLeafAmt; uniform float uBlossom; uniform vec3 uBloomA; uniform vec3 uBloomB;\n' : '';
-    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow; uniform float uSurfWet; uniform float uSurfFloor; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn;\n' + leafHead + noise(SURF_DETAIL.oct) + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow; uniform float uSurfWet; uniform float uSurfFloor; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn; uniform float uSeeR;\n' + leafHead + noise(SURF_DETAIL.oct) + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       float snowW = 1.0;
-      ${kind !== 'fur' ? `// 시야 구멍: 카메라→캐릭터 선분 가까이에 있는 조각을 점묘(dither)로 버림 (노이즈 계산보다 먼저: 버릴 조각은 계산 생략)
+      ${kind !== 'fur' ? `// 시야 구멍: 카메라→캐릭터(몸 가운데, 따라가기 점보다 ${SEE_DROP}m 아래) 원뿔 안 조각을 버림. 안쪽은 다 비우고 가장자리만 얇게 점묘
       if (uSeeOn > 0.5 && vSW.y > 0.35) {
-        vec3 seg = uSeeTarget - uSeeCam; float segL = length(seg); vec3 sd = seg / max(segL, 1e-3);
+        vec3 seeT = uSeeTarget - vec3(0.0, ${SEE_DROP.toFixed(2)}, 0.0);
+        vec3 seg = seeT - uSeeCam; float segL = length(seg); vec3 sd = seg / max(segL, 1e-3);
         float st = dot(vSW - uSeeCam, sd);
-        if (st > 0.0 && st < segL - 0.5) {
+        if (st > 0.0 && st < segL - 0.4) {
           float sr = length(vSW - (uSeeCam + sd * st));
-          float sR = 1.3 + 1.5 * (st / segL);
-          float seeFade = 1.0 - smoothstep(sR * 0.82, sR, sr);
+          float sR = uSeeR * st / segL;
+          float seeFade = (1.0 - smoothstep(sR * 0.8, sR, sr)) * (1.0 - smoothstep(segL - 0.9, segL - 0.4, st));
           float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-          if (seeFade * 0.9 > ign) discard;
+          if (seeFade > ign) discard;
         }
       }` : ''}
       ${(KIND_CODE[kind] || KIND_CODE.base).replace('LEAF_SEASON', leaf ? LEAF_SEASON : '')}

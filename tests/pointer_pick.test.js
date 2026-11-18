@@ -167,11 +167,14 @@ function outdoorGame(camera, extra = {}) {
 }
 const screenOf = (p, camera) => { const v = p.clone().project(camera); return [((v.x + 1) / 2) * innerWidth, ((1 - v.y) / 2) * innerHeight]; };
 
-test('시야 구멍: 셰이더와 같은 식 (선분 둘레 안쪽만, 바닥 높이·유니코 뒤는 아님)', () => {
+test('시야 구멍: 셰이더와 같은 원뿔 (캐릭터 둘레만, 곁의 물체·바닥 높이·유니코 뒤는 아님)', () => {
   const cam = new THREE.Vector3(0, 5, 8), tgt = new THREE.Vector3(0, 1.1, 0);
   assert.equal(inSeeHole(new THREE.Vector3(0, 3, 4), cam, tgt), true, '선분 위');
-  assert.equal(inSeeHole(new THREE.Vector3(1.2, 3, 4), cam, tgt), true, '반지름 안');
+  assert.equal(inSeeHole(new THREE.Vector3(0.45, 3, 4), cam, tgt), true, '원뿔 안 (가운데쯤 깊이에서 반지름 약 0.74m)');
+  assert.equal(inSeeHole(new THREE.Vector3(1.2, 3, 4), cam, tgt), false, '예전 원기둥에서는 구멍이던 곁의 물체 (울타리·가로등)');
   assert.equal(inSeeHole(new THREE.Vector3(2.5, 3, 4), cam, tgt), false, '반지름 밖');
+  assert.equal(inSeeHole(new THREE.Vector3(0.3, 4.6, 7.2), cam, tgt), false, '카메라 바로 앞은 원뿔이 좁아 구멍이 작음');
+  assert.equal(inSeeHole(new THREE.Vector3(0.45, 3, 4), cam, tgt, 1, 0.6), false, '반지름을 줄이면 밖');
   assert.equal(inSeeHole(new THREE.Vector3(0, 0.3, 0.5), cam, tgt), false, '바닥 가까이는 구멍 없음');
   assert.equal(inSeeHole(new THREE.Vector3(0, 0.8, -1), cam, tgt), false, '유니코 뒤');
   assert.equal(inSeeHole(new THREE.Vector3(0, 3, 4), cam, tgt, 0), false, '꺼짐');

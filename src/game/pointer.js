@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { heightAt } from './terrain.js';
 import { LAYOUT } from './world.js';
 import { IO } from './view/home_interior.js';
-import { SURF } from './surface.js';
+import { SURF, seeFade } from './surface.js';
 
 export const TOUCH_PICK_PX = 32; // 터치 탭: 작은 대상(곤충)은 화면에서 이만큼(CSS px) 빗나가도 잡음
 
@@ -138,18 +138,12 @@ export function staticBox(o, out = new THREE.Box3(), pad = 0.3) {
 const shown = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
 
 /**
- * 시야 구멍 안의 점인가 (surface.js 셰이더와 같은 식: 카메라→캐릭터 선분 둘레, 거의 다 비쳐 보이는 안쪽 0.82)
+ * 시야 구멍 안의 점인가 (surface.js 셰이더와 같은 식 seeFade: 카메라 끝이 뾰족한 원뿔, 반 넘게 비쳐 보이면 구멍)
  * 광선은 셰이더가 버린 조각도 맞히므로, 구멍으로 비쳐 보이는 곳을 누르면 그 뒤의 땅·대상을 고르게 함
  */
-export function inSeeHole(p, cam = SURF.seeCam.value, tgt = SURF.seeTarget.value, on = SURF.seeOn.value) {
-  if (on < 0.5 || p.y <= 0.35) return false;
-  const sx = tgt.x - cam.x, sy = tgt.y - cam.y, sz = tgt.z - cam.z, L = Math.hypot(sx, sy, sz);
-  if (L < 1e-3) return false;
-  const rx = p.x - cam.x, ry = p.y - cam.y, rz = p.z - cam.z;
-  const st = (rx * sx + ry * sy + rz * sz) / L;
-  if (st <= 0 || st >= L - 0.5) return false;
-  const k = st / L;
-  return Math.hypot(rx - sx * k, ry - sy * k, rz - sz * k) < (1.3 + 1.5 * k) * 0.82;
+export function inSeeHole(p, cam = SURF.seeCam.value, tgt = SURF.seeTarget.value, on = SURF.seeOn.value, r = SURF.seeR.value) {
+  if (on < 0.5) return false;
+  return seeFade(p, cam, tgt, r) > 0.5;
 }
 
 /** 시야 구멍 셰이더가 붙은 재질인가 (enhanceMaterial 의 캐시 키 'surf-종류-…'. 털 재질은 구멍 없음, 복제한 재질은 셰이더가 빠짐) */

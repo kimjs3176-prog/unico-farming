@@ -54,6 +54,26 @@ export function savedCam(v, lim) {
   return { distance: THREE.MathUtils.clamp(+v.distance, lim.min, lim.max), pitch: THREE.MathUtils.clamp(+v.pitch, 0.15, lim.pitchMax) };
 }
 
+/**
+ * 앞쪽 내다보기 (걷는 방향의 땅을 더 보여 줌, 카메라 기준 m)
+ *  - 카메라 쪽으로(화면 아래로) 걸을 때 가장 많이: 속도 × 0.35, 최대 1.6m
+ *  - 카메라에서 멀어질 때는 조금: 속도 × 0.10, 최대 0.5m (자전거처럼 빠르면 1.2m 까지 조금 더)
+ *  - 옆으로: 속도 × 0.12, ±0.6m
+ *  - 커질 때 2.0/s, 줄어들 때 1.4/s 로 부드럽게
+ */
+export const LEAD = { toward: 0.35, towardMax: 1.6, away: 0.10, awayMax: 0.5, awayFastMax: 1.2, side: 0.12, sideMax: 0.6, grow: 2.0, shrink: 1.4 };
+/** 이보다 빠른 위치 변화(m/s)는 순간이동으로 봄 (내다보기를 지움) */
+const LEAD_JUMP = 25;
+
+/** 걷는 속도 → 원하는 내다보기 (vf: 카메라에서 멀어지는 쪽 +, vr: 오른쪽 +) → [앞뒤, 옆] */
+export function leadWant(vf, vr) {
+  const f = vf < 0
+    ? Math.max(vf * LEAD.toward, -LEAD.towardMax)
+    : Math.min(vf * LEAD.away, Math.min(LEAD.awayFastMax, LEAD.awayMax + Math.max(0, vf - 5) * 0.15));
+  const r = THREE.MathUtils.clamp(vr * LEAD.side, -LEAD.sideMax, LEAD.sideMax);
+  return [f, r];
+}
+
 /** 3인칭 추적 카메라 (드래그 회전 / 휠·두 손가락 줌 / 화면 버튼) */
 export class FollowCamera {
   /** @param opts { touch, aspect, saved: { distance, pitch } } — 터치 기기는 멀리서 시작, 저장한 값이 있으면 그 값 */
@@ -65,7 +85,11 @@ export class FollowCamera {
     this.pitch = sv?.pitch ?? this.defaults.pitch;
     this.distance = sv?.distance ?? this.defaults.distance;
     this.target = new THREE.Vector3();
-    this.smooth = new THREE.Vector3();
+    this.smooth = new THREE.Vector3(); // 내다보기 없는 따라가기 점 (시야 구멍·그림자·컷신이 씀)
+    this.lead = new THREE.Vector3();   // 걷는 방향 내다보기 (XZ)
+    this.look = new THREE.Vector3();   // 실제로 바라보는 점 = smooth + lead
+    this.vel = new THREE.Vector3();    // 따라가는 대상의 속도 (위치 변화로 잼)
+    this._prev = new THREE.Vector3();
     this.first = true;
     this.lockTarget = null;
     this.lookOffsetY = 0; // 바라보는 높이 보정 (세로 폰 옷장: 유니코가 아래 창 위로 보이게 낮춤)
@@ -83,8 +107,9 @@ export class FollowCamera {
     }
     this.target.copy(targetPos);
     this.target.y += 1.1 + (this.lookOffsetY || 0);
-    if (this.first) { this.smooth.copy(this.target); this.first = false; }
+    if (this.first) { this.smooth.copy(this.target); this.lead.set(0, 0, 0); this.vel.set(0, 0, 0); this._prev.copy(targetPos); this.first = false; }
     this.smooth.lerp(this.target, 1 - Math.pow(0.001, dt));
+    this._updateLead(dt, input, targetPos);
     const off = (this._off ||= new THREE.Vector3()).set(
       Math.sin(this.yaw) * Math.cos(this.pitch),
       Math.sin(this.pitch),
@@ -95,8 +120,31 @@ export class FollowCamera {
     const want = this.distance;
     this.curDist = this.curDist === undefined ? want : this.curDist + (want - this.curDist) * Math.min(1, dt * 8);
     off.setLength(this.curDist);
-    this.camera.position.copy(this.smooth).add(off);
-    this.camera.lookAt(this.smooth);
+    this.look.copy(this.smooth).add(this.lead);
+    this.camera.position.copy(this.look).add(off);
+    this.camera.lookAt(this.look);
+  }
+
+  /** 내다보기: 창·컷신(input 없음)·바라보는 높이 보정 중에는 0 으로 돌아감 */
+  _updateLead(dt, input, targetPos) {
+    const v = this.vel;
+    if (dt > 0) {
+      const ix = (targetPos.x - this._prev.x) / dt, iz = (targetPos.z - this._prev.z) / dt;
+      if (Math.hypot(ix, iz) > LEAD_JUMP) { v.set(0, 0, 0); this.lead.set(0, 0, 0); }
+      else { const a = 1 - Math.exp(-dt * 10); v.x += (ix - v.x) * a; v.z += (iz - v.z) * a; }
+    }
+    this._prev.copy(targetPos);
+    let wx = 0, wz = 0;
+    if (input && !this.lookOffsetY) {
+      const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw); // 카메라 앞(fwd) = (-sy, -cy), 오른쪽 = (cy, -sy)
+      const vf = -v.x * sy - v.z * cy, vr = v.x * cy - v.z * sy;
+      const [f, r] = leadWant(vf, vr);
+      wx = -sy * f + cy * r; wz = -cy * f - sy * r;
+    }
+    const grow = wx * wx + wz * wz > this.lead.x * this.lead.x + this.lead.z * this.lead.z;
+    const a = 1 - Math.exp(-dt * (grow ? LEAD.grow : LEAD.shrink));
+    this.lead.x += (wx - this.lead.x) * a;
+    this.lead.z += (wz - this.lead.z) * a;
   }
 
   /** ＋/－ 버튼: dir > 0 멀리, < 0 가까이 */

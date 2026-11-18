@@ -8,6 +8,32 @@ import { signTexture, attachSign } from './koat_view.js';
 import { LAYOUT } from '../world.js';
 import { PRODUCTS, ANIMALS } from '../sim/crops.js';
 import { makeLabel } from '../label.js';
+
+/** 목장 생산물 모양 (손에 든 크기, 지오메트리·재질은 한 번만 만들어 함께 씀 → 끝나도 해제하지 않음) */
+let PROD_KIT = null;
+function productKit() {
+  if (PROD_KIT) return PROD_KIT;
+  const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.55, ...o });
+  PROD_KIT = {
+    egg: std(0xe9c79a, { roughness: 0.45 }), eggGeo: new THREE.SphereGeometry(0.11, 16, 12),
+    glass: std(0xffffff, { roughness: 0.25 }), cap: std(0x3f8fd8, { roughness: 0.4 }), band: std(0xf2c84b),
+    bottle: new THREE.CylinderGeometry(0.085, 0.1, 0.26, 16), neck: new THREE.CylinderGeometry(0.05, 0.085, 0.08, 16),
+    capGeo: new THREE.CylinderGeometry(0.056, 0.056, 0.035, 16), bandGeo: new THREE.CylinderGeometry(0.102, 0.102, 0.07, 16),
+    wool: std(0xfbf7ee, { roughness: 0.95 }), puff: new THREE.IcosahedronGeometry(0.09, 1),
+  };
+  return PROD_KIT;
+}
+/** 생산물 하나의 3D 모양 (없는 종류면 null → 예전처럼 글자만) */
+export function productMesh(kind) {
+  const K = productKit(), g = new THREE.Group();
+  const add = (geo, mat, x = 0, y = 0, z = 0, s = 1) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.setScalar(s); g.add(m); return m; };
+  if (kind === 'egg' || kind === 'gold_egg') add(K.eggGeo, K.egg).scale.set(1, 1.28, 1);
+  else if (kind === 'milk') { add(K.bottle, K.glass); add(K.bandGeo, K.band, 0, -0.02); add(K.neck, K.glass, 0, 0.17); add(K.capGeo, K.cap, 0, 0.225); }
+  else if (kind === 'wool') { for (const [x, y, z, s] of [[0, 0, 0, 1.3], [0.09, 0.03, 0.02, 1], [-0.09, 0.02, -0.02, 1.05], [0.02, 0.09, -0.05, 0.95], [-0.03, -0.05, 0.07, 0.9]]) add(K.puff, K.wool, x, y, z, s); }
+  else return null;
+  g.name = `item-${kind}`;
+  return g;
+}
 import { BUY_SOUND } from '../reward.js';
 
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
@@ -544,12 +570,23 @@ export class RanchView {
     if (r.gold) g.economy.addItem(r.gold, 1);
     g.onEvent('collect', r.amount);
     if (r.gold) g.onEvent('rgold');
-    g.audio.play(r.gold ? 'win' : 'harvest');
     this._face(e);
     g.player.unico.playAction(e.a.type === 'chicken' ? 'plant' : 'pull', 0.8);
     g.ui.toast(`${P.emoji} ${e.a.name}의 ${P.name} ×${r.amount}${r.gold ? ` + ✨ ${ITEMS[r.gold].name}!` : ''}${r.amount > 1 ? ' (♥3 보너스)' : ''}`);
     g.juice.pop(e.m, 0.2);
-    g.fx.pop(e.m.position.x, e.m.position.z, P.emoji, { to: 'bag' });
+    // 얻는 순간: 동물 곁에서 생산물이 솟아 머리 위에 잠깐 → 가방 (모양이 없는 종류는 예전처럼 글자만)
+    const mesh = g.fx.itemGet ? productMesh(r.product) : null;
+    if (mesh) {
+      const at = e.m.position;
+      g.fx.itemGet(mesh, g.player, {
+        tier: r.gold ? 2 : 1, emoji: P.emoji, scale: 2.2, delay: 0.3,
+        from: new THREE.Vector3((at.x + g.player.position.x) / 2, 0.5, (at.z + g.player.position.z) / 2),
+        onApex: () => { g.audio.play(r.gold ? 'win' : 'harvest'); g.juice?.haptic?.(12); },
+      });
+    } else {
+      g.audio.play(r.gold ? 'win' : 'harvest');
+      g.fx.pop(e.m.position.x, e.m.position.z, P.emoji, { to: 'bag' });
+    }
     if (r.gold) { g.fx.pop(e.m.position.x + 0.4, e.m.position.z, ITEMS[r.gold].emoji, { to: 'bag', y: 1.6, burst: false }); g.fx.burst(e.m.position.x, 1, e.m.position.z, 0xffe27a, 18); }
     this._levelCheck();
   }

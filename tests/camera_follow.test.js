@@ -21,3 +21,10 @@ test('따라가기 카메라: 바라보는 높이 보정', () => {
   c.update(0.016, null, new THREE.Vector3(0, 0, 0));
   assert.ok(Math.abs(c.smooth.y + 0.15) < 1e-9);
 });
+
+test('따라가기 카메라: 창·컷신(input 없음)에서는 바라보는 점이 따라가기 점과 같음 (내다보기 없음)', () => {
+  const c = new FollowCamera(new THREE.PerspectiveCamera());
+  const pos = new THREE.Vector3();
+  for (let i = 0; i < 60; i++) { pos.z += 0.08; c.update(1 / 60, null, pos); }
+  assert.ok(c.look.distanceTo(c.smooth) < 1e-9);
+});

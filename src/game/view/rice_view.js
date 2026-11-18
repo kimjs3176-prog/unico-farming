@@ -10,6 +10,38 @@ import { ITEMS } from '../sim/items.js';
 import { reward } from '../reward.js';
 
 const CLUMPS = 5; // 한 논에 5x5 포기
+
+/** 벼 한 단 (손에 든 모양): 가는 짚대 다발 + 묶은 끈 + 고개 숙인 금빛 이삭. 지오메트리·재질은 함께 씀 (해제하지 않음) */
+let SHEAF = null;
+export function sheafMesh() {
+  if (!SHEAF) {
+    const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
+    SHEAF = {
+      straw: std(0xc9b26a), tie: std(0x8a4f2a), grain: std(0xf4c430, { roughness: 0.55, emissive: 0x3a2a00 }),
+      stalk: new THREE.CylinderGeometry(0.016, 0.02, 0.5, 5), tieGeo: new THREE.TorusGeometry(0.06, 0.018, 6, 14),
+      head: new THREE.CapsuleGeometry(0.028, 0.16, 3, 6),
+    };
+  }
+  const K = SHEAF, g = new THREE.Group();
+  // 짚대: 아래는 모이고 위는 부채처럼 퍼짐, 끝마다 이삭이 바깥으로 고개 숙임
+  const N = 9;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 + 0.3, r = i === 0 ? 0 : 0.035, lean = i === 0 ? 0 : 0.22;
+    const st = new THREE.Mesh(K.stalk, K.straw);
+    st.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+    st.rotation.set(Math.sin(a) * lean, 0, -Math.cos(a) * lean);
+    g.add(st);
+    const h = new THREE.Mesh(K.head, K.grain);
+    const tip = 0.25, tx = Math.cos(a) * (r + Math.sin(lean) * tip), tz = Math.sin(a) * (r + Math.sin(lean) * tip);
+    const out = i === 0 ? 0.5 : 1.15; // 이삭은 바깥으로 숙임
+    h.position.set(tx + Math.cos(a) * 0.05 * out, tip + 0.06, tz + Math.sin(a) * 0.05 * out);
+    h.rotation.set(Math.sin(a) * out, 0, -Math.cos(a) * out);
+    g.add(h);
+  }
+  const tie = new THREE.Mesh(K.tieGeo, K.tie); tie.rotation.x = Math.PI / 2; tie.position.y = -0.04; g.add(tie);
+  g.name = 'item-rice';
+  return g;
+}
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _c = new THREE.Color();
 const GREEN = [new THREE.Color(0x9fdc6a), new THREE.Color(0x6fbf45), new THREE.Color(0x5aa83a), new THREE.Color(0xe8c24a)];
 
@@ -165,9 +197,18 @@ export class RiceView {
         if (!r) return;
         this.batches.push({ n: r.amount, q: r.quality });
         g.economy.addItem('paddy', r.amount);
-        // 등급 ★★★ 벼는 주먹 불끈, 나머지는 끄덕 (소리는 수확 소리 그대로)
-        reward(g, RiceSim.grade(r.quality) >= 3 ? 2 : 1, { sound: 'harvest' }); g.juice.pop(u.group, 0.2); g.juice?.haptic?.(15);
-        g.fx.pop(this.paddies[i].x, this.paddies[i].z, '🌾', { to: 'bag' });
+        // 베는 순간 벼 한 단이 솟아 머리 위에 잠깐 → 가방. 등급 ★★★ 벼는 주먹 불끈, 나머지는 끄덕 (소리는 머리 위에서 수확 소리)
+        const tier = RiceSim.grade(r.quality) >= 3 ? 2 : 1, pd = this.paddies[i], pp = g.player.position;
+        u.facing = Math.atan2(pd.x - pp.x, pd.z - pp.z);
+        u.playAction('pull', 0.8);
+        g.audio.play('dig', 0.5);
+        const from = new THREE.Vector3(pp.x + Math.sin(u.facing) * 0.9, 0.35, pp.z + Math.cos(u.facing) * 0.9);
+        g.fx.itemGet(sheafMesh(), g.player, {
+          tier, emoji: '🌾', scale: 1.7, delay: 0.3, from,
+          onSpawn: () => g.fx.burst(from.x, 0.3, from.z, 0x8fb04a, 8),
+          onApex: () => { g.audio.play('harvest'); g.juice.pop(u.group, 0.2); g.juice?.haptic?.(15); },
+          onDone: () => reward(g, tier, { sound: null }),
+        });
         if (this.sim.skillLevel > lv0) g.ui.skillLevelUp?.(`🌾 논농사 Lv.${this.sim.skillLevel}!`);
         g.ui.toast(`🌾 벼 ${r.amount}단 수확! 예상 등급 ${'★'.repeat(RiceSim.grade(r.quality))} · 숙련도 Lv.${this.sim.skillLevel} · 탈곡장에서 쌀로 만드세요`);
         break;
