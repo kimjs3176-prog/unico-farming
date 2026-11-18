@@ -43,9 +43,11 @@ function targetOf(id, g) {
     for (const b of g.nature.bugs) if (b.g.visible) { const d = b.g.position.distanceTo(p); if (d < bd) { bd = d; best = b.g.position; } }
     return best;
   };
+  // 주민은 하루 일과로 움직이므로 지금 서 있는 자리를 가리킴 (없으면 원래 자리)
+  const npcAt = (k) => { const p = g.npcs?.posOf?.(k) ?? L.npcs[k]; return new THREE.Vector3(p.x, 0, p.z); };
   switch (id) {
     case 'till1': case 'plant3': case 'water3': case 'harvest5': return new THREE.Vector3(0, 0, 0);
-    case 'sell10': case 'sell3': return new THREE.Vector3(L.npcs.merchant.x, 0, L.npcs.merchant.z);
+    case 'sell10': case 'sell3': return npcAt('merchant');
     case 'tractor1': case 'plow30': return g.ride.driving ? new THREE.Vector3(LAYOUT.field.x0 + 10, 0, LAYOUT.field.z0 + 6) : new THREE.Vector3(g.ride.tractor.vehicle.x, 0, g.ride.tractor.vehicle.z);
     case 'ride5': { const b = g.ride.byId.bike || g.ride.tractor; return new THREE.Vector3(b.vehicle.x, 0, b.vehicle.z); }
     case 'smart1': return new THREE.Vector3(L.sensor.x, 0, L.sensor.z);
@@ -65,10 +67,10 @@ function targetOf(id, g) {
     case 'lake1': case 'fight3': return new THREE.Vector3(L.lake.x, 0, (L.lake.pier[1].z0 + L.lake.pier[1].z1) / 2);
     case 'weed2': { const i = g.farm.sim.plots.findIndex((p) => p.weeds); return i >= 0 ? new THREE.Vector3(g.farm.tiles[i].x, 0, g.farm.tiles[i].z) : new THREE.Vector3(0, 0, 0); }
     case 'dive3': { const t = g.lake?.treasures.find((x) => x.g.visible); return t ? t.g.position.clone() : new THREE.Vector3(L.lake.x, 0, L.lake.z); }
-    case 'lakereq': return g.angling.today(g.world.day).done ? new THREE.Vector3(L.npcs.fisher.x, 0, L.npcs.fisher.z) : new THREE.Vector3(L.lake.board.x, 0, L.lake.board.z);
+    case 'lakereq': return g.angling.today(g.world.day).done ? npcAt('fisher') : new THREE.Vector3(L.lake.board.x, 0, L.lake.board.z);
     case 'bug1': { const b = nearestBug(); return b ? b.clone().setY(0) : null; }
     case 'shake3': return new THREE.Vector3(L.orchard[0].x, 0, L.orchard[0].z);
-    case 'friend2': return new THREE.Vector3(L.npcs.granny.x, 0, L.npcs.granny.z);
+    case 'friend2': return npcAt('granny');
     case 'koat1': case 'koat6': return new THREE.Vector3(L.koat.gate.x, 0, L.koat.gate.z - 4);
     case 'petfeed3': { const p = g.pet?.e?.m?.position; return p ? new THREE.Vector3(p.x, 0, p.z) : null; }
     default: return null;
@@ -98,7 +100,7 @@ export function farmTarget(id, g, st = { i: -1 }) {
   const dry = (p) => growing(p) && p.water <= 0 && !p.weeds;
   const seeds = Object.values(g.economy.inventory.seeds).some((n) => n > 0);
   const plantFlow = () => {
-    if (!seeds) return spot(LAYOUT.npcs.merchant.x, LAYOUT.npcs.merchant.z);
+    if (!seeds) { const M = g.npcs?.posOf?.('merchant') ?? LAYOUT.npcs.merchant; return spot(M.x, M.z); }
     let i = pick((p) => p.state === 'tilled');
     if (i < 0) i = pick((p) => p.state === 'empty');
     return i >= 0 ? tile(i) : null;
@@ -144,7 +146,7 @@ export function farmObjective(cur, g) {
   const F = g.farm, plots = F.sim.plots;
   const seeds = Object.values(g.economy.inventory.seeds).some((n) => n > 0);
   if (!seeds && !plots.some((p) => p.state === 'growing' || p.state === 'ready')) {
-    const M = LAYOUT.npcs.merchant;
+    const M = g.npcs?.posOf?.('merchant') ?? LAYOUT.npcs.merchant;
     return { q: { ...cur, id: `${cur.id}:seed`, desc: '장터 여우에게 당근 씨앗 사기', descTouch: null }, tgt: new THREE.Vector3(M.x, 0, M.z) };
   }
   if (cur.id === 'harvest5' && F.grace && !plots.some((p) => p.state === 'ready')) {

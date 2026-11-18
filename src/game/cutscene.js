@@ -304,7 +304,7 @@ export class Cinematics {
    */
   shot(pos, look, dur = 1.2, { orbit = 0, lift = 0 } = {}) {
     const cam = this.game.camera;
-    if (this.blend < 0.01) { this.pos.copy(cam.position); this.look.copy(this.game.followCam.smooth); }
+    if (this.blend < 0.01) { this.pos.copy(cam.position); this.look.copy(this.game.followCam.look || this.game.followCam.smooth); }
     this.from.pos.copy(this.pos); this.from.look.copy(this.look);
     this.to.pos.set(...pos); this.to.look.set(...look);
     this.t = 0; this.dur = Math.max(0.01, dur); this.orbit = orbit;
@@ -397,7 +397,7 @@ export class Cinematics {
     }
     // 따라가기 카메라와 섞기
     const cam = this.game.camera, b = easeInOut(this.blend);
-    this._fp.copy(cam.position); this._fl.copy(this.game.followCam.smooth);
+    this._fp.copy(cam.position); this._fl.copy(this.game.followCam.look || this.game.followCam.smooth);
     cam.position.lerpVectors(this._fp, this.pos, b);
     this._fl.lerp(this.look, b);
     cam.lookAt(this._fl);

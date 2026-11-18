@@ -3,11 +3,11 @@
 .hud-top .p-badge { background: none; box-shadow: none; text-shadow: none; color: var(--wood-d); }
 .p-badge .pb-ring { box-shadow: 0 0 0 2px var(--wood-d), 0 3px 0 2px var(--wood-d), 0 6px 12px rgba(20,14,10,0.25); }
 .p-badge .pb-face { background: #fffdf6; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.8); }
-.p-badge .pb-lv { background: linear-gradient(180deg, var(--teal-hi), var(--teal) 60%, var(--teal-d)); color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,0.25); box-shadow: 0 0 0 2px #fff, 0 2px 0 2px var(--teal-dd); font-family: var(--display); }
+.p-badge .pb-lv { background: linear-gradient(180deg, #1a7c73, var(--teal-t, #17736b) 60%, #0f5c55); /* 흰 글자 4.5:1 이상 (밝은 청록은 1.9:1) */ color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,0.25); box-shadow: 0 0 0 2px #fff, 0 2px 0 2px var(--teal-dd); font-family: var(--display); }
 .p-badge .pb-xp { background: rgba(35,25,22,0.82); color: #fff; font-family: var(--display); }
 /* ---------------- 코인 지갑 ---------------- */
 .purse { background: linear-gradient(180deg, #fffdf7 0%, #f6efe0 100%); border: 2px solid var(--wood-l); box-shadow: inset 0 1px 0 #fff, var(--chip-shadow); font-family: var(--display); }
-.purse .money { color: #a8650a; text-shadow: 0 1px 0 #fff3c4; font-weight: 400; }
+.purse .money { color: #8a5208; /* 4.05 → 5.6:1 */ text-shadow: 0 1px 0 #fff3c4; font-weight: 400; }
 /* ---------------- 달력: 미니맵 액자와 같은 나무 테 ---------------- */
 .hud-top .calendar { background: linear-gradient(180deg, #fffdf7 0%, #f3e8d2 100%); color: var(--wood-d); text-shadow: none;
   border: 3px solid var(--wood-hi); box-shadow: 0 0 0 3px var(--wood), 0 0 0 5px var(--wood-d), 0 -2px 12px rgba(20,14,10,0.18); font-family: var(--display); }
