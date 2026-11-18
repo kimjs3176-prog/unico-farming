@@ -397,3 +397,22 @@ test('손상된 원본 보관 실패 + 읽을 수 있는 백업: 백업으로 �
   failSet = null; assert.equal(g.save(), false);
   assert.equal(store.get(SAVE_KEY), raw);
 });
+
+test('칭호: 주민 칭호 다음에 KOAT 투어 칭호를 달았으면 다시 불러와도 KOAT 칭호', async () => {
+  // 준비: 주민 칭호를 먼저 받고(flags.title), KOAT 데스크가 player.setTitle 로 투어 칭호를 닮
+  reset();
+  const { TOUR_REWARD } = await import('../src/game/sim/koat.js');
+  const g = makeGame({ _introPending: false });
+  g.flags = { intro: true, titles: ['꼬마 토끼의 단짝'], title: '꼬마 토끼의 단짝' };
+  g.player.title = TOUR_REWARD.title;
+  g.koat.book.rewarded = true;
+  // 실행: 저장 → 새 창에서 불러오기
+  assert.equal(g.save(), true);
+  let shown = null;
+  const h = makeGame();
+  h.koat.got = undefined; h.koat.load = function (d) { this.got = d; this.book = { rewarded: true }; };
+  h.player.setTitle = (t) => { shown = t; };
+  h.restore();
+  // 확인
+  assert.equal(shown, TOUR_REWARD.title);
+});

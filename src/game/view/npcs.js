@@ -33,8 +33,21 @@ const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 /** 시선: 이만큼(m) 안이면 플레이어 얼굴을 봄, 이만큼 밖으로 2초 지나면 그만 봄. 몸은 고개 한계(1.1rad)를 1.2초 넘게 넘어야 돌림 */
 const LOOK_IN = 6, LOOK_OUT = 7, LOOK_OUT_T = 2, BODY_TURN = 1.1, BODY_TURN_T = 1.2, HERO_LOOK = 3.5;
 /** 일과 걷기: 속도(m/s), 카메라에서 이만큼 멀면 걷지 않고 바로 옮김, 밤에 플레이어가 이만큼 멀면 졸기 */
-const WALK_SPD = 1.6, SNAP_FAR = 30, DOZE_FAR = 6;
-const ROLE_HEX = { merchant: 0xf28c28, researcher: 0x8e7cc3, guide: 0x6dbb4f, granny: 0xa07e5c, kid: 0xf28bb0, fisher: 0x3170c9 };
+const WALK_SPD = 1.6, SNAP_FAR = 30;
+/** 밤 졸기: 플레이어가 7m 밖에 3초 넘게 있으면 졸고, 5m 안으로 오면 깸 (경계를 오가도 깜빡이지 않게). 깨며 하는 한마디는 하룻밤 한 번 */
+export const DOZE_FAR = 7, WAKE_NEAR = 5, DOZE_WAIT = 3;
+/** 💤 말풍선이 보이는 카메라 거리 (낮음 품질은 가까이만 — 그리기 수) */
+const ZZZ_FAR = { low: 15, other: 30 };
+/** 대화 상대 고르기: 2.6m 안에서 거리 + 보는 방향 벌점(등 뒤 주민일수록 덜 고름) */
+export const TALK_R = 2.6, TALK_FACE_W = 2;
+export const talkScore = (d, fx, fz, dx, dz) => d + TALK_FACE_W * (1 - (fx * dx + fz * dz) / (Math.hypot(dx, dz) || 1));
+/** 일하는 자리 효과는 카메라에서 이만큼(m) 안에서만: 호미질 흙먼지·반딧불이 */
+const FX_NEAR = 15;
+const FIREFLY_N = 5;
+/** 같은 자리인가 (일과 자리는 좌표로 비교 — 밤 12시를 넘을 때 같은 벤치가 다른 칸이어도 움직이지 않게) */
+const sameSpot = (a, b) => a === b || (!!a && !!b && a.x === b.x && a.z === b.z);
+/** 비 올 때 우산 색 (두 색 줄무늬): 여우 주황, 강아지 노랑, 할머니 꽃분홍, 너구리 보라, 토끼 하늘, 고양이 파랑 */
+const UMB_COLORS = { merchant: [0xf28c28, 0xffe2b8], researcher: [0x8e7cc3, 0xe6defa], guide: [0xf6c63c, 0xfff3c4], granny: [0xe86a92, 0xfff0f4], kid: [0x6cc4ec, 0xffffff], fisher: [0x3170c9, 0xd6e6fb] };
 /** 가로 화면 대화 구도: 카메라 높이·시선 높이 상한 — 아래 대화창(선택지 6개면 화면 아래 약 64%)이 얼굴을 가리지 않게
  *  얼굴 가운데를 화면 위 30% 안에 둠 (세로 화면은 cutscene.talkShot 이 이미 시선을 더 낮춤 — 그대로) */
 const TALK_CAM_Y = 2.0, TALK_LOOK_Y = 0;
@@ -52,6 +65,16 @@ const _lv = new THREE.Vector3(), _nv = new THREE.Vector3();
 export const TALK_FRAME = { chip: 28, room: 0.04, heroW: 0.24, heroWTall: 0.4, heroClip: 0.4, heroR: 0.6, heroTop: 1.85, lowH: 500, lowRoom: 0.12 };
 export const talkBoxTop = (aspect, h) => (aspect < 1 ? 0.46 : h <= TALK_FRAME.lowH ? 0.48 : 0.42);
 const _fc = new THREE.PerspectiveCamera(), _fr = new THREE.Vector3(), _fp = new THREE.Vector3();
+
+/** 반딧불이 둥근 빛 (가운데 밝고 가장자리 투명, 32px) */
+function glowDot() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const x = c.getContext('2d'), gr = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 32, 32);
+  return new THREE.CanvasTexture(c);
+}
 
 /** 점 (px, pz) 에서 선분 (ax, az)–(bx, bz) 까지 거리 (바닥 평면) */
 function segDist(px, pz, ax, az, bx, bz) {
@@ -83,6 +106,13 @@ export class NPCs {
     });
     this.talking = null; // 지금 대화 중인 주민
     this._heroLook = new THREE.Vector3();
+    // 할머니 호미질: 내리찍을 때마다 흙먼지 (가까울 때만)
+    for (const e of this.list) e.u.onHit = (k) => {
+      if (k !== 'hoe' || e.cur?.act !== 'hoe' || !this._camNear(e)) return;
+      const p = e.u.group.position, f = e.u.yaw;
+      game.fx?.burst?.(p.x + Math.sin(f) * 0.7, 0.15, p.z + Math.cos(f) * 0.7, 0x7a5636, 3);
+    };
+    this._ff = null; // 꼬마 반딧불이 (처음 보일 때 만듦)
   }
 
   /** 주민의 지금 위치 (일과로 옮겨 다님 — 퀘스트 화살표·자동 진행이 씀) */
@@ -97,9 +127,9 @@ export class NPCs {
     e.u.facing = Math.atan2(from.x - p.x, from.z - p.z); // 트랙터 쪽을 돌아봄
     e.u.playAction('startle', 1.3);
     const say = [...STARTLE, ...(e.u.species?.startle || [])];
+    this._wake(e, false); // 💤 를 먼저 내리고 놀란 말
     e.u.say(say[Math.floor(Math.random() * say.length)], 1.8);
     e.idle = 0;
-    this._wake(e, false);
     if (e.n.wander && !e.route) { const dx = p.x - from.x, dz = p.z - from.z, l = Math.hypot(dx, dz) || 1; e.target = { x: p.x + (dx / l) * 2.5, z: p.z + (dz / l) * 2.5 }; e.wait = 0; e.spd = 3.5; }
     this.game.audio.play('startle', 0.35);
     return true;
@@ -112,8 +142,9 @@ export class NPCs {
   }
 
   update(dt, playerPos) {
-    let hit = null, hd = 2.6;
+    let hit = null, hd = TALK_R, hs = Infinity;
     const g = this.game, W = g.world, cam = g.followCam.camera;
+    const pf = g.player?.unico?.facing ?? 0, pfx = Math.sin(pf), pfz = Math.cos(pf);
     // 트랙터가 빠르게 스쳐 지나가면 가까운 주민이 놀람
     const tr = g.ride, tv = tr?.driving ? tr.vehicle : null;
     // 일과: 시각·비 (1초마다 자리 확인), 플레이어 얼굴 높이
@@ -126,7 +157,7 @@ export class NPCs {
       const talking = this.talking === e;
       this._routine(e, dt, d, hour, rain, talking, cam);
       // 비: 우산 (바뀔 때만)
-      if (!!e.umb !== rain) { e.umb = rain; u.setUmbrella(rain, ROLE_HEX[e.id]); }
+      if (!!e.umb !== rain) { e.umb = rain; u.setUmbrella(rain, UMB_COLORS[e.id]); }
       if (e.route) this._walkRoute(e, dt);
       // 꼬마는 들판을 돌아다님 (플레이어가 가까우면 멈춰서 바라봄, 비 오면 좁은 곳에서만)
       else if (e.n.wander && !e.cur?.at && d > 3 && !talking) this._wander(e, dt, rain);
@@ -167,8 +198,16 @@ export class NPCs {
         } else if (d > 6) e.near = false;
       }
       // 밤: 플레이어가 멀면 꾸벅꾸벅 (💤), 가까이 오면 깸 (밤낚시·반딧불이 자리는 깨어 있음)
-      if (night && d > DOZE_FAR && !walking && !talking && !e.dozing && (!u.action || u.action === e.cur?.act) && !e.cur?.awake) { e.dozing = true; u.playAction('doze', 0); u.say('💤', 1e6); } // 하던 일(돈 세기 등)은 멈추고 졸기
-      else if (e.dozing && (!night || d <= DOZE_FAR || talking || walking || e.cur?.awake)) this._wake(e, night && d <= DOZE_FAR && !talking);
+      if (!e.dozing && night && d > DOZE_FAR && !walking && !talking && (!u.action || u.action === e.cur?.act) && !e.cur?.awake) {
+        e.dozeT = (e.dozeT || 0) + dt;
+        if (e.dozeT > DOZE_WAIT) { e.dozing = true; e.dozeT = 0; u.playAction('doze', 0); u.say('💤', 1e6, ZZZ_FAR[g.quality?.level === 'low' ? 'low' : 'other']); e.zzz = u.bubble; } // 하던 일(돈 세기 등)은 멈추고 졸기
+      } else if (!e.dozing) e.dozeT = 0;
+      else if (!night || d <= WAKE_NEAR || talking || walking || e.cur?.awake) {
+        const nightKey = hour >= 12 ? W.day : W.day - 1; // 밤 12시를 넘어도 같은 밤
+        const say = night && d <= WAKE_NEAR && !talking && e.wokeNight !== nightKey;
+        if (say) e.wokeNight = nightKey;
+        this._wake(e, say);
+      }
       // 대기 동작: 일하는 자리면 그 일(낚시·호미질·태블릿…)을 자주, 아니면 성격 동작
       e.idle = (e.idle || 0) + dt;
       if (e.idle > e.nextIdle && !u.moving && !e.dozing && !talking) {
@@ -182,10 +221,11 @@ export class NPCs {
         }
       }
       u.update(dt, cam);
-      if (d < hd) { hd = d; hit = e; }
+      if (d < TALK_R) { const sc = talkScore(d, pfx, pfz, p.x - playerPos.x, p.z - playerPos.z); if (sc < hs) { hs = sc; hd = d; hit = e; } }
     }
     this._heroGaze(playerPos);
     this._fadePlayerLabel(dt, playerPos);
+    this._fireflies(dt, hour);
     this.lookAt = g.player?.unico?.lookTarget ?? null;
     if (!hit) return null;
     const v = g.villagers;
@@ -204,13 +244,44 @@ export class NPCs {
     hu.lookTarget = this._heroLook.set(q.x, q.y + best.u.headH, q.z);
   }
 
+  /** 카메라에서 FX_NEAR 안인가 */
+  _camNear(e) {
+    const c = this.game.followCam?.camera;
+    return !!c && c.position.distanceTo(e.u.group.position) < FX_NEAR;
+  }
+
+  /** 꼬마가 연못가에서 곤충채를 들면 반딧불이 다섯 마리가 둘레를 맴돎 (가까울 때만, 그리기 1번) */
+  _fireflies(dt, hour) {
+    const k = this.list.find((e) => e.id === 'kid');
+    const on = !!k && k.cur?.act === 'net' && !k.route && (hour >= 19 || hour < 5) && this._camNear(k);
+    if (!on) { if (this._ff) this._ff.visible = false; return; }
+    if (!this._ff) {
+      const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(FIREFLY_N * 3), 3));
+      const mat = new THREE.PointsMaterial({ color: 0xe4ff7a, size: 0.22, map: glowDot(), transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending });
+      this._ff = new THREE.Points(geo, mat);
+      this._ff.frustumCulled = false;
+      this._ffT = 0;
+      this.game.world.scene.add(this._ff);
+    }
+    const ff = this._ff, pos = ff.geometry.attributes.position, c = k.u.group.position;
+    ff.visible = true;
+    this._ffT += dt;
+    for (let i = 0; i < FIREFLY_N; i++) {
+      const a = this._ffT * (0.5 + i * 0.13) + i * 1.3, r = 0.7 + 0.35 * Math.sin(this._ffT * 0.7 + i);
+      pos.setXYZ(i, c.x + Math.sin(a) * r, c.y + 0.7 + 0.45 * Math.sin(this._ffT * 1.1 + i * 2), c.z + Math.cos(a) * r);
+    }
+    pos.needsUpdate = true;
+    ff.material.opacity = 0.65 + 0.3 * Math.sin(this._ffT * 3);
+  }
+
   /** 졸던 주민 깨우기 (say = 하품하며 한마디) */
   _wake(e, say) {
     if (!e.dozing) return;
     e.dozing = false;
     const u = e.u;
     if (u.action === 'doze') u.clearAction();
-    if (u.bubble) u.bubbleUntil = u.t; // 💤 말풍선 내림
+    if (u.bubble && u.bubble === e.zzz) u.bubbleUntil = u.t; // 💤 말풍선만 내림 (그사이 다른 말풍선이면 그대로)
+    e.zzz = null;
     if (say) { u.playAction(u.species?.id === 'cat' ? 'stretch' : 'think', 1.4); u.say(WAKE[e.id] || '하암…', 2.5); }
   }
 
@@ -230,7 +301,7 @@ export class NPCs {
     const want = slotAt(e.id, hour, rain);
     if (!want || e.route) return;
     const curAt = e.cur?.at ?? null, wantAt = want.at ?? null;
-    if (e.cur && curAt === wantAt) { e.cur = want; return; }
+    if (e.cur && sameSpot(curAt, wantAt)) { e.cur = want; return; }
     if (!e.cur && !wantAt) { e.cur = want; e.placed = true; return; }
     const far = !e.placed || !cam?.position || cam.position.distanceTo(p) > SNAP_FAR;
     if (!far && !canDepart(d, talking || !!this.game.dialogue?.active)) return;
@@ -518,8 +589,8 @@ export class NPCs {
     if (r.gained) g.ui.toast(`💕 ${e.name}${josa(e.name, '와/과')} 오늘 첫 인사! 우정 +${r.gained}`);
     this.applyRewards(e, r);
     const id = e.id, color = NPC_COLOR[id] || '#30b6aa';
-    // 우정 하트는 대화창이 그림 (hearts/heartsMax)
-    const who = () => ({ speaker: e.u, name: `${ROLE_ICON[id] || ''} ${e.name}`, color, hearts: g.villagers.hearts(id), heartsMax: 5 });
+    // 우정 하트: 이름표 옆 작은 글씨(sub)로 ♥/♡ (hearts/heartsMax 도 함께 넘김)
+    const who = () => { const h = g.villagers.hearts(id); return { speaker: e.u, name: `${ROLE_ICON[id] || ''} ${e.name}`, color, sub: `${'♥'.repeat(h)}${'♡'.repeat(5 - h)}`, hearts: h, heartsMax: 5 }; };
     // 오늘 할 말: 계절·날씨·밤·하트·축제·한 일에 맞는 줄 (그날 첫 대화는 지금 상황에 맞는 줄 먼저), 이 대화에서 한 말은 다시 안 함
     const said = [];
     const next = (prefer = false) => {
@@ -540,7 +611,7 @@ export class NPCs {
       const choices = [];
       const have = req.done ? 0 : g.economy.count(req.item);
       // 아직 모자란 부탁: 잠긴 줄(locked)로 보여 주고, 누르면 몇 개 더 필요한지 알려 줌
-      if (!req.done) choices.push(have < req.n ? { label: '📝 부탁 들어주기', note: `${g.villagers.describeRequest(req)} 지금 ${have}/${req.n}개 있어!`, value: 'req', locked: true } : { label: '📝 부탁 들어주기', note: `${g.villagers.describeRequest(req)} · 보유 ${have}/${req.n}`, value: 'req' });
+      if (!req.done) choices.push(have < req.n ? { label: '🔒 📝 부탁 들어주기', note: `${g.villagers.describeRequest(req)} 지금 ${have}/${req.n}개 있어!`, value: 'req', locked: true } : { label: '📝 부탁 들어주기', note: `${g.villagers.describeRequest(req)} · 보유 ${have}/${req.n}`, value: 'req' });
       choices.push({ label: '🎁 선물하기', note: v.lastGift === g.world.day ? '오늘은 이미 선물했어요' : '', value: 'gift', disabled: v.lastGift === g.world.day });
       if (id === 'merchant') choices.push({ label: '🛒 장터 열기', value: 'market' });
       if (id === 'guide') {
@@ -604,18 +675,24 @@ export class NPCs {
 
   /** 하트 단계 보상 지급 */
   applyRewards(e, r) {
-    const g = this.game;
-    for (const rw of r?.rewards || []) {
-      if (rw.money) g.economy.earn(rw.money);
-      if (rw.seeds) for (const [k, n] of Object.entries(rw.seeds)) g.economy.addSeeds(k, n);
-      if (rw.item) for (const [k, n] of Object.entries(rw.item)) g.economy.addItem(k, n);
-      if (rw.title) this.grantTitle(rw.title === true ? `${e.name}의 단짝` : rw.title);
-      g.ui.toast(`🎁 ${e.name}: "${rw.text}"`);
+    const g = this.game, list = r?.rewards || [];
+    for (const rw of list) this._giveReward(e, rw);
+    if (list.length) { // 불러오기 등으로 여러 칸이 한꺼번에 오르면 알림·효과는 한 번만
+      g.ui.toast(list.length > 1 ? `🎁 ${e.name}: 선물 ${list.length}개 받음` : `🎁 ${e.name}: "${list[0].text}"`);
       const ep = e.u.group.position;
       if (g.reward) g.reward(3, { x: ep.x, z: ep.z, label: '💕' }); else g.audio.play('levelup');
     }
     const max = Math.max(...Object.keys(VILLAGERS).map((id) => g.villagers.hearts(id)));
     g.onEvent('hearts', max);
+  }
+
+  /** 하트 보상 하나 주기 (알림 없이) */
+  _giveReward(e, rw) {
+    const g = this.game;
+    if (rw.money) g.economy.earn(rw.money);
+    if (rw.seeds) for (const [k, n] of Object.entries(rw.seeds)) g.economy.addSeeds(k, n);
+    if (rw.item) for (const [k, n] of Object.entries(rw.item)) g.economy.addItem(k, n);
+    if (rw.title) this.grantTitle(rw.title === true ? `${e.name}의 단짝` : rw.title);
   }
 
   /** 오늘의 부탁 후보: 플레이어가 구할 수 있는 것 위주 */

@@ -1031,9 +1031,33 @@ function applyPalette(root, id) {
 
 // 감정표현 → 머리 위 아이콘
 // 행동별 손에 드는 도구 (두 발 캐릭터 오른손)
-const PROP_OF = { hoe: 'hoe', water: 'can', net: 'net', cast: 'rod', fishwait: 'rod', reel: 'rod', brush: 'brush' };
+const PROP_OF = { hoe: 'hoe', water: 'can', net: 'net', cast: 'rod', fishwait: 'rod', reel: 'rod', brush: 'brush', count: 'coins' };
 const HAND_R = [0.16, -0.34, 0.045]; // 오른팔 뼈 기준 손 위치 (주민 동물)
-const UMB_ARM = [-0.95, 0, 0.25], UMB_STICK = 1.3; // 우산 든 왼팔 각도(앞으로 듦·안쪽으로), 우산대 길이 (뼈 좌표)
+/** 주민이 플레이어를 알아보는 순간: 웃는 눈 시간(초), 고개 갸웃(rad), 다시 하기까지(초) */
+const NOTICE_T = 0.6, NOTICE_TILT = 0.04, NOTICE_GAP = 8;
+const UMB_ARM = [-0.95, 0, 0.25]; // 우산 든 왼팔 각도(앞으로 듦·안쪽으로)
+/** 우산 덮개: 반지름·높이, 귀 끝 위 간격(m), 뒤로 기울기(rad, 약 12°) */
+const UMB_R = 0.6, UMB_H = 0.26, UMB_GAP = 0.2, UMB_TILT = 0.21;
+const UMB_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide });
+const UMB_STICK_MAT = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.7 });
+const UMB_POLE_GEO = new THREE.CylinderGeometry(0.014, 0.014, 1, 5, 1, true).translate(0, 0.5, 0);
+const UMB_TIP_GEO = new THREE.ConeGeometry(0.025, 0.08, 5);
+const UMB_GEO = new Map();
+/** 줄무늬 덮개 (두 색이 칸마다 번갈아, 테두리 쪽은 조금 어둡게) — 색 짝마다 하나를 함께 씀 */
+function umbCoverGeo([a, b]) {
+  const key = `${a}:${b}`;
+  if (UMB_GEO.has(key)) return UMB_GEO.get(key);
+  const geo = new THREE.ConeGeometry(UMB_R, UMB_H, 10, 1, true).toNonIndexed();
+  const pos = geo.attributes.position, col = new Float32Array(pos.count * 3), ca = new THREE.Color(a), cb = new THREE.Color(b), c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    c.copy(Math.floor(i / 6) % 2 ? cb : ca);
+    if (pos.getY(i) < 0) c.multiplyScalar(0.88);
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  UMB_GEO.set(key, geo);
+  return geo;
+}
 const HAND_R_HERO = HAND_R.map((v) => v * ARM_K); // 두 발 유니코: 팔이 ARM_K 배로 짧아 손도 그만큼 어깨 쪽
 
 /** 손 도구 (팔 뼈 로컬 좌표: 팔을 내리고 있을 때 -y 가 손끝 방향, +z 가 앞) */
@@ -1066,6 +1090,12 @@ function makeProp(kind) {
     const mesh = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.26, 12, 1, true), new THREE.MeshStandardMaterial({ color: 0xf4f7ee, transparent: true, opacity: 0.55, side: THREE.DoubleSide, roughness: 0.9 }));
     mesh.rotation.z = Math.PI / 2; mesh.position.set(0.13, -0.82, 0);
     g.add(handle, hoop, mesh);
+  } else if (kind === 'coins') { // 동전 더미: 손바닥 위 금화 네 닢 (밤에도 보이게 빛남, 그리기 1번)
+    const parts = [0, 1, 2, 3].map((i) => new THREE.CylinderGeometry(0.068, 0.068, 0.02, 12).translate((i % 2) * 0.01 - 0.005, i * 0.021, (i % 3) * 0.008 - 0.008));
+    const coins = new THREE.Mesh(mergeGeometries(parts), new THREE.MeshStandardMaterial({ color: 0xffcf45, emissive: 0xb07400, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.4 }));
+    for (const q of parts) q.dispose();
+    coins.rotation.x = Math.PI / 2; coins.position.set(-0.03, -0.04, 0.05); // 팔을 앞으로 든 자세에서 팔 +z 가 위쪽
+    g.add(coins);
   } else if (kind === 'brush') { // 가축 빗: 나무 손잡이 + 솔
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.16, 6), wood);
     handle.position.y = -0.06;
@@ -1278,6 +1308,7 @@ export class Unico {
     // 이름표·감정 아이콘·말풍선 높이: 종은 굽힌 키로, 유니콘은 예전 값
     const LH = sp ? labelHeights(sp, R.meta.top) : this.biped ? { label: 2.3, emote: 2.6, bubble: 3.0 } : { label: 2.55, emote: 2.6, bubble: 3.0 };
     this.labelY = LH.label; this.emoteY = LH.emote; this.bubbleY = LH.bubble;
+    this._topY = sp ? R.meta.top * sp.scale : this.biped ? 2.0 : 2.2; // 귀·뿔 끝 높이 (우산 자리)
     if (!sp) applyPalette(this.root, palette);
     this.palette = palette;
     if (name) this.setName(name, labelColor, labelBg);
@@ -1318,8 +1349,10 @@ export class Unico {
     this.group.add(this.label);
   }
 
-  say(text, seconds = 4) {
+  /** 말풍선 (far: 카메라에서 이만큼(m) 넘게 멀면 숨김, 0 = 늘 보임) */
+  say(text, seconds = 4, far = 0) {
     if (this.bubble) { this.group.remove(this.bubble); this.bubble.userData.dispose(); }
+    this.bubbleFar = far;
     this.bubble = makeLabel(text, { color: '#231916', bg: 'rgba(255,255,255,0.92)', size: 36 });
     this.bubble.position.y = this.bubbleY;
     this.group.add(this.bubble);
@@ -1372,32 +1405,57 @@ export class Unico {
   }
 
   /**
-   * 우산 (비 올 때 주민): 왼손에 들고 머리 위로. 팔을 앞으로 든 만큼 되돌려 우산대는 늘 위로 섬.
-   * 원뿔 덮개 + 막대 (삼각형 약 60개), 처음 펼 때 한 번만 만듦
+   * 우산 (비 올 때 주민): 왼손에 들고, 덮개는 귀 위 0.2m 에 뒤로 살짝 기울여 (이름표는 덮개 위로 올림).
+   * 덮개·막대는 팔의 부모 뼈(몸)에 붙임 — 우산 든 팔 각도는 고정이라 손에서 덮개까지 막대가 이어짐.
+   * 색은 주민마다 두 색 줄무늬(재질 하나 공유, 정점 색), 처음 펼 때 한 번만 만듦
    */
-  setUmbrella(on, color = 0xf28bb0) {
+  setUmbrella(on, colors = [0xf28bb0, 0xfff4f8]) {
     if (!this.biped || !this.arms.length) return;
     if (on && !this._umb) {
-      const g = new THREE.Group(), up = new THREE.Group();
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, side: THREE.DoubleSide });
-      const stick = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.7 });
-      const cover = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.26, 10, 1, true), mat);
-      cover.position.y = UMB_STICK + 0.11;
-      // 막대 + 꼭지는 한 번에 그림 (그리기 2번: 덮개·막대)
-      const poleG = new THREE.CylinderGeometry(0.014, 0.014, UMB_STICK + 0.08, 5, 1, true).translate(0, (UMB_STICK + 0.08) / 2, 0);
-      const tipG = new THREE.ConeGeometry(0.025, 0.08, 5).translate(0, UMB_STICK + 0.27, 0);
-      const pole = new THREE.Mesh(mergeGeometries([poleG, tipG]), stick);
-      poleG.dispose(); tipG.dispose();
-      up.add(cover, pole);
-      up.rotation.order = 'ZYX'; up.rotation.set(-UMB_ARM[0], 0, -UMB_ARM[2] + 0.12); // 팔을 든 각도를 되돌림 → 우산대가 위로 (머리 쪽으로 살짝)
-      g.add(up);
-      g.position.set(-HAND_R[0], HAND_R[1], HAND_R[2]);
-      for (const m of [cover, pole]) { m.castShadow = false; m.receiveShadow = false; }
-      this.arms[0].add(g);
+      const arm = this.arms[0], par = arm.parent;
+      // 우산 든 팔 자세에서 손 위치·덮개 자리 (몸 뼈 좌표)
+      const saved = arm.rotation.clone();
+      arm.rotation.set(UMB_ARM[0], UMB_ARM[1], UMB_ARM[2]);
+      this.group.updateMatrixWorld(true);
+      const hand = par.worldToLocal(arm.localToWorld(new THREE.Vector3(-HAND_R[0], HAND_R[1], HAND_R[2])));
+      const top = this._topY ?? 2;
+      const at = par.worldToLocal(this.group.localToWorld(new THREE.Vector3(-0.14, top + UMB_GAP + UMB_H / 2, -0.06)));
+      arm.rotation.copy(saved);
+      const g = new THREE.Group();
+      const up = new THREE.Group();
+      up.position.copy(at);
+      up.rotation.set(-UMB_TILT, 0, UMB_TILT * 0.6); // 뒤로·어깨 쪽으로 기울임
+      const cover = new THREE.Mesh(umbCoverGeo(colors), UMB_MAT);
+      cover.name = 'umbCover';
+      const tip = new THREE.Mesh(UMB_TIP_GEO, UMB_STICK_MAT);
+      tip.position.y = UMB_H / 2 + 0.03;
+      up.add(cover, tip);
+      // 막대: 손 → 덮개 가운데
+      const pole = new THREE.Mesh(UMB_POLE_GEO, UMB_STICK_MAT);
+      pole.scale.y = hand.distanceTo(at);
+      pole.position.copy(hand);
+      pole.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), at.clone().sub(hand).normalize());
+      g.add(up, pole);
+      for (const m of [cover, tip, pole]) { m.castShadow = false; m.receiveShadow = false; }
+      par.add(g);
       this._umb = g;
+      // 이름표·말풍선·감정 아이콘을 덮개 위로
+      this._umbLift = Math.max(0, top + UMB_GAP + UMB_H + 0.14 - this.labelY);
     }
+    if (!!on === !!this._umbOn) return;
     this._umbOn = !!on;
-    if (this._umb) this._umb.visible = this._umbOn && !(this.isLod && charQ() === 'low');
+    const k = (this._umbLift || 0) * (on ? 1 : -1);
+    this.labelY += k; this.emoteY += k; this.bubbleY += k;
+    if (this.label) this.label.position.y = this.labelY;
+    if (this.bubble) this.bubble.position.y = this.bubbleY;
+    this._umbVis();
+  }
+
+  /** 우산 보이기: 펴 있고, 타거나 헤엄치지 않고, 낮음 품질에서 멀지 않을 때 */
+  _umbVis() {
+    if (!this._umb) return;
+    const v = !!this._umbOn && !this.riding && !this.swimming && !(this.isLod && charQ() === 'low');
+    if (this._umb.visible !== v) this._umb.visible = v;
   }
 
   /** 낚싯대 끝 월드 위치 */
@@ -1749,7 +1807,7 @@ export class Unico {
       // 낮음: 내 캐릭터가 아니면 9m 넘으면 저해상도 몸 (대화 구도 7m 안팎은 원본), 실제 그림자 대신 바닥 그림자만
       if (this.skinLod) {
         const far = low && !hero ? d > (this.isLod ? 8 : 9) : d > (this.isLod ? 14 : 16);
-        if (far !== this.isLod) { this.isLod = far; this.skin.visible = !far; this.skinLod.visible = far; if (this._umb) this._umb.visible = this._umbOn && !(far && low); } // 낮음 품질에서 멀면 우산도 끔 (그리기 수)
+        if (far !== this.isLod) { this.isLod = far; this.skin.visible = !far; this.skinLod.visible = far; this._umbVis(); } // 낮음 품질에서 멀면 우산도 끔 (그리기 수)
       }
       // 낮음은 그림자 맵을 3프레임마다 그려서 움직이는 캐릭터의 실제 그림자가 끊겨 깜빡임 → 내 캐릭터도 바닥 그림자만
       this.skin.castShadow = d < 24 && !low;
@@ -1763,6 +1821,7 @@ export class Unico {
       // 카메라 바로 앞(3m 안)에서는 이름표·감정 아이콘이 화면을 가리지 않게 흐리게
       const near = THREE.MathUtils.clamp((d - 1.8) / 1.6, 0, 1);
       if (this.emote) this.emote.visible = near > 0.3;
+      if (this.bubble && this.bubbleFar) this.bubble.visible = d < this.bubbleFar;
       if (this.label && !this.labelAlways) {
       // 주민 동물 이름표는 내 캐릭터 곁에서만 (7m 안, 11m 에서 사라짐 — 줌을 멀리 빼도 옆 주민은 보임), 다른 접속자·유니콘 주민은 예전처럼 카메라에서 22m
       const a = (this.species ? THREE.MathUtils.clamp((11 - (HERO_POS ? HERO_POS.distanceTo(this.group.position) : d - 9)) / 4, 0, 1) : THREE.MathUtils.clamp((22 - d) / 7, 0, 1)) * near;
@@ -2236,6 +2295,7 @@ export class Unico {
     }
     // 우산 든 왼팔 (걸을 때도, 말할 때도)
     if (this._umbOn && !this.riding && !this.swimming) arms[0].rotation.set(UMB_ARM[0], UMB_ARM[1], UMB_ARM[2]);
+    this._umbVis(); // 타거나 헤엄치면 우산 숨김
     // ---- 수영: 몸을 앞으로 눕히고 개헤엄 (팔 교대로 젓기 + 발차기), 얼굴은 물 위로 ----
     if (this.swimming) {
       const m = Math.min(1, speed / 2), f = 2.6 + m * 4.5;
@@ -2317,6 +2377,14 @@ export class Unico {
     // 감정표현 중에는(말하기 빼고) 동작이 이김. 머리 위치는 내 위치 + 머리 높이 (월드 행렬을 읽지 않음)
     const L = this._look, lt = this.lookTarget;
     const lookOn = !!lt && (!this.action || this.action === 'talk') && !this.swimming && !this.riding;
+    if (sp && lookOn && !this._lookWas && this.t - (this._noticeT ?? -99) > NOTICE_GAP) {
+      this._noticeT = this.t;
+      this.nextBlink = Math.min(this.nextBlink, 0.05); // 바로 한 번 깜빡
+      this.happyUntil = Math.max(this.happyUntil, this.t + NOTICE_T);
+    }
+    this._lookWas = lookOn;
+    const nk = this.t - (this._noticeT ?? -99);
+    if (nk < NOTICE_T) headRoll += NOTICE_TILT * Math.sin((nk / NOTICE_T) * Math.PI);
     L.w += ((lookOn ? 1 : 0) - L.w) * (1 - Math.exp(-dt * 5));
     if (lookOn) {
       const dx = lt.x - pos.x, dz = lt.z - pos.z;
@@ -2395,7 +2463,6 @@ export class Unico {
     // 손 도구는 캐릭터마다 새로 만든 것 (makeProp)
     const own = new Set();
     for (const p of Object.values(this.props)) p.traverse((o) => { if (o.isMesh) own.add(o.geometry).add(o.material); });
-    this._umb?.traverse((o) => { if (o.isMesh) own.add(o.geometry).add(o.material); });
     for (const r of own) r.dispose();
     this.skeleton.dispose(); // 뼈 텍스처 (몸·저해상도 몸이 함께 씀)
   }

@@ -89,3 +89,23 @@ test('하트 보상: 주민마다 다르고, 칸마다 돈·씨앗·아이템 �
   assert.equal(r.rewards[0].item.bait, 3);
   assert.equal(r.rewards[4].title, '호수의 낚시 친구');
 });
+
+test('대사: 한 주민 안에서 같은 말이 되풀이되지 않음 (앞 8글자, 공백 뺀 7글자 이어진 구절)', () => {
+  const NGRAM = 7;
+  for (const id of IDS) {
+    const L = LINES[id].map((l) => l.t);
+    const heads = L.map((t) => t.slice(0, 8));
+    assert.equal(new Set(heads).size, heads.length, `${id} 앞 8글자가 같은 줄`);
+    const grams = L.map((t) => { const c = t.replace(/[\s.,!?~…·'"]/g, ''); const g = new Set(); for (let i = 0; i + NGRAM <= c.length; i++) g.add(c.slice(i, i + NGRAM)); return g; });
+    for (let a = 0; a < L.length; a++) for (let b = a + 1; b < L.length; b++) {
+      const dup = [...grams[a]].find((x) => grams[b].has(x));
+      assert.equal(dup, undefined, `${id}: "${L[a]}" / "${L[b]}"`);
+    }
+  }
+});
+
+test('대사: 퀘스트 뜻과 맞음 (5번 수확 줄은 첫 수확이라 하지 않음), 할머니는 손주를 강아지라 부르지 않음', () => {
+  const h5 = LINES.guide.find((l) => l.after === 'harvest5');
+  assert.ok(h5 && !h5.t.includes('첫 수확'), h5?.t);
+  assert.ok(!LINES.granny.some((l) => l.t.includes('강아지')));
+});

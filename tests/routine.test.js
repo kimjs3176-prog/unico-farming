@@ -131,7 +131,7 @@ test('주민 일과: 플레이어가 4m 안이면 자리를 뜨지 않고 기다
   assert.ok(Math.hypot(p.x - s.at.x, p.z - s.at.z) < 0.4, `벤치 옆 (${p.x.toFixed(2)}, ${p.z.toFixed(2)})`);
 });
 
-test('밤: 플레이어가 6m 밖이면 하던 일(돈 세기)을 멈추고 졸다가, 다가오면 깨서 한마디 · 밤낚시 자리는 깨어 있음', async () => {
+test('밤: 플레이어가 7m 밖이면 하던 일(돈 세기)을 멈추고 졸다가, 다가오면 깨서 한마디 · 밤낚시 자리는 깨어 있음', async () => {
   const v = await village((23 + ROUTINE.merchant.shift) / 24);
   v.camera.position.set(3, 6, -2);
   v.game.player.position.set(12, 0, 0);
@@ -165,4 +165,77 @@ test('주민 일과: 제자리 → 부두 끝도 경유점을 차례로 지나 �
   // 확인
   assert.ok(Math.hypot(p.x + 12.5, p.z - 31.8) < 0.4, `부두 끝 (${p.x.toFixed(2)}, ${p.z.toFixed(2)})`);
   assert.equal(f.cur.act, 'fishwait');
+});
+
+/** 23시 여우를 졸게 해 둔 마을 (플레이어는 20m 밖) */
+async function dozingFox(hour = 23) {
+  const v = await village((hour + ROUTINE.merchant.shift) / 24);
+  v.camera.position.set(3, 6, -2);
+  v.game.player.position.set(20, 0, 0);
+  step(v, 20 * 5);
+  const m = v.npcs.list.find((e) => e.id === 'merchant');
+  assert.ok(m.dozing, '졸기 시작');
+  return { v, m, p: m.u.group.position };
+}
+
+test('밤 12시를 넘어도 같은 벤치 자리면 여우는 걷지 않고 계속 졺', async () => {
+  // 준비: 23.9시 벤치에서 졸기
+  const { v, m } = await dozingFox(23.9);
+  // 실행: 0.5시 (0~6시 칸으로 넘어감)
+  v.w.time = (0.5 + ROUTINE.merchant.shift) / 24;
+  step(v, 20 * 3);
+  // 확인
+  assert.equal(m.route, null, '벤치 → 가판대 → 벤치로 걷지 않음');
+  assert.ok(m.dozing, '계속 졺');
+});
+
+test('밤: 6m 둘레를 오가도 졸다 깨다 되풀이하지 않고, 깨는 한마디는 하룻밤 한 번', async () => {
+  // 준비
+  const { v, m, p } = await dozingFox();
+  // 실행: 6m 둘레에서 1.5초마다 ±0.2m 오가기 20초
+  let flips = 0, last = m.dozing;
+  for (let i = 0; i < 20 * 20; i++) {
+    v.game.player.position.set(p.x + (Math.floor(i / 30) % 2 ? 6.2 : 5.8), 0, p.z);
+    step(v, 1);
+    if (m.dozing !== last) { flips++; last = m.dozing; }
+  }
+  // 확인
+  assert.equal(flips, 0, `졸기·깨기 ${flips}번`);
+  v.game.player.position.set(p.x + 2, 0, p.z); step(v, 2);
+  assert.ok(!m.dozing && m.u.bubble, '가까이 오면 깨서 한마디');
+  // 멀어졌다가 다시 오면 조용히 깸
+  v.game.player.position.set(p.x + 20, 0, p.z); step(v, 20 * 6);
+  assert.ok(m.dozing, '멀어지면 다시 졺');
+  m.u.bubbleUntil = m.u.t; step(v, 1); // 💤 내림
+  v.game.player.position.set(p.x + 2, 0, p.z); step(v, 2);
+  assert.ok(!m.dozing, '깸');
+  assert.equal(m.u.bubble, null, '두 번째로 깰 땐 한마디 없음');
+});
+
+test('졸던 주민이 트랙터에 놀라면 놀란 말풍선이 그대로 보임', async () => {
+  // 준비
+  const { v, m, p } = await dozingFox();
+  // 실행
+  v.npcs.startle(m, { x: p.x + 2, z: p.z });
+  step(v, 2);
+  // 확인
+  assert.ok(!m.dozing);
+  assert.ok(m.u.bubble && m.u.bubbleUntil > m.u.t + 1, '놀란 말풍선이 남아 있음');
+});
+
+test('말 걸 대상: 등 뒤 1.5m 주민보다 바라보는 앞 2m 주민을 고름', async () => {
+  // 준비: 한낮 낚시꾼 가게 앞, 플레이어는 낚시꾼을 바라보고 꼬마는 등 뒤
+  const v = await village((12 + ROUTINE.fisher.shift) / 24);
+  v.camera.position.set(-5, 6, 20);
+  step(v, 2);
+  const f = v.npcs.list.find((e) => e.id === 'fisher'), k = v.npcs.list.find((e) => e.id === 'kid');
+  const fp = f.u.group.position;
+  v.game.player.position.set(fp.x, 0, fp.z - 2);
+  v.game.player.unico = { facing: 0 }; // +z 쪽(낚시꾼)을 봄
+  k.u.group.position.set(fp.x + 0.3, 0, fp.z - 3.5); k.target = { x: fp.x + 0.3, z: fp.z - 3.5 }; k.wait = 999;
+  // 실행
+  const r = v.npcs.update(1 / 20, v.game.player.position);
+  // 확인
+  assert.ok(Math.hypot(k.u.group.position.x - v.game.player.position.x, k.u.group.position.z - v.game.player.position.z) < 2, '꼬마가 더 가까움');
+  assert.match(r.label, /낚시꾼/);
 });

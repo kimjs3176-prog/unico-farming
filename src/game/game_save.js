@@ -26,6 +26,9 @@ export const GameSave = {
   save(opt) {
     this.saveTimer = 0;
     if (this._introPending) return false; // 첫 접속: 인트로 시작 전에는 저장하지 않음 (저장이 생기면 다음 접속에 인트로가 안 나옴)
+    // 지금 단 칭호를 flags.title 로 (KOAT 데스크처럼 player.setTitle 만 부른 곳도 다시 불러오면 그 칭호)
+    const curTitle = this.player?.title;
+    if (typeof curTitle === 'string' && curTitle && this.flags) this.flags.title = curTitle;
     const ok = saveGame(this, opt);
     try {
       const warned = (this._saveWarnedKinds ||= new Set());
