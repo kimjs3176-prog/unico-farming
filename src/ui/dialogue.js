@@ -1,6 +1,8 @@
 import { portraitSVG, preloadPortraits } from './portrait2d.js';
 import { textOn } from './contrast.js';
 import { isSubmitEnter } from '../game/input.js';
+import { VOICE_UNICO } from '../game/species.js';
+import { voice, greet, lineShape, holdDuck, DUCK } from '../game/voice.js';
 
 /** 이름 다듬기: 앞뒤 공백·제어 문자 빼고 max 글자까지 (이모지도 한 글자), 비면 fallback */
 export function sanitizeName(raw, fallback = '', max = 6) {
@@ -12,11 +14,79 @@ export const NAME_AUTO_S = 4;
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+/** 하트 하나 (24×24 그림): 채움 #f06292, 빈 하트는 흰 바탕 + 갈색 테두리 */
+const HEART = 'M12 20.6 4.2 13.2C1.9 11 1.8 7.4 4 5.4c2-1.8 5-1.5 6.8.5L12 7.2l1.2-1.3c1.8-2 4.8-2.3 6.8-.5 2.2 2 2.1 5.6-.2 7.8Z';
+/** 우정 하트 n/max 를 그림 하트로 (이모지 🤍 는 크림 바탕에서 안 보임) */
+export function heartsHTML(n, max = 5, label = '우정') {
+  const k = Math.max(0, Math.min(max, Math.round(n) || 0));
+  let s = '';
+  for (let i = 0; i < max; i++) s += `<svg class="ht${i < k ? ' on' : ''}" viewBox="0 0 24 24" aria-hidden="true"><path d="${HEART}"/></svg>`;
+  return `<span class="dlg-hearts" role="img" aria-label="${esc(label)} ${k}/${max}">${label ? `<em>${esc(label)}</em>` : ''}${s}</span>`;
+}
+/** 예전 방식 sub('우정 ❤️❤️🤍🤍🤍 · 배부름 80%') → { hearts, max, label, rest }. 아니면 null */
+export function parseHeartsSub(sub) {
+  const m = /^\s*(우정|애정)\s*((?:❤️|❤|🤍)+)\s*(?:·\s*(.*))?$/u.exec(String(sub ?? ''));
+  if (!m) return null;
+  const on = (m[2].match(/❤/g) || []).length, off = (m[2].match(/🤍/g) || []).length;
+  return { hearts: on, max: on + off, label: m[1], rest: m[3] || '' };
+}
+
+/** 자물쇠 (작은 그림) */
+const LOCK = '<svg class="lk" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="2.5" y="7" width="11" height="7.5" rx="2" fill="currentColor"/></svg>';
+/**
+ * 선택지 한 줄의 모양 (순수 함수): { html, cls, disabled, locked }
+ *  - disabled: 누를 수 없음 (반려견 재주 잠금 등, 그대로)
+ *  - locked: 누를 수는 있는 '아직 못 하는' 줄 (부탁 다시 듣기 등)
+ *  둘 다 같은 잠긴 모양: 점선 테두리 + 자물쇠 + 'n/m' 진행 알약 (c.progress 또는 설명의 'n/m' 에서)
+ */
+export function choiceView(c, k) {
+  const locked = !!(c.locked || c.disabled);
+  let note = c.note || '', prog = c.progress ?? null;
+  if (locked && prog == null) {
+    const m = /(?:보유\s*)?(\d+)\s*\/\s*(\d+)/.exec(note);
+    if (m) { prog = `${m[1]}/${m[2]}`; note = note.replace(/\s*·?\s*보유\s*\d+\s*\/\s*\d+/, '').trim(); }
+  }
+  const pill = locked && prog != null ? `<b class="pg">${esc(prog)}</b>` : '';
+  const html = `<span class="k">${k + 1}</span>${locked ? LOCK : ''}<span class="lb">${esc(c.label)}</span>${pill}${note ? `<small>${esc(note)}</small>` : ''}`;
+  return { html, cls: locked ? 'locked' : '', disabled: !!c.disabled, locked };
+}
+
+/**
+ * 선택지 자리: 'float' 대화창 위 오른쪽 기둥 · 'stack' 세로 폰, 창 위 전체 너비 · 'inbox' 창 안 (가로로 눕힌 폰, 이름 카드)
+ */
+export function choicesMode(w, h, coarse, input = false) {
+  if (input) return 'inbox';
+  if (h <= 500 && coarse) return 'inbox';
+  return w <= 600 ? 'stack' : 'float';
+}
+const viewMode = (input) => {
+  const w = typeof innerWidth === 'number' ? innerWidth : 1280, h = typeof innerHeight === 'number' ? innerHeight : 800;
+  let coarse = false;
+  try { coarse = !!globalThis.matchMedia?.('(pointer: coarse)').matches; } catch { /* 없으면 마우스 */ }
+  return choicesMode(w, h, coarse, input);
+};
+
+/** 말소리 고르기: 줄에 준 voice → 말하는 주민 종 → 유니코 종소리. 해설(말하는 사람 없음)·반려견은 없음 */
+export function voiceOf(ln) {
+  if (ln.voice && typeof ln.voice === 'object') return ln.voice;
+  if (typeof ln.voice === 'number') return { f0: ln.voice };
+  return ln.speaker?.species?.voice ?? (ln.speaker ? VOICE_UNICO : null);
+}
+
+/** 이름 있는 효과음이 있으면 그것, 없으면 대신할 소리 ('tap'·'blip' 은 소리 정리 쪽에서 더함) */
+const hasNamed = new Map();
+function named(audio, name, fallback, vol) {
+  if (!audio?.play) return;
+  if (!hasNamed.has(name)) { let ok = false; try { ok = typeof audio.has === 'function' ? !!audio.has(name) : new RegExp(`['"]${name}['"]`).test(String(audio.play)); } catch { ok = false; } hasNamed.set(name, ok); }
+  return hasNamed.get(name) ? audio.play(name, vol) : audio.play(fallback, vol);
+}
+
 /**
  * 대화창 (화면 아래): 2D 초상화(SVG, 말할 때 입이 움직임) + 이름표 + 한 글자씩 나오는 대사 + 말소리 + 선택지
  *  - 클릭 / E / Space / Enter: 글자 다 보이기 → 다음 줄
  *  - 선택지는 클릭 또는 숫자 키 1~9
- * say([{ speaker?: Unico, name, color?, sub?, text, choices?: [{ label, value, disabled? }], input?: { value, max } }]) → 마지막 선택 값
+ * say([{ speaker?: Unico, name, color?, sub?, hearts?, heartsMax?, voice?, text, choices?: [{ label, value, note?, disabled?, locked?, progress? }], input?: { value, max } }]) → 마지막 선택 값
+ *  - hearts: 이름표 옆 그림 하트 (sub 는 '배부름 80%' 같은 작은 글)  - locked: 누를 수 있는 잠긴 줄 (disabled 는 못 누름)
  *  - input: 대화창 안 이름 카드 [좋아!] / [✏️ 바꾸기] → 다듬은 이름 (건너뛰면 지금 이름)
  *  - 대화 중에 또 say 하면 앞 대화가 끝난 뒤 이어서 (덮어쓰지 않음)
  */
@@ -26,9 +96,12 @@ export class Dialogue {
     this.el = document.createElement('div');
     this.el.className = 'dlg hidden';
     this.el.innerHTML = `<div class="dlg-portrait"></div>
-      <div class="dlg-main"><div class="dlg-name"><b></b><small></small></div><div class="dlg-text"></div><div class="dlg-choices"></div><i class="dlg-next">▼</i></div>`;
+      <div class="dlg-main"><div class="dlg-name"><b></b><span class="dlg-hearts-slot"></span><small></small></div><div class="dlg-text"></div><i class="dlg-next">▼</i></div>
+      <div class="dlg-choices"></div>`;
     root.append(this.el);
     this.$ = (s) => this.el.querySelector(s);
+    this.choicesEl = this.$('.dlg-choices');
+    this._mode = null;
     this.active = false;
     this.closedAt = 0;
     this.el.addEventListener('pointerdown', (e) => { if (!e.target.closest('.dlg-choices')) { e.preventDefault(); this._advance(); } });
@@ -82,12 +155,18 @@ export class Dialogue {
 
   async _say(lines) {
     if (!Array.isArray(lines)) lines = [lines];
+    // 3초 넘게 쉬었다 시작하는 대화는 새 대화 (첫인사를 다시)
+    if (!this._greeted || performance.now() - this.closedAt > 3000) this._greeted = new Set();
     this.active = true; this._skip = false;
     const P = this.game.player;
     P.hold ? P.hold('dlg') : (P.frozen = true);
     this.el.classList.remove('hidden');
     document.body?.classList?.add('talking'); // HUD·행동 막대를 흐리게, 누를 수 없게 (dialogue.css)
+    // 대화 동안 음악 살짝 줄임: 다음 대화가 0.6초 안에 이어지면 풀지 않음 (줄 사이에 음악이 들썩이지 않게)
+    clearTimeout(this._duckOff);
+    if (!this._ducked) { this._ducked = true; try { holdDuck(this.game.audio, true); } catch { /* 소리 실패는 무시 */ } }
     try { return await this._lines(lines); } finally {
+      this._duckOff = setTimeout(() => { this._ducked = false; try { holdDuck(this.game.audio, false); } catch { /* 무시 */ } }, DUCK.release * 1000);
       document.body?.classList?.remove('talking');
       this.el.classList.add('hidden');
       this.active = false;
@@ -108,32 +187,63 @@ export class Dialogue {
       this.el.style.setProperty('--dlg-accent', ln.color || '#30b6aa');
       this.el.style.setProperty('--dlg-on', textOn(ln.color || '#30b6aa')); // 이름표 글자색: 배경색에 따라 흰색/진한 갈색
       this.$('.dlg-name b').textContent = ln.name || '';
-      this.$('.dlg-name small').innerHTML = ln.sub ? esc(ln.sub) : '';
-      this.$('.dlg-choices').innerHTML = '';
+      // 우정 하트: hearts 로 받거나, 예전 sub('우정 ❤️🤍…') 를 풀어서 그림 하트로
+      const hp = ln.hearts != null ? { hearts: ln.hearts, max: ln.heartsMax ?? 5, label: ln.heartsLabel ?? '우정', rest: ln.sub || '' } : parseHeartsSub(ln.sub);
+      const hk = hp ? `${hp.label}${hp.hearts}/${hp.max}` : '';
+      if (hk !== this._heartsKey) { this._heartsKey = hk; this.$('.dlg-hearts-slot').innerHTML = hp ? heartsHTML(hp.hearts, hp.max, hp.label) : ''; }
+      const sub = hp ? hp.rest : ln.sub;
+      this.$('.dlg-name small').innerHTML = sub ? esc(sub) : '';
+      this.choicesEl.innerHTML = '';
       this.el.classList.toggle('has-choices', !!(ln.choices || ln.input));
       this.el.classList.toggle('has-input', !!ln.input);
+      this._placeChoices(!!ln.input);
+      const prof = voiceOf(ln), cps = prof?.cps || 38;
+      // 첫인사 한 마디 (주민 종·반려견): 한 이어진 대화에서 인물마다 한 번 (선택지 뒤 다시 불러도·컷신에서 번갈아 말해도 반복하지 않음)
+      const dog = !ln.speaker && ln.portrait === 'dog', gk = dog ? 'bark' : ln.speaker?.species?.voice?.greet;
+      const vk = gk ? `${gk}:${ln.name || ''}` : '';
+      if (vk && !this._greeted.has(vk)) {
+        this._greeted.add(vk);
+        try { greet(this.game.audio, gk); } catch { /* 소리 실패는 무시 */ }
+      }
       ln.speaker?.playAction?.(ln.emote || 'talk', Math.min(2.5, ln.text.length * 0.05));
-      ln.speaker?.speak?.(Math.min(6, [...ln.text].length / 38 + 0.2)); // 글자 나오는 동안 입 움직임 (초당 38자)
-      result = await this._type(ln);
+      ln.speaker?.speak?.(Math.min(6, [...ln.text].length / cps + 0.2)); // 글자 나오는 동안 입 움직임
+      result = await this._type(ln, prof, cps);
     }
     return result;
   }
 
-  _type(ln) {
+  _type(ln, prof = voiceOf(ln), cps = prof?.cps || 38) {
     return new Promise((resolve) => {
       const textEl = this.$('.dlg-text');
       const chars = [...ln.text];
-      let i = 0, acc = 0;
+      let i = 0, acc = 0, syl = 0, pause = 0;
       this.typing = true;
       textEl.textContent = '';
       this.el.classList.remove('done');
-      const voice = ln.voice ?? 520 + ((ln.name || '').length * 37) % 260; // 인물마다 다른 말소리 높이
+      // 말소리: 종마다 다른 목소리, 글자마다 정해진 소리 (voice.js). every 음절마다 한 번
+      const shape = prof ? lineShape(chars) : null, every = prof?.every || 2, audio = this.game.audio;
+      const speakChar = (k) => {
+        const ch = chars[k];
+        if (!prof || !/[가-힣0-9A-Za-z]/.test(ch)) return;
+        const last = k === shape.lastIdx;
+        if (syl++ % every !== 0 && !last) return;
+        try { voice(audio, prof, ch, { last, q: shape.q, ex: shape.ex }); } catch { /* 소리 실패는 무시 */ }
+      };
       let last = performance.now();
       const step = (now) => {
         if (!this.active) return;
         const dt = (now - last) / 1000; last = now;
         if (!this.typing) i = chars.length;
-        else { acc += dt * 38; while (acc >= 1 && i < chars.length) { acc -= 1; i++; if (i % 2 === 0 && chars[i - 1].trim()) this.game.audio.tone(voice + Math.random() * 60, 0.045, 'triangle', 0.035, 0, { rev: 0.05 }); } }
+        else {
+          acc += dt * cps;
+          if (pause > 0) { const p = Math.min(pause, acc / cps); pause -= p; acc -= p * cps; } // 쉼표·말줄임: 잠깐 쉼
+          while (acc >= 1 && i < chars.length && pause <= 0) {
+            acc -= 1; i++;
+            const ch = chars[i - 1];
+            if (ch === ',' || ch === '…') pause = ch === '…' ? 0.16 : 0.1;
+            speakChar(i - 1);
+          }
+        }
         textEl.textContent = chars.slice(0, i).join('');
         if (i < chars.length) return requestAnimationFrame(step);
         this.typing = false;
@@ -141,7 +251,7 @@ export class Dialogue {
         ln.speaker?.speak?.(0); // 글자가 다 나오면 입 다묾
         if (ln.input) this._showName(ln.input, resolve);
         else if (ln.choices) this._showChoices(ln.choices, resolve);
-        else this._next = () => { this._next = null; this.game.audio.play('click', 0.6); resolve(null); };
+        else this._next = () => { this._next = null; named(this.game.audio, 'tap', 'click', 0.6); resolve(null); };
       };
       requestAnimationFrame(step);
     });
@@ -165,7 +275,7 @@ export class Dialogue {
     if (this.choosing) {
       const bye = this._choices?.find((c) => c.value === 'bye' && !c.disabled);
       if (!bye) return false;
-      if (waited > 4) { this._autoAt = 0; this.choosing = false; this.game.audio.play('click'); this._resolveChoice?.(bye.value); }
+      if (waited > 4) { this._autoAt = 0; this.choosing = false; named(this.game.audio, 'blip', 'click'); this._resolveChoice?.(bye.value); }
       return true;
     }
     const n = this.$('.dlg-text').textContent.length;
@@ -190,7 +300,7 @@ export class Dialogue {
         if (this._naming !== n) return;
         this._naming = null; this.choosing = false;
         input?.blur?.();
-        this.game.audio.play('click');
+        named(this.game.audio, 'blip', 'click');
         resolve(sanitizeName(v ?? cur, cur, max));
       },
     });
@@ -263,14 +373,29 @@ export class Dialogue {
   _showChoices(choices, resolve) {
     this.choosing = true;
     this._choices = choices; this._resolveChoice = resolve; this._autoAt = 0;
-    const box = this.$('.dlg-choices');
+    const box = this.choicesEl;
     box.innerHTML = '';
     choices.forEach((c, k) => {
-      const b = document.createElement('button');
-      b.innerHTML = `<span class="k">${k + 1}</span>${esc(c.label)}${c.note ? `<small>${esc(c.note)}</small>` : ''}`;
-      b.disabled = !!c.disabled;
-      b.onclick = (e) => { e.stopPropagation(); this.choosing = false; this.game.audio.play('click'); resolve(c.value); };
+      const v = choiceView(c, k), b = document.createElement('button');
+      b.innerHTML = v.html;
+      if (v.cls) b.className = v.cls;
+      b.disabled = v.disabled;
+      if (v.locked) b.setAttribute('aria-label', `${c.label} (아직 못 해요${c.note ? `: ${c.note}` : ''})`);
+      b.onclick = (e) => { e.stopPropagation(); this.choosing = false; named(this.game.audio, 'blip', 'click'); resolve(c.value); };
       box.append(b);
     });
+    // 선택지가 뜰 때 짧게 미끄러져 올라옴 (transform·opacity 만)
+    box.classList.remove('in'); void box.offsetWidth; box.classList.add('in');
+    box.scrollTop = 0;
+  }
+
+  /** 선택지 자리 정하기: 창 위에 띄우기(float·stack) 또는 창 안(inbox). 클래스 ch-* 로 CSS 가 모양을 정함 */
+  _placeChoices(input) {
+    const mode = viewMode(input), box = this.choicesEl;
+    if (mode === this._mode && box.parentNode) return;
+    this._mode = mode;
+    if (mode === 'inbox') { const main = this.$('.dlg-main'); if (main.insertBefore) main.insertBefore(box, this.$('.dlg-next')); else main.append(box); }
+    else this.el.append(box);
+    for (const m of ['float', 'stack', 'inbox']) this.el.classList.toggle('ch-' + m, m === mode);
   }
 }

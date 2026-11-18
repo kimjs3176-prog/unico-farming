@@ -8,22 +8,22 @@
 .dlg-portrait { flex: 0 0 auto; width: 112px; height: 112px; border-radius: 20px; overflow: hidden; border: 3px solid var(--dlg-accent, #30b6aa); background: #cfe9f7; align-self: center; }
 .dlg-portrait canvas { width: 100%; height: 100%; display: block; }
 .dlg-main { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; }
-.dlg-name { display: flex; align-items: baseline; gap: 8px; margin: -30px 0 6px; }
+.dlg-name { display: flex; align-items: center; gap: 8px; margin: -30px 0 6px; }
 .dlg-name b { background: var(--dlg-accent, #30b6aa); color: var(--dlg-on, #fff); font-family: 'Unico Coin', Jua, sans-serif; font-weight: normal; font-size: 19px; padding: 4px 14px; border-radius: 14px; box-shadow: 0 3px 0 rgba(0,0,0,0.12); }
 .dlg-name small { font-size: 14px; opacity: 0.85; }
-.dlg-text { font-size: 19px; line-height: 1.55; min-height: 60px; white-space: pre-wrap; word-break: keep-all; }
+.dlg-text { font-size: 19px; line-height: 1.55; min-height: calc(3 * 1.55em); white-space: pre-wrap; word-break: keep-all; }
 .dlg-next { position: absolute; right: 2px; bottom: -2px; font-style: normal; color: var(--dlg-accent, #30b6aa); opacity: 0; }
 .dlg.done:not(.has-choices) .dlg-next { opacity: 1; animation: dlgnext 0.8s ease-in-out infinite; }
 @keyframes dlgnext { 50% { transform: translateY(4px); } }
 .dlg-choices { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .dlg-choices:empty { display: none; }
-.dlg-choices button { text-align: left; font-size: 15px; padding: 8px 12px; background: var(--cream); color: var(--brown); border: 2px solid var(--panel-edge); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dlg-choices button { text-align: left; font-size: 15px; padding: 8px 12px; background: var(--cream); color: var(--brown); border: 2px solid var(--panel-edge); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; text-shadow: none;
+  box-shadow: inset 0 2px 0 #fff, 0 3px 0 color-mix(in srgb, var(--dlg-accent, #30b6aa) 55%, #6b4a2e); } /* 아래 두께는 말하는 이 색에서 (청록 공통 그림자 대신) */
+.dlg-choices button:active:not(:disabled) { box-shadow: inset 0 2px 3px rgba(0,0,0,0.12), 0 1px 0 color-mix(in srgb, var(--dlg-accent, #30b6aa) 55%, #6b4a2e); transform: translateY(2px); }
 .dlg-choices button:hover:not(:disabled) { border-color: var(--dlg-accent, #30b6aa); background: #fff; }
-.dlg-choices button:disabled { opacity: 0.72; background: #f1ece4; border-style: dashed; filter: grayscale(0.5); }
-.dlg-choices button:disabled small { opacity: 1; color: #8a5a2b; font-weight: bold; } /* 못 고르는 까닭은 또렷하게 */
 .dlg-choices .k { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: var(--dlg-accent, #30b6aa); color: var(--dlg-on, #fff); font-size: 13px; }
 .dlg-choices small { width: 100%; padding-left: 30px; opacity: 0.7; font-size: 12px; }
-@media (max-width: 600px) { .dlg { bottom: 150px; padding: 10px 12px; gap: 10px; } .dlg-portrait { width: 76px; height: 76px; } .dlg-text { font-size: 16px; } }
+@media (max-width: 600px) { .dlg { bottom: 150px; padding: 10px 12px; gap: 10px; } .dlg-portrait { width: 76px; height: 76px; } .dlg-text { font-size: 16px; line-height: 1.45; min-height: calc(2 * 1.45em); } }
 
 /* 컷신: 위아래 영화 띠 + 건너뛰기, 컷신 중에는 HUD 숨김 */
 .cine-bars { position: absolute; inset: 0; pointer-events: none; z-index: 25; }
@@ -80,7 +80,7 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 
 /* 대화 중: 위 HUD·행동 막대·지도·채팅을 흐리게, 누를 수 없게 (화면 E 버튼은 대사 넘기기라 그대로) */
 /* 자동 칩(.auto-chip)은 빼 둠: 오토플레이가 대사를 넘기는 중에도 눌러서 끌 수 있게 */
-body.talking:not(.cine) :is(.hud-top, .actionbar, .minimap, .objective, .chat, .fps-chip) { opacity: 0.35; pointer-events: none; transition: opacity 0.3s; }
+body.talking:not(.cine) :is(.hud-top, .actionbar, .minimap, .objective, .chat, .fps-chip, .cam-pad) { opacity: 0.35; pointer-events: none; transition: opacity 0.3s; }
 
 /* 이름 카드 (대화창 안): 지금 이름 + [좋아!] / [✏️ 바꾸기] → 바꾸기를 누르면 글 상자 */
 .dlg-name-card { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -99,3 +99,27 @@ body.talking:not(.cine) :is(.hud-top, .actionbar, .minimap, .objective, .chat, .
 .dlg-choices .dlg-name-card button { min-height: 44px; font-size: 16px; padding: 8px 14px; }
 .dlg-choices .dlg-name-card button.gold { background: var(--gold); color: var(--ink); border-color: #d9a21c; box-shadow: 0 3px 0 #d9a21c; }
 @media (max-width: 600px) { .dlg-name-card .nm { font-size: 20px; flex-basis: 100%; } .dlg-name-card .btns { flex: 1 1 100%; } .dlg-name-card .btns button { flex: 1; justify-content: center; } }
+
+/* ---------------- 선택지 기둥: 대화창 위에 띄움 (창은 3줄 높이로 작게, 장면은 그대로 보임) ---------------- */
+/* float: PC 오른쪽 기둥 · stack: 세로 폰, 창 위 전체 너비 · inbox: 가로로 눕힌 폰·이름 카드는 창 안 (dialogue.js choicesMode) */
+.dlg.ch-float > .dlg-choices, .dlg.ch-stack > .dlg-choices { position: absolute; bottom: calc(100% + 14px); margin: 0; padding: 2px 4px 6px; gap: 8px;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: thin; }
+.dlg.ch-float > .dlg-choices { right: 12px; width: min(300px, 60%); max-height: calc(100vh / var(--ui-zoom, 1) - 100% - 200px); max-height: calc(100dvh / var(--ui-zoom, 1) - 100% - 200px); }
+.dlg.ch-float > .dlg-choices button, .dlg.ch-stack > .dlg-choices button { min-height: 44px; border-radius: 22px; padding: 8px 14px 8px 10px; flex: 0 0 auto;
+  box-shadow: inset 0 2px 0 #fff, 0 3px 0 color-mix(in srgb, var(--dlg-accent, #30b6aa) 55%, #6b4a2e), 0 6px 14px rgba(35,25,22,0.18); }
+.dlg-choices.in { animation: dlgch 0.22s cubic-bezier(.3,1.3,.5,1); }
+@keyframes dlgch { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .dlg-choices.in { animation: none; } }
+/* 세로 폰: 창 위 전체 너비, 두 칸 (설명 줄이 있는 줄은 한 줄 전체). 창 + 선택지가 화면 아래 54% 를 넘지 않게 (얼굴은 그 위) */
+.dlg.ch-stack > .dlg-choices { left: 0; right: 0; width: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  max-height: max(104px, calc(54vh / var(--ui-zoom, 1) - 100% - 84px - var(--sab, 0px))); max-height: max(104px, calc(54dvh / var(--ui-zoom, 1) - 100% - 84px - var(--sab, 0px))); }
+.dlg.ch-stack > .dlg-choices button { font-size: 14px; padding: 6px 10px; gap: 6px; }
+.dlg.ch-stack > .dlg-choices button:has(small), .dlg.ch-stack > .dlg-choices button.locked { grid-column: 1 / -1; }
+.dlg.ch-stack > .dlg-choices small { padding-left: 0; }
+@media (pointer: coarse) { .dlg.ch-float > .dlg-choices .k, .dlg.ch-stack > .dlg-choices .k { display: none; } .dlg.ch-float > .dlg-choices small, .dlg.ch-stack > .dlg-choices small { padding-left: 0; } } /* 숫자 키 표시는 PC 만 */
+/* 가로로 눕힌 폰: 창 안 두 칸 그대로 (위로 띄울 세로 자리가 없음) */
+.dlg.ch-inbox > .dlg-main > .dlg-choices { position: static; }
+/* 대화 중 PC: 행동 막대가 흐려진 자리까지 창을 내림 (장면이 더 보임) */
+@media (min-width: 601px) and (min-height: 501px) { body.talking:not(.cine) .dlg { bottom: calc(24px + var(--sab, 0px)); } }
+/* 대화 중에는 점프 단추도 흐리게 (선택지를 누르다 뛰지 않게) */
+body.talking:not(.cine) .jump-btn { opacity: 0.35; pointer-events: none; transition: opacity 0.3s; }

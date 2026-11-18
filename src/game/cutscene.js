@@ -17,17 +17,38 @@ export function talkLookDrop(aspect = 1) {
   return aspect < 1 ? Math.min(1.7, Math.max(0.7, (1 - aspect) * 3.2)) : 0.7;
 }
 
-/** 두 인물을 담는 대화 구도 { pos, look }: 지금 카메라가 있는 쪽에서 어깨 너머 살짝 비스듬히 */
-export function talkShot(a, b, camPos, fov, aspect = 1) {
+/** 두 인물을 담는 대화 구도 { pos, look }: 지금 카메라가 있는 쪽에서 어깨 너머 살짝 비스듬히
+ *  dodge: 선택지 기둥이 오른쪽에 떠 있는 화면(PC)이면 카메라를 오른쪽으로 0.5m 옮겨 두 사람을 왼쪽으로 */
+export function talkShot(a, b, camPos, fov, aspect = 1, dodge = choiceColumn(aspect)) {
   const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
   const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1;
   const nx = -dz / d, nz = dx / d; // 두 사람을 잇는 선의 옆 방향
   const side = (camPos.x - mx) * nx + (camPos.z - mz) * nz >= 0 ? 1 : -1;
   const dist = talkDistance(d, fov, aspect);
-  return {
+  const shot = {
     pos: [mx + nx * side * dist - (dx / d) * 1.2, 2.5, mz + nz * side * dist - (dz / d) * 1.2],
     look: [mx, 1.1 - talkLookDrop(aspect), mz],
   };
+  return dodge == null ? shot : panRight(shot, 0.5);
+}
+
+/**
+ * 선택지 기둥(대화창 위 오른쪽, dialogue.js 'float')이 뜨는 화면이면 기둥 왼쪽 끝의 화면 가로 위치(NDC x), 아니면 null
+ * 세로 폰(창 위 전체 너비)·가로로 눕힌 폰(창 안)은 null. 대화창 폭 min(94vw, 760) · 기둥 min(300, 60%) · 오른쪽 12px (dialogue.css)
+ */
+export function choiceColumn(aspect = 1.6, w = typeof innerWidth === 'number' ? innerWidth : 1280, h = typeof innerHeight === 'number' ? innerHeight : 800, coarse = isCoarse()) {
+  if (aspect < 1 || w <= 600 || (h <= 500 && coarse)) return null;
+  const box = Math.min(w * 0.94, 760), col = Math.min(300, box * 0.6);
+  return (box / 2 - 16 - col) / (w / 2);
+}
+function isCoarse() {
+  try { return !!globalThis.matchMedia?.('(pointer: coarse)').matches; } catch { return false; }
+}
+/** 구도를 카메라 오른쪽으로 m 만큼 평행 이동 (화면 속 인물은 왼쪽으로) */
+export function panRight(shot, m) {
+  const fx = shot.look[0] - shot.pos[0], fz = shot.look[2] - shot.pos[2], l = Math.hypot(fx, fz) || 1;
+  const rx = (-fz / l) * m, rz = (fx / l) * m;
+  return { ...shot, pos: [shot.pos[0] + rx, shot.pos[1], shot.pos[2] + rz], look: [shot.look[0] + rx, shot.look[1], shot.look[2] + rz] };
 }
 
 const DEG = Math.PI / 180;
@@ -53,7 +74,7 @@ export function ndcX(pos, look, p, y, fov, aspect) {
  *  sep = 두 얼굴의 가로 간격 (화면 너비 비율)
  */
 export function speakerShot(listener, speaker, side = 1, {
-  theta = 35 * DEG, D = 4.2, maxD = 6, camY = 1.6, lookY = 1.25, lookMix = 0.3, faceS = 1.3, faceL = 1.35, fov = 45, aspect = 1.6, fit = 0.8,
+  theta = 35 * DEG, D = 4.2, maxD = 6, camY = 1.6, lookY = 1.25, lookMix = 0.3, faceS = 1.3, faceL = 1.35, fov = 45, aspect = 1.6, fit = 0.8, dodge = choiceColumn(aspect),
 } = {}) {
   const fx = listener.x - speaker.x, fz = listener.z - speaker.z, d = Math.hypot(fx, fz) || 1;
   const ux = fx / d, uz = fz / d, nx = -uz * side, nz = ux * side;
@@ -67,7 +88,21 @@ export function speakerShot(listener, speaker, side = 1, {
     if (dist >= maxD || (Math.abs(xs) < fit && Math.abs(xl) < fit)) break;
     dist = Math.min(maxD, dist + 0.2);
   }
-  return { pos, look, lift: true, theta, side, dist, sep: faceL == null ? 1 : Math.abs(xs - xl) / 2 };
+  // 선택지 기둥(오른쪽)이 말하는 얼굴을 덮으면 카메라를 오른쪽으로 옮겨 얼굴을 기둥 왼쪽으로 (0.8m 까지, 듣는 쪽은 화면 안에)
+  let shift = 0;
+  if (dodge != null && faceL != null && xs > dodge - 0.12) {
+    const k = Math.tan((fov * DEG) / 2) * aspect, depth = (p, y) => { const f = [look[0] - pos[0], look[1] - pos[1], look[2] - pos[2]], l = Math.hypot(...f) || 1; return ((p.x - pos[0]) * f[0] + (y - pos[1]) * f[1] + (p.z - pos[2]) * f[2]) / l; };
+    const zS = depth(speaker, faceS), zL = depth(listener, faceL);
+    let m = (xs - (dodge - 0.12)) * zS * k;
+    m = Math.min(m, 0.8, Math.max(0, (xl + fit) * zL * k));
+    if (m > 0.01) {
+      const s = panRight({ pos, look }, m);
+      pos = s.pos; look.splice(0, 3, ...s.look); shift = m;
+      xs = ndcX(pos, look, speaker, faceS, fov, aspect);
+      xl = ndcX(pos, look, listener, faceL, fov, aspect);
+    }
+  }
+  return { pos, look, lift: true, theta, side, dist, shift, sep: faceL == null ? 1 : Math.abs(xs - xl) / 2 };
 }
 
 /** 몸을 상대(to) 쪽에서 카메라 쪽으로 amount(rad) 만큼만 살짝 돌린 방향 (yaw = atan2(dx, dz)) — 화면에서 얼굴이 더 보이게 */
@@ -209,7 +244,7 @@ export function faceShot(step, camPos, fov = 45, aspect = 1.6, blocked = null, c
   search: for (const LL of Ls) for (const sd of [side, -side]) for (const D of Ds) for (const dt of dts) {
     const th = opts.theta + dt * DEG;
     if (th < 5 * DEG) continue;
-    const c = speakerShot(LL, S, sd, { ...opts, D, maxD: Math.max(opts.maxD, D), theta: th, fov, aspect }), n = score(c);
+    const c = speakerShot(LL, S, sd, { ...opts, D, maxD: Math.max(opts.maxD, D), theta: th, fov, aspect, dodge: null }), n = score(c); // 컷신 얼굴 구도는 선택지 기둥 비킴 없음
     if (n < best - 1e-6) { best = n; sh = c; sh.L = LL; }
     if (n === 0) break search;
   }

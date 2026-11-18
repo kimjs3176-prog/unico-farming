@@ -329,3 +329,33 @@ test('앞모습 대화 구도: 내 옆 우체통이 카메라→주민 얼굴 �
   const s1 = self.talkCamera(L, S, e, { front: true });
   assert.equal(self._propsOnFace(s1.pos, S), 0, `우체통을 피한 구도 ${s1.pos.map((v) => v.toFixed(1))}`);
 });
+
+test('선택지 기둥이 오른쪽에 떠 있는 PC 화면에서만: 말하는 얼굴을 기둥 왼쪽으로 비킴 (0.8m 까지, 듣는 쪽은 화면 안), 세로 폰·가로로 눕힌 폰·컷신은 그대로', async () => {
+  const { choiceColumn } = await import('../src/game/cutscene.js');
+  // 준비: 기둥 왼쪽 끝 (1280×800 → 대화창 760, 기둥 300, 오른쪽 12+4px)
+  const col = choiceColumn(1.6, 1280, 800, false);
+  assert.ok(Math.abs(col - (380 - 16 - 300) / 640) < 1e-9, `기둥 왼쪽 ${col}`);
+  assert.equal(choiceColumn(412 / 839, 412, 839, true), null, '세로 폰: 전체 너비라 비킬 곳 없음');
+  assert.equal(choiceColumn(844 / 390, 844, 390, true), null, '가로로 눕힌 폰: 선택지는 창 안');
+  const fov = fovFor(1.6), S = { x: 0, z: 0 };
+  let moved = 0;
+  for (let k = 0; k < 8; k++) for (const side of [1, -1]) {
+    const a = k * 45 * DEG, L = { x: Math.sin(a) * 1.9, z: Math.cos(a) * 1.9 };
+    // 실행
+    const off = speakerShot(L, S, side, { fov, aspect: 1.6, dodge: null });
+    const on = speakerShot(L, S, side, { fov, aspect: 1.6, dodge: col });
+    const xs0 = ndcX(off.pos, off.look, S, 1.3, fov, 1.6), xs = ndcX(on.pos, on.look, S, 1.3, fov, 1.6), xl = ndcX(on.pos, on.look, L, 1.35, fov, 1.6);
+    // 확인
+    assert.equal(off.shift, 0);
+    if (xs0 <= col - 0.12) { assert.equal(on.shift, 0, `${k} ${side}: 이미 기둥 왼쪽이면 그대로`); continue; }
+    moved++;
+    assert.ok(on.shift > 0 && on.shift <= 0.8 + 1e-9, `옮긴 거리 ${on.shift.toFixed(2)}m`);
+    assert.ok(xs < xs0, `얼굴이 왼쪽으로 ${xs0.toFixed(2)} → ${xs.toFixed(2)}`);
+    assert.ok(xs <= col - 0.12 + 1e-6 || on.shift >= 0.8 - 1e-6 || xl <= -0.8 + 1e-6, `기둥을 비키거나 한계까지 (${xs.toFixed(2)})`);
+    assert.ok(xl >= -0.8 - 1e-6, `듣는 쪽 화면 안 ${xl.toFixed(2)}`);
+  }
+  assert.ok(moved > 0, '비키는 구도가 있어야 시험이 뜻이 있음');
+  const two = talkShot({ x: 0, z: 0 }, { x: 2, z: 0 }, { x: 1, z: 8 }, fov, 1.6, col), plain = talkShot({ x: 0, z: 0 }, { x: 2, z: 0 }, { x: 1, z: 8 }, fov, 1.6, null);
+  assert.ok(Math.abs(Math.hypot(two.look[0] - plain.look[0], two.look[2] - plain.look[2]) - 0.5) < 1e-9, '두 사람 구도는 0.5m');
+  assert.ok(ndcX(two.pos, two.look, { x: 1, z: 0 }, 1, fov, 1.6) < -0.05, '가운데가 왼쪽으로');
+});

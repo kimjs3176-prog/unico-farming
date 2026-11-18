@@ -10,12 +10,20 @@ export const VILLAGER_NAMES = { merchant: '장터 여우', researcher: '연구�
 export const villagerName = (id) => VILLAGER_NAMES[id];
 export const speciesOf = (id) => SPECIES[VILLAGER_SPECIES[id]] || null;
 
+/**
+ * 말소리 (src/game/voice.js): f0 기준 음 높이(Hz), fs 모음 울림(포먼트) 배율, wave 파형, cps 초당 글자, every 몇 음절마다 소리,
+ * gain 크기 맞춤(종마다 시작 최고 ≈ -24 dBFS), lp 저역통과, glide 음절 안 미끄럼(Hz), endFall 문장 끝 음절 내림(Hz), sub 아래 옥타브, dur 음절 길이(초), greet 첫인사 소리
+ * 유니코(나·KOAT 안내·종 없는 유니콘): 맑은 종소리
+ */
+export const VOICE_UNICO = { f0: 880, fs: 1.2, bell: true, gain: 0.8, greet: 'chime' };
+
 // 얼굴 공통: 큰 광택 검은 눈 + 분홍 볼 + 가는 입선 (유니코와 같은 얼굴 가족)
 const EYE = 0x1b1513, LINE = 0x5b4434, NOSE = 0x2a1d18;
 
 export const SPECIES = {
   fox: {
     id: 'fox', koName: '여우', emoji: '🦊', scale: 1, obstacleR: 0.6, shadow: [0.95, 1.2, -0.18],
+    voice: { f0: 700, fs: 1.15, wave: 'sawtooth', cps: 42, every: 2, gain: 1.25, greet: 'yip' }, // 빠르고 또랑또랑
     palette: { body: 0xe8843c, snout: 0xfff3e2, mane: 0xfff8ef, maneD: 0x5a3a2e, hoof: 0x5a3a2e },
     face: {
       eye: { r: 0.066, s: [0.95, 1.05, 0.42], tilt: 0.22, shine: [0.024, 0.011], hl3: false, open: 1 },
@@ -36,6 +44,7 @@ export const SPECIES = {
   },
   raccoon: {
     id: 'raccoon', koName: '너구리', emoji: '🦝', scale: 0.96, obstacleR: 0.65, shadow: [1, 1.05, -0.1],
+    voice: { f0: 460, fs: 1.0, wave: 'square', lp: 2400, gain: 0.9, greet: 'chirp' }, // 사각파를 눌러 웅얼웅얼
     palette: { body: 0x9a8d7e, snout: 0xf1ebe1, mane: 0x8a7c6d, maneD: 0x3f3631, hoof: 0x3f3631 },
     face: {
       eye: { r: 0.07, s: [0.92, 1.05, 0.42], tilt: 0, shine: [0.032, 0.014], hl3: false, open: 1 },
@@ -57,6 +66,7 @@ export const SPECIES = {
   },
   puppy: {
     id: 'puppy', koName: '강아지', emoji: '🐶', scale: 0.94, obstacleR: 0.6, shadow: [0.95, 0.9, 0],
+    voice: { f0: 620, fs: 1.1, glide: 60, gain: 1.5, greet: 'yip' }, // 음절마다 살짝 올라감
     palette: { body: 0xf0d09a, snout: 0xfffaf1, mane: 0xfffaf1, maneD: 0xa96a3f, hoof: 0xfffaf1 },
     face: {
       eye: { r: 0.085, s: [0.9, 1.05, 0.42], tilt: 0, shine: [0.03, 0.013], hl3: true, open: 1 },
@@ -78,6 +88,7 @@ export const SPECIES = {
   },
   bear: {
     id: 'bear', koName: '곰', emoji: '🐻', scale: 1, obstacleR: 0.75, shadow: [1.15, 1, 0],
+    voice: { f0: 210, fs: 0.8, wave: 'sawtooth', sub: true, cps: 30, every: 3, gain: 0.7, greet: 'grunt' }, // 낮고 느리게, 아래 옥타브 받침
     palette: { body: 0x4f423b, snout: 0xc9a27c, mane: 0xf3e6cc, maneD: 0x8a7464, hoof: 0x3a302b },
     face: {
       eye: { r: 0.062, s: [0.95, 1.05, 0.42], tilt: 0, shine: [0.022, 0.01], hl3: false, open: 1 },
@@ -99,6 +110,7 @@ export const SPECIES = {
   },
   cat: {
     id: 'cat', koName: '고양이', emoji: '🐱', scale: 0.98, obstacleR: 0.55, shadow: [0.9, 1, -0.1],
+    voice: { f0: 820, fs: 1.25, endFall: -120, gain: 1.4, greet: 'meow' }, // 문장 끝 음절이 아래로 흘러내림
     palette: { body: 0x9ba7b7, snout: 0xfbf8f2, mane: 0xf2b5c4, maneD: 0x5f6b7d, hoof: 0xfbf8f2 },
     face: {
       // 호박색은 눈 안에: 검은 눈(가는 테두리) 앞에 호박색 홍채 원판, 그 앞에 세로로 긴 검은 동공, 맨 앞 반짝임 (초상화와 같은 고양이 눈)
@@ -121,6 +133,7 @@ export const SPECIES = {
   },
   rabbit: {
     id: 'rabbit', koName: '토끼', emoji: '🐰', scale: 0.85, obstacleR: 0, shadow: [0.85, 0.85, -0.05],
+    voice: { f0: 960, fs: 1.35, dur: 0.03, cps: 44, greet: 'squeak' }, // 높고 짧게 재잘재잘
     palette: { body: 0xddbba0, snout: 0xfffaf3, mane: 0xf6b8c8, maneD: 0xb88f6c, hoof: 0xf4e4cf },
     face: {
       eye: { r: 0.085, s: [0.9, 1.05, 0.42], tilt: 0, shine: [0.03, 0.013], hl3: true, open: 1 },
