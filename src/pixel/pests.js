@@ -44,7 +44,7 @@ export const PestMethods = {
     const wolf = Math.random() < 0.35;
     const ty = (RANCH.y0 + 2 + Math.floor(Math.random() * (RANCH.y1 - RANCH.y0 - 3))) * T + 26;
     const tx = (RANCH.x1 + 1) * T + 16;
-    this.pests.push({ kind: wolf ? 'wolf' : 'fox', name: wolf ? '늑대' : '여우', state: 'approach', t: 0, x: (RANCH.x1 + 5) * T, y: ty, home: { x: (RANCH.x1 + 6) * T, y: ty }, to: { x: tx, y: ty }, face: 1 });
+    this.pests.push({ kind: wolf ? 'wolf' : 'fox', name: wolf ? '늑대' : '산여우', state: 'approach', t: 0, x: (RANCH.x1 + 5) * T, y: ty, home: { x: (RANCH.x1 + 6) * T, y: ty }, to: { x: tx, y: ty }, face: 1 });
     this.audio.play(wolf ? 'howl' : 'caw', wolf ? 1 : 0.5);
     this.ui.toast(wolf ? '늑대가 목장으로 다가와요! 동쪽 울타리로 가서 E — 배틀!' : '여우가 닭장을 노려요! 동쪽 울타리로 가서 E — 배틀!', 'star');
   },

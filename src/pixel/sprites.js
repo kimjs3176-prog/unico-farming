@@ -1,3 +1,5 @@
+import { villager } from './art_villagers.js';
+import * as DA from './art_decor.js';
 import { definePalette } from './palette.js';
 import { Spr } from './pxl.js';
 import * as C from './art_chars.js';
@@ -14,6 +16,13 @@ export function buildSprites() {
     const k = `${key}|${dir}|${f}`;
     let c = S.chars.get(k);
     if (!c) { c = cv(C.unico(dir, f, look)); S.chars.set(k, c); }
+    return c;
+  };
+  // 주민 동물 6종 (쓰일 때 구움)
+  S.villager = (sp, dir, f) => {
+    const k = `v:${sp}|${dir}|${f}`;
+    let c = S.chars.get(k);
+    if (!c) { c = cv(villager(sp, dir, f)); S.chars.set(k, c); }
     return c;
   };
   const dirs = ['down', 'up', 'left', 'right'];
@@ -109,5 +118,50 @@ export function buildSprites() {
   // 발밑 그림자 (픽셀 타원)
   const shadow = (w, h) => { const s = new Spr(w, h); s.ell(w / 2, h / 2, w / 2 - 0.5, h / 2 - 0.5, 'ink', { level: 0 }); return cv(s); };
   S.shadow = { s: shadow(14, 5), m: shadow(22, 7), l: shadow(34, 9), xl: shadow(52, 13) };
+
+  // 농장 꾸미기 소품 (쓰일 때 구움): { img, ax, ay(발밑 기준점), tall, glow }
+  const decorCache = new Map();
+  const flipC = (c) => { const o = document.createElement('canvas'); o.width = c.width; o.height = c.height; const g = o.getContext('2d'); g.translate(c.width, 0); g.scale(-1, 1); g.drawImage(c, 0, 0); return o; };
+  const DECOR_ART = {
+    flowerbed: () => ({ img: cv(DA.flowerbed()), ay: 22 }),
+    planter: () => ({ img: cv(DA.planter()), ay: 28 }),
+    bush: () => ({ img: S.bush[1], ay: 28 }),
+    berrybush: () => ({ img: cv(DA.berrybush(W.bush(2))), ay: 28 }),
+    tree: () => ({ img: DA.treeWhole(S.tree.fol[2]), ay: 104, tall: true }),
+    birch: () => ({ img: cv(DA.birch()), ay: 90, tall: true }),
+    maple: () => ({ img: DA.treeWhole(S.tree.autumn[0]), ay: 104, tall: true }),
+    mossrock: () => ({ img: S.rock[1], ay: 20 }),
+    stump: () => ({ img: S.stump, ay: 20 }),
+    bench: () => ({ img: cv(DA.bench()), ay: 28 }),
+    lamp: () => ({ img: S.lamp.day, glow: S.lamp.night, ay: 64, tall: true }),
+    fence: () => ({ img: S.fence[10], ay: 38 }),
+    scarecrow: () => ({ img: cv(DA.scarecrow()), ay: 56, tall: true }),
+    well: () => ({ img: S.well, ay: 68, tall: true }),
+    barrel: () => ({ img: cv(DA.barrel()), ay: 30 }),
+    crate: () => ({ img: S.crate, ay: 26 }),
+    sack: () => ({ img: cv(DA.sack()), ay: 24 }),
+    bucket: () => ({ img: cv(DA.bucket()), ay: 19 }),
+    hay: () => ({ img: S.hay, ay: 26 }),
+    cart: () => ({ img: cv(DA.cart()), ay: 30 }),
+  };
+  S.decor = (id, flip = false) => {
+    const k = id + (flip ? '|f' : '');
+    let d = decorCache.get(k);
+    if (!d) {
+      const b = decorCache.get(id) || (() => { const o = (DECOR_ART[id] || DECOR_ART.crate)(); o.ax = o.img.width / 2; decorCache.set(id, o); return o; })();
+      d = flip ? { ...b, img: flipC(b.img), glow: b.glow && flipC(b.glow) } : b;
+      decorCache.set(k, d);
+    }
+    return d;
+  };
+  const decorIcons = {};
+  S.decorIcon = (id) => {
+    if (decorIcons[id]) return decorIcons[id];
+    const im = S.decor(id).img, c = document.createElement('canvas'); c.width = c.height = 32;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    const k = Math.min(1, 32 / im.width, 32 / im.height), w = Math.round(im.width * k), h = Math.round(im.height * k);
+    g.drawImage(im, (32 - w) >> 1, 32 - h, w, h);
+    return (decorIcons[id] = c.toDataURL());
+  };
   return S;
 }

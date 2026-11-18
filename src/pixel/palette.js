@@ -64,6 +64,17 @@ export function definePalette() {
   ramp('face', ['#1c1620', '#3a3040', '#5a4c5c']);
   ramp('hoof', ['#2a1e1c', '#4c3a34', '#6c5a50']);
 
+  // 주민 동물 6종 (3D 판 docs/CHARACTERS.md 의 색을 램프로)
+  ramp('fox', ['#5a2412', '#a04a1e', '#d2702e', '#e8843c', '#f6aa62', '#ffd29a']);
+  ramp('racc', ['#2e2826', '#5c524a', '#86796b', '#9a8d7e', '#bdb0a0', '#dcd2c4']);
+  ramp('dog', ['#6a4a2c', '#b08654', '#e0b880', '#f0d09a', '#fff0d2']);
+  ramp('bear', ['#14100e', '#2a221e', '#3e342e', '#4f423b', '#6e5e54', '#8e7c70']);
+  ramp('cat', ['#2e3542', '#4f5a6c', '#7a8698', '#9ba7b7', '#c2ccd8', '#e2e8f0']);
+  ramp('bun', ['#6e4e3a', '#a8846a', '#c8a68a', '#ddbba0', '#efd8c2', '#fbeee0']);
+  ramp('furc', ['#9c8a78', '#d2c4b2', '#f1ebe1', '#fffaf3']);
+  ramp('fdark', ['#1a120e', '#33292a', '#4a3a32', '#6a5446']);
+  ramp('spot', ['#4a2a16', '#7a4a2a', '#a96a3f', '#c88c5e']);
+
   // 빛나는 재질 (밤 조명·블룸)
   ramp('lamp', ['#8a4a10', '#f0a030', '#ffd870', '#fffbe0'], { glow: true });
   ramp('win', ['#6a3a12', '#d8902a', '#ffcc5c', '#fff2b8'], { glow: true });
