@@ -174,12 +174,19 @@ export function greet(audio, kind) {
 }
 
 /**
- * 대화 동안 음악 살짝 줄이기 (붙잡기). audio.holdDuck(key, on, opt) 가 있으면 그것을 씀,
- * 없으면 음악 버스 목표값을 직접 0.7배로 (음악 끔·소리 끔 설정은 그대로 따름)
+ * 대화 동안 음악 살짝 줄이기 (붙잡기).
+ *  - audio.duckHold(db) 가 있으면 그것 (덕킹 전용 게인, 돌려받은 풀기 함수는 한 개만 들고 있음)
+ *  - audio.holdDuck(key, on, opt) 가 있으면 그것
+ *  - 둘 다 없는 예전 판: 음악 버스 목표값을 직접 0.7배로 (음악 끔·소리 끔 설정은 그대로 따름)
  */
 export const DUCK = { db: -3, attack: 0.15, release: 0.6 };
 export function holdDuck(audio, on) {
   if (!audio) return;
+  if (typeof audio.duckHold === 'function') {
+    if (on) { if (!audio._dlgDuckOff) audio._dlgDuckOff = audio.duckHold(DUCK.db); }
+    else { const off = audio._dlgDuckOff; audio._dlgDuckOff = null; if (typeof off === 'function') off(); }
+    return;
+  }
   if (typeof audio.holdDuck === 'function') return audio.holdDuck('dialogue', on, { db: DUCK.db, attack: DUCK.attack });
   const c = audio.ctx, m = audio.music;
   if (!c || !m?.gain) return;

@@ -33,13 +33,19 @@ export function talkShot(a, b, camPos, fov, aspect = 1, dodge = choiceColumn(asp
 }
 
 /**
- * 선택지 기둥(대화창 위 오른쪽, dialogue.js 'float')이 뜨는 화면이면 기둥 왼쪽 끝의 화면 가로 위치(NDC x), 아니면 null
- * 세로 폰(창 위 전체 너비)·가로로 눕힌 폰(창 안)은 null. 대화창 폭 min(94vw, 760) · 기둥 min(300, 60%) · 오른쪽 12px (dialogue.css)
+ * 선택지 기둥(대화창 위 오른쪽, dialogue.js choicesMode 'float')이 뜨는 화면이면 기둥 왼쪽 끝의 화면 가로 위치(NDC x), 아니면 null
+ * 기준은 choicesMode 와 같음: 세로 화면(폭 600 이하·세운 태블릿)은 창 위 전체 너비, 가로로 눕힌 폰은 창 안 → null
+ * 대화창 폭 min(94vw, 760) · 기둥 min(300, 60%) · 오른쪽 12px (dialogue.css). 760·300·16px 은 글자 크기 배율(--ui-zoom)만큼 커짐
  */
-export function choiceColumn(aspect = 1.6, w = typeof innerWidth === 'number' ? innerWidth : 1280, h = typeof innerHeight === 'number' ? innerHeight : 800, coarse = isCoarse()) {
-  if (aspect < 1 || w <= 600 || (h <= 500 && coarse)) return null;
-  const box = Math.min(w * 0.94, 760), col = Math.min(300, box * 0.6);
-  return (box / 2 - 16 - col) / (w / 2);
+export function choiceColumn(aspect = 1.6, w = typeof innerWidth === 'number' ? innerWidth : 1280, h = typeof innerHeight === 'number' ? innerHeight : w / (aspect || 1.6), coarse = isCoarse(), zoom = uiZoom()) {
+  if (w <= 600 || w < h || (h <= 500 && coarse)) return null;
+  const z = zoom > 0 ? zoom : 1;
+  const box = Math.min(w * 0.94, 760 * z), col = Math.min(300 * z, box * 0.6);
+  return (box / 2 - 16 * z - col) / (w / 2);
+}
+/** 화면 글자 크기 배율 (#ui 의 --ui-zoom, game_gfx.js) */
+function uiZoom() {
+  try { return parseFloat(globalThis.document?.getElementById?.('ui')?.style?.getPropertyValue?.('--ui-zoom')) || 1; } catch { return 1; }
 }
 function isCoarse() {
   try { return !!globalThis.matchMedia?.('(pointer: coarse)').matches; } catch { return false; }

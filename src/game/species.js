@@ -23,7 +23,7 @@ const EYE = 0x1b1513, LINE = 0x5b4434, NOSE = 0x2a1d18;
 export const SPECIES = {
   fox: {
     id: 'fox', koName: '여우', emoji: '🦊', scale: 1, obstacleR: 0.6, shadow: [0.95, 1.2, -0.18],
-    voice: { f0: 700, fs: 1.15, wave: 'sawtooth', cps: 42, every: 2, gain: 1.25, greet: 'yip' }, // 빠르고 또랑또랑
+    voice: { f0: 700, fs: 1.15, wave: 'sawtooth', cps: 42, every: 2, gain: 1.45, greet: 'yip' }, // 빠르고 또랑또랑
     palette: { body: 0xe8843c, snout: 0xfff3e2, mane: 0xfff8ef, maneD: 0x5a3a2e, hoof: 0x5a3a2e },
     face: {
       eye: { r: 0.066, s: [0.95, 1.05, 0.42], tilt: 0.22, shine: [0.024, 0.011], hl3: false, open: 1 },

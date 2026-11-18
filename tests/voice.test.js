@@ -92,3 +92,33 @@ test('대화 동안 음악 줄이기: holdDuck API 가 있으면 그것, 없으�
   a.musicOn = false; holdDuck(a, false);
   assert.equal(a.music.gain.target, 0, '음악 끔 설정을 따름');
 });
+
+test('W3-A 오디오의 duckHold(db) 가 있으면 그것: 두 번 켜도 붙잡기 한 개, 끄면 풀기 한 번, 음악 버스는 건드리지 않음', () => {
+  let holds = 0, releases = 0;
+  const { a } = fakeAudio();
+  a.duckHold = (db) => { holds++; assert.equal(db, -3); return () => { releases++; }; };
+  holdDuck(a, true); holdDuck(a, true);
+  assert.equal(holds, 1, '붙잡기는 한 개만');
+  assert.equal(a.music.gain.target, undefined, '음악 버스 게인은 그대로');
+  holdDuck(a, false); holdDuck(a, false);
+  assert.equal(releases, 1, '풀기는 한 번');
+  holdDuck(a, true);
+  assert.equal(holds, 2, '다시 켜면 새로 붙잡음');
+});
+
+test('종마다 말소리 크기 맞춤: 음절 봉우리 중앙값이 마스터·효과음 버스(0.9×0.8) 뒤 -24±2 dBFS, 종끼리 3dB 안', async () => {
+  const { syllablePeak } = await import('./lib/voice_render.js');
+  // 준비: 기준값
+  const TARGET = -24, TOL = 2, SPREAD = 3, BUS = 0.9 * 0.8;
+  const text = '안녕하세요반가워오늘날씨가참좋다물고기잡으러가자';
+  const meds = {};
+  // 실행: 종마다 문장 음절을 하나씩 그려 봉우리 중앙값
+  for (const [id, v] of [...SPECIES_IDS.map((i) => [i, SPECIES[i].voice]), ['unico', VOICE_UNICO]]) {
+    const pk = [...text].map((ch) => syllablePeak(voiceParams(v, ch))).sort((a, b) => a - b);
+    meds[id] = 20 * Math.log10(pk[pk.length >> 1] * BUS);
+  }
+  // 확인
+  for (const [id, db] of Object.entries(meds)) assert.ok(Math.abs(db - TARGET) <= TOL, `${id} ${db.toFixed(1)} dBFS`);
+  const all = Object.values(meds);
+  assert.ok(Math.max(...all) - Math.min(...all) <= SPREAD, `종끼리 차이 ${(Math.max(...all) - Math.min(...all)).toFixed(1)} dB`);
+});

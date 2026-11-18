@@ -333,10 +333,14 @@ test('앞모습 대화 구도: 내 옆 우체통이 카메라→주민 얼굴 �
 test('선택지 기둥이 오른쪽에 떠 있는 PC 화면에서만: 말하는 얼굴을 기둥 왼쪽으로 비킴 (0.8m 까지, 듣는 쪽은 화면 안), 세로 폰·가로로 눕힌 폰·컷신은 그대로', async () => {
   const { choiceColumn } = await import('../src/game/cutscene.js');
   // 준비: 기둥 왼쪽 끝 (1280×800 → 대화창 760, 기둥 300, 오른쪽 12+4px)
-  const col = choiceColumn(1.6, 1280, 800, false);
+  const col = choiceColumn(1.6, 1280, 800, false, 1);
   assert.ok(Math.abs(col - (380 - 16 - 300) / 640) < 1e-9, `기둥 왼쪽 ${col}`);
   assert.equal(choiceColumn(412 / 839, 412, 839, true), null, '세로 폰: 전체 너비라 비킬 곳 없음');
   assert.equal(choiceColumn(844 / 390, 844, 390, true), null, '가로로 눕힌 폰: 선택지는 창 안');
+  assert.equal(choiceColumn(768 / 1024, 768, 1024, true, 1), null, '세운 태블릿: 창 위 전체 너비 (기둥 없음)');
+  // 글자 크기 ×1.3: 대화창 760→988 은 화면(1280×0.94=1203)보다 작고, 기둥 300→390, 여백 16→20.8
+  const big = choiceColumn(1.6, 1280, 800, false, 1.3);
+  assert.ok(Math.abs(big - (988 / 2 - 16 * 1.3 - 390) / 640) < 1e-9, `글자 크기 배율 ${big}`);
   const fov = fovFor(1.6), S = { x: 0, z: 0 };
   let moved = 0;
   for (let k = 0; k < 8; k++) for (const side of [1, -1]) {

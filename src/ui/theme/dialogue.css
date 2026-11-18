@@ -16,7 +16,13 @@
 .dlg-hearts-slot:empty { display: none; }
 .dlg-hearts { display: inline-flex; align-items: center; gap: 2px; background: var(--panel); border: 2px solid var(--panel-edge); border-radius: 999px; padding: 3px 8px 3px 7px; line-height: 1; }
 .dlg-hearts em { font-style: normal; font-size: 12px; font-weight: bold; color: #7a5a3c; margin-right: 3px; }
-.dlg-hearts .ht { width: 15px; height: 15px; display: block; }
-.dlg-hearts .ht path { fill: #fff; stroke: #b98a6a; stroke-width: 2; stroke-linejoin: round; }
+.dlg-hearts .ht { width: 17px; height: 17px; display: block; }
+/* 빈 하트: 채울 칸으로 읽히게 연분홍 (흰 바탕 가는 선은 낙서처럼 보였음) */
+.dlg-hearts .ht path { fill: #fde3ec; stroke: #d29aac; stroke-width: 1.5; stroke-linejoin: round; }
 .dlg-hearts .ht.on path { fill: #f06292; stroke: #c94a78; }
-@media (max-height: 500px) and (pointer: coarse) { .dlg-hearts { padding: 2px 6px; } .dlg-hearts .ht { width: 13px; height: 13px; } .dlg-hearts em { display: none; } }
+/* 이야기하다 하트가 늘면 새 하트만 톡 (transform 만) */
+.dlg-hearts .ht.pop { animation: htpop 0.5s cubic-bezier(.3,1.6,.5,1); transform-origin: 50% 60%; }
+@keyframes htpop { 0% { transform: scale(0.4); } 60% { transform: scale(1.35); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .dlg-hearts .ht.pop { animation: none; } }
+@media (max-width: 600px) { .dlg-hearts { padding: 2px 6px; } .dlg-hearts .ht { width: 14px; height: 14px; } .dlg-hearts em { font-size: 11px; margin-right: 2px; } }
+@media (max-height: 500px) and (pointer: coarse) { .dlg-hearts { padding: 2px 6px; } .dlg-hearts .ht { width: 13px; height: 13px; } .dlg-hearts em { font-size: 11px; margin-right: 2px; } }

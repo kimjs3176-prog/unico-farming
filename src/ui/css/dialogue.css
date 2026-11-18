@@ -7,11 +7,11 @@
 @keyframes dlgin { from { opacity: 0; transform: translate(-50%, 24px) scale(0.96); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
 .dlg-portrait { flex: 0 0 auto; width: 112px; height: 112px; border-radius: 20px; overflow: hidden; border: 3px solid var(--dlg-accent, #30b6aa); background: #cfe9f7; align-self: center; }
 .dlg-portrait canvas { width: 100%; height: 100%; display: block; }
-.dlg-main { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; }
+.dlg-main { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; justify-content: center; } /* 짧은 대사는 초상화 가운데 높이에 */
 .dlg-name { display: flex; align-items: center; gap: 8px; margin: -30px 0 6px; }
 .dlg-name b { background: var(--dlg-accent, #30b6aa); color: var(--dlg-on, #fff); font-family: 'Unico Coin', Jua, sans-serif; font-weight: normal; font-size: 19px; padding: 4px 14px; border-radius: 14px; box-shadow: 0 3px 0 rgba(0,0,0,0.12); }
 .dlg-name small { font-size: 14px; opacity: 0.85; }
-.dlg-text { font-size: 19px; line-height: 1.55; min-height: calc(3 * 1.55em); white-space: pre-wrap; word-break: keep-all; }
+.dlg-text { font-size: 19px; line-height: 1.55; min-height: calc(2 * 1.55em); white-space: pre-wrap; word-break: keep-all; }
 .dlg-next { position: absolute; right: 2px; bottom: -2px; font-style: normal; color: var(--dlg-accent, #30b6aa); opacity: 0; }
 .dlg.done:not(.has-choices) .dlg-next { opacity: 1; animation: dlgnext 0.8s ease-in-out infinite; }
 @keyframes dlgnext { 50% { transform: translateY(4px); } }
@@ -23,7 +23,9 @@
 .dlg-choices button:hover:not(:disabled) { border-color: var(--dlg-accent, #30b6aa); background: #fff; }
 .dlg-choices .k { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: var(--dlg-accent, #30b6aa); color: var(--dlg-on, #fff); font-size: 13px; }
 .dlg-choices small { width: 100%; padding-left: 30px; opacity: 0.7; font-size: 12px; }
-@media (max-width: 600px) { .dlg { bottom: 150px; padding: 10px 12px; gap: 10px; } .dlg-portrait { width: 76px; height: 76px; } .dlg-text { font-size: 16px; line-height: 1.45; min-height: calc(2 * 1.45em); } }
+@media (max-width: 600px) { .dlg { bottom: 150px; padding: 10px 12px; gap: 10px; } .dlg-portrait { width: 76px; height: 76px; } .dlg-text { font-size: 16px; line-height: 1.45; min-height: calc(2 * 1.45em); }
+  /* 이름표는 창 왼쪽 끝(초상화 위)부터: 이름 + 하트가 한 줄에 들어가게 */
+  .dlg-name { margin-left: -86px; } .dlg-name b { font-size: 17px; padding: 4px 12px; } }
 
 /* 컷신: 위아래 영화 띠 + 건너뛰기, 컷신 중에는 HUD 숨김 */
 .cine-bars { position: absolute; inset: 0; pointer-events: none; z-index: 25; }
@@ -53,7 +55,10 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
 @media (prefers-reduced-motion: reduce) { .p2 .p2-eye, .dlg:not(.done) .p2 .p2-mo, .dlg:not(.done) .p2 .p2-mc, .dlg:not(.done) .dlg-portrait svg.p2 { animation: none; } }
 /* 대화창 이름표는 한 줄 (좁은 화면에서 '🐕 / 콩이'로 쪼개지지 않게) */
 .dlg-name b { white-space: nowrap; }
-.dlg-name { flex-wrap: wrap; row-gap: 2px; }
+/* 이름표·하트는 늘 한 줄 (작은 설명만 줄여 말줄임) */
+.dlg-name { flex-wrap: nowrap; min-width: 0; }
+.dlg-name > b, .dlg-name > .dlg-hearts-slot { flex: 0 0 auto; }
+.dlg-name small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 모바일: UI 최소화 (세로 폰 + 가로로 눕힌 폰) */
 @media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
@@ -68,12 +73,17 @@ body.cine .dlg { bottom: calc(9vh + 14px); }
   /* 대화창: ☰·E 사이로 폭을 줄이고 바닥까지 내려 세로 공간 확보, 선택지는 2열 (☰·E 도 확대되므로 150px 은 확대 단위로 뺌) */
   .dlg { bottom: calc(6px + var(--sab)); width: min(calc(100vw / var(--ui-zoom, 1) - 150px - var(--sal) - var(--sar)), 760px); padding: 8px 12px 8px 10px; gap: 10px; border-width: 3px;
     max-height: calc(100vh / var(--ui-zoom, 1) - var(--hud-b, 40px) - 50px); max-height: calc(100dvh / var(--ui-zoom, 1) - var(--hud-b, 40px) - 50px); }
-  .dlg-portrait { width: 64px; height: 64px; border-radius: 14px; }
-  .dlg-name { margin: -24px 0 4px; }
+  .dlg { padding: 6px 10px 6px 8px; gap: 8px; }
+  .dlg-portrait { width: 64px; height: 64px; border-radius: 14px; align-self: flex-start; margin-top: 4px; }
+  .dlg-name { margin: -22px 0 2px; }
   .dlg-name b { font-size: 16px; padding: 3px 10px; }
-  .dlg-text { font-size: 15px; line-height: 1.45; min-height: 0; }
-  .dlg-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 6px; align-content: start; }
-  .dlg-choices button { padding: 5px 10px; font-size: 14px; min-height: 36px; }
+  .dlg-text { font-size: 15px; line-height: 1.4; min-height: 0; }
+  /* 선택지 세 칸 (잠긴 줄은 두 칸): 창이 화면 아래 절반 안에 들어가 얼굴이 보이게 */
+  .dlg-choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 4px; align-content: start; }
+  .dlg-choices button { padding: 3px 8px; font-size: 13px; min-height: 34px; gap: 4px 6px; }
+  .dlg-choices button.locked { grid-column: span 2; }
+  /* 창 오른쪽에 겹치던 위 오른쪽 단추·카메라 패드·채팅은 대화 중 아예 숨김 (흐리게는 겹침이 남음) */
+  body.talking:not(.cine) :is(.cam-pad, .chat, .chat-bubble, .hud-right) { opacity: 0; visibility: hidden; }
   .dlg-choices .k { display: none; } /* 숫자 키 표시는 터치에서 쓸모없음 */
   .dlg-choices small { padding-left: 0; font-size: 11px; }
 }
@@ -100,13 +110,17 @@ body.talking:not(.cine) :is(.hud-top, .actionbar, .minimap, .objective, .chat, .
 .dlg-choices .dlg-name-card button.gold { background: var(--gold); color: var(--ink); border-color: #d9a21c; box-shadow: 0 3px 0 #d9a21c; }
 @media (max-width: 600px) { .dlg-name-card .nm { font-size: 20px; flex-basis: 100%; } .dlg-name-card .btns { flex: 1 1 100%; } .dlg-name-card .btns button { flex: 1; justify-content: center; } }
 
-/* ---------------- 선택지 기둥: 대화창 위에 띄움 (창은 3줄 높이로 작게, 장면은 그대로 보임) ---------------- */
+/* ---------------- 선택지 기둥: 대화창 위에 띄움 (창은 2줄 높이로 작게, 장면은 그대로 보임) ---------------- */
 /* float: PC 오른쪽 기둥 · stack: 세로 폰, 창 위 전체 너비 · inbox: 가로로 눕힌 폰·이름 카드는 창 안 (dialogue.js choicesMode) */
 .dlg.ch-float > .dlg-choices, .dlg.ch-stack > .dlg-choices { position: absolute; bottom: calc(100% + 14px); margin: 0; padding: 2px 4px 6px; gap: 8px;
   overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: thin; }
-.dlg.ch-float > .dlg-choices { right: 12px; width: min(300px, 60%); max-height: calc(100vh / var(--ui-zoom, 1) - 100% - 200px); max-height: calc(100dvh / var(--ui-zoom, 1) - 100% - 200px); }
+.dlg.ch-float > .dlg-choices { right: 12px; width: min(300px, 60%); gap: 6px; max-height: min(270px, calc(100vh / var(--ui-zoom, 1) - 100% - 200px)); max-height: min(270px, calc(100dvh / var(--ui-zoom, 1) - 100% - 200px)); }
+/* 다섯 줄 넘으면 스크롤 + 아래 끝을 흐리게 (더 있다는 표시, 끝까지 내리면 없앰) */
+.dlg.ch-float > .dlg-choices.more:not(.at-end) { -webkit-mask-image: linear-gradient(#000 calc(100% - 36px), transparent); mask-image: linear-gradient(#000 calc(100% - 36px), transparent); }
 .dlg.ch-float > .dlg-choices button, .dlg.ch-stack > .dlg-choices button { min-height: 44px; border-radius: 22px; padding: 8px 14px 8px 10px; flex: 0 0 auto;
   box-shadow: inset 0 2px 0 #fff, 0 3px 0 color-mix(in srgb, var(--dlg-accent, #30b6aa) 55%, #6b4a2e), 0 6px 14px rgba(35,25,22,0.18); }
+/* PC 기둥은 가볍게: 아래 두께 2px, 그림자 옅게 (장면보다 튀지 않게) */
+.dlg.ch-float > .dlg-choices button { box-shadow: inset 0 2px 0 #fff, 0 2px 0 color-mix(in srgb, var(--dlg-accent, #30b6aa) 55%, #6b4a2e), 0 4px 10px rgba(35,25,22,0.12); }
 .dlg-choices.in { animation: dlgch 0.22s cubic-bezier(.3,1.3,.5,1); }
 @keyframes dlgch { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .dlg-choices.in { animation: none; } }
@@ -114,10 +128,13 @@ body.talking:not(.cine) :is(.hud-top, .actionbar, .minimap, .objective, .chat, .
 .dlg.ch-stack > .dlg-choices { left: 0; right: 0; width: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
   max-height: max(104px, calc(54vh / var(--ui-zoom, 1) - 100% - 84px - var(--sab, 0px))); max-height: max(104px, calc(54dvh / var(--ui-zoom, 1) - 100% - 84px - var(--sab, 0px))); }
 .dlg.ch-stack > .dlg-choices button { font-size: 14px; padding: 6px 10px; gap: 6px; }
-.dlg.ch-stack > .dlg-choices button:has(small), .dlg.ch-stack > .dlg-choices button.locked { grid-column: 1 / -1; }
+.dlg.ch-stack > .dlg-choices button.locked { grid-column: 1 / -1; }
+.dlg.ch-stack > .dlg-choices button.has-note { grid-column: 1 / -1; } /* :has() 없는 브라우저도 (dialogue.js choiceView 가 붙임) */
+/* 마지막 줄에 빈 칸이 남으면 마지막 선택지가 그 칸까지 (dialogue.js lastRowSpan, '안녕' 이 혼자 반 칸에 남지 않게) */
+.dlg.ch-stack > .dlg-choices button.fill-end, .dlg.ch-inbox .dlg-choices button.fill-end { justify-content: center; }
 .dlg.ch-stack > .dlg-choices small { padding-left: 0; }
 @media (pointer: coarse) { .dlg.ch-float > .dlg-choices .k, .dlg.ch-stack > .dlg-choices .k { display: none; } .dlg.ch-float > .dlg-choices small, .dlg.ch-stack > .dlg-choices small { padding-left: 0; } } /* 숫자 키 표시는 PC 만 */
-/* 가로로 눕힌 폰: 창 안 두 칸 그대로 (위로 띄울 세로 자리가 없음) */
+/* 가로로 눕힌 폰: 창 안 (위로 띄울 세로 자리가 없음) */
 .dlg.ch-inbox > .dlg-main > .dlg-choices { position: static; }
 /* 대화 중 PC: 행동 막대가 흐려진 자리까지 창을 내림 (장면이 더 보임) */
 @media (min-width: 601px) and (min-height: 501px) { body.talking:not(.cine) .dlg { bottom: calc(24px + var(--sab, 0px)); } }
