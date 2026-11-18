@@ -4,6 +4,7 @@ import { joinQrBox } from '../join_qr.js';
 import { CROPS, PRODUCTS } from '../../game/sim/crops.js';
 import { ITEMS } from '../../game/sim/items.js';
 import { VILLAGERS } from '../../game/sim/villagers.js';
+import { REACT } from '../../game/sim/villager_lines.js';
 
 const anyItem = (k) => CROPS[k] || PRODUCTS[k] || ITEMS[k];
 
@@ -58,7 +59,7 @@ export const VillagerPanel = {
           const r = v.fulfill(id);
           g.economy.earn(r.reward);
           g.audio.play('coin');
-          this.toast(`🙏 ${e.name ?? e.n.name}: 고마워! +${r.reward}🪙, 우정 +${r.gained}`);
+          this.toast(`🙏 ${e.name ?? e.n.name}: ${REACT[id]?.thanks ?? '고마워!'} +${r.reward}🪙, 우정 +${r.gained}`);
           g.npcs.applyRewards(e, r);
           render();
         };
@@ -93,7 +94,9 @@ export const VillagerPanel = {
         const r = g.villagers.gift(e.id, k, g.world.day, g.costume?.mult('friend') ?? 1);
         e.u.playAction(r.liked ? 'cheer' : 'heart', 1.8);
         e.u.happyUntil = e.u.t + 3; // 동작이 끝나도 잠깐 더 웃는 얼굴 (주민 동물)
-        e.u.say(r.liked ? '와아! 이거 정말 좋아해! 💕' : '고마워, 잘 쓸게!', 3);
+        // 주민마다 다른 반응 (말투는 docs/CHARACTERS.md), 하트가 오르면 그 한마디
+        const R = REACT[e.id] || {};
+        e.u.say(r.heartUp && R.heartUp ? R.heartUp : r.liked ? R.liked ?? '와아! 이거 정말 좋아해! 💕' : R.neutral ?? '고마워, 잘 쓸게!', 3.5);
         g.audio.play(r.liked ? 'win' : 'coin');
         this.toast(`🎁 ${it.name} 선물! 우정 +${r.gained}${r.liked ? ' (아주 좋아해요!)' : ''}`);
         g.npcs.applyRewards(e, r);

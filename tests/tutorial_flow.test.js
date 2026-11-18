@@ -65,7 +65,7 @@ test('완료 알림: 자동 보상은 금액, 아니면 받는 법. 완료 소�
   t.mock.timers.tick(2000);
   g.economy.money = 1200;
   g.onEvent('bug');
-  assert.ok(g.toasts.some((x) => x.startsWith('✅ 천 원의 농부')), '보유 금액 퀘스트');
+  assert.ok(g.toasts.some((x) => x.startsWith('✅ 천 코인 농부')), '보유 금액 퀘스트');
   t.mock.timers.tick(400);
   assert.equal(g.sounds.filter((s) => s === 'win').length, 2);
 });

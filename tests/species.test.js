@@ -505,3 +505,41 @@ test('내 이름표: 바로 뒤에 선 주민(5m 안, 12° 안)을 가리면 흐
   for (let i = 0; i < 60; i++) self._fadePlayerLabel(1 / 30, player.group.position);
   assert.ok(player.label.material.opacity > 0.98);
 });
+
+/** 고개 한계(시선 1.0 · 위 0.3 · 아래 0.45)에 더해지는 몸짓 여유 (걸음 끄덕임·두리번·대기 동작) */
+const LOOK_SLACK_Y = 0.5, LOOK_SLACK_P = 0.3;
+test('시선: 아무 데나 둔 lookTarget → 고개는 한계 안, 귀 돌림 0.6 안, 몸 방향(facing)은 건드리지 않음', () => {
+  let seed = 3;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (const sp of [...SPECIES_IDS, null]) {
+    const u = sp ? new Unico(null, { species: sp }) : new Unico(null, { rig: 'biped' });
+    u.labelAlways = true;
+    const target = new THREE.Vector3();
+    for (let i = 0; i < 300; i++) {
+      const dt = 1 / 60 + rnd() * 0.2;
+      if (rnd() < 0.2) u.lookTarget = rnd() < 0.15 ? null : target.set(rnd() * 20 - 10, rnd() * 4 - 1, rnd() * 20 - 10);
+      if (rnd() < 0.05) u.facing = rnd() * 6.2 - 3.1;
+      u.attention = rnd(); u.attnYaw = rnd() * 4 - 2;
+      const f = u.facing;
+      u.update(dt, camAt(6));
+      assert.equal(u.facing, f, '시선은 facing 을 바꾸지 않음');
+      const h = u.headG.rotation;
+      assert.ok(Number.isFinite(h.y) && Math.abs(h.y) <= 1.0 + LOOK_SLACK_Y, `${sp} 고개 좌우 ${h.y}`);
+      assert.ok(h.x > -0.3 - LOOK_SLACK_P && h.x < 0.45 + LOOK_SLACK_P, `${sp} 고개 위아래 ${h.x}`);
+      assert.ok(Math.abs(u.lookYawApplied) <= 1 + 1e-6, `${u.lookYawApplied}`);
+      if (u.earChain) for (const c of u.earChain) if (c[0]) assert.ok(Math.abs(c[0].rotation.y) <= 0.6 + 1e-6, `${sp} 귀 y ${c[0].rotation.y}`);
+    }
+  }
+});
+
+test('시선: 옆 3m 대상을 1초 보면 고개가 그쪽으로 (몸은 그대로), 대상을 치우면 고개가 돌아옴', () => {
+  const u = new Unico(null, { species: 'fox' });
+  u.labelAlways = true; u.facing = u.yaw = 0;
+  u.lookTarget = new THREE.Vector3(3, 1.2, 0.5); // 오른쪽(+x) 약 80°
+  for (let i = 0; i < 60; i++) u.update(1 / 60, camAt(6));
+  assert.ok(u.headG.rotation.y > 0.8, `고개 ${u.headG.rotation.y}`);
+  assert.equal(u.root.rotation.y, 0, '몸은 그대로');
+  u.lookTarget = null;
+  for (let i = 0; i < 90; i++) u.update(1 / 60, camAt(6));
+  assert.ok(Math.abs(u.lookYawApplied) < 0.05, `돌아옴 ${u.lookYawApplied}`);
+});

@@ -114,8 +114,7 @@ export class KoatView {
       // 담당 유니코: 가까이 오면 바라보고, 가끔 손님 맞이 동작
       const np = b.npc.group.position;
       const dn = Math.hypot(np.x - playerPos.x, np.z - playerPos.z);
-      if (b.npc.faceLock != null) b.npc.facing = b.npc.faceLock; // 컷신·대화 구도 (cinema.release 가 풂)
-      else b.npc.facing = dn < 6 ? Math.atan2(playerPos.x - np.x, playerPos.z - np.z) : b.rot;
+      this._gaze(b.npc, b, dn, playerPos, b.rot, dt);
       b.idle += dt;
       if (b.idle > 9) { b.idle = Math.random() * 3; b.npc.playAction(dn < 6 ? 'heart' : 'present', 1.8); }
       b.npc.update(dt, cam);
@@ -123,11 +122,29 @@ export class KoatView {
     if (this.drone) { this.drone.position.y = 2.9 + Math.sin(this.t * 2) * 0.15; this.drone.traverse((o) => { if (/^Rotor/.test(o.name)) o.rotation.y += dt * 40; }); }
     const dp = this.desk.group.position;
     const dd = Math.hypot(dp.x - playerPos.x, dp.z - playerPos.z);
-    if (this.desk.faceLock != null) this.desk.facing = this.desk.faceLock;
-    else this.desk.facing = dd < 6 ? Math.atan2(playerPos.x - dp.x, playerPos.z - dp.z) : 0;
+    this._gaze(this.desk, (this._deskG ||= {}), dd, playerPos, 0, dt);
     this.desk.update(dt, cam);
     if (dd < 2.4 && (!best || dd < best.d)) best = { d: dd, label: `🏢 KOAT 안내데스크 · 스탬프 ${this.book.count}/${DIVISIONS.length}`, key: 'koat', onInteract: () => this.game.ui.openKoatDesk() };
     return best;
+  }
+
+  /**
+   * 담당 유니코 시선 (주민과 같은 식): 6m 안이면 고개로 플레이어 얼굴을 보고, 고개 한계(1.1rad)를 1.2초 넘게 넘으면 그때 몸을 천천히 돌림.
+   * 멀어지면 원래 자리 방향(rest)으로 돌아감. st = 담당마다 상태 (타이머·돌릴 방향·시선 벡터)
+   */
+  _gaze(u, st, d, pp, rest, dt) {
+    if (u.faceLock != null) { u.facing = u.faceLock; st.to = null; return; } // 컷신·대화 구도 (cinema.release 가 풂)
+    const hy = (this.game.player?.position?.y ?? 0) + (this.game.player?.unico?.headH ?? 1.2);
+    if (d < 6) u.lookTarget = (st.look ||= new THREE.Vector3()).set(pp.x, hy, pp.z);
+    else if (d > 7) u.lookTarget = null;
+    const p = u.group.position, toP = Math.atan2(pp.x - p.x, pp.z - p.z);
+    if (u.lookTarget) {
+      const off = Math.abs(Math.atan2(Math.sin(toP - u.yaw), Math.cos(toP - u.yaw)));
+      st.t = off > 1.1 ? (st.t || 0) + dt : 0;
+      if (st.t > 1.2) { st.to = toP; st.t = 0; }
+    } else { st.t = 0; st.to = null; }
+    const want = st.to ?? (u.lookTarget ? null : rest);
+    if (want != null) { const e = Math.atan2(Math.sin(want - u.facing), Math.cos(want - u.facing)); u.facing += e * (1 - Math.exp(-dt * (st.to != null ? 3 : 1.5))); }
   }
 
   /** 체험 결과 반영: 스탬프·보상·퀘스트 */
@@ -140,7 +157,7 @@ export class KoatView {
       if (g.reward) g.reward(done ? 3 : 2, { x: pp.x, z: pp.z, label: '🏅' }); else g.audio.play('win');
       g.player.unico.playAction('cheer', 1.6);
     }
-    else { g.audio.play('bump'); g.player.unico.playAction('think', 1.2); }
+    else { g.audio.play('deny'); g.player.unico.playAction('think', 1.2); }
     if (r.newStamp) { g.onEvent('koatstamp', 1); g.onEvent('koatall', this.book.count); }
     return r;
   }

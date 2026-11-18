@@ -8,6 +8,10 @@ import { VILLAGER_SPECIES, villagerName } from '../species.js';
 import { talkShot, speakerShot, cheatYaw, liftFor, hudFrac } from '../cutscene.js';
 import { setHeroLabel, setLabelOccluders } from '../label.js';
 import { heightAt } from '../terrain.js';
+import { pickLine, remember, REACT, OUT_OF_LINES, OUT_OF_LINES_BY, WAKE } from '../sim/villager_lines.js';
+import { slotAt, legOf, hourOf, isNight, canDepart, ROUTINE_CHECK } from '../sim/routine.js';
+import { seasonOf } from '../sim/season.js';
+import { Economy } from '../sim/economy.js';
 
 const ROLE_ICON = { merchant: '🛒', researcher: '🔬', guide: '📣', granny: '🌾', kid: '🦋', fisher: '🎣' };
 /** 대화창 이름표 색 (역할별) */
@@ -24,26 +28,13 @@ const OUTFITS = {
   fisher: { hat: 'straw', scarf: 'blue' },
 };
 
-/** 성격별 대사 (매일 조금씩 다른 말) */
-const LINES = {
-  merchant: ['신선한 농산물 삽니다~ 씨앗도 팔아요!', '오늘 시세 봤어? 매일 바뀐다구!', '볍씨도 들여놨어. 논농사 해 볼래?'],
-  researcher: ['스마트팜은 센서로 온도·습도를 관리해요.', '벼는 단계마다 알맞은 물 높이가 달라요. 익으면 물을 빼 주세요!', '얕은 물에선 잡초가 잘 자라요. 깊게 대면 잡초가 줄어요.'],
-  guide: ['유니코 팜에 온 걸 환영해요! 퀘스트(Q)를 확인해 보세요.', '연못에서 낚시를 해 봤어요? 비 오는 날엔 희귀한 물고기가!', '과일 나무는 하루에 한 번 흔들 수 있어요.'],
-  granny: ['쌀 한 톨에도 정성이 담겨야 한단다.', '모내기 철엔 물을 얕게, 이삭이 패면 깊게 대거라.', '탈곡은 힘껏! 빠르게 밟아야 낟알이 잘 떨어져.'],
-  fisher: ['큰 녀석은 서두르면 안 돼. 줄이 빨개지면 놓아 주고, 지치면 감는 거야.', '밤에는 뱀장어가 나온단다. 비 오는 날엔 산천어가 잘 물지.', '호수 한가운데 반짝이는 곳 봤니? 헤엄쳐 가서 잠수하면 조개가 있어.', '전설의 철갑상어… 황금 낚싯대라면 혹시 모르지.'],
-  kid: ['나비 잡으러 가자! 밤엔 반딧불이도 있어!', '황금 잉어 본 적 있어? 엄청 희귀하대!', '나무를 흔들면 가끔 장수풍뎅이가 떨어져!'],
-};
-/** 동물 주민만 하는 대사 (종 특징) */
-const SPECIES_LINES = {
-  merchant: ['밤에 닭장 노리는 건 산여우야. 난 장사만 한다구!', '꼬리 털 손질에만 아침 한 시간이라구~'],
-  researcher: ['생각할 땐 앞발을 비비게 돼요. 집중이 잘 되거든요!'],
-  guide: ['꼬리가 저절로 흔들려요! 반가워서 그런가 봐요 🐾'],
-  granny: ['아이고, 우리 강아지 왔구나. 밥은 먹었니?'],
-  fisher: ['물고기 냄새만 맡아도 어디 있는지 알지. 고양이 코는 못 속여.'],
-  kid: ['깡충깡충! 나 잡아 봐라~'],
-};
 const STARTLE = ['깜짝이야!', '으악! 트랙터다!', '조심해~!', '어이쿠!'];
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+/** 시선: 이만큼(m) 안이면 플레이어 얼굴을 봄, 이만큼 밖으로 2초 지나면 그만 봄. 몸은 고개 한계(1.1rad)를 1.2초 넘게 넘어야 돌림 */
+const LOOK_IN = 6, LOOK_OUT = 7, LOOK_OUT_T = 2, BODY_TURN = 1.1, BODY_TURN_T = 1.2, HERO_LOOK = 3.5;
+/** 일과 걷기: 속도(m/s), 카메라에서 이만큼 멀면 걷지 않고 바로 옮김, 밤에 플레이어가 이만큼 멀면 졸기 */
+const WALK_SPD = 1.6, SNAP_FAR = 30, DOZE_FAR = 6;
+const ROLE_HEX = { merchant: 0xf28c28, researcher: 0x8e7cc3, guide: 0x6dbb4f, granny: 0xa07e5c, kid: 0xf28bb0, fisher: 0x3170c9 };
 /** 가로 화면 대화 구도: 카메라 높이·시선 높이 상한 — 아래 대화창(선택지 6개면 화면 아래 약 64%)이 얼굴을 가리지 않게
  *  얼굴 가운데를 화면 위 30% 안에 둠 (세로 화면은 cutscene.talkShot 이 이미 시선을 더 낮춤 — 그대로) */
 const TALK_CAM_Y = 2.0, TALK_LOOK_Y = 0;
@@ -81,12 +72,21 @@ export class NPCs {
       u.group.position.set(n.x, 0, n.z);
       u.facing = u.yaw = Math.atan2(0 - n.x, 9 - n.z); // 스폰 쪽을 바라봄
       game.world.scene.add(u.group);
+      // 장애물은 주민마다 하나 (일과로 자리를 옮기면 같이 옮김, 걷는 동안은 r 0 = 꺼짐)
       const ob = n.wander ? null : { x: n.x, z: n.z, r: u.species?.obstacleR || 0.7 };
       if (ob) game.world.obstacles.push(ob);
-      const lines = u.species ? [...LINES[id], ...(SPECIES_LINES[id] || [])] : LINES[id];
-      return { id, u, n, name, lines, lineIdx: Math.floor(Math.random() * 3), target: null, wait: 2, nextIdle: this._idleGap(u) };
+      return {
+        id, u, n, name, ob, obR: ob?.r ?? 0, recent: [], target: null, wait: 2, nextIdle: this._idleGap(u),
+        home: { x: n.x, z: n.z }, homeFacing: u.facing, cur: null, route: null, checkT: 0,
+        look: new THREE.Vector3(), glance: new THREE.Vector3(), farT: 0, turnT: 0, turnTo: null,
+      };
     });
+    this.talking = null; // 지금 대화 중인 주민
+    this._heroLook = new THREE.Vector3();
   }
+
+  /** 주민의 지금 위치 (일과로 옮겨 다님 — 퀘스트 화살표·자동 진행이 씀) */
+  posOf(id) { return this.list.find((e) => e.id === id)?.u.group.position ?? null; }
 
   /** 트랙터에 깜짝 놀람: 펄쩍 + ❗ + 말풍선, 돌아다니던 주민은 트랙터 반대쪽으로 비켜남 (4초에 한 번) */
   startle(e, from) {
@@ -99,8 +99,9 @@ export class NPCs {
     const say = [...STARTLE, ...(e.u.species?.startle || [])];
     e.u.say(say[Math.floor(Math.random() * say.length)], 1.8);
     e.idle = 0;
-    if (e.n.wander) { const dx = p.x - from.x, dz = p.z - from.z, l = Math.hypot(dx, dz) || 1; e.target = { x: p.x + (dx / l) * 2.5, z: p.z + (dz / l) * 2.5 }; e.wait = 0; e.spd = 3.5; }
-    this.game.audio.play('bump', 0.35);
+    this._wake(e, false);
+    if (e.n.wander && !e.route) { const dx = p.x - from.x, dz = p.z - from.z, l = Math.hypot(dx, dz) || 1; e.target = { x: p.x + (dx / l) * 2.5, z: p.z + (dz / l) * 2.5 }; e.wait = 0; e.spd = 3.5; }
+    this.game.audio.play('startle', 0.35);
     return true;
   }
 
@@ -112,74 +113,196 @@ export class NPCs {
 
   update(dt, playerPos) {
     let hit = null, hd = 2.6;
+    const g = this.game, W = g.world, cam = g.followCam.camera;
     // 트랙터가 빠르게 스쳐 지나가면 가까운 주민이 놀람
-    const tr = this.game.ride, tv = tr?.driving ? tr.vehicle : null;
+    const tr = g.ride, tv = tr?.driving ? tr.vehicle : null;
+    // 일과: 시각·비 (1초마다 자리 확인), 플레이어 얼굴 높이
+    const hour = hourOf(W.time ?? 0.3), night = isNight(hour), rain = W.weatherKind === 'rain' || W.weatherKind === 'storm';
+    const pHeadY = (g.player?.position?.y ?? 0) + (g.player?.unico?.headH ?? 1.2);
     for (const e of this.list) {
-      const p = e.u.group.position;
+      const p = e.u.group.position, u = e.u;
       if (tv && Math.abs(tv.speed) > 1.2 && Math.hypot(p.x - tv.x, p.z - tv.z) < 2.9 && !((e.bellUntil || 0) > performance.now() / 1000)) this.startle(e, tv); // 자전거 종을 들었으면 안 놀람
       const d = Math.hypot(p.x - playerPos.x, p.z - playerPos.z);
-      // 꼬마는 들판을 돌아다님 (플레이어가 가까우면 멈춰서 바라봄)
-      if (e.n.wander && d > 3) {
-        const W = e.n.wander;
-        if (!e.target || Math.hypot(e.target.x - p.x, e.target.z - p.z) < 0.3) {
-          e.wait -= dt;
-          e.spd = 0;
-          e.u.moving = false;
-          if (e.wait <= 0) {
-            // 화분·수레·가로등 같은 장애물 위는 피해서 목적지 고르기
-            for (let k = 0; k < 10; k++) { const t = { x: W.x0 + Math.random() * (W.x1 - W.x0), z: W.z0 + Math.random() * (W.z1 - W.z0) }; if (!this.game.world.isBlocked(t.x, t.z, 0.8)) { e.target = t; break; } }
-            e.wait = 2 + Math.random() * 4;
-          }
-        } else {
-          const dx = e.target.x - p.x, dz = e.target.z - p.z, len = Math.hypot(dx, dz);
-          // 출발할 때 천천히 붙는 속도, 도착할 때 감속 (도착 0.8m 전부터)
-          const want = 2.2 * Math.min(1, len / 0.8 + 0.25);
-          e.spd = (e.spd || 0) + (want - (e.spd || 0)) * (1 - Math.exp(-dt * 6));
-          const step = Math.min(len, e.spd * dt);
-          const nv = (this._nv ||= new THREE.Vector3()).set(p.x + (dx / len) * step, 0, p.z + (dz / len) * step);
-          this.game.world.resolveCollision(nv, 0.4); // 소품을 통과하지 않게
-          if (Math.hypot(nv.x - p.x, nv.z - p.z) < step * 0.3) e.blocked = (e.blocked || 0) + dt; else e.blocked = 0;
-          p.x = nv.x; p.z = nv.z;
-          if (e.blocked > 1.5) { e.blocked = 0; e.target = null; e.wait = 0.5; }
-          e.u.facing = Math.atan2(dx, dz);
-          e.u.moving = e.spd > 0.4;
-        }
-      } else {
-        e.u.moving = false;
+      const talking = this.talking === e;
+      this._routine(e, dt, d, hour, rain, talking, cam);
+      // 비: 우산 (바뀔 때만)
+      if (!!e.umb !== rain) { e.umb = rain; u.setUmbrella(rain, ROLE_HEX[e.id]); }
+      if (e.route) this._walkRoute(e, dt);
+      // 꼬마는 들판을 돌아다님 (플레이어가 가까우면 멈춰서 바라봄, 비 오면 좁은 곳에서만)
+      else if (e.n.wander && !e.cur?.at && d > 3 && !talking) this._wander(e, dt, rain);
+      else {
+        u.moving = false;
         e.spd = 0;
-        if (e.u.faceLock != null) e.u.facing = e.u.faceLock; // 대화 구도에서 카메라 쪽으로 살짝 돈 방향 (cinema.release 가 풂)
-        else if (d < 7) e.u.facing = Math.atan2(playerPos.x - p.x, playerPos.z - p.z);
+      }
+      const walking = u.moving;
+      // ---- 시선: 6m 안이면 고개로 플레이어를 봄 (몸은 그대로), 고개 한계를 1.2초 넘게 넘으면 그때 몸을 돌림 ----
+      if (walking) { u.lookTarget = null; e.turnT = 0; e.turnTo = null; }
+      else {
+        if (talking || (d < LOOK_IN && !e.dozing)) { u.lookTarget = e.look.set(playerPos.x, pHeadY, playerPos.z); e.farT = 0; }
+        else if (u.lookTarget && (d > LOOK_OUT || e.dozing)) { e.farT += dt; if (e.farT > LOOK_OUT_T || e.dozing) u.lookTarget = null; }
+        const toP = Math.atan2(playerPos.x - p.x, playerPos.z - p.z);
+        if (u.faceLock != null) { u.facing = u.faceLock; e.turnTo = null; } // 대화 구도에서 카메라 쪽으로 살짝 돈 방향 (cinema.release 가 풂)
+        else if (!e.n.wander || e.cur?.at || d <= 3) {
+          if (u.lookTarget && !talking) {
+            if (Math.abs(wrapA(toP - u.yaw)) > BODY_TURN) e.turnT += dt; else e.turnT = 0;
+            if (e.turnT > BODY_TURN_T) { e.turnTo = toP; e.turnT = 0; }
+          } else if (!u.lookTarget) { e.turnT = 0; e.turnTo = null; }
+          // 몸 돌리기는 천천히 (휙 돌지 않게), 아무도 안 보면 원래 보던 쪽(가판대 등)으로 돌아감 (꼬마는 들판에선 그대로)
+          const want = e.turnTo ?? (u.lookTarget || e.n.wander && !e.cur?.at ? null : e.restFacing ?? e.homeFacing);
+          if (want != null) u.facing += wrapA(want - u.facing) * (1 - Math.exp(-dt * (e.turnTo != null ? 3 : 1.5)));
+        }
       }
       // 플레이어를 보는 정도(귀 쫑긋·꼬리·눈인사), 우정 하트, 플레이어 쪽 상대 각도
-      const u = e.u;
       u.attention += ((d < 5 ? 1 : 0) - u.attention) * (1 - Math.exp(-4 * dt));
       if (u.species) {
-        u.hearts = this.game.villagers.hearts(e.id);
+        u.hearts = g.villagers.hearts(e.id);
         u.attnYaw = wrapA(Math.atan2(playerPos.x - p.x, playerPos.z - p.z) - u.yaw);
-        // 처음 가까이 오면 반응: 강아지 갸웃, 친한 여우는 꼬리 흔들며 손 인사
+        // 처음 가까이 오면 반응: 강아지 갸웃, 친한 여우는 꼬리 흔들며 손 인사 (인사하면 몸도 플레이어 쪽으로)
         if (d < 4 && !e.near) {
           e.near = true;
-          if (!u.action && !u.moving) {
-            if (u.species.id === 'puppy') u.playAction('tilt', 1.3);
-            else if (u.species.id === 'fox' && u.hearts >= 3) u.playAction('wave', 1.5);
+          if (!u.action && !u.moving && !e.dozing) {
+            if (u.species.id === 'puppy') { u.playAction('tilt', 1.3); e.turnTo = Math.atan2(playerPos.x - p.x, playerPos.z - p.z); }
+            else if (u.species.id === 'fox' && u.hearts >= 3) { u.playAction('wave', 1.5); e.turnTo = Math.atan2(playerPos.x - p.x, playerPos.z - p.z); }
           }
         } else if (d > 6) e.near = false;
       }
+      // 밤: 플레이어가 멀면 꾸벅꾸벅 (💤), 가까이 오면 깸 (밤낚시·반딧불이 자리는 깨어 있음)
+      if (night && d > DOZE_FAR && !walking && !talking && !e.dozing && (!u.action || u.action === e.cur?.act) && !e.cur?.awake) { e.dozing = true; u.playAction('doze', 0); u.say('💤', 1e6); } // 하던 일(돈 세기 등)은 멈추고 졸기
+      else if (e.dozing && (!night || d <= DOZE_FAR || talking || walking || e.cur?.awake)) this._wake(e, night && d <= DOZE_FAR && !talking);
+      // 대기 동작: 일하는 자리면 그 일(낚시·호미질·태블릿…)을 자주, 아니면 성격 동작
       e.idle = (e.idle || 0) + dt;
-      if (e.idle > e.nextIdle && !u.moving) {
+      if (e.idle > e.nextIdle && !u.moving && !e.dozing && !talking) {
         e.idle = 0;
-        e.nextIdle = this._idleGap(u);
-        const pool = [e.n.pose, ...(u.species?.idles || [])];
-        u.playAction(pool[Math.floor(Math.random() * pool.length)], 2);
+        const work = e.cur?.act;
+        if (work && d > 3.5) { u.playAction(work, 3 + Math.random() * 2); e.nextIdle = 2.8 + Math.random(); }
+        else {
+          e.nextIdle = this._idleGap(u);
+          const pool = [e.n.pose, ...(u.species?.idles || [])];
+          u.playAction(pool[Math.floor(Math.random() * pool.length)], 2);
+        }
       }
-      u.update(dt, this.game.followCam.camera);
+      u.update(dt, cam);
       if (d < hd) { hd = d; hit = e; }
     }
+    this._heroGaze(playerPos);
     this._fadePlayerLabel(dt, playerPos);
+    this.lookAt = g.player?.unico?.lookTarget ?? null;
     if (!hit) return null;
-    const v = this.game.villagers;
+    const v = g.villagers;
     const hearts = v.hearts(hit.id);
     return { d: hd, label: `💬 ${hit.name}${josa(hit.name, '와/과')} 대화 ${'❤️'.repeat(hearts)}${'🤍'.repeat(5 - hearts)}`, key: 'npc', onInteract: () => this.talk(hit) };
+  }
+
+  /** 내 캐릭터 시선: 대화 중이면 말하는 주민 얼굴, 아니면 3.5m 안 가장 가까운 주민 얼굴 (없으면 두리번) */
+  _heroGaze(pp) {
+    const hu = this.game.player?.unico;
+    if (!hu) return;
+    let best = this.talking, bd = HERO_LOOK;
+    if (!best && !this.game.home?.inside && !hu.riding) for (const e of this.list) { const q = e.u.group.position, d = Math.hypot(q.x - pp.x, q.z - pp.z); if (d < bd) { bd = d; best = e; } }
+    if (!best) { hu.lookTarget = null; return; }
+    const q = best.u.group.position;
+    hu.lookTarget = this._heroLook.set(q.x, q.y + best.u.headH, q.z);
+  }
+
+  /** 졸던 주민 깨우기 (say = 하품하며 한마디) */
+  _wake(e, say) {
+    if (!e.dozing) return;
+    e.dozing = false;
+    const u = e.u;
+    if (u.action === 'doze') u.clearAction();
+    if (u.bubble) u.bubbleUntil = u.t; // 💤 말풍선 내림
+    if (say) { u.playAction(u.species?.id === 'cat' ? 'stretch' : 'think', 1.4); u.say(WAKE[e.id] || '하암…', 2.5); }
+  }
+
+  /**
+   * 하루 일과: 1초마다 지금 있을 자리를 보고, 자리가 바뀌었으면 (플레이어가 4m 밖이고 대화 중이 아닐 때) 걸어서 옮김.
+   * 카메라에서 30m 넘게 멀거나 처음(불러온 직후)이면 걷지 않고 바로 그 자리로
+   */
+  _routine(e, dt, d, hour, rain, talking, cam) {
+    e.checkT -= dt;
+    if (e.checkT > 0) return;
+    e.checkT = ROUTINE_CHECK;
+    // 두리번거릴 때 가끔 볼 곳: 12m 안 가장 가까운 다른 주민
+    const p = e.u.group.position;
+    let gb = null, gd = 12;
+    for (const o of this.list) { if (o === e) continue; const q = o.u.group.position, dd = Math.hypot(q.x - p.x, q.z - p.z); if (dd < gd) { gd = dd; gb = q; } }
+    e.u.glanceAt = gb ? e.glance.set(gb.x, gb.y + 1.2, gb.z) : null;
+    const want = slotAt(e.id, hour, rain);
+    if (!want || e.route) return;
+    const curAt = e.cur?.at ?? null, wantAt = want.at ?? null;
+    if (e.cur && curAt === wantAt) { e.cur = want; return; }
+    if (!e.cur && !wantAt) { e.cur = want; e.placed = true; return; }
+    const far = !e.placed || !cam?.position || cam.position.distanceTo(p) > SNAP_FAR;
+    if (!far && !canDepart(d, talking || !!this.game.dialogue?.active)) return;
+    // 경로: (지금 자리 → 제자리) + (제자리 → 새 자리). 꼬마의 제자리는 들판이라 마지막 경유점에서 다시 뛰어다님
+    const pts = [];
+    if (curAt) pts.push(...legOf(e.home, e.cur, true).slice(1));
+    else if (!e.n.wander) pts.push({ x: e.home.x, z: e.home.z });
+    if (wantAt) pts.push(...legOf(e.home, want).slice(e.n.wander && !curAt ? 1 : 1));
+    else if (e.n.wander && pts.length > 1) pts.pop();
+    e.wantSlot = want;
+    if (far || !pts.length) { const last = pts[pts.length - 1]; if (last) { p.x = last.x; p.z = last.z; } this._arrive(e); e.placed = true; return; }
+    e.placed = true;
+    e.route = pts; e.wait = 0;
+    if (e.ob) e.ob.r = 0; // 걷는 동안 장애물 끔 (자기 자신에 걸리지 않게)
+    this._wake(e, false);
+    e.u.lookTarget = null;
+    if (e.u.action && e.u.action !== 'talk') e.u.clearAction();
+  }
+
+  /** 자리에 닿음: 장애물을 새 자리로, 그 자리 방향·일 */
+  _arrive(e) {
+    const p = e.u.group.position, s = e.wantSlot;
+    e.route = null; e.cur = s; e.u.moving = false; e.spd = 0;
+    if (e.ob) { e.ob.x = p.x; e.ob.z = p.z; e.ob.r = e.obR; }
+    e.restFacing = s?.at ? s.face : e.homeFacing;
+    if (s?.at) e.u.facing = s.face;
+    e.idle = e.nextIdle; // 바로 일 시작
+  }
+
+  /** 경유점 따라 걷기 (꼬마 걸음과 같은 식: 붙는 속도·도착 감속·소품 밀어내기·오래 막히면 경유점으로) */
+  _walkRoute(e, dt) {
+    const t = e.route[0];
+    if (this._stepToward(e, t.x, t.z, dt, WALK_SPD, e.route.length === 1)) {
+      e.route.shift();
+      if (!e.route.length) this._arrive(e);
+    } else if (e.blocked > 2) { const p = e.u.group.position; p.x = t.x; p.z = t.z; e.blocked = 0; }
+  }
+
+  /** (tx, tz) 쪽으로 한 걸음. 닿으면 true */
+  _stepToward(e, tx, tz, dt, top, brake = true) {
+    const p = e.u.group.position, dx = tx - p.x, dz = tz - p.z, len = Math.hypot(dx, dz);
+    if (len < 0.25) return true;
+    // 출발할 때 천천히 붙는 속도, 도착할 때 감속 (도착 0.8m 전부터)
+    const want = top * (brake ? Math.min(1, len / 0.8 + 0.25) : 1);
+    e.spd = (e.spd || 0) + (want - (e.spd || 0)) * (1 - Math.exp(-dt * 6));
+    const step = Math.min(len, e.spd * dt);
+    const nv = (this._nv ||= new THREE.Vector3()).set(p.x + (dx / len) * step, 0, p.z + (dz / len) * step);
+    this.game.world.resolveCollision(nv, 0.4); // 소품을 통과하지 않게
+    if (Math.hypot(nv.x - p.x, nv.z - p.z) < step * 0.3) e.blocked = (e.blocked || 0) + dt; else e.blocked = 0;
+    p.x = nv.x; p.z = nv.z;
+    e.u.facing = Math.atan2(dx, dz);
+    e.u.moving = e.spd > 0.4;
+    return false;
+  }
+
+  /** 꼬마 들판 뛰어다니기 (비 오면 들판 가운데 좁은 곳에서만) */
+  _wander(e, dt, rain) {
+    const p = e.u.group.position, W0 = e.n.wander;
+    if (!e.target || Math.hypot(e.target.x - p.x, e.target.z - p.z) < 0.3) {
+      e.wait -= dt;
+      e.spd = 0;
+      e.u.moving = false;
+      if (e.wait <= 0) {
+        const k = rain ? 0.3 : 1, cx = (W0.x0 + W0.x1) / 2, cz = (W0.z0 + W0.z1) / 2, hx = ((W0.x1 - W0.x0) / 2) * k, hz = ((W0.z1 - W0.z0) / 2) * k;
+        // 화분·수레·가로등 같은 장애물 위는 피해서 목적지 고르기
+        for (let i = 0; i < 10; i++) { const t = { x: cx - hx + Math.random() * hx * 2, z: cz - hz + Math.random() * hz * 2 }; if (!this.game.world.isBlocked(t.x, t.z, 0.8)) { e.target = t; break; } }
+        e.wait = 2 + Math.random() * 4;
+      }
+      return;
+    }
+    if (this._stepToward(e, e.target.x, e.target.z, dt, 2.2)) e.target = null;
+    if (e.blocked > 1.5) { e.blocked = 0; e.target = null; e.wait = 0.5; }
   }
 
   /**
@@ -373,6 +496,9 @@ export class NPCs {
     const g = this.game;
     if (g.dialogue.active) return;
     const pp = g.player.position, np = e.u.group.position;
+    this.talking = e; // 대화 동안: 서로 얼굴을 보고, 일과로 자리를 뜨지 않음
+    this._wake(e, false);
+    if (e.u.action && e.u.action !== 'talk') e.u.clearAction(); // 하던 일(낚시·호미질)을 멈추고 돌아봄
     e.u.facing = Math.atan2(pp.x - np.x, pp.z - np.z);
     g.player.unico.facing = Math.atan2(np.x - pp.x, np.z - pp.z);
     const shot = this.talkCamera(pp, np, e, { front: true });
@@ -382,7 +508,7 @@ export class NPCs {
       g.cinema.faceLock(g.player.unico, cheatYaw(pp, np, shot.pos, CHEAT_ME));
     }
     g.cinema.hideLabelsOf(g.player.unico, e.u, ...shot.near);
-    try { await this._talkLoop(e); } finally { g.cinema.release(); } // 도중에 오류가 나도 카메라·렌즈·몸 방향은 풀림
+    try { await this._talkLoop(e); } finally { g.cinema.release(); this.talking = null; e.turnTo = null; } // 도중에 오류가 나도 카메라·렌즈·몸 방향은 풀림
   }
 
   /** 대화 내용: 첫 인사 보상 → 선택지(부탁·선물·장터·퀘스트·이야기) 반복 → 끝나면 고른 창 열기 */
@@ -392,8 +518,17 @@ export class NPCs {
     if (r.gained) g.ui.toast(`💕 ${e.name}${josa(e.name, '와/과')} 오늘 첫 인사! 우정 +${r.gained}`);
     this.applyRewards(e, r);
     const id = e.id, color = NPC_COLOR[id] || '#30b6aa';
-    const who = () => ({ speaker: e.u, name: `${ROLE_ICON[id] || ''} ${e.name}`, color, sub: `우정 ${'❤️'.repeat(g.villagers.hearts(id))}${'🤍'.repeat(5 - g.villagers.hearts(id))}` });
-    let line = e.lines[e.lineIdx++ % e.lines.length];
+    // 우정 하트는 대화창이 그림 (hearts/heartsMax)
+    const who = () => ({ speaker: e.u, name: `${ROLE_ICON[id] || ''} ${e.name}`, color, hearts: g.villagers.hearts(id), heartsMax: 5 });
+    // 오늘 할 말: 계절·날씨·밤·하트·축제·한 일에 맞는 줄 (그날 첫 대화는 지금 상황에 맞는 줄 먼저), 이 대화에서 한 말은 다시 안 함
+    const said = [];
+    const next = (prefer = false) => {
+      const ln = pickLine(id, this.lineCtx(e), [...(e.recent ||= []), ...said], Math.random, { prefer });
+      if (!ln) return null;
+      said.push(ln.t); remember(e.recent, ln.t);
+      return ln.t;
+    };
+    let line = next(r.gained > 0) ?? OUT_OF_LINES_BY[id] ?? OUT_OF_LINES, out = false;
     // 장터 여우 첫 대화: 장터 쓰는 법 한 줄 (한 번만)
     if (id === 'merchant' && !g.flags.marketTip) { g.flags.marketTip = true; line = '처음 왔구나! 여기서 씨앗·사료를 사고 키운 작물을 팔 수 있어. 시세는 매일 바뀌니까 잘 보고 팔아!'; }
     // 안내 강아지: 받을 보상·할 일이 있으면 그 귀띔부터
@@ -403,7 +538,9 @@ export class NPCs {
       const req = g.villagers.requestFor(id, g.world.day, this.requestPool());
       const v = g.villagers.state[id];
       const choices = [];
-      if (!req.done) { const have = g.economy.count(req.item); choices.push({ label: `📝 부탁 들어주기`, note: have < req.n ? `${g.villagers.describeRequest(req)} · 보유 ${have}/${req.n} — ${req.n}개 모으면 가능` : `${g.villagers.describeRequest(req)} · 보유 ${have}/${req.n}`, value: 'req', disabled: have < req.n }); }
+      const have = req.done ? 0 : g.economy.count(req.item);
+      // 아직 모자란 부탁: 잠긴 줄(locked)로 보여 주고, 누르면 몇 개 더 필요한지 알려 줌
+      if (!req.done) choices.push(have < req.n ? { label: '📝 부탁 들어주기', note: `${g.villagers.describeRequest(req)} 지금 ${have}/${req.n}개 있어!`, value: 'req', locked: true } : { label: '📝 부탁 들어주기', note: `${g.villagers.describeRequest(req)} · 보유 ${have}/${req.n}`, value: 'req' });
       choices.push({ label: '🎁 선물하기', note: v.lastGift === g.world.day ? '오늘은 이미 선물했어요' : '', value: 'gift', disabled: v.lastGift === g.world.day });
       if (id === 'merchant') choices.push({ label: '🛒 장터 열기', value: 'market' });
       if (id === 'guide') {
@@ -415,11 +552,13 @@ export class NPCs {
         if (lr.done && !lr.claimed) choices.unshift({ label: '📋 의뢰 보고하기', note: `보상 ${lr.reward}🪙 + 떡밥 ${lr.bait}`, value: 'lakereq' });
         choices.push({ label: '🎣 낚시 가게', value: 'lakeshop' }, { label: '🏆 기록판 보기', value: 'lakeboard' });
       }
-      choices.push({ label: '💬 이야기 더 하기', value: 'more' }, { label: '👋 안녕!', value: 'bye' });
+      if (!out) choices.push({ label: '💬 이야기 더 하기', value: 'more' }); // 할 얘기를 다 했으면 숨김 (같은 말 되풀이 안 함)
+      choices.push({ label: '👋 안녕!', value: 'bye' });
       const c = await g.dialogue.say({ ...who(), text: line, choices: choices.slice(0, 4).concat(choices.length > 4 ? choices.slice(4) : []) });
-      if (c === 'more') { line = e.lines[e.lineIdx++ % e.lines.length]; continue; }
+      if (c === 'more') { const t = next(); if (t) line = t; else { line = OUT_OF_LINES_BY[id] ?? OUT_OF_LINES; out = true; } continue; }
       if (c === 'lakereq') { g.lake.claimRequest(); e.u.playAction('cheer', 1.2); g.villagers.addFriend(id, 5); line = '역시! 네 솜씨는 알아줘야 해. 내일 의뢰도 기대하렴 🎣'; continue; }
       if (c === 'req') {
+        if (have < req.n) { line = `${g.villagers.describeRequest(req)} 지금 ${have}/${req.n}개 있어!`; continue; }
         if (g.economy.take(req.item, req.n)) {
           const rr = g.villagers.fulfill(id);
           g.economy.earn(rr.reward);
@@ -427,7 +566,7 @@ export class NPCs {
           if (g.reward) g.reward(2, { x: ep.x, z: ep.z, label: '🙏' }); else g.audio.play('coin');
           e.u.playAction('cheer', 1.2);
           this.applyRewards(e, rr);
-          await g.dialogue.say({ ...who(), text: `정말 고마워! 덕분에 살았어 🙏 (+${rr.reward}🪙, 우정 +${rr.gained})`, emote: 'heart' });
+          await g.dialogue.say({ ...who(), text: `${REACT[id]?.thanks ?? '정말 고마워! 덕분에 살았어 🙏'} (+${rr.reward}🪙, 우정 +${rr.gained})`, emote: 'heart' });
         }
         continue;
       }
@@ -444,6 +583,25 @@ export class NPCs {
     else if (after === 'lakeboard') g.lake.openBoard();
   }
 
+  /** 주민 대사 고르기용 지금 상황: 계절·날씨·밤·하트·축제·받은 퀘스트·동물 주민인가 */
+  lineCtx(e) {
+    const g = this.game, W = g.world, day = W.day ?? 1, k = W.weatherKind;
+    return {
+      season: seasonOf(day).id, weather: k === 'rain' || k === 'storm' ? 'rain' : k === 'snow' ? 'snow' : null,
+      night: isNight(hourOf(W.time ?? 0.3)), hearts: g.villagers.hearts(e.id), festival: Economy.isFestival(day),
+      done: g.quests?.claimed || {}, species: !!e.u.species,
+    };
+  }
+
+  /** 칭호 받기: 가진 칭호 목록·지금 칭호는 flags 에 (저장됨, 불러오면 game_save 가 다시 붙임) */
+  grantTitle(title) {
+    const g = this.game, f = (g.flags ||= {});
+    const own = (f.titles ||= []);
+    if (!own.includes(title)) own.push(title);
+    f.title = title;
+    g.player?.setTitle?.(title);
+  }
+
   /** 하트 단계 보상 지급 */
   applyRewards(e, r) {
     const g = this.game;
@@ -451,6 +609,7 @@ export class NPCs {
       if (rw.money) g.economy.earn(rw.money);
       if (rw.seeds) for (const [k, n] of Object.entries(rw.seeds)) g.economy.addSeeds(k, n);
       if (rw.item) for (const [k, n] of Object.entries(rw.item)) g.economy.addItem(k, n);
+      if (rw.title) this.grantTitle(rw.title === true ? `${e.name}의 단짝` : rw.title);
       g.ui.toast(`🎁 ${e.name}: "${rw.text}"`);
       const ep = e.u.group.position;
       if (g.reward) g.reward(3, { x: ep.x, z: ep.z, label: '💕' }); else g.audio.play('levelup');

@@ -2,6 +2,9 @@
 // main.js 에서 Object.assign(Game.prototype, …) 으로 붙임 (축약 메서드라 this 는 Game)
 import { saveGame, loadSaveInfo, loadBackup, backupSave, keepBroken, clearSave, setReadOnly, saveBlocked, lastSaveError, crashMarked, clearCrashMark, claimOwner, SAVE_KEY, OWNER_KEY } from './save.js';
 import { record, showOverlay, OVERLAY_ICON } from './crash.js';
+import { TOUR_REWARD } from './sim/koat.js';
+
+const KOAT_TITLE = TOUR_REWARD.title;
 
 /** '여기서 이어 하기' 로 새로고침했다는 표시 (sessionStorage, 그 창에만) */
 export const TAKEOVER_KEY = 'unico.takeover';
@@ -161,7 +164,14 @@ export const GameSave = {
     step('decor', () => this.decor.load(s.decor));
     step('look', () => this.applyLook(false));
     step('pet', () => { if (this.pet.ok) this.pet.load(s.pet); });
-    step('title', () => { if (this.koat.book.rewarded) this.player.setTitle('KOAT 명예 연구원'); });
+    // 칭호: 가진 것 목록(flags.titles)·지금 칭호(flags.title). KOAT 투어 칭호는 스탬프북에서 다시 채움
+    step('title', () => {
+      const own = Array.isArray(this.flags.titles) ? this.flags.titles.filter((t) => typeof t === 'string') : [];
+      if (this.koat.book.rewarded && !own.includes(KOAT_TITLE)) own.push(KOAT_TITLE);
+      this.flags.titles = own;
+      const cur = own.includes(this.flags.title) ? this.flags.title : own[own.length - 1];
+      if (cur) this.player.setTitle(cur);
+    });
     step('world', () => {
       if (num(s.world?.time)) this.world.time = s.world.time;
       if (num(s.world?.day)) this.world.day = s.world.day;

@@ -156,7 +156,9 @@ export class AutoPlay {
   }
 
   _marketSpot() {
-    if (!this._mk) { const m = LAYOUT.npcs.merchant; this._mk = this.g.findOpenSpot(m.x, m.z + 1.6); }
+    // 장터 여우는 저녁엔 가판대를 떠나 있음 → 지금 자리 기준 (1m 넘게 옮겼을 때만 다시 찾음)
+    const m = this.g.npcs?.posOf?.('merchant') ?? LAYOUT.npcs.merchant;
+    if (!this._mk || Math.hypot(m.x - this._mkAt.x, m.z - this._mkAt.z) > 1) { this._mkAt = { x: m.x, z: m.z }; this._mk = this.g.findOpenSpot(m.x, m.z + 1.6); }
     return this._mk;
   }
 

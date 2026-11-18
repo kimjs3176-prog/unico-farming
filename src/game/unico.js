@@ -1033,6 +1033,7 @@ function applyPalette(root, id) {
 // 행동별 손에 드는 도구 (두 발 캐릭터 오른손)
 const PROP_OF = { hoe: 'hoe', water: 'can', net: 'net', cast: 'rod', fishwait: 'rod', reel: 'rod', brush: 'brush' };
 const HAND_R = [0.16, -0.34, 0.045]; // 오른팔 뼈 기준 손 위치 (주민 동물)
+const UMB_ARM = [-0.95, 0, 0.25], UMB_STICK = 1.3; // 우산 든 왼팔 각도(앞으로 듦·안쪽으로), 우산대 길이 (뼈 좌표)
 const HAND_R_HERO = HAND_R.map((v) => v * ARM_K); // 두 발 유니코: 팔이 ARM_K 배로 짧아 손도 그만큼 어깨 쪽
 
 /** 손 도구 (팔 뼈 로컬 좌표: 팔을 내리고 있을 때 -y 가 손끝 방향, +z 가 앞) */
@@ -1157,6 +1158,8 @@ export class Unico {
     this.boneMap = boneMap;
     this.costumeMeshes = {}; // 코스튬 id → 부위별 메시 (처음 입을 때 만듦)
     this.root.updateMatrixWorld(true);
+    this.headH = this.headG.getWorldPosition(new THREE.Vector3()).y; // 머리 높이 (시선 계산용, 한 번만)
+    this.headG.rotation.order = 'YXZ'; // 고개: 돌리고 → 끄덕 (갸웃이 섞이지 않게)
     this.skeleton = new THREE.Skeleton(R.bones.map((b) => boneMap[b[0]]));
     // 몸 색: 종 팔레트(+가짜 AO) 또는 유니콘 팔레트. 원본이 아직 없으면 저해상도로 시작해 나중에 지오메트리만 올림 (생성은 늘 동기·늘 보임)
     this._pal = sp ? sp.palette : PALETTES[palette] || OFFICIAL;
@@ -1263,6 +1266,13 @@ export class Unico {
     this.hearts = 0;
     this.happyUntil = 0;
     this.attnYaw = 0;
+    // 시선: lookTarget(월드 좌표, 없으면 null) 쪽으로 머리부터. w = 보는 정도(0..1), 실제로 돌린 고개 각도는 lookYawApplied
+    this.lookTarget = null;
+    this._look = { y: 0, p: 0, w: 0, raw: 0 };
+    this.lookYawApplied = 0;
+    this.glanceAt = null; // 두리번거릴 때 가끔 볼 곳 (가까운 다른 주민, {x, y, z})
+    this._gl = { t: 1 + Math.random() * 2, y: 0, p: 0, pNow: 0 };
+    this._eyeYaw = 0;
     this._speakUntil = 0;
     this._talkSeed = Math.random() * 1000; // 말하기 입 박자 (캐릭터마다 다르게)
     // 이름표·감정 아이콘·말풍선 높이: 종은 굽힌 키로, 유니콘은 예전 값
@@ -1359,6 +1369,35 @@ export class Unico {
       this.props[kind] = m;
     }
     return this.props[kind];
+  }
+
+  /**
+   * 우산 (비 올 때 주민): 왼손에 들고 머리 위로. 팔을 앞으로 든 만큼 되돌려 우산대는 늘 위로 섬.
+   * 원뿔 덮개 + 막대 (삼각형 약 60개), 처음 펼 때 한 번만 만듦
+   */
+  setUmbrella(on, color = 0xf28bb0) {
+    if (!this.biped || !this.arms.length) return;
+    if (on && !this._umb) {
+      const g = new THREE.Group(), up = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, side: THREE.DoubleSide });
+      const stick = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.7 });
+      const cover = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.26, 10, 1, true), mat);
+      cover.position.y = UMB_STICK + 0.11;
+      // 막대 + 꼭지는 한 번에 그림 (그리기 2번: 덮개·막대)
+      const poleG = new THREE.CylinderGeometry(0.014, 0.014, UMB_STICK + 0.08, 5, 1, true).translate(0, (UMB_STICK + 0.08) / 2, 0);
+      const tipG = new THREE.ConeGeometry(0.025, 0.08, 5).translate(0, UMB_STICK + 0.27, 0);
+      const pole = new THREE.Mesh(mergeGeometries([poleG, tipG]), stick);
+      poleG.dispose(); tipG.dispose();
+      up.add(cover, pole);
+      up.rotation.order = 'ZYX'; up.rotation.set(-UMB_ARM[0], 0, -UMB_ARM[2] + 0.12); // 팔을 든 각도를 되돌림 → 우산대가 위로 (머리 쪽으로 살짝)
+      g.add(up);
+      g.position.set(-HAND_R[0], HAND_R[1], HAND_R[2]);
+      for (const m of [cover, pole]) { m.castShadow = false; m.receiveShadow = false; }
+      this.arms[0].add(g);
+      this._umb = g;
+    }
+    this._umbOn = !!on;
+    if (this._umb) this._umb.visible = this._umbOn && !(this.isLod && charQ() === 'low');
   }
 
   /** 낚싯대 끝 월드 위치 */
@@ -1463,9 +1502,10 @@ export class Unico {
     const startle = this.action === 'startle' && this.actionT < 0.4;
     let open = startle ? 1.15 : F.eye.open ?? 1;
     if (this.action === 'count') open *= 0.6;
+    if (this.action === 'doze') open *= 0.08;
     if (sp.id === 'cat') {
       // 느린 눈인사: 친한(하트 3+) 플레이어가 가까이서 마주 보면 6~9초마다 (0.3초 감기·0.3초 유지·0.3초 뜨기)
-      if (this.hearts >= 3 && this.attention > 0.6 && Math.abs(this.attnYaw) < 0.4) {
+      if (this.hearts >= 3 && this.attention > 0.6 && Math.abs(this.attnYaw - this.lookYawApplied) < 0.4) { // 눈이 마주칠 때 (고개를 돌려 봐도)
         this._slowT = (this._slowT ?? 6 + Math.random() * 3) - dt;
         if (this._slowT <= 0) { this._slowT = 6 + Math.random() * 3; this._slowBlink = 0.9; }
       }
@@ -1580,7 +1620,7 @@ export class Unico {
         tz = turn * 0.4;
         if (startle && E.startle) { if (E.startle.x !== undefined) tx = E.startle.x; if (E.startle.out) tz += out * E.startle.out; }
         if (chain.length > 1 && (act === 'cheer' || act === 'nose')) tx = 0.15;
-        if (E.turn && this.attention > 0.5) ty = clamp(this.attnYaw || 0, -E.turn, E.turn);
+        if (E.turn && this.attention > 0.5) ty = clamp((this.attnYaw || 0) - this.lookYawApplied, -E.turn, E.turn); // 고개가 이미 돈 만큼은 빼고
       }
       spring(s0, 'x', 'vx', tx, k, c, steps, h);
       spring(s0, 'z', 'vz', tz, k, c, steps, h);
@@ -1709,7 +1749,7 @@ export class Unico {
       // 낮음: 내 캐릭터가 아니면 9m 넘으면 저해상도 몸 (대화 구도 7m 안팎은 원본), 실제 그림자 대신 바닥 그림자만
       if (this.skinLod) {
         const far = low && !hero ? d > (this.isLod ? 8 : 9) : d > (this.isLod ? 14 : 16);
-        if (far !== this.isLod) { this.isLod = far; this.skin.visible = !far; this.skinLod.visible = far; }
+        if (far !== this.isLod) { this.isLod = far; this.skin.visible = !far; this.skinLod.visible = far; if (this._umb) this._umb.visible = this._umbOn && !(far && low); } // 낮음 품질에서 멀면 우산도 끔 (그리기 수)
       }
       // 낮음은 그림자 맵을 3프레임마다 그려서 움직이는 캐릭터의 실제 그림자가 끊겨 깜빡임 → 내 캐릭터도 바닥 그림자만
       this.skin.castShadow = d < 24 && !low;
@@ -1927,10 +1967,22 @@ export class Unico {
       bodyPitch -= 0.24 * skidK; bodyY -= 0.035 * skidK; headPitch += 0.06 * skidK;
       if (this._skidPuff > 0 && u >= (2 - this._skidPuff) * 0.4) { this._skidPuff--; this.onStep?.(pos.x + Math.sin(this.yaw) * 0.25, pos.z + Math.cos(this.yaw) * 0.25, 1); }
     }
-    // 대기 중 두리번
-    if (!this.moving && !this.action) {
-      this.lookYaw += (Math.sin(this.t * 0.45) * 0.35 - this.lookYaw) * (1 - Math.exp(-dt * 2));
+    // 대기 중 두리번: 1.5~4초마다 다른 곳을 잠깐 봄 (30% 는 가까운 다른 주민 쪽). 보는 대상이 있으면 그쪽이 이김
+    const Gl = this._gl, idle = !this.moving && !this.action;
+    if (idle) {
+      Gl.t -= dt;
+      if (Gl.t <= 0) {
+        Gl.t = 1.5 + Math.random() * 2.5;
+        const ga = this.glanceAt;
+        const gy = ga && Math.random() < 0.3 ? wrap(Math.atan2(ga.x - pos.x, ga.z - pos.z) - this.yaw) : null;
+        if (gy !== null && Math.abs(gy) < 1) { Gl.y = gy; Gl.p = 0.02; }
+        else if (Math.random() < 0.3) { Gl.y = 0; Gl.p = 0; } // 다시 앞을 봄
+        else { Gl.y = (Math.random() * 2 - 1) * 0.5; Gl.p = -0.1 + Math.random() * 0.25; }
+      }
+      this.lookYaw += (Gl.y - this.lookYaw) * (1 - Math.exp(-dt * 4));
     } else this.lookYaw *= Math.exp(-dt * 6);
+    Gl.pNow += ((idle ? Gl.p : 0) - Gl.pNow) * (1 - Math.exp(-dt * 4));
+    headPitch += Gl.pNow * (1 - this._look.w);
     let headYaw = this.lookYaw;
     // 돌아서기 전에 고개가 먼저 가려는 쪽을 봄
     if (!this.action) headYaw += THREE.MathUtils.clamp(turnErr * 0.45 * (G.look ?? 1), -0.5, 0.5);
@@ -2145,6 +2197,9 @@ export class Unico {
         case 'nod': // 곰 할머니: 끄덕끄덕
           headPitch = 0.12 * Math.sin(a * 2.4);
           break;
+        case 'doze': // 밤에 꾸벅꾸벅 졸기 (눈은 _express 가 감김): 고개가 천천히 떨어졌다 퍼뜩
+          headPitch = 0.32 + Math.sin(a * 0.9) * 0.08 - Math.max(0, Math.sin(a * 0.45)) ** 8 * 0.25; bodyPitch = 0.06; bodyY -= 0.02;
+          break;
         case 'groom': // 고양이: 세수
           headPitch = 0.25; headRoll = 0.2;
           if (bp) AR.rotation.set(-2.0, 0, -0.6 + Math.sin(a * 10) * 0.15);
@@ -2179,6 +2234,8 @@ export class Unico {
         AR.rotation.set(AR.rotation.x + (-0.95 - AR.rotation.x) * k, 0, AR.rotation.z + (-0.35 - AR.rotation.z) * k);
       } else if (sp.rest === 'backhand' && w < 0.5) AL.rotation.set(0.55, 0, -0.25);
     }
+    // 우산 든 왼팔 (걸을 때도, 말할 때도)
+    if (this._umbOn && !this.riding && !this.swimming) arms[0].rotation.set(UMB_ARM[0], UMB_ARM[1], UMB_ARM[2]);
     // ---- 수영: 몸을 앞으로 눕히고 개헤엄 (팔 교대로 젓기 + 발차기), 얼굴은 물 위로 ----
     if (this.swimming) {
       const m = Math.min(1, speed / 2), f = 2.6 + m * 4.5;
@@ -2256,6 +2313,29 @@ export class Unico {
         headPitch += (-0.18 - headPitch) * k;
       }
     }
+    // ---- 시선: 보는 대상(lookTarget)이 있으면 머리만 그쪽으로 (몸은 그대로, 좌우 ±1.0·위 0.3·아래 0.45) ----
+    // 감정표현 중에는(말하기 빼고) 동작이 이김. 머리 위치는 내 위치 + 머리 높이 (월드 행렬을 읽지 않음)
+    const L = this._look, lt = this.lookTarget;
+    const lookOn = !!lt && (!this.action || this.action === 'talk') && !this.swimming && !this.riding;
+    L.w += ((lookOn ? 1 : 0) - L.w) * (1 - Math.exp(-dt * 5));
+    if (lookOn) {
+      const dx = lt.x - pos.x, dz = lt.z - pos.z;
+      L.raw = wrap(Math.atan2(dx, dz) - this.yaw);
+      const ty = THREE.MathUtils.clamp(L.raw, -1, 1);
+      const tp = THREE.MathUtils.clamp(Math.atan2(pos.y + this.headH - lt.y, Math.hypot(dx, dz) || 1e-3), -0.3, 0.45);
+      const k = 1 - Math.exp(-dt * 6);
+      L.y += (ty - L.y) * k; L.p += (tp - L.p) * k;
+    }
+    if (L.w > 0.002) {
+      headYaw += (L.y - headYaw) * L.w;
+      headPitch += L.p * L.w;
+    }
+    this.lookYawApplied = L.y * L.w;
+    // 눈: 고개보다 먼저 (대상이 고개 한계 밖이면 그만큼, 두리번 때는 다음 볼 곳 쪽으로) ±0.07
+    const eyeT = THREE.MathUtils.clamp(L.w > 0.5 ? L.raw - headYaw : idle ? Gl.y - this.lookYaw : 0, -0.07, 0.07);
+    this._eyeYaw += (eyeT - this._eyeYaw) * (1 - Math.exp(-dt * 12));
+    if (sp) { this.eyesG.rotation.y = this._eyeYaw; this.eyesHappy.rotation.y = this._eyeYaw; } // 주민 눈 묶음은 머리 가운데 기준 → 얼굴 면을 따라 돎
+    else if (this._eyeAt) { this.eyesG.position.x = this._eyeAt.x + this._eyeYaw * 0.15; this.eyesHappy.position.x = this.eyesG.position.x; } // 유니코 눈 묶음은 눈 자리 기준 → 살짝 옆으로
     this.bodyG.position.y = bodyY;
     this.bodyG.rotation.set(bodyPitch, 0, bodyRoll);
     if (sp) this.bodyG.scale.y = bodySY;
@@ -2315,6 +2395,7 @@ export class Unico {
     // 손 도구는 캐릭터마다 새로 만든 것 (makeProp)
     const own = new Set();
     for (const p of Object.values(this.props)) p.traverse((o) => { if (o.isMesh) own.add(o.geometry).add(o.material); });
+    this._umb?.traverse((o) => { if (o.isMesh) own.add(o.geometry).add(o.material); });
     for (const r of own) r.dispose();
     this.skeleton.dispose(); // 뼈 텍스처 (몸·저해상도 몸이 함께 씀)
   }

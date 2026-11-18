@@ -53,7 +53,7 @@ export const QUESTS = [
   { id: 'buyanimal', title: '새 식구',              desc: '축사 앞 우리 목장에서 새끼 가축 들이기',       event: 'buyanimal', goal: 1, reward: { money: 100, xp: 80 } },
   { id: 'rprocess2', title: '치즈 공방 견습생',      desc: '목장 가공소에서 치즈·털실 같은 가공품 2개 만들기', event: 'rprocess', goal: 2, reward: { money: 150, xp: 120 } },
   { id: 'rgold1',    title: '목장의 보물',          desc: '하트 4개 동물에게서 황금 달걀 같은 특별한 생산물 받기', event: 'rgold', goal: 1, reward: { money: 250, xp: 180 } },
-  { id: 'rich',      title: '천 원의 농부',         desc: '보유 금액 1,000 코인 달성',               event: 'money',    goal: 1000, reward: { money: 200, xp: 150 }, absolute: true },
+  { id: 'rich',      title: '천 코인 농부',         desc: '보유 금액 1,000 코인 달성',               event: 'money',    goal: 1000, reward: { money: 200, xp: 150 }, absolute: true },
   { id: 'plow30',    title: '밭갈이 달인',          desc: '트랙터를 한 번 타고 밭을 30칸 이상 갈기',   event: 'plowbest', goal: 30, reward: { money: 250, xp: 200 }, absolute: true },
   { id: 'ride5',     title: '마을 드라이브',        desc: '트랙터·자전거·농장 카트 같은 마을 탈것에 5번 타 보세요', event: 'ride', goal: 5, reward: { money: 60, xp: 40 } },
   // 첫 장(첫 농사)의 마지막: 첫 수확(당근 6개 안팎)으로 끝낼 수 있게 3개

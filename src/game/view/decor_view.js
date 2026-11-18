@@ -2,6 +2,7 @@ import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { heightAt } from '../terrain.js';
 import { LAYOUT } from '../world.js';
+import { routineSpots } from '../sim/routine.js';
 import { DecorSim, DECOR, DECOR_BY_ID, DECOR_CATS, DECOR_MAX, outsideZones, snapAhead } from '../sim/decor.js';
 import { saveGame } from '../save.js';
 import { touchUI } from '../input.js';
@@ -37,6 +38,7 @@ export class DecorView {
     for (const s of L.town?.sites || []) z.push({ x: s.x, z: s.z, r: 3.4 });
     if (L.town?.sign) z.push({ ...L.town.sign, r: 1.2 });
     for (const n of Object.values(L.npcs || {})) if (!n.wander) z.push({ x: n.x, z: n.z, r: 1.6 });
+    for (const s of routineSpots()) z.push({ x: s.x, z: s.z, r: 1.6 }); // 주민 일과 자리 (부두 끝·논두렁·센서 옆…)
     if (L.home?.door) z.push({ x: L.home.door.x, z: L.home.door.z, r: 2.2 });
     if (L.tractorHome) z.push({ x: L.tractorHome.x, z: L.tractorHome.z, r: 3 });
     for (const list of Object.values(L.rides || {})) for (const p of list) z.push({ x: p.x, z: p.z, r: 2.4 }); // 자전거·카트 세워 두는 자리
@@ -173,7 +175,7 @@ export class DecorView {
     const s = this.spot();
     if (m.id) {
       const d = DECOR_BY_ID[m.id], why = this.whyNotHere(s.x, s.z, d.r) || this.sim.whyNot(m.id, { money: g.economy.money, level: g.quests.level });
-      if (why) { g.audio.play('bump', 0.4); return g.ui.toast(`🚫 ${why}`); }
+      if (why) { g.audio.play('deny', 0.4); return g.ui.toast(`🚫 ${why}`); }
       const cost = this.sim.place(m.id, s.x, s.z, m.rot, { money: g.economy.money, level: g.quests.level });
       if (cost < 0) return;
       if (cost > 0) { g.economy.spend(cost); }
