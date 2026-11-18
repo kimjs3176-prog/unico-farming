@@ -13,7 +13,7 @@ export const SURF = {
   floor: { value: 0 }, // 바닥 높이 (실내처럼 땅속 방에서는 그 방바닥 → 발치 접지 음영 기준)
   // 시야 구멍: 카메라와 캐릭터 사이를 가리는 물체를 캐릭터 둘레만 점묘로 투명하게 (카메라를 당기지 않음)
   // 구멍은 카메라 끝이 뾰족한 원뿔: 캐릭터 깊이에서 반지름 seeR(m) → 화면에서는 캐릭터 둘레만 둥글게 (곁의 울타리·가로등은 그대로)
-  seeCam: { value: new THREE.Vector3(0, 50, 0) }, seeTarget: { value: new THREE.Vector3() }, seeOn: { value: 1 }, seeR: { value: 1.5 },
+  seeCam: { value: new THREE.Vector3(0, 50, 0) }, seeTarget: { value: new THREE.Vector3() }, seeOn: { value: 1 }, seeR: { value: 1.8 },
   // 계절 잎 색 (view/season_view.js 가 계절마다 채움): 나무마다 a/b 반반, 활엽수 일부는 red/red2(녹슨 색)
   leafA: { value: new THREE.Color(0x3f9a35) }, leafB: { value: new THREE.Color(0x3f9a35) }, leafR: { value: new THREE.Color(0x3f9a35) }, leafR2: { value: new THREE.Color(0x3f9a35) },
   leafAmt: { value: new THREE.Vector4() }, // [활엽수, 단풍나무, 침엽수, 덤불]
@@ -31,6 +31,8 @@ export function easeWet(cur, target, dt) {
 
 /** 시야 구멍 가운데를 따라가기 점(머리 높이 1.1m)보다 이만큼 낮춤 → 몸 가운데 */
 export const SEE_DROP = 0.4;
+/** 구멍 모양: 화면 아래쪽(발치)으로 이만큼 길쭉하게 (발 둘레 땅이 보이게), 가장자리 점묘 띠는 반지름의 edge~1 사이만 */
+export const SEE_SHAPE = { down: 1.3, edge: 0.88 };
 
 /**
  * 시야 구멍 비침 정도 0..1 (셰이더와 같은 식, 1 이면 완전히 비어 보임)
@@ -44,9 +46,15 @@ export function seeFade(p, cam, tgt, r = SURF.seeR.value) {
   const st = (rx * sx + ry * sy + rz * sz) / L;
   if (st <= 0 || st >= L - 0.4) return 0;
   const k = st / L, sR = r * k;
-  const sr = Math.hypot(rx - sx * k, ry - sy * k, rz - sz * k);
+  // 축에서 벗어난 만큼: 화면 위쪽 성분이 음수(아래)면 SEE_SHAPE.down 으로 나눠 아래로 길쭉하게
+  const ox = rx - sx * k, oy = ry - sy * k, oz = rz - sz * k;
+  const dx = sx / L, dy = sy / L, dz = sz / L;
+  let ux = -dy * dx, uy = 1 - dy * dy, uz = -dy * dz; // 세상 위(0,1,0)에서 시선 성분을 뺀 화면 위쪽
+  const ul = Math.hypot(ux, uy, uz) || 1; ux /= ul; uy /= ul; uz /= ul;
+  const ov = ox * ux + oy * uy + oz * uz, sq = ov < 0 ? ov / SEE_SHAPE.down : ov;
+  const sr = Math.hypot(ox - ux * ov + ux * sq, oy - uy * ov + uy * sq, oz - uz * ov + uz * sq);
   const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-  return (1 - ss(sR * 0.8, sR, sr)) * (1 - ss(L - 0.9, L - 0.4, st));
+  return (1 - ss(sR * SEE_SHAPE.edge, sR, sr)) * (1 - ss(L - 0.9, L - 0.4, st));
 }
 
 /** 계절 잎 역할 (셰이더 번호): 0 없음(작물·꽃·화분·실내 등은 물들지 않음) */
@@ -214,11 +222,16 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
         vec3 seg = seeT - uSeeCam; float segL = length(seg); vec3 sd = seg / max(segL, 1e-3);
         float st = dot(vSW - uSeeCam, sd);
         if (st > 0.0 && st < segL - 0.4) {
-          float sr = length(vSW - (uSeeCam + sd * st));
+          vec3 so = vSW - (uSeeCam + sd * st);
+          vec3 su = normalize(vec3(0.0, 1.0, 0.0) - sd * sd.y + vec3(0.0, 1e-4, 0.0)); // 화면 위쪽
+          float sv = dot(so, su);
+          float sr = length(so - su * (sv - (sv < 0.0 ? sv / ${SEE_SHAPE.down.toFixed(2)} : sv))); // 아래(발치)로 길쭉한 구멍
           float sR = uSeeR * st / segL;
-          float seeFade = (1.0 - smoothstep(sR * 0.8, sR, sr)) * (1.0 - smoothstep(segL - 0.9, segL - 0.4, st));
+          float seeFade = (1.0 - smoothstep(sR * ${SEE_SHAPE.edge.toFixed(2)}, sR, sr)) * (1.0 - smoothstep(segL - 0.9, segL - 0.4, st));
           float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
           if (seeFade > ign) discard;
+          // 남은 가장자리 조각은 크림빛으로 살짝: 일부러 낸 창처럼 보이게
+          if (seeFade > 0.02) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.95, 0.84), 0.55);
         }
       }` : ''}
       ${(KIND_CODE[kind] || KIND_CODE.base).replace('LEAF_SEASON', leaf ? LEAF_SEASON : '')}

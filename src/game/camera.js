@@ -59,9 +59,9 @@ export function savedCam(v, lim) {
  *  - 카메라 쪽으로(화면 아래로) 걸을 때 가장 많이: 속도 × 0.35, 최대 1.6m
  *  - 카메라에서 멀어질 때는 조금: 속도 × 0.10, 최대 0.5m (자전거처럼 빠르면 1.2m 까지 조금 더)
  *  - 옆으로: 속도 × 0.12, ±0.6m
- *  - 커질 때 2.0/s, 줄어들 때 1.4/s 로 부드럽게
+ *  - 커질 때 2.0/s, 줄어들 때 1.4/s 로 부드럽게, 그래도 한 번에 초당 rate(m) 넘게는 움직이지 않음 (자전거로 돌아설 때 화면이 휘청이지 않게)
  */
-export const LEAD = { toward: 0.35, towardMax: 1.6, away: 0.10, awayMax: 0.5, awayFastMax: 1.2, side: 0.12, sideMax: 0.6, grow: 2.0, shrink: 1.4 };
+export const LEAD = { toward: 0.35, towardMax: 1.6, away: 0.10, awayMax: 0.5, awayFastMax: 1.2, side: 0.12, sideMax: 0.6, grow: 2.0, shrink: 1.4, rate: 2.4 };
 /** 이보다 빠른 위치 변화(m/s)는 순간이동으로 봄 (내다보기를 지움) */
 const LEAD_JUMP = 25;
 
@@ -85,9 +85,10 @@ export class FollowCamera {
     this.pitch = sv?.pitch ?? this.defaults.pitch;
     this.distance = sv?.distance ?? this.defaults.distance;
     this.target = new THREE.Vector3();
-    this.smooth = new THREE.Vector3(); // 내다보기 없는 따라가기 점 (시야 구멍·그림자·컷신이 씀)
+    this.base = new THREE.Vector3();   // 내다보기 없는 따라가기 점
+    this.smooth = new THREE.Vector3(); // 밖에서 읽는 따라가기 점 (시야 구멍·컷신): 조작 중엔 base, 창·컷신 중엔 실제 바라보는 점 (컷신이 이어받을 때 튀지 않게)
     this.lead = new THREE.Vector3();   // 걷는 방향 내다보기 (XZ)
-    this.look = new THREE.Vector3();   // 실제로 바라보는 점 = smooth + lead
+    this.look = new THREE.Vector3();   // 실제로 바라보는 점 = base + lead
     this.vel = new THREE.Vector3();    // 따라가는 대상의 속도 (위치 변화로 잼)
     this._prev = new THREE.Vector3();
     this.first = true;
@@ -107,8 +108,8 @@ export class FollowCamera {
     }
     this.target.copy(targetPos);
     this.target.y += 1.1 + (this.lookOffsetY || 0);
-    if (this.first) { this.smooth.copy(this.target); this.lead.set(0, 0, 0); this.vel.set(0, 0, 0); this._prev.copy(targetPos); this.first = false; }
-    this.smooth.lerp(this.target, 1 - Math.pow(0.001, dt));
+    if (this.first) { this.base.copy(this.target); this.lead.set(0, 0, 0); this.vel.set(0, 0, 0); this._prev.copy(targetPos); this.first = false; }
+    this.base.lerp(this.target, 1 - Math.pow(0.001, dt));
     this._updateLead(dt, input, targetPos);
     const off = (this._off ||= new THREE.Vector3()).set(
       Math.sin(this.yaw) * Math.cos(this.pitch),
@@ -120,7 +121,8 @@ export class FollowCamera {
     const want = this.distance;
     this.curDist = this.curDist === undefined ? want : this.curDist + (want - this.curDist) * Math.min(1, dt * 8);
     off.setLength(this.curDist);
-    this.look.copy(this.smooth).add(this.lead);
+    this.look.copy(this.base).add(this.lead);
+    this.smooth.copy(input ? this.base : this.look);
     this.camera.position.copy(this.look).add(off);
     this.camera.lookAt(this.look);
   }
@@ -143,8 +145,11 @@ export class FollowCamera {
     }
     const grow = wx * wx + wz * wz > this.lead.x * this.lead.x + this.lead.z * this.lead.z;
     const a = 1 - Math.exp(-dt * (grow ? LEAD.grow : LEAD.shrink));
-    this.lead.x += (wx - this.lead.x) * a;
-    this.lead.z += (wz - this.lead.z) * a;
+    let sx = (wx - this.lead.x) * a, sz = (wz - this.lead.z) * a;
+    const sl = Math.hypot(sx, sz), cap = LEAD.rate * dt;
+    if (sl > cap) { sx *= cap / sl; sz *= cap / sl; }
+    this.lead.x += sx;
+    this.lead.z += sz;
   }
 
   /** ＋/－ 버튼: dir > 0 멀리, < 0 가까이 */

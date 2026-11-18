@@ -1,5 +1,6 @@
 import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RanchSim, ANIMAL_PRICES, BARN, TROUGH_MAX, RANCH_LEVELS } from '../sim/ranch.js';
 import { Processor, RANCH_RECIPES, WORKSHOP_PRICES } from '../sim/farmcraft.js';
 import { ITEMS } from '../sim/items.js';
@@ -19,8 +20,16 @@ function productKit() {
     glass: std(0xffffff, { roughness: 0.25 }), cap: std(0x3f8fd8, { roughness: 0.4 }), band: std(0xf2c84b),
     bottle: new THREE.CylinderGeometry(0.085, 0.1, 0.26, 16), neck: new THREE.CylinderGeometry(0.05, 0.085, 0.08, 16),
     capGeo: new THREE.CylinderGeometry(0.056, 0.056, 0.035, 16), bandGeo: new THREE.CylinderGeometry(0.102, 0.102, 0.07, 16),
-    wool: std(0xfbf7ee, { roughness: 0.95 }), puff: new THREE.IcosahedronGeometry(0.09, 1),
+    wool: std(0xfbf7ee, { roughness: 0.95 }),
   };
+  // 양털 뭉치 다섯 개·유리병 몸통+목은 한 번 합쳐 둠 (그리기 횟수 줄이기)
+  const puff = new THREE.IcosahedronGeometry(0.09, 1), o = new THREE.Object3D();
+  const at = (geo, x, y, z, s = 1) => { o.position.set(x, y, z); o.scale.setScalar(s); o.updateMatrix(); return geo.clone().applyMatrix4(o.matrix); };
+  const puffs = [[0, 0, 0, 1.3], [0.09, 0.03, 0.02, 1], [-0.09, 0.02, -0.02, 1.05], [0.02, 0.09, -0.05, 0.95], [-0.03, -0.05, 0.07, 0.9]].map(([x, y, z, s]) => at(puff, x, y, z, s));
+  PROD_KIT.woolGeo = mergeGeometries(puffs);
+  const glass = [at(PROD_KIT.bottle, 0, 0, 0), at(PROD_KIT.neck, 0, 0.17, 0)];
+  PROD_KIT.glassGeo = mergeGeometries(glass);
+  for (const g of [puff, ...puffs, ...glass]) g.dispose();
   return PROD_KIT;
 }
 /** 생산물 하나의 3D 모양 (없는 종류면 null → 예전처럼 글자만) */
@@ -28,8 +37,8 @@ export function productMesh(kind) {
   const K = productKit(), g = new THREE.Group();
   const add = (geo, mat, x = 0, y = 0, z = 0, s = 1) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.setScalar(s); g.add(m); return m; };
   if (kind === 'egg' || kind === 'gold_egg') add(K.eggGeo, K.egg).scale.set(1, 1.28, 1);
-  else if (kind === 'milk') { add(K.bottle, K.glass); add(K.bandGeo, K.band, 0, -0.02); add(K.neck, K.glass, 0, 0.17); add(K.capGeo, K.cap, 0, 0.225); }
-  else if (kind === 'wool') { for (const [x, y, z, s] of [[0, 0, 0, 1.3], [0.09, 0.03, 0.02, 1], [-0.09, 0.02, -0.02, 1.05], [0.02, 0.09, -0.05, 0.95], [-0.03, -0.05, 0.07, 0.9]]) add(K.puff, K.wool, x, y, z, s); }
+  else if (kind === 'milk') { add(K.glassGeo, K.glass); add(K.bandGeo, K.band, 0, -0.02); add(K.capGeo, K.cap, 0, 0.225); }
+  else if (kind === 'wool') add(K.woolGeo, K.wool);
   else return null;
   g.name = `item-${kind}`;
   return g;

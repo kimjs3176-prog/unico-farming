@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 
-const { FX, ITEM_GET } = await import('../src/game/fx.js');
+const { FX, ITEM_GET, faceToward } = await import('../src/game/fx.js');
 const { SURF } = await import('../src/game/surface.js');
 const { sheafMesh } = await import('../src/game/view/rice_view.js');
 const { productMesh } = await import('../src/game/view/ranch_view.js');
@@ -75,4 +75,49 @@ test('생산물 모양은 지오메트리를 함께 써서 끝나도 해제하�
   assert.equal(disposed, 0);
   assert.equal(sheafMesh().children[0].geometry, sheafMesh().children[0].geometry);
   assert.equal(productMesh('honey'), null, '모양이 없는 종류는 글자만');
+});
+
+test('itemGet: 머리 위 감정 아이콘(🎉)은 걷고, 솟는 동안 카메라 쪽으로 60°까지 돌아섰다가 끝나면 원래 방향', () => {
+  // 준비: 카메라는 남쪽(+z), 유니코는 북쪽(facing π)을 봄, 머리 위에 🎉
+  SURF.seeCam.value.set(0, 5, 10);
+  const fx = new FX(new THREE.Scene(), null), P = player();
+  P.unico.facing = Math.PI;
+  P.unico.emote = { visible: true };
+  P.unico.emoteUntil = 99;
+  // 실행
+  fx.itemGet(productMesh('egg'), P, { delay: 0.3 });
+  // 확인
+  assert.equal(P.unico.emoteUntil, -1, '감정 아이콘은 바로 걷힘');
+  assert.equal(P.unico.facing, Math.PI, '기다리는 동안(뽑기 동작)은 그대로');
+  run(fx, 0.32);
+  const turned = Math.abs(Math.atan2(Math.sin(P.unico.facing - Math.PI), Math.cos(P.unico.facing - Math.PI)));
+  assert.ok(Math.abs(turned - ITEM_GET.turn) < 1e-9, `돌아선 각 ${turned.toFixed(3)}`);
+  run(fx, ITEM_GET.arc + ITEM_GET.hold + 0.1);
+  assert.equal(P.unico.facing, Math.PI, '끝나면 원래 방향');
+});
+
+test('faceToward: 카메라가 30° 옆이면 그만큼만, 반대쪽이면 60°까지만', () => {
+  assert.ok(Math.abs(faceToward(0, 0, 0, Math.sin(0.5), Math.cos(0.5)) - 0.5) < 1e-9);
+  assert.ok(Math.abs(faceToward(Math.PI, 0, 0, 0, 10) - (Math.PI - Math.PI / 3)) < 1e-9 || Math.abs(faceToward(Math.PI, 0, 0, 0, 10) - (Math.PI + Math.PI / 3)) < 1e-9);
+});
+
+test('물건은 머리 뼈보다 ITEM_GET.lift 위에 머묾 (뿔과 겹치지 않게 1.1m 이상)', () => {
+  const fx = new FX(new THREE.Scene(), null), P = player();
+  const head = new THREE.Object3D(); head.position.set(0, 1.6, 0); head.updateMatrixWorld();
+  P.unico.headG = head;
+  const m = productMesh('milk');
+  fx.itemGet(m, P, {});
+  run(fx, ITEM_GET.arc + 0.1);
+  assert.ok(ITEM_GET.lift >= 1.1);
+  assert.ok(Math.abs(m.position.y - (1.6 + ITEM_GET.lift)) < 0.06, `높이 ${m.position.y.toFixed(2)}`);
+});
+
+test('벼 한 단은 그리기 2번 (짚·이삭 둘로 합침) → 폰 낮음 품질에서 수확할 때 드로우콜이 크게 늘지 않음', () => {
+  const g = sheafMesh();
+  let meshes = 0;
+  g.traverse((o) => { if (o.isMesh) meshes++; });
+  assert.equal(meshes, 2);
+  let wool = 0;
+  productMesh('wool').traverse((o) => { if (o.isMesh) wool++; });
+  assert.ok(wool <= 1, `양털 ${wool}`);
 });

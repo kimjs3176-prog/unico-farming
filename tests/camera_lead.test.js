@@ -84,3 +84,33 @@ test('바라보는 높이 보정 중(옷장)에는 내다보기 없음', () => {
   walk(c, pos, 0, WALK, 2);
   assert.ok(c.lead.length() < 1e-9);
 });
+
+test('걷다가·자전거로 돌아서도 내다보기는 한 프레임(60fps)에 LEAD.rate/60 m 넘게 움직이지 않음', () => {
+  for (const [v, name] of [[WALK, '걷기'], [BIKE, '자전거']]) {
+    // 준비: 카메라에서 멀어지다가 돌아서 카메라 쪽으로
+    const c = new FollowCamera(new THREE.PerspectiveCamera());
+    const pos = new THREE.Vector3();
+    c.update(DT, INPUT, pos);
+    walk(c, pos, 0, -v, 3);
+    const prev = c.lead.clone();
+    let max = 0;
+    // 실행
+    for (let i = 0; i < 180; i++) { pos.z += v * DT; c.update(DT, INPUT, pos); max = Math.max(max, c.lead.distanceTo(prev)); prev.copy(c.lead); }
+    // 확인
+    assert.ok(max <= LEAD.rate * DT + 1e-9, `${name} 한 프레임 ${max.toFixed(4)}m`);
+    assert.ok(max <= 0.05, `${name} 0.05m 이하`);
+  }
+});
+
+test('창·컷신(input 없음) 동안 밖에서 읽는 따라가기 점(smooth)은 실제 바라보는 점과 같음 → 컷신이 이어받을 때 튀지 않음', () => {
+  const c = new FollowCamera(new THREE.PerspectiveCamera());
+  const pos = new THREE.Vector3();
+  c.update(DT, INPUT, pos);
+  walk(c, pos, 0, WALK, 2);
+  const before = c.look.clone();
+  c.update(DT, null, pos);
+  assert.ok(c.smooth.distanceTo(c.look) < 1e-9);
+  assert.ok(c.look.distanceTo(before) < 0.05, `바라보는 점 이동 ${c.look.distanceTo(before).toFixed(3)}m`);
+  c.update(DT, INPUT, pos);
+  assert.ok(c.smooth.distanceTo(c.base) < 1e-9, '조작이 돌아오면 다시 내다보기 없는 점');
+});

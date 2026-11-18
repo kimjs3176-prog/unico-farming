@@ -35,29 +35,42 @@ export const arrowAngle = (facing) => Math.PI - facing;
 export const mapDpr = (dpr, low) => Math.max(1, Math.min(dpr || 1, low ? 1.5 : 2));
 
 const LABEL_TRY = ['below', 'above', 'right', 'left'];
+/** 이름표가 제자리에서 이만큼(px) 넘게 떨어지면 가는 선으로 이어 줌 */
+export const LEADER_PX = 20;
 /**
- * 이름표 놓기: 앞 순서(중요한 곳)부터 아래·위·오른쪽·왼쪽 순으로 자리를 찾고, 이미 놓인 이름표와 겹치거나 지도 밖이면 건너뜀
- * labels: [{ text, x, y, r }] (r: 표시 반지름, 이름표가 떨어질 거리), measure(text) → 너비, h: 글자 높이
- * @returns [{ text, x, y, w, h }] (x·y: 글 가운데)
+ * 이름표 놓기: 앞 순서(중요한 곳)부터 (넓은 구역 inside 는 한가운데 먼저) 아래·위·오른쪽·왼쪽 순으로 자리를 찾고,
+ * 이미 놓인 이름표·avoid 상자(나 화살표 등)와 겹치거나 지도 밖이면 건너뜀
+ * labels: [{ text, x, y, r, inside }] (r: 표시 반지름, 이름표가 떨어질 거리), measure(text) → 너비, h: 글자 높이
+ * @returns [{ text, x, y, w, h, ax, ay, lead }] (x·y: 글 가운데, ax·ay: 원래 자리, lead: 이어 줄 선이 필요함)
  */
-export function placeLabels(labels, measure, h, S, pad = 2) {
+export function placeLabels(labels, measure, h, S, pad = 2, avoid = []) {
   const out = [];
-  const hit = (a) => out.some((b) => Math.abs(a.x - b.x) * 2 < a.w + b.w + pad * 2 && Math.abs(a.y - b.y) * 2 < a.h + b.h + pad * 2);
+  const hit = (a) => out.concat(avoid).some((b) => Math.abs(a.x - b.x) * 2 < a.w + b.w + pad * 2 && Math.abs(a.y - b.y) * 2 < a.h + b.h + pad * 2);
   for (const L of labels) {
     const w = measure(L.text), r = L.r ?? 4;
-    for (const side of LABEL_TRY) {
-      const c = side === 'below' ? { x: L.x, y: L.y + r + h / 2 }
-        : side === 'above' ? { x: L.x, y: L.y - r - h / 2 }
-          : side === 'right' ? { x: L.x + r + w / 2 + 2, y: L.y } : { x: L.x - r - w / 2 - 2, y: L.y };
-      const a = { text: L.text, x: c.x, y: c.y, w, h };
+    for (const side of L.inside ? ['center', ...LABEL_TRY] : LABEL_TRY) {
+      const c = side === 'center' ? { x: L.x, y: L.y }
+        : side === 'below' ? { x: L.x, y: L.y + r + h / 2 }
+          : side === 'above' ? { x: L.x, y: L.y - r - h / 2 }
+            : side === 'right' ? { x: L.x + r + w / 2 + 2, y: L.y } : { x: L.x - r - w / 2 - 2, y: L.y };
+      const a = { text: L.text, x: c.x, y: c.y, w, h, ax: L.x, ay: L.y };
       if (a.x - w / 2 < 1 || a.x + w / 2 > S - 1 || a.y - h / 2 < 1 || a.y + h / 2 > S - 1) continue;
       if (hit(a)) continue;
+      a.lead = Math.hypot(a.x - L.x, a.y - L.y) > LEADER_PX;
       out.push(a);
       break;
     }
   }
   return out;
 }
+
+/** 화면 배율 (글자 크기 설정 zoom 등): 테두리 포함 실제 폭 / 테두리 포함 레이아웃 폭. hover 확대(transform)는 offsetWidth 에 들어가지 않음 */
+export function mapZoom(rectW, offsetW) {
+  return rectW > 0 && offsetW > 0 ? rectW / offsetW : 1;
+}
+
+/** 작은 지도에서 이보다 작게(px) 보이는 잔 시설은 그리지 않음 (뜻 없는 점이 되므로) */
+export const MIN_PROP_PX = 6;
 
 /** 우상단 미니맵 (2D 캔버스). 누르면 큰 지도가 열리고, 큰 지도에서 원하는 곳을 누르면 그곳으로 이동 */
 export class Minimap {
@@ -90,9 +103,10 @@ export class Minimap {
   /** 캔버스 픽셀 크기를 보이는 크기 × 배율로 (글자 크기 설정 zoom 포함) */
   _fit(v) {
     const cv = v.cv, css = cv.clientWidth || v.fallback;
-    const vis = cv.getBoundingClientRect?.().width || css;
+    const ob = cv.offsetWidth || css; // 테두리 포함, transform 무시
+    const zoom = mapZoom(cv.getBoundingClientRect?.().width || ob, ob);
     const low = this.game.quality?.level === 'low';
-    const k = +(mapDpr((globalThis.devicePixelRatio || 1) * (vis / css || 1), low)).toFixed(3);
+    const k = +(mapDpr((globalThis.devicePixelRatio || 1) * zoom, low)).toFixed(3);
     if (v.S === css && v.k === k) return;
     v.S = css; v.k = k; v.key = '';
     const px = Math.round(css * k);
@@ -156,6 +170,8 @@ export class Minimap {
     c.beginPath(); c.roundRect(0, 0, S, S, 16 * ui); c.fill();
     const L = LAYOUT;
     const rect = (x0, z0, x1, z1, col) => { c.fillStyle = col; c.fillRect(X(x0), Z(z0), (x1 - x0) * k, (z1 - z0) * k); };
+    // 잔 시설: 작은 지도에서 MIN_PROP_PX 보다 작으면 생략
+    const prop = (x0, z0, x1, z1, col) => { if (big || Math.max(x1 - x0, z1 - z0) * k >= MIN_PROP_PX) rect(x0, z0, x1, z1, col); };
     // 언덕: 등고선처럼 겹친 원 (+ 작은 지도는 폰이 아니면 산 표시, 큰 지도는 전망대)
     const hillIcon = big || S >= 120;
     for (const H of HILLS) {
@@ -182,33 +198,34 @@ export class Minimap {
     c.fillStyle = '#6fc3e8'; c.beginPath(); c.arc(X(L.pond.x), Z(L.pond.z), L.pond.r * k, 0, 7); c.fill();
     c.beginPath(); c.arc(X(L.lake.x), Z(L.lake.z), L.lake.r * k, 0, 7); c.fill();
     for (const b of L.lake.pier) rect(b.x0, b.z0, b.x1, b.z1, '#b08457');
-    rect(L.ranchWork.x - 1.4, L.ranchWork.z - 1.4, L.ranchWork.x + 1.4, L.ranchWork.z + 1.4, '#f2c84b');
-    rect(L.craft.jars.x - 1.7, L.craft.jars.z - 0.8, L.craft.jars.x + 1.7, L.craft.jars.z + 0.8, '#5a3523');
-    rect(L.craft.compost.x - 0.6, L.craft.compost.z - 0.6, L.craft.compost.x + 0.6, L.craft.compost.z + 0.6, '#4a3322');
-    rect(L.lake.shop.x - 1.2, L.lake.shop.z - 1.2, L.lake.shop.x + 1.2, L.lake.shop.z + 1.2, '#3a8fd8');
+    prop(L.ranchWork.x - 1.4, L.ranchWork.z - 1.4, L.ranchWork.x + 1.4, L.ranchWork.z + 1.4, '#f2c84b');
+    prop(L.craft.jars.x - 1.7, L.craft.jars.z - 0.8, L.craft.jars.x + 1.7, L.craft.jars.z + 0.8, '#5a3523');
+    prop(L.craft.compost.x - 0.6, L.craft.compost.z - 0.6, L.craft.compost.x + 0.6, L.craft.compost.z + 0.6, '#4a3322');
+    prop(L.lake.shop.x - 1.2, L.lake.shop.z - 1.2, L.lake.shop.x + 1.2, L.lake.shop.z + 1.2, '#3a8fd8');
     const pd = L.paddy; rect(pd.x0, pd.z0, pd.x0 + pd.cols * (pd.size + pd.bund) + pd.bund, pd.z0 + pd.rows * (pd.size + pd.bund) + pd.bund, '#5fa3b0');
     const kr = L.koat.rect; rect(kr[0], kr[1], kr[2], kr[3], 'rgba(48,182,170,0.55)');
     rect(L.home.x - 2, L.home.z - 1.6, L.home.x + 2, L.home.z + 1.6, '#2fa89c'); // 유니코 집 (청록 지붕)
     // 새 마을 부지: 빈 부지는 옅은 흙색, 지은 건물은 주황
-    for (const [i, st] of L.town.sites.entries()) { const done = this.game.town?.sim.sites[i]?.state !== 'empty' && this.game.town; rect(st.x - 1.8, st.z - 1.8, st.x + 1.8, st.z + 1.8, done ? '#f2a33a' : 'rgba(160,120,70,0.45)'); }
-    c.fillStyle = '#e0413a'; for (const o of L.orchard) { c.beginPath(); c.arc(X(o.x), Z(o.z), 2.2 * ui * (big ? 1 : 0.8), 0, 7); c.fill(); }
-    if (big) this._labels(c, S, ui, X, Z);
+    for (const [i, st] of L.town.sites.entries()) { const done = this.game.town?.sim.sites[i]?.state !== 'empty' && this.game.town; prop(st.x - 1.8, st.z - 1.8, st.x + 1.8, st.z + 1.8, done ? '#f2a33a' : 'rgba(160,120,70,0.45)'); }
+    if (big) { c.fillStyle = '#e0413a'; for (const o of L.orchard) { c.beginPath(); c.arc(X(o.x), Z(o.z), 2.2 * ui, 0, 7); c.fill(); } }
+    else { c.fillStyle = 'rgba(224,65,58,0.22)'; for (const o of L.orchard) { c.beginPath(); c.arc(X(o.x), Z(o.z), 2.2 * k, 0, 7); c.fill(); } } // 작은 지도: 과수원은 옅은 빛만
   }
 
-  /** 큰 지도 이름표: 중요한 곳부터, 겹치면 다른 쪽, 그래도 겹치면 생략. 크림색 테두리로 바탕 위에서도 읽히게 */
-  _labels(c, S, ui, X, Z) {
+  /** 큰 지도 이름표: 중요한 곳부터 (넓은 구역은 한가운데 먼저), 겹치면 다른 쪽, 그래도 겹치면 생략. 크림색 테두리로 바탕 위에서도 읽히게
+   * avoid: 이름표가 덮지 않을 상자 (나 화살표). 멀리 밀려난 이름표는 가는 선으로 제자리와 이음 */
+  _labels(c, S, ui, X, Z, avoid = []) {
     const L = LAYOUT, f = L.farm, fd = L.field, pd = L.paddy, kr = L.koat.rect, k = mapScale(S).k;
-    const at = (text, x, z, r) => ({ text, x: X(x), y: Z(z), r: r * k });
+    const at = (text, x, z, r, inside = false) => ({ text, x: X(x), y: Z(z), r: r * k, inside });
     const list = [
-      at('농장', f.origin.x, f.origin.z, f.rows * f.tile / 2),
+      at('농장', f.origin.x, f.origin.z, f.rows * f.tile / 2, true),
       at('장터', L.market.x, L.market.z, 1.2),
-      at('목장', (L.ranch.x0 + L.ranch.x1) / 2, (L.ranch.z0 + L.ranch.z1) / 2, (L.ranch.z1 - L.ranch.z0) / 2),
-      at('논', pd.x0 + pd.cols * (pd.size + pd.bund) / 2, pd.z0 + pd.rows * (pd.size + pd.bund) / 2, pd.rows * (pd.size + pd.bund) / 2),
+      at('목장', (L.ranch.x0 + L.ranch.x1) / 2, (L.ranch.z0 + L.ranch.z1) / 2, (L.ranch.z1 - L.ranch.z0) / 2, true),
+      at('논', pd.x0 + pd.cols * (pd.size + pd.bund) / 2, pd.z0 + pd.rows * (pd.size + pd.bund) / 2, pd.rows * (pd.size + pd.bund) / 2, true),
       at('우리 집', L.home.x, L.home.z, 1.8),
-      at('KOAT', (kr[0] + kr[2]) / 2, (kr[1] + kr[3]) / 2, 0.5),
-      at('스마트팜', L.smartfarm.x, L.smartfarm.z, 4.6),
-      at('낚시터', L.lake.x, L.lake.z, L.lake.r),
-      at('밭갈이', fd.x0 + fd.cols * fd.cell / 2, fd.z0 + fd.rows * fd.cell / 2, fd.rows * fd.cell / 2),
+      at('KOAT', (kr[0] + kr[2]) / 2, (kr[1] + kr[3]) / 2, 0.5, true),
+      at('스마트팜', L.smartfarm.x, L.smartfarm.z, 4.6, true),
+      at('낚시터', L.lake.x, L.lake.z, L.lake.r, true),
+      at('밭갈이', fd.x0 + fd.cols * fd.cell / 2, fd.z0 + fd.rows * fd.cell / 2, fd.rows * fd.cell / 2, true),
       at('연못', L.pond.x, L.pond.z, L.pond.r),
       at('과수원', 9, -11.5, 1.5),
       at('새 마을', -28, 11, 2),
@@ -217,7 +234,14 @@ export class Minimap {
     const h = 9 * ui;
     c.font = `bold ${h}px 'Unico Coin', Jua, sans-serif`;
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
-    for (const p of placeLabels(list, (t) => c.measureText(t).width, h, S)) {
+    const placed = placeLabels(list, (t) => c.measureText(t).width, h, S, 2, avoid);
+    c.strokeStyle = 'rgba(35,25,22,0.55)'; c.lineWidth = 1;
+    for (const p of placed) {
+      if (!p.lead) continue;
+      const ex = p.x + Math.sign(p.ax - p.x) * Math.min(Math.abs(p.ax - p.x), p.w / 2), ey = p.y + Math.sign(p.ay - p.y) * Math.min(Math.abs(p.ay - p.y), p.h / 2);
+      c.beginPath(); c.moveTo(ex, ey); c.lineTo(p.ax, p.ay); c.stroke();
+    }
+    for (const p of placed) {
       c.strokeStyle = 'rgba(255,247,225,0.92)'; c.lineWidth = 3.2 * ui / 2.2 * 1.6;
       c.strokeText(p.text, p.x, p.y);
       c.fillStyle = '#231916'; c.fillText(p.text, p.x, p.y);
@@ -238,22 +262,26 @@ export class Minimap {
     c.fillStyle = '#4a90d9';
     for (const r of g.net?.remote?.values?.() || []) { const p = r.unico.group.position; dot(p.x, p.z, 2.5 * ui); }
     // 지금 목표 (밭 한 칸·장소): 금빛 겹고리, 천천히 숨 쉬듯 (지도 밖이면 표시 안 함)
-    const t = g.guide?.target;
+    const t = g.guide?.target, me = this._me();
     if (t && Math.abs(t.x) < B && Math.abs(t.z) < B) {
+      const near = Math.hypot(X(t.x) - X(me.x), Z(t.z) - Z(me.z)) < 8 * ui; // 목표가 바로 곁이면 화살표 뒤에 옅게
+      if (near) c.globalAlpha = 0.4;
       const pulse = 0.5 + 0.5 * Math.sin((globalThis.performance?.now?.() || 0) / 260);
       c.strokeStyle = '#231916'; c.lineWidth = 2.6 * ui;
       c.beginPath(); c.arc(X(t.x), Z(t.z), (4.2 + pulse * 1.2) * ui, 0, 7); c.stroke();
       c.strokeStyle = '#ffd34d'; c.lineWidth = 1.5 * ui;
       c.beginPath(); c.arc(X(t.x), Z(t.z), (4.2 + pulse * 1.2) * ui, 0, 7); c.stroke();
-      c.beginPath(); c.arc(X(t.x), Z(t.z), (7.4 + pulse * 1.6) * ui, 0, 7); c.globalAlpha = 0.55; c.stroke(); c.globalAlpha = 1;
+      c.beginPath(); c.arc(X(t.x), Z(t.z), (7.4 + pulse * 1.6) * ui, 0, 7); c.globalAlpha *= 0.55; c.stroke(); c.globalAlpha = 1;
     }
-    const p = this._me(), px = X(p.x), pz = Z(p.z);
+    const p = me, px = X(p.x), pz = Z(p.z);
     // 큰 지도: 카메라가 보는 쪽 부채꼴 (60°)
     if (big && g.followCam) {
       const a = arrowAngle(g.followCam.yaw + Math.PI) - Math.PI / 2, half = Math.PI / 6, R = 26 * ui;
-      c.fillStyle = 'rgba(255,255,255,0.26)';
-      c.beginPath(); c.moveTo(px, pz); c.arc(px, pz, R, a - half, a + half); c.closePath(); c.fill();
+      c.fillStyle = 'rgba(255,255,255,0.25)'; c.strokeStyle = 'rgba(255,255,255,0.95)'; c.lineWidth = 1.2; c.lineJoin = 'round';
+      c.beginPath(); c.moveTo(px, pz); c.arc(px, pz, R, a - half, a + half); c.closePath(); c.fill(); c.stroke();
     }
+    // 큰 지도 이름표: 나 화살표 자리를 비워 두고 놓음 (나는 움직이니 고정 그림이 아니라 여기서)
+    if (big) { const s0 = 5.5 * ui * 1.4; this._labels(c, S, ui, X, Z, [{ x: px, y: pz, w: s0 * 2, h: s0 * 2 }]); }
     // 나: 보는 쪽을 가리키는 금빛 화살표 (운전 중이면 탈것 방향)
     const facing = g.ride?.driving ? g.ride.vehicle?.heading : g.player?.unico?.facing;
     const s = (big ? 5.5 : 5.2) * ui;
@@ -311,7 +339,7 @@ export class Minimap {
   travel(x, z, name) {
     const g = this.game;
     const pos = g.findOpenSpot(x, z);
-    const started = g.warpTo(pos.x, pos.z, {}, { after: () => g.ui.toast(name ? `${name}${josa(name, '으로/로')} 이동했어요` : '✨ 이동했어요') });
+    const started = g.warpTo(pos.x, pos.z, {}, { label: name || '🗺️ 지도에서 고른 곳', after: () => g.ui.toast(name ? `${name}${josa(name, '으로/로')} 이동했어요` : '✨ 이동했어요') });
     if (started) this.pick = pos;
     return started;
   }

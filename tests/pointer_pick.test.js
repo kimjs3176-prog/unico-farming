@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { buildRoom, IO, ROOM } from '../src/game/view/home_interior.js';
 import { PointerNav, roomSpotAt, roomSpotSolids, nearestOnScreen, inSeeHole, TOUCH_PICK_PX } from '../src/game/pointer.js';
-import { SURF, enhanceMaterial } from '../src/game/surface.js';
+import { SURF, enhanceMaterial, SEE_DROP, SEE_SHAPE } from '../src/game/surface.js';
 import { LAYOUT } from '../src/game/world.js';
 
 const mats = () => ({ glass: new THREE.MeshStandardMaterial(), lampMat: new THREE.MeshStandardMaterial() });
@@ -178,6 +178,18 @@ test('시야 구멍: 셰이더와 같은 원뿔 (캐릭터 둘레만, 곁의 물
   assert.equal(inSeeHole(new THREE.Vector3(0, 0.3, 0.5), cam, tgt), false, '바닥 가까이는 구멍 없음');
   assert.equal(inSeeHole(new THREE.Vector3(0, 0.8, -1), cam, tgt), false, '유니코 뒤');
   assert.equal(inSeeHole(new THREE.Vector3(0, 3, 4), cam, tgt, 0), false, '꺼짐');
+});
+
+test('시야 구멍: 화면 아래(발치) 쪽으로 SEE_SHAPE.down 배 길쭉 → 같은 거리라도 위쪽은 막히고 아래쪽은 비침', () => {
+  // 준비: 카메라→몸 가운데 축의 한가운데 깊이, 화면 위쪽 방향
+  const cam = new THREE.Vector3(0, 5, 8), tgt = new THREE.Vector3(0, 1.1, 0);
+  const body = tgt.clone().setY(tgt.y - SEE_DROP), sd = body.clone().sub(cam).normalize();
+  const mid = cam.clone().lerp(body, 0.5), up = new THREE.Vector3(0, 1, 0).addScaledVector(sd, -sd.y).normalize();
+  const sR = SURF.seeR.value * 0.5;
+  // 실행·확인: 반지름보다 조금 바깥(1.1배)
+  assert.equal(inSeeHole(mid.clone().addScaledVector(up, sR * 1.1), cam, tgt), false, '위쪽은 반지름 밖이면 막힘');
+  assert.equal(inSeeHole(mid.clone().addScaledVector(up, -sR * 1.1), cam, tgt), true, '아래쪽은 길쭉해서 비침');
+  assert.ok(SEE_SHAPE.down >= 1.2 && SURF.seeR.value >= 1.8);
 });
 
 test('바깥 PointerNav.pick: 유니코를 가린 집은 시야 구멍 자리를 누르면 그 뒤의 땅, 보이는 지붕을 누르면 집', () => {

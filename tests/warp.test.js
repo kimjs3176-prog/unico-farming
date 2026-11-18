@@ -4,11 +4,11 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 
 const { GameTravel, BUSY_TRAVEL, NO_TRAVEL, WARP_DOLLY } = await import('../src/game/game_travel.js');
-const { irisSize, Wipe } = await import('../src/ui/wipe.js');
+const { irisSize, irisFor, Wipe } = await import('../src/ui/wipe.js');
 
 /** 막(wipe)을 손으로 진행하는 가짜: run 이 받은 mid·done 을 시험이 부름 */
 function stubWipe() {
-  const w = { runs: [], run(at, mid, done) { w.runs.push({ at, mid, done }); return true; } };
+  const w = { runs: [], run(at, mid, done, opts) { w.runs.push({ at, mid, done, opts }); return true; } };
   return w;
 }
 
@@ -85,4 +85,22 @@ test('goKoat: 체험관 도착 알림은 막이 열린 뒤', () => {
 test('막 크기는 화면 어느 점에서 커져도 화면을 다 덮음, 화면이 없으면 바로 처리하도록 false', () => {
   assert.ok(irisSize(412, 839) / 2 >= Math.hypot(412, 839));
   assert.equal(new Wipe({}).run(null, () => {}, () => {}), false);
+});
+
+test('덮인 동안 가는 곳 이름표: 체험관은 KOAT 체험관, 지도 장소는 그 이름', () => {
+  const g = game();
+  g.goKoat();
+  assert.equal(g.wipe.runs[0].opts.label, '🏢 KOAT 체험관');
+  const g2 = game();
+  g2.warpTo(1, 1, {}, { label: '🛒 장터' });
+  assert.equal(g2.wipe.runs[0].opts.label, '🛒 장터');
+});
+
+test('구멍 지름: 캐릭터 자리에서 가장 먼 모서리까지 딱 덮을 만큼 (너무 크면 좁히는 앞쪽 시간 동안 아무것도 안 보임)', () => {
+  // 폰 412x839 가운데
+  const d = irisFor(206, 420, 412, 839);
+  assert.ok(d / 2 >= Math.hypot(206, 420), '모서리까지 열림');
+  assert.ok(d < irisSize(412, 839) * 0.6, `지름 ${d}`);
+  // 모서리 가까운 점은 반대쪽 모서리까지
+  assert.ok(irisFor(0, 0, 412, 839) / 2 >= Math.hypot(412, 839));
 });

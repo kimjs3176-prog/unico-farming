@@ -17,6 +17,7 @@ export const GameTravel = {
   goKoat() {
     // 도착 팡파르는 없음 (순간이동 소리만): 큰 축하 소리는 보상·레벨업에만
     return this.warpTo(25, -24, { yaw: 0, pitch: 0.62, distance: 13, facing: Math.PI }, {
+      label: '🏢 KOAT 체험관',
       after: () => {
         if (!this.flags.koatIntro) { if (!this._koatCine) this.koatCutscene(); } // 표시는 컷신 마지막 스텝에서 (잃어버리지 않게)
         else this.ui.toast('🏢 KOAT 체험관에 도착! 본부별 부스에서 체험하고 안내데스크에서 스탬프를 확인하세요');
@@ -33,10 +34,10 @@ export const GameTravel = {
 
   /**
    * 장면 전환과 함께 이동 (지도·체험관): 동그란 막이 덮이는 동안 순간이동, 열릴 때 카메라가 살짝 멀리서 다가옴
-   * 막는 조건은 누를 때와 막이 다 덮였을 때 두 번 봄. after: 도착해 막이 다 열린 뒤 (알림·컷신)
+   * 막는 조건은 누를 때와 막이 다 덮였을 때 두 번 봄. after: 도착해 막이 다 열린 뒤 (알림·컷신), label: 덮인 동안 보일 가는 곳
    * @returns 전환을 시작했으면 true
    */
-  warpTo(x, z, opts = {}, { after } = {}) {
+  warpTo(x, z, opts = {}, { after, label } = {}) {
     if (this._warping) return false;
     const no = this.travelBlock();
     if (no) { this.ui.toast(...no); return false; }
@@ -59,7 +60,7 @@ export const GameTravel = {
       this._warping = false;
       if (ok) after?.();
     };
-    if (wipe.run(() => this.screenOf?.(this.player.position, 1.0), mid, done) === false) { mid(); done(); }
+    if (wipe.run(() => this.screenOf?.(this.player.position, 1.0), mid, done, { label }) === false) { mid(); done(); }
     return true;
   },
 

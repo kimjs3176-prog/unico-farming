@@ -18,8 +18,15 @@ export function skipOverride(renderer, scene) {
   if (scene?.overrideMaterial) this.matrixWorld.makeScale(0, 0, 0);
 }
 
-/** 수확물 보여 주기 시간 (초): 흙 → 머리 위 / 머리 위에서 / 너무 멀어지면 바로 가방으로 (m) */
-export const ITEM_GET = { arc: 0.3, hold: 0.45, far: 14 };
+/** 수확물 보여 주기 시간 (초): 흙 → 머리 위 / 머리 위에서 / 너무 멀어지면 바로 가방으로 (m)
+ * lift: 머리 뼈보다 이만큼(m) 위 (뿔에 겹치지 않게), turn: 솟는 동안 카메라 쪽으로 이만큼(라디안)까지 돌아섬 */
+export const ITEM_GET = { arc: 0.3, hold: 0.45, far: 14, lift: 1.15, turn: Math.PI / 3 };
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+/** 카메라 쪽으로 최대 turn 만큼 돌린 방향 (facing 은 atan2(dx, dz)) */
+export function faceToward(facing, px, pz, cx, cz, turn = ITEM_GET.turn) {
+  const want = Math.atan2(cx - px, cz - pz), d = wrapA(want - facing);
+  return facing + Math.max(-turn, Math.min(turn, d));
+}
 const easeOutBack = (k) => { const c = 1.70158; return 1 + (c + 1) * (k - 1) ** 3 + c * (k - 1) ** 2; };
 
 /** 간단 이펙트: 떠오르는 이모지, 물방울 */
@@ -147,11 +154,25 @@ export class FX {
     const u = player?.unico;
     const hid = [u?.label, player?.arrow].filter((x) => x?.visible); // 이름표·화살표가 물건을 가리지 않게
     for (const x of hid) x.visible = false;
+    this._clearEmote(u);
     const wait = (o.delay || 0) > 0;
     mesh.visible = !wait;
     this.item = { mesh, player, o, from, s, t: 0, phase: wait ? 'wait' : 'arc', hid, head: new THREE.Vector3(), start: player?.position?.clone?.() };
-    if (!wait) o.onSpawn?.();
+    if (!wait) this._spawn(this.item);
     return this.item;
+  }
+
+  /** 머리 위 감정 아이콘(🎉 등)은 물건과 겹치지 않게 바로 걷음 (unico 가 다음 프레임에 지움) */
+  _clearEmote(u) { if (u?.emote) u.emoteUntil = -1; }
+
+  /** 솟기 시작: 카메라 쪽으로 반쯤 돌아서서 들어 올리는 모습과 물건이 함께 보이게 */
+  _spawn(it) {
+    const u = it.player?.unico, P = it.player?.position, c = SURF.seeCam.value;
+    if (u && P && Number.isFinite(u.facing) && !u.riding && !u.swimming) {
+      it.face0 = u.facing;
+      u.facing = it.faceSet = faceToward(u.facing, P.x, P.z, c.x, c.z);
+    }
+    it.o.onSpawn?.();
   }
 
   /** 진행 중인 물건 보여 주기를 바로 끝냄 (가방으로 날리고 onDone 한 번) */
@@ -163,6 +184,8 @@ export class FX {
     it.mesh.parent?.remove(it.mesh);
     it.mesh.visible = true;
     for (const x of it.hid) x.visible = true;
+    const u = it.player?.unico;
+    if (u && it.faceSet !== undefined && u.facing === it.faceSet) u.facing = it.face0; // 그사이 걷지 않았으면 원래 보던 쪽으로
     if (it.o.emoji) this.onPop?.(it.o.emoji, pos, {});
     it.o.onDone?.(pos);
   }
@@ -170,8 +193,8 @@ export class FX {
   /** 머리 위 자리 */
   _headTop(P, out) {
     const hg = P?.unico?.headG;
-    if (hg?.getWorldPosition) { hg.getWorldPosition(out); out.y += 0.9; }
-    else if (P?.position) out.set(P.position.x, P.position.y + 2.45, P.position.z);
+    if (hg?.getWorldPosition) { hg.getWorldPosition(out); out.y += ITEM_GET.lift; }
+    else if (P?.position) out.set(P.position.x, P.position.y + 2.7, P.position.z);
     return out;
   }
 
@@ -184,7 +207,8 @@ export class FX {
     if (it.phase === 'wait') {
       if (it.t < it.o.delay) return;
       it.phase = 'arc'; it.t = 0; m.visible = true;
-      it.o.onSpawn?.();
+      this._clearEmote(P?.unico);
+      this._spawn(it);
     }
     const head = this._headTop(P, it.head);
     if (it.phase === 'arc') {
@@ -199,6 +223,7 @@ export class FX {
         this.burst(head.x, head.y, head.z, big ? 0xffd75a : 0xfff3a0, big ? 14 : 6);
         if (P?.unico?.playAction && !P.unico.riding && !P.unico.swimming) P.unico.playAction('lift', ITEM_GET.hold + 0.2);
         it.o.onApex?.(head);
+        this._clearEmote(P?.unico);
       }
     } else {
       m.position.copy(head);

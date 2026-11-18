@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.window ??= { addEventListener() {} };
-const { placeLabels, arrowAngle, mapToWorld, mapScale, mapDpr } = await import('../src/ui/minimap.js');
+const { placeLabels, arrowAngle, mapToWorld, mapScale, mapDpr, mapZoom, LEADER_PX } = await import('../src/ui/minimap.js');
 
 const overlap = (a, b) => Math.abs(a.x - b.x) * 2 < a.w + b.w && Math.abs(a.y - b.y) * 2 < a.h + b.h;
 
@@ -47,4 +47,25 @@ test('캔버스 배율: 상한 2, 낮음 품질은 1.5, 최소 1', () => {
   assert.equal(mapDpr(3, true), 1.5);
   assert.equal(mapDpr(0.5, false), 1);
   assert.equal(mapDpr(1.25, false), 1.25);
+});
+
+test('화면 배율: 테두리 3px 인 150px 지도는 배율 1 (테두리 때문에 흐려지지 않음), 글자 크기 1.3배면 1.3', () => {
+  // getBoundingClientRect 폭과 offsetWidth 는 둘 다 테두리를 포함 → 나눠도 테두리 몫이 섞이지 않음
+  assert.equal(mapZoom(150, 150), 1);
+  assert.equal(mapZoom(195, 150), 1.3);
+  assert.equal(mapZoom(0, 150), 1, '아직 그려지지 않았으면 1');
+});
+
+test('이름표 놓기: 넓은 구역은 한가운데 먼저, 피할 상자(나 화살표)와 겹치지 않고, 멀리 밀리면 이음선 표시', () => {
+  const S = 300, h = 12, measure = (t) => t.length * 11;
+  // 준비: 구역 한가운데에 내 화살표가 있음
+  const me = { x: 150, y: 150, w: 16, h: 16 };
+  const out = placeLabels([{ text: '목장', x: 80, y: 80, r: 20, inside: true }, { text: '농장', x: 150, y: 150, r: 30, inside: true }], measure, h, S, 2, [me]);
+  // 확인
+  assert.deepEqual([out[0].x, out[0].y], [80, 80], '넓은 구역은 한가운데');
+  assert.equal(out[0].lead, false);
+  const farm = out[1];
+  assert.ok(Math.abs(farm.x - me.x) * 2 >= farm.w + me.w || Math.abs(farm.y - me.y) * 2 >= farm.h + me.h, '화살표와 겹치지 않음');
+  assert.equal(farm.lead, Math.hypot(farm.x - 150, farm.y - 150) > LEADER_PX);
+  assert.equal(farm.lead, true, `한가운데에서 ${Math.hypot(farm.x - 150, farm.y - 150).toFixed(1)}px 밀림`);
 });
