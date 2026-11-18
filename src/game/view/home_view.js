@@ -560,7 +560,7 @@ export class HomeView {
     fade.className = 'sleep-fade';
     fade.innerHTML = '<span>💤 쿨쿨…</span>';
     document.getElementById('ui').append(fade);
-    g.audio.play('pop', 0.4);
+    g.audio.play('sleep');
     requestAnimationFrame(() => fade.classList.add('on'));
     setTimeout(() => {
       this._sleeping = false;
@@ -570,6 +570,7 @@ export class HomeView {
         if (r.newDay && w.day < r.day) { w.day = r.day; w.onNewDay?.(r.day); }
         if (this.inside) { const b = this.room.spots.find((x) => x.key === 'bed'); if (b) g.player.position.set(IO.x + b.x, IO.y, IO.z + b.z); }
         reward(g, 1, { sound: null }); // 개운한 기지개 대신 콩콩
+        g.audio.play('morning');
         g.ui.toast(`☀️ ${w.day}일차 아침! 푹 자서 개운해요 · 오늘 하루 걷는 속도 +15%`);
         g.onEvent('sleep');
         saveGame(g);

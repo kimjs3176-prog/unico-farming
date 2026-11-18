@@ -62,8 +62,64 @@ test('발소리: 달리면 걸을 때보다 큼 (0.6 + 0.4×빠르기)', () => {
   const peak = (s) => {
     const a = new Audio(); a.rng = () => 0.5; a._ctx();
     const c = a.ctx; a.step('grass', s);
-    return Math.max(...c.started.map((x) => x.outs[0]?.outs[0]?.gain?.peak ?? 0));
+    // 게인이 올라간 값 (exp 램프 중 가장 큰 값)
+    return Math.max(...c.started.map((x) => Math.max(0, ...(x.outs[0]?.outs[0]?.gain?.events ?? []).filter((e) => e[0] === 'exp').map((e) => e[1]))));
   };
   const walk = peak(0), run = peak(1);
   assert.ok(Math.abs(run / walk - 1 / 0.6) < 1e-6, `달리기/걷기 ${run / walk}`);
+});
+
+test('발소리: 디딘 발을 알면 그쪽으로(왼발 -0.1, 오른발 +0.1), 젖은 흙·풀은 찰박을 얹음', () => {
+  globalThis.window = { AudioContext: MockAudioContext };
+  const a = new Audio(); a.rng = () => 0.5; a._ctx();
+  const c = a.ctx;
+  // 실행·확인: 같은 발이 두 번 디뎌도 같은 쪽
+  a.step('grass', 1, 1, { left: true }); assert.equal(a._stepPan, -0.1);
+  c.currentTime = 0.2; a.step('grass', 1, 1, { left: true }); assert.equal(a._stepPan, -0.1);
+  c.currentTime = 0.4; a.step('grass', 1, 1, { left: false }); assert.equal(a._stepPan, 0.1);
+  // 젖은 땅: 재료 하나 더 (1.2kHz)
+  for (const x of c.started) x.onended?.();
+  c.currentTime = 0.6; let n = c.started.length; a.step('dirt', 1);
+  const dry = c.started.length - n;
+  c.currentTime = 0.8; n = c.started.length; a.step('dirt', 1, 1, { wet: true });
+  assert.equal(c.started.length - n, dry + 1);
+  assert.ok(c.started.slice(n).some((s) => s.outs[0]?.frequency?.value === 1200), '1.2kHz 찰박');
+  // 나무 바닥은 비가 와도 그대로
+  c.currentTime = 1; n = c.started.length; a.step('wood', 1, 1, { wet: true });
+  const woodWet = c.started.length - n;
+  c.currentTime = 1.2; n = c.started.length; a.step('wood', 1);
+  assert.equal(woodWet, c.started.length - n);
+});
+
+test('발소리: 나무·마루는 음 높이가 미끄러지지 않고 몸통음이 20ms 아래', () => {
+  globalThis.window = { AudioContext: MockAudioContext };
+  const a = new Audio(); a.rng = () => 0.5; a._ctx();
+  const c = a.ctx;
+  for (const [i, k] of ['wood', 'floor'].entries()) {
+    c.currentTime = i; const n = c.started.length; a.step(k, 1);
+    for (const o of c.started.slice(n).filter((s) => s.kind === 'osc')) {
+      assert.ok(!o.frequency.events.some((e) => e[0] === 'exp'), `${k}: 미끄러짐 없음`);
+      assert.ok(o.t1 - o.t0 <= 0.02 + 0.05 + 1e-9, `${k}: 길이 ${o.t1 - o.t0}`);
+    }
+  }
+});
+
+test('다른 플레이어 발소리는 내 발소리의 90ms 간격을 막지 않음', () => {
+  globalThis.window = { AudioContext: MockAudioContext };
+  const a = new Audio(); a.rng = () => 0.5; a._ctx();
+  const c = a.ctx;
+  a.step('grass', 0.6, 0.3, { remote: true });
+  c.currentTime = 0.03; const n = c.started.length;
+  a.step('grass', 1);
+  assert.ok(c.started.length > n, '내 발소리는 남');
+});
+
+test('main.js: 발소리는 발이 닿을 때마다(onFoot), 디딘 발·젖은 땅을 넘기고, 다른 플레이어는 8m 안 40% 까지', async () => {
+  const { readFileSync } = await import('node:fs');
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.match(main, /unico\.onFoot = \(x, z, r, left\) =>/);
+  assert.match(main, /\{ left, wet: this\._wetGround\(\) \}/);
+  assert.match(main, /if \(!this\._hasFoot\) myStep\(x, z\)/, 'onFoot 이 없을 때만 onStep 으로 대신');
+  assert.match(main, /d >= 8 \|\| now - at < 250/);
+  assert.match(main, /0\.4 \* \(1 - d \/ 8\)/);
 });

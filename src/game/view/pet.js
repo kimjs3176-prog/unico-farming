@@ -308,7 +308,7 @@ export class Pet {
     const g = this.game, p = this.e.m.position;
     if (!r) return g.ui.toast('🐕 배가 불러서 더 못 먹겠대요');
     this.petT = 2; playClip(this.e, 'eat', 0.2);
-    g.audio.play('plant');
+    g.audio.play('eat');
     g.fx.pop(p.x, p.z, emoji, { fly: false }); // 먹은 것: 떠오르기만 (가방으로 날아가지 않게)
     g.ui.toast(`🐕 ${this.sim.name}${josa(this.sim.name, '이/가')} 맛있게 먹었어요! 배부름 +${r.hunger}, 애정 +${r.affection}`);
     g.onEvent?.('petfeed');

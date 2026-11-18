@@ -2,10 +2,11 @@
  * 사운드 (외부 파일 없이 WebAudio 합성)
  * 믹서: 효과음·목소리 → 마스터 / 음악·환경음 → 낮춤(덕킹) → 마스터 / 공용 잔향(컨볼버) 센드
  * 마스터 → 묶음 압축기 → 리미터 → 출력 (폭풍+천둥+레벨업이 겹쳐도 깨지지 않게)
- * 효과음은 이름마다 목표 크기(MIX_DB)가 있고, scripts/audio-levels.mjs 로 실제 소리를 재서 MIX 를 맞춤
+ * 효과음은 이름마다 목표 크기(MIX_DB)가 있고, scripts/audio-levels.mjs 로 압축기 앞 소리를 재서 MIX 를 맞춤
+ * (소리 하나는 압축기 문턱 아래 → 압축기는 겹칠 때만 일함, 음악이 출렁이지 않게)
  */
 
-/** 이름별 목표 크기: 마스터 뒤 가장 큰 50ms 구간(dBFS). 자주 나는 작은 소리 < 도구 < 줍기 < 큰 보상 */
+/** 이름별 목표 크기: 쉬고 있는 압축기 뒤 가장 큰 50ms 구간(dBFS). 자주 나는 작은 소리 < 도구 < 줍기 < 큰 보상 */
 export const MIX_DB = {
   tap: -32, blip: -32, open: -30, close: -30, click: -27,
   dig: -22, plant: -22, water: -22, stroke: -24, splash: -22, shoo: -22, bump: -22,
@@ -14,22 +15,30 @@ export const MIX_DB = {
   go: -17, quest: -17, warp: -20, ignite: -24, engine: -24, bell: -22,
   win: -16, levelup: -15,
   caw: -32, howl: -32, bark: -30, buzz: -36, tune: -28,
+  eat: -24, scatter: -26, sleep: -22, morning: -20,
   thunder: -16,
 };
 
+/**
+ * 압축기 앞에서 잴 때 목표에 더하는 값 (dB) = 압축기·리미터의 자동 보정 이득을 뺀 것.
+ * 압축기 앞 크기 = MIX_DB + PRE_DB. scripts/audio-levels.mjs 가 조용한 사인파로 재서 확인
+ */
+export const PRE_DB = -8;
+
 /** 이름별 크기 배율 (scripts/audio-levels.mjs 로 잰 값에서 맞춤) */
 export const MIX = {
-  tap: 23.173, blip: 26.002, open: 1.549, close: 1.549, click: 10.116, dig: 16.983, plant: 1.072, water: 2.042,
-  stroke: 31.624, splash: 2.09, shoo: 3.311, bump: 7.586, hammer: 1.719, rustle: 2.541, pull: 1.679, swish: 7.328,
-  door: 1.072, deny: 1.203, bite: 13.032, alert: 0.902, startle: 20.418, land: 10.353, coin: 1.698, pop: 12.588,
-  harvest: 0.556, catch: 35.89, combo: 19.498, pickup: 1.679, buy: 1.718, count: 18.621, star: 8.71, sale: 1.622,
-  go: 3.055, quest: 0.966, warp: 5.309, ignite: 4.027, engine: 3.549, bell: 0.676, win: 0.822, levelup: 0.724,
-  caw: 3.507, howl: 1.23, bark: 3.389, buzz: 2.042, tune: 10.115, thunder: 3.846,
+  tap: 1.122, blip: 1.122, open: 0.813, close: 0.812, click: 0.989, dig: 1.122, plant: 0.708, water: 1.109,
+  stroke: 2.787, splash: 1.035, shoo: 1.122, bump: 1.034, hammer: 1.7, rustle: 1.861, pull: 1.365, swish: 3.981,
+  door: 1, deny: 1.048, bite: 1.585, alert: 0.823, startle: 1.217, land: 0.785, coin: 1.161, pop: 1.334,
+  harvest: 0.537, catch: 1.622, combo: 1.429, pickup: 1.162, buy: 1.288, count: 1.349, star: 1.123, sale: 1.097,
+  go: 1.396, quest: 0.922, warp: 1.429, ignite: 1.189, engine: 1.289, bell: 0.631, win: 0.832, levelup: 0.631,
+  caw: 2.985, howl: 0.776, bark: 2.818, buzz: 0.359, tune: 0.652, eat: 2.019, scatter: 1.884, sleep: 0.575,
+  morning: 0.725, thunder: 3.127,
 };
 
 /** 변주 종류: 음 있는 소리는 음 하나 ±1.2%, 두드리는·노이즈 소리는 높이·길이 ±10%, 팡파르는 그대로 */
-const VARY_NONE = new Set(['win', 'levelup', 'quest', 'go', 'tune', 'sale', 'count', 'star', 'thunder']);
-const VARY_PERC = new Set(['dig', 'stroke', 'splash', 'shoo', 'bump', 'hammer', 'rustle', 'pull', 'swish', 'door', 'bite', 'land', 'buzz', 'caw', 'bark', 'startle', 'deny']);
+const VARY_NONE = new Set(['win', 'levelup', 'quest', 'go', 'tune', 'sale', 'count', 'star', 'thunder', 'sleep', 'morning']);
+const VARY_PERC = new Set(['dig', 'stroke', 'splash', 'shoo', 'bump', 'hammer', 'rustle', 'pull', 'swish', 'door', 'bite', 'land', 'buzz', 'caw', 'bark', 'startle', 'deny', 'eat', 'scatter']);
 /** 같은 이름이 45ms 안에 또 나도, 소리 수가 넘쳐도 꼭 내는 소리 */
 const KEEP = new Set(['click', 'levelup']);
 /** 이어서 하면 오음계로 한 칸씩 오르는 소리와 그 소리의 가장 높은 음 (2.4kHz 를 넘지 않게) */
@@ -38,6 +47,21 @@ const COMBO_TOP = { harvest: 1319, water: 1568, plant: 784 };
 export const COMBO_STEPS = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3, 2];
 export const COMBO_WINDOW = 2.5;
 const COMBO_CAP = 2400;
+
+/** C장조 오음계(도·레·미·솔·라) 평균율 음 중 f 이상에서 가장 가까운 음 (cap 을 넘으면 cap 아래 가장 높은 음) */
+export function snapPenta(f, cap = COMBO_CAP) {
+  const PC = [0, 2, 4, 7, 9];
+  const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  let best = 0;
+  for (let m = 36; m < 120; m++) {
+    if (!PC.includes(m % 12)) continue;
+    const h = hz(m);
+    if (h > cap) break;
+    best = h;
+    if (h >= f * 0.999) return h;
+  }
+  return best;
+}
 /** 이 소리가 나면 음악을 잠깐 낮춤 [dB, 유지 초] */
 const DUCK = { levelup: [-5, 1.2], win: [-3, 0.6], quest: [-3, 0.6] };
 
@@ -47,7 +71,7 @@ export const STEP_KINDS = ['grass', 'dirt', 'wood', 'floor', 'snow', 'stone'];
 export const STEP_DB = { grass: -31, dirt: -30, wood: -29, floor: -30, snow: -30, stone: -30 };
 /** 발소리 배율 (scripts/audio-levels.mjs 로 맞춤) */
 export const STEP_MIX = {
-  grass: 51.286, dirt: 52.481, wood: 18.62, floor: 22.387, snow: 6.998, stone: 51.286,
+  grass: 2.755, dirt: 3.236, wood: 3.2, floor: 4.954, snow: 1.288, stone: 2.042,
 };
 
 export const dbToGain = (db) => Math.pow(10, db / 20);
@@ -105,7 +129,8 @@ export class Audio {
   /** 멈춘(suspended)·끊긴(iOS 'interrupted') 상태면 다시 켬. 거절돼도 조용히 넘어감 (다음 터치에서 다시 시도) */
   _resume() {
     const c = this.ctx, s = c?.state;
-    if (s === 'suspended' || s === 'interrupted') c.resume()?.catch?.(() => {});
+    // 다시 켜지면 멈춰 있던 낮추기 타이머를 다시 검
+    if (s === 'suspended' || s === 'interrupted') c.resume()?.then?.(() => { if (this._ducks.size) { try { this._applyDuck(); } catch { /* 이미 끊김 */ } } }, () => {});
   }
 
   /** 첫 탭 처리 안에서 바로 호출: 소리 장치를 만들고 무음 1샘플을 재생해 iOS 잠금을 풂 */
@@ -199,7 +224,8 @@ export class Audio {
       node.gain.setTargetAtTime(dbToGain(db * k), t, down ? 0.04 : 0.25);
     }
     clearTimeout(this._duckTimer);
-    if (next < Infinity && typeof setTimeout === 'function') { this._duckTimer = setTimeout(() => this._applyDuck(), (next - t) * 1000 + 20); this._duckTimer?.unref?.(); }
+    // 멈춘 동안은 시계가 서 있으니 타이머를 다시 걸지 않음 (_resume 이 켜진 뒤 다시 부름)
+    if (next < Infinity && c.state === 'running' && typeof setTimeout === 'function') { this._duckTimer = setTimeout(() => this._applyDuck(), (next - t) * 1000 + 20); this._duckTimer?.unref?.(); }
   }
 
   // ------------------------------------------------------------ 소리 재료
@@ -246,7 +272,7 @@ export class Audio {
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, attack + 0.01));
     s.connect(f).connect(g).connect(out || this.sfx);
     this._track(s);
-    s.start(t, Math.random()); s.stop(t + dur + 0.05);
+    s.start(t, this.rng()); s.stop(t + dur + 0.05);
   }
 
   /** 칼림바/마림바 같은 맑은 음 (음악·효과음 공용) */
@@ -305,7 +331,8 @@ export class Audio {
     switch (name) {
       // ---- 화면·대화
       case 'tap': return this.pluck(opts.freq || 2093, v * 0.35, 0, undefined, 0.07);
-      case 'blip': return this.tone(opts.freq || 660, 0.05, 'triangle', v * 0.5, 0, { rev: 0.05, lp: 3000 });
+      // 대사 한 글자: 목소리 버스로
+      case 'blip': return this.tone(opts.freq || 660, 0.05, 'triangle', v * 0.5, 0, { rev: 0.05, lp: 3000, out: this.voiceBus });
       case 'click': return this.pluck(1568, v * 0.45, 0, undefined, 0.18);
       case 'open': this.pluck(1175, v * 0.4, 0, undefined, 0.12); return this.pluck(1568, v * 0.4, 0.05, undefined, 0.16);
       case 'close': this.pluck(1568, v * 0.4, 0, undefined, 0.12); return this.pluck(1175, v * 0.4, 0.05, undefined, 0.16);
@@ -315,14 +342,14 @@ export class Audio {
       case 'dig': this.noise(0.18, v * 1.2, { freq: 420, q: 0.8 }); this.noise(0.035, v * 1.8, { freq: 2200, q: 1.2 }); return this.tone(110, 0.16, 'triangle', v * 0.8, -40, { lp: 900, rev: 0.1 });
       case 'plant': this.noise(0.08, v * 0.5, { freq: 900 }); return this.pluck(784, v * 0.7, 0.05);
       case 'splash': this.noise(0.5, v * 1.1, { type: 'bandpass', freq: 850, q: 0.6 }); this.noise(0.35, v * 0.7, { type: 'highpass', freq: 3200, q: 0.4, at: 0.04 }); return this.tone(150, 0.2, 'sine', v * 0.5, -70, { rev: 0.15 });
-      case 'stroke': return this.noise(0.2, v * 0.8, { type: 'bandpass', freq: 1100 + Math.random() * 700, q: 0.9 });
+      case 'stroke': return this.noise(0.2, v * 0.8, { type: 'bandpass', freq: 1100 + this.rng() * 700, q: 0.9 });
       case 'water': this.noise(0.35, v * 0.7, { type: 'highpass', freq: 2200, q: 0.4 }); this.pluck(1175, v * 0.4, 0.05, undefined, 0.3); return this.pluck(1568, v * 0.35, 0.14, undefined, 0.3);
       case 'harvest': this.pluck(784, v, 0); this.pluck(988, v, 0.08); return this.pluck(1319, v, 0.16);
       // 망치: 나무 두드림 + 딱 소리, 2~3번 (박자 조금씩 다르게)
       case 'hammer': {
-        const n = opts.n || 2 + (Math.random() < 0.5 ? 1 : 0);
+        const n = opts.n || 2 + (this.rng() < 0.5 ? 1 : 0);
         for (let i = 0; i < n; i++) {
-          const at = i * 0.17 + Math.random() * 0.03;
+          const at = i * 0.17 + this.rng() * 0.03;
           this.tone(220, 0.09, 'triangle', v * 0.8, -60, { at, lp: 1400, rev: 0.12 });
           this.noise(0.025, v * 0.6, { freq: 1800, q: 1.5, at });
         }
@@ -365,8 +392,9 @@ export class Audio {
       }
       case 'pop': return this.pluck(1319, v * 0.6, 0, undefined, 0.25);
       // 미니게임: 잡기(음 높이 opts.freq) · 연속 · 카운트 · 시작 · 별
-      case 'catch': this.pluck(opts.freq || 988, v * 0.7, 0, undefined, opts.dur || 0.12); return this.noise(0.03, v * 0.25, { type: 'highpass', freq: 4000, q: 0.5 });
-      case 'combo': return this.pluck(opts.freq || 1568, v * 0.7, 0, undefined, 0.2);
+      // 잡기·연속: 음 높이는 음악과 같은 오음계로 맞춤 (2.4kHz 아래)
+      case 'catch': this.pluck(opts.freq ? snapPenta(opts.freq) : 988, v * 0.7, 0, undefined, opts.dur || 0.12); return this.noise(0.03, v * 0.25, { type: 'highpass', freq: 4000, q: 0.5 });
+      case 'combo': return this.pluck(opts.freq ? snapPenta(opts.freq) : 1568, v * 0.7, 0, undefined, 0.2);
       case 'count': return this.pluck(opts.freq || 784, v * 0.7, 0, undefined, opts.dur || 0.2);
       case 'go': this.pluck(1568, v * 0.7, 0, undefined, 0.5); return this.pluck(2093, v * 0.45, 0.06, undefined, 0.45);
       case 'star': this.pluck(opts.freq || 1319, v * 0.7, 0, undefined, 0.3); return this.noise(0.2, v * 0.2, { type: 'highpass', freq: 6000, q: 0.5, at: 0.03 });
@@ -399,9 +427,21 @@ export class Audio {
       case 'shoo': this.noise(0.25, v * 1.8, { type: 'bandpass', freq: 1800, q: 0.7 }); this.tone(180, 0.12, 'triangle', v * 0.4, -60, { rev: 0.05 }); return this.tone(170, 0.12, 'triangle', v * 0.4, -60, { at: 0.18, rev: 0.05 });
       case 'bark': this.tone(520, 0.09, 'square', v * 0.12, -200, { lp: 1500, rev: 0.1 }); return this.tone(480, 0.1, 'square', v * 0.1, -180, { lp: 1400, at: 0.16, rev: 0.1 });
       // 벌 윙윙
-      case 'buzz': return this.tone(220 + Math.random() * 40, 0.25, 'sawtooth', v * 0.5, 10, { lp: 700, rev: 0.05 });
+      case 'buzz': return this.tone(220 + this.rng() * 40, 0.25, 'sawtooth', v * 0.5, 10, { lp: 700, rev: 0.05 });
       // 콩이 춤 노래: 한 음씩 (opts.k 번째)
       case 'tune': return this.pluck([784, 988, 1175, 988, 1319][(opts.k ?? 0) % 5], v * 0.7, 0, undefined, 0.12);
+      // ---- 생활
+      // 먹기: 아삭 두 번 + 작은 퉁김
+      case 'eat': this.noise(0.04, v, { freq: 2200, q: 1.4 }); this.noise(0.04, v * 0.85, { freq: 2000, q: 1.4, at: 0.12 }); return this.pluck(659, v * 0.35, 0.2, undefined, 0.15);
+      // 모이 뿌리기: 작은 째깍 7번이 0.3초에 흩어짐
+      case 'scatter': for (let i = 0; i < 7; i++) this.noise(0.012, v * (0.7 + this.rng() * 0.3), { type: 'highpass', freq: 3500, q: 0.6, at: i * 0.045 + this.rng() * 0.02 }); return;
+      // 잠들기: 오음계 세 음이 내려감 (솔·미·도)
+      case 'sleep': return [784, 659, 523].forEach((f, i) => this.pluck(f, v * 0.8, i * 0.25, undefined, 0.9));
+      // 아침: 오음계 네 음이 올라가고 새 두 번
+      case 'morning':
+        [523, 659, 784, 1046].forEach((f, i) => this.pluck(f, v * 0.75, i * 0.14, undefined, 0.9));
+        this.tone(3200, 0.08, 'sine', v * 0.12, 600, { at: 0.7, rev: 0.3 });
+        return this.tone(3500, 0.07, 'sine', v * 0.1, 500, { at: 0.82, rev: 0.3 });
     }
   }
 
@@ -411,16 +451,21 @@ export class Audio {
    * @param kind 'grass' | 'dirt' | 'wood' | 'floor' | 'snow' | 'stone'
    * @param s 빠르기 0..1 (달리면 큼)
    * @param gain 추가 배율 (자동 놀이 0.6 등)
+   * @param o.left 왼발이면 true, 오른발 false (없으면 좌우 번갈아)
+   * @param o.wet 비 오는 날 흙·풀: 찰박 물 소리를 얹음
+   * @param o.remote 다른 플레이어 발소리
    */
-  step(kind = 'grass', s = 1, gain = 1) {
+  step(kind = 'grass', s = 1, gain = 1, o = {}) {
     const c = this.ctx;
     if (!c || c.state !== 'running' || !this.enabled || this.hold) return;
     const now = c.currentTime;
-    if (now - this._stepAt < 0.09) return;
+    // 90ms 안 두 번째는 건너뜀 (다른 플레이어 발소리는 따로 세어 내 발소리를 막지 않게)
+    const sk = o.remote ? '_stepAtR' : '_stepAt';
+    if (now - (this[sk] ?? -1) < 0.09) return;
     if (!this._room('step')) return;
-    this._stepAt = now;
-    // 좌우 번갈아 (패너가 없는 브라우저는 가운데)
-    this._stepPan = -this._stepPan;
+    this[sk] = now;
+    // 디딘 발 쪽 (모르면 번갈아). 패너가 없는 브라우저는 가운데
+    this._stepPan = o.left === undefined ? -this._stepPan : (o.left ? -0.1 : 0.1);
     let out = this.sfx;
     if (c.createStereoPanner) { out = c.createStereoPanner(); out.pan.value = this._stepPan; out.connect(this.sfx); }
     const r = () => this.rng() * 2 - 1;
@@ -429,12 +474,15 @@ export class Audio {
     try {
       switch (kind) {
         case 'dirt': this.noise(0.065, v * 1.3, { freq: 800, q: 1.0, out }); this.noise(0.04, v * 0.5, { type: 'lowpass', freq: 400, q: 0.7, out }); break;
-        case 'wood': this.tone(300, 0.06, 'triangle', v * 1.4, -70, { rev: 0, lp: 1500, out }); this.noise(0.015, v * 0.6, { freq: 1400, q: 2, out }); break;
-        case 'floor': this.tone(340, 0.045, 'triangle', v * 1.2, -70, { rev: 0.05, lp: 1600, out }); this.noise(0.012, v * 0.5, { freq: 1400, q: 2, out }); break;
+        // 나무·마루: 낮은 노이즈 '똑' + 1.4kHz 딱 + 아주 짧은 몸통음(미끄러짐 없음)
+        case 'wood': this.noise(0.025, v * 2.2, { freq: 320, q: 2, attack: 0.003, out }); this.noise(0.012, v * 0.7, { freq: 1400, q: 2, attack: 0.002, out }); this.tone(260, 0.018, 'sine', v * 0.5, 0, { rev: 0, lp: 1200, out }); break;
+        case 'floor': this.noise(0.022, v * 2, { freq: 380, q: 2, attack: 0.003, out }); this.noise(0.01, v * 0.6, { freq: 1400, q: 2, attack: 0.002, out }); this.tone(300, 0.015, 'sine', v * 0.4, 0, { rev: 0.05, lp: 1200, out }); break;
         case 'snow': this.noise(0.13, v * 1.3, { freq: 2800, q: 0.9, attack: 0.025, out }); this.noise(0.05, v * 0.4, { type: 'lowpass', freq: 450, q: 0.7, out }); break;
         case 'stone': this.noise(0.025, v * 1.2, { freq: 2400, q: 1.5, out }); this.tone(600, 0.03, 'triangle', v * 0.6, 0, { rev: 0, lp: 2000, out }); break;
         default: this.noise(0.04, v * 1.1, { freq: 1700, q: 0.9, out }); this.noise(0.05, v * 0.5, { type: 'lowpass', freq: 450, q: 0.7, out }); break; // grass
       }
+      // 젖은 땅: 1.2kHz 찰박 (-6dB 쯤)
+      if (o.wet && (kind === 'dirt' || kind === 'grass')) this.noise(0.06, v * 0.6, { freq: 1200, q: 1.2, attack: 0.004, out });
     } finally { this._pm = 1; this._inPlay = false; this._cost.step = this._made; }
   }
 
@@ -448,17 +496,25 @@ export class Audio {
     const out = c.createGain(); out.gain.setValueAtTime(0.0001, t); out.connect(this.sfx);
     const e = { kind, out, nodes: [out], srcs: [], setAt: -1, tickAt: t };
     if (kind !== 'bike') {
-      // 톱니파 70→105Hz → 저역통과 800Hz Q3 → 털털(7→14Hz 떨림) → 출력
-      const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = kind === 'cart' ? 85 : 70;
-      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 800; lp.Q.value = 3;
+      // 톱니파 둘(+1.5% 어긋남) + 한 옥타브 아래 사각파(0.3) → 저역통과 800Hz Q1.2 → 털털(7→14Hz 떨림, 밝기도 ±150Hz) → 출력
+      const f0 = kind === 'cart' ? 85 : 70;
+      const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f0;
+      const o2 = c.createOscillator(); o2.type = 'sawtooth'; o2.frequency.value = f0; o2.detune.value = 26; // +1.5%
+      const sub = c.createOscillator(); sub.type = 'square'; sub.frequency.value = f0 / 2;
+      const subG = c.createGain(); subG.gain.value = 0.3;
+      const mix = c.createGain(); mix.gain.value = 0.6;
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 800; lp.Q.value = 1.2;
       const amp = c.createGain(); amp.gain.value = 0.7;
       const lfo = c.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 7;
       const depth = c.createGain(); depth.gain.value = 0.3;
+      const cut = c.createGain(); cut.gain.value = 150;
       lfo.connect(depth).connect(amp.gain);
-      o.connect(lp).connect(amp).connect(out);
-      Object.assign(e, { o, lfo, lp });
-      e.nodes.push(o, lp, amp, lfo, depth); e.srcs.push(o, lfo);
-      o.start(t); lfo.start(t);
+      lfo.connect(cut).connect(lp.frequency);
+      o.connect(mix); o2.connect(mix); sub.connect(subG).connect(mix);
+      mix.connect(lp).connect(amp).connect(out);
+      Object.assign(e, { o, o2, sub, lfo, lp, f0, s: 0, sAt: t });
+      e.nodes.push(o, o2, sub, subG, mix, lp, amp, lfo, depth, cut); e.srcs.push(o, o2, sub, lfo);
+      for (const x of [o, o2, sub, lfo]) x.start(t);
     }
     // 노이즈 층: 트랙터는 쟁기질(500Hz), 자전거는 바퀴 굴러가는 소리(저역)
     const n = c.createBufferSource(); n.buffer = this.noiseBuf; n.loop = true;
@@ -497,15 +553,20 @@ export class Audio {
         const rate = 6 + s * 10;
         if (e.tickAt < t) e.tickAt = t;
         while (e.tickAt < t + 0.1) {
-          this.tone(3200, 0.012, 'square', 0.16 * 0.05 * (0.5 + s), 0, { at: e.tickAt - t, rev: 0, lp: 5000 });
+          this.tone(2400, 0.006, 'triangle', 0.16 * 0.07 * (0.5 + s), 0, { at: e.tickAt - t, rev: 0, lp: 4000 });
           e.tickAt += 1 / rate;
         }
       }
       return;
     }
-    const base = e.kind === 'cart' ? 85 : 70;
-    e.o.frequency.setTargetAtTime(base + 35 * s, t, 0.08);
-    e.lfo.frequency.setTargetAtTime(7 + 7 * s, t, 0.08);
+    const f = e.f0 + 35 * s;
+    e.o.frequency.setTargetAtTime(f, t, 0.08);
+    e.o2.frequency.setTargetAtTime(f, t, 0.08);
+    e.sub.frequency.setTargetAtTime(f / 2, t, 0.08);
+    // 털털 빠르기를 ±0.5Hz 흔들어 기계처럼 고르지 않게
+    e.lfo.frequency.setTargetAtTime(7 + 7 * s + (this.rng() * 2 - 1) * 0.5, t, 0.08);
+    // 밟으면(0.3초 안에 빠르기 +0.2) 짧은 '푸흣'
+    if (t - e.sAt > 0.3) { if (s - e.s > 0.2) this.noise(0.12, 0.8, { type: 'lowpass', freq: 600, q: 0.8, out: e.out }); e.s = s; e.sAt = t; }
     e.lp.frequency.setTargetAtTime(800 + 400 * s, t, 0.08);
     e.noiseGain.gain.setTargetAtTime(plowing && s > 0.1 ? 0.6 : 0, t, 0.08);
   }
@@ -543,7 +604,8 @@ export class Audio {
       this._reel = { s, g };
     }
     const t = c.currentTime, R = this._reel;
-    R.s.playbackRate.setTargetAtTime(Math.max(0.5, Math.min(1.8, rate || 0.5)), t, 0.05);
+    // 째깍 음 높이가 날카로워지지 않게 재생 속도는 0.8~1.25 만
+    R.s.playbackRate.setTargetAtTime(Math.max(0.8, Math.min(1.25, rate || 0.8)), t, 0.05);
     R.g.gain.setTargetAtTime(rate > 0 ? 0.16 * 0.35 : 0, t, 0.04);
   }
 

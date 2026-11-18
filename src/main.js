@@ -113,11 +113,16 @@ class Game {
     this.fx = new FX(this.world.scene, this.quality);
     this.waterfx = new WaterFX(this.world.scene, this.world.scenery, this.quality);
     // 발: 먼지(달릴 때만, r = 달리기 섞임) + 바닥에 따라 다른 발소리 (빠를수록 큼, 자동 놀이는 작게)
+    // 발소리는 발이 닿을 때마다(onFoot, 디딘 발 쪽으로). onFoot 을 아직 안 부르는 캐릭터면 onStep(두 발짝에 한 번)으로 대신
+    const myStep = (x, z, left) => {
+      const v = this.player.vel, sp = v ? Math.hypot(v.x, v.z) / RUN_SPEED : 1;
+      this.audio.step(surfaceAt(this, x, z), sp, this.autoplay?.on ? 0.6 : 1, { left, wet: this._wetGround() });
+    };
     this.player.unico.onStep = (x, z, r) => {
       if (r === undefined || r > 0.5) this.fx.dust(x, z);
-      const v = this.player.vel, sp = v ? Math.hypot(v.x, v.z) / RUN_SPEED : 1;
-      this.audio.step(surfaceAt(this, x, z), sp, this.autoplay?.on ? 0.6 : 1);
+      if (!this._hasFoot) myStep(x, z);
     };
+    this.player.unico.onFoot = (x, z, r, left) => { this._hasFoot = true; myStep(x, z, left); };
     // 점프 착지: 먼지 두 줌 + 부드러운 툭 + 그 바닥 발소리
     this.player.onLand = () => { const p = this.player.position; this.fx.dust(p.x, p.z); this.fx.dust(p.x + 0.3, p.z - 0.2); this.audio.play('land'); this.audio.step(surfaceAt(this, p.x, p.z), 0.8); };
     this.farm = new FarmView(this);
@@ -488,6 +493,7 @@ class Game {
     }
     this.ui.setPrompt(this.ui.panel ? null : prompt);
     this.net.update(dt);
+    if (this.net.remote.size) this._remoteSteps();
     this.fx.update(dt);
     this.waterfx.update(dt, this.camera, this.renderer);
     this.juice.update(dt, this.camera);
@@ -523,6 +529,30 @@ class Game {
   }
 
   /** 그리기: 그림자 갱신 주기·시간대 색·후처리 */
+  /** 비·폭풍이면 흙·풀 발소리에 찰박을 얹음 (집 안 제외) */
+  _wetGround() {
+    const k = this.world.weatherKind;
+    return (k === 'rain' || k === 'storm') && !this.home?.inside;
+  }
+
+  /** 다른 플레이어 발소리: 8m 안에서만, 거리만큼 작게(최대 40%), 한 사람당 0.25초에 한 번 */
+  _remoteSteps() {
+    for (const r of this.net.remote.values()) {
+      const u = r.unico;
+      if (u._stepHook) continue;
+      u._stepHook = true;
+      let at = 0;
+      const play = (x, z, left) => {
+        const now = performance.now(), p = this.player.position, d = Math.hypot(x - p.x, z - p.z);
+        if (d >= 8 || now - at < 250) return;
+        at = now;
+        this.audio.step(surfaceAt(this, x, z), 0.6, 0.4 * (1 - d / 8), { left, wet: this._wetGround(), remote: true });
+      };
+      u.onStep = (x, z) => { if (!u._hasFoot) play(x, z); };
+      u.onFoot = (x, z, rr, left) => { u._hasFoot = true; play(x, z, left); };
+    }
+  }
+
   stepRender() {
     // 그림자 맵 갱신 주기 (높음: 매 프레임, 보통: 2프레임, 낮음: 3프레임마다 — 정적 장면이 대부분이라 체감 차이 작음)
     // 자동 갱신은 끄고 프레임마다 한 번만 요청 → 한 프레임 안의 여러 render(GTAO·반사 연못)가 그림자를 다시 그리지 않음

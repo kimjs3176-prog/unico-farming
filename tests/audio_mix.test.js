@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { MockAudioContext } from './lib/audio_mock.js';
 import { mockLevels } from './lib/audio_levels_mock.js';
 
-const { Audio, MIX_DB, STEP_DB, COMBO_STEPS, dbToGain } = await import('../src/game/audio.js');
+const { Audio, MIX_DB, STEP_DB, COMBO_STEPS, PRE_DB, dbToGain, snapPenta } = await import('../src/game/audio.js');
 const { Music, rainGainFor } = await import('../src/game/music.js');
 const FIX = JSON.parse(readFileSync(new URL('./fixtures/audio_levels.json', import.meta.url), 'utf8'));
 
@@ -25,6 +25,10 @@ const oscFreqs = (c, from = 0) => c.started.slice(from).filter((s) => s.kind ===
 const TOL_DB = 2;
 // 조리법을 바꿨는데 다시 재지 않았는지: 가짜 컨텍스트 어림값이 잰 때와 이만큼 넘게 다르면 실패
 const DRIFT_DB = 1.5;
+// 소리 하나가 압축기 앞에서 넘지 말아야 할 봉우리 (dBFS): 압축기는 여러 소리가 겹칠 때만 일하게
+const SINGLE_PEAK_DB = -6;
+// 작은 소리를 잇달아 낼 때 음악이 줄어들어도 되는 양 (dB)
+const PUMP_DB = 1;
 
 test('목표 크기: 작은 소리 < 클릭 < 도구 < 줍기 < 시작·퀘스트 < 중간 보상 < 레벨업, 동물은 -30dB 아래', () => {
   const T = MIX_DB;
@@ -35,13 +39,29 @@ test('목표 크기: 작은 소리 < 클릭 < 도구 < 줍기 < 시작·퀘스�
   for (const n of ['caw', 'howl', 'bark', 'buzz']) assert.ok(T[n] <= -30, `${n} ${T[n]}`);
 });
 
-test('잰 값(fixtures/audio_levels.json): 이름마다 목표 ±2dB, 발소리도 ±2dB', () => {
-  for (const [n, target] of Object.entries(MIX_DB)) {
-    const m = FIX.measured[n];
+test('잰 값(fixtures/audio_levels.json): 압축기 앞에서 이름마다 목표+PRE_DB ±2dB, 발소리도 ±2dB', () => {
+  assert.equal(FIX.pre_db, PRE_DB, 'PRE_DB 를 바꿨으면 다시 재세요');
+  for (const [n, t0] of Object.entries(MIX_DB)) {
+    const m = FIX.measured[n], target = t0 + PRE_DB;
     assert.ok(typeof m === 'number', `${n} 잰 값 없음 → node scripts/audio-levels.mjs`);
     assert.ok(Math.abs(m - target) <= TOL_DB, `${n}: 잰 값 ${m} / 목표 ${target}`);
   }
-  for (const [k, target] of Object.entries(STEP_DB)) assert.ok(Math.abs(FIX.step[k] - target) <= TOL_DB, `발소리 ${k}: ${FIX.step[k]} / ${target}`);
+  for (const [k, t0] of Object.entries(STEP_DB)) assert.ok(Math.abs(FIX.step[k] - (t0 + PRE_DB)) <= TOL_DB, `발소리 ${k}: ${FIX.step[k]} / ${t0 + PRE_DB}`);
+});
+
+test('PRE_DB 는 압축기·리미터의 자동 보정 이득과 1dB 안 (조용한 소리는 압축기 뒤에서 MIX_DB 크기)', () => {
+  assert.ok(Math.abs(FIX.misc.makeup + PRE_DB) <= 1, `보정 이득 ${FIX.misc.makeup} / PRE_DB ${PRE_DB}`);
+});
+
+test('압축기를 빼고 그려도 어떤 소리 하나의 봉우리도 -6dBFS 를 넘지 않음', () => {
+  for (const [n, p] of Object.entries(FIX.peak)) assert.ok(p <= SINGLE_PEAK_DB, `${n}: 봉우리 ${p}dBFS`);
+});
+
+test('대사 블립(60ms 마다)·두드림·잡기를 잇달아 내도 음악이 1dB 넘게 줄지 않음 (압축기 출렁임 없음)', () => {
+  for (const n of ['blip', 'tap', 'catch']) {
+    const d = FIX.misc[`pump_${n}`];
+    assert.ok(typeof d === 'number' && d >= -PUMP_DB, `${n}: 음악 ${d}dB`);
+  }
 });
 
 test('잰 값: 폭풍 비 + 천둥 + 레벨업 + 음악이 겹쳐도 -1dBFS 아래, 음악은 -27±2 / 평균 -33±2', () => {
@@ -209,7 +229,7 @@ test('자전거: 엔진 대신 바퀴 소리, 페달을 안 밟고 굴러가면 
   a.engineStop();
 });
 
-test('릴: 감는 동안 째깍 버퍼 하나를 반복, 빠르기는 재생 속도, 멈추면 끊음', () => {
+test('릴: 감는 동안 째깍 버퍼 하나를 반복, 빠르기는 재생 속도(0.8~1.25 로 묶어 음 높이가 날카로워지지 않음), 멈추면 끊음', () => {
   const a = make();
   const c = a.ctx;
   a.reel(0);
@@ -220,7 +240,112 @@ test('릴: 감는 동안 째깍 버퍼 하나를 반복, 빠르기는 재생 속
   const n = c.started.length;
   a.reel(1.5);
   assert.equal(c.started.length, n, '버퍼 소스는 하나');
-  assert.ok(Math.abs(R.s.playbackRate.events.at(-1)[1] - 1.5) < 1e-9);
+  assert.equal(R.s.playbackRate.events.at(-1)[1], 1.25, '1.5 → 1.25');
+  a.reel(0.3);
+  assert.equal(R.s.playbackRate.events.at(-1)[1], 0.8, '0.3 → 0.8');
   a.reelStop();
   assert.equal(a._reel, null);
+});
+
+test('잡기·연속 음 높이는 C장조 오음계 음으로 맞추고 2.4kHz 를 넘지 않음', () => {
+  // 준비: 도·레·미·솔·라 (평균율)
+  const PENTA = new Set([0, 2, 4, 7, 9]);
+  const isPenta = (f) => PENTA.has(((Math.round(12 * Math.log2(f / 440)) + 69) % 12 + 12) % 12);
+  // 실행·확인: 이어 하기 10번까지(880 + 콤보×60)
+  for (let k = 0; k <= 10; k++) {
+    const f = snapPenta(880 + k * 60);
+    assert.ok(isPenta(f), `${880 + k * 60} → ${f}`);
+    assert.ok(f >= 880 + k * 60 - 1 || f <= 2400, `${f}`);
+    assert.ok(f <= 2400, `${f}`);
+  }
+  assert.equal(Math.round(snapPenta(880)), 880, '라 그대로');
+  assert.equal(Math.round(snapPenta(940)), 1047, '940 → 다음 도');
+  // 소리에도 맞춘 음이 들어감
+  const a = make(), c = a.ctx, from = c.started.length;
+  a.play('catch', 1, { freq: 1000 });
+  assert.equal(Math.round(oscFreqs(c, from)[0]), 1047);
+});
+
+test('새 생활 소리(먹기·모이 뿌리기·잠들기·아침)는 소리를 내고, 잠들기는 내려가고 아침은 올라감', () => {
+  const a = make(), c = a.ctx;
+  for (const n of ['eat', 'scatter', 'sleep', 'morning']) {
+    for (const x of c.started) x.onended?.();
+    c.currentTime += 1;
+    const from = c.started.length;
+    a.play(n);
+    assert.ok(c.started.length - from >= 3, `${n}: 재료 ${c.started.length - from}`);
+    assert.ok(MIX_DB[n] < MIX_DB.levelup && MIX_DB[n] > MIX_DB.tap, `${n} 목표 ${MIX_DB[n]}`);
+  }
+  const done = () => { for (const x of c.started) x.onended?.(); }; // 앞 소리가 끝남 (소리 수 상한에 걸리지 않게)
+  done(); c.currentTime += 1; let from = c.started.length; a.play('sleep');
+  const down = oscFreqs(c, from).filter((_, i) => i % 2 === 0);
+  assert.deepEqual(down, [784, 659, 523]);
+  done(); c.currentTime += 1; from = c.started.length; a.play('morning');
+  const up = oscFreqs(c, from).slice(0, 8).filter((_, i) => i % 2 === 0);
+  assert.deepEqual(up, [523, 659, 784, 1046]);
+});
+
+test('대사 블립은 목소리 버스로 나감', () => {
+  const a = make(), c = a.ctx, from = c.started.length;
+  a.play('blip');
+  const o = c.started[from];
+  // 오실레이터 → 필터 → 게인 → 목소리 버스
+  assert.ok(o.outs[0].outs[0].outs.includes(a.voiceBus), '목소리 버스');
+});
+
+test('음악 낮추기: 소리 장치가 멈춘 동안에는 타이머를 다시 걸지 않고, 다시 켜지면 이어서 계산', async () => {
+  // 준비
+  const a = make(), c = a.ctx;
+  a.duck(-5, 0.6);
+  clearTimeout(a._duckTimer);
+  // 실행: 멈춤 → 다시 계산
+  c.state = 'suspended';
+  a._duckTimer = undefined;
+  a._applyDuck();
+  // 확인
+  assert.equal(a._duckTimer, undefined, '멈춘 동안 타이머 없음');
+  assert.equal(a.duckDb, -5);
+  a._resume();
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(c.state, 'running');
+  assert.ok(a._duckTimer !== undefined, '켜지면 다시 검');
+  clearTimeout(a._duckTimer);
+});
+
+test('엔진: 톱니파 둘(+1.5% 어긋남)·한 옥타브 아래 사각파, 저역통과 Q 1.2, 털털이 밝기도 흔듦, 밟으면 푸흣', () => {
+  const a = make(), c = a.ctx;
+  a.engineStart('tractor');
+  const e = a._eng;
+  assert.equal(e.o2.type, 'sawtooth');
+  assert.ok(Math.abs(Math.pow(2, e.o2.detune.value / 1200) - 1.015) < 0.001, `어긋남 ${e.o2.detune.value}c`);
+  assert.equal(e.sub.type, 'square');
+  assert.equal(e.sub.frequency.value, e.o.frequency.value / 2);
+  assert.equal(e.lp.Q.value, 1.2);
+  assert.ok(e.lfo.outs.some((g) => g.gain.value === 150 && g.outs.includes(e.lp.frequency)), '밝기 ±150Hz');
+  // 털털 빠르기가 매번 조금씩 다름 (rng 0.5 면 그대로, 1 이면 +0.5)
+  a.rng = () => 1;
+  c.currentTime = 0.5; a.engineSet(0, false);
+  assert.ok(Math.abs(e.lfo.frequency.events.at(-1)[1] - 7.5) < 1e-9);
+  // 0.3초 안에 빠르기 +0.2 넘게 → 노이즈 푸흣
+  const n = c.started.length;
+  c.currentTime = 0.9; a.engineSet(0.6, false);
+  assert.ok(c.started.slice(n).some((s) => s.kind === 'buffer'), '푸흣');
+  a.engineStop(true);
+});
+
+test('자전거 프리휠 째깍은 2.4kHz 삼각파 (사각파 아님)', () => {
+  const a = make(), c = a.ctx;
+  a.engineStart('bike');
+  const n = c.started.length;
+  c.currentTime = 1; a.engineSet(0.8, true);
+  const ticks = c.started.slice(n).filter((s) => s.kind === 'osc');
+  assert.ok(ticks.length >= 1);
+  for (const t of ticks) { assert.equal(t.type, 'triangle'); assert.equal(t.frequency.events[0][1], 2400); }
+  a.engineStop(true);
+});
+
+test('효과음 조리법은 Math.random 대신 a.rng 를 씀 (같은 씨앗이면 같은 소리)', () => {
+  const src = readFileSync(new URL('../src/game/audio.js', import.meta.url), 'utf8');
+  const body = src.slice(src.indexOf('  tone('));
+  assert.equal((body.match(/Math\.random/g) || []).length, 0);
 });
