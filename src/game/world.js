@@ -28,7 +28,7 @@ export const LAYOUT = {
   tractorYard: { x0: 6.0, z0: 12.0, x1: 31.6, z1: 27.8, gate: { x: 9.6, w: 6.0 } }, // 문은 농장에서 오는 흙길 끝(북서쪽)
   // 자전거·농장 카트를 세워 두는 자리 후보 (막히지 않은 첫 자리)
   rides: {
-    bike: [{ x: 3.6, z: 2.6, heading: Math.PI / 2 }, { x: -4.5, z: 3.6, heading: -Math.PI / 2 }],
+    bike: [{ x: 8.2, z: 6.2, heading: Math.PI / 2 }, { x: -4.4, z: 5.6, heading: -Math.PI / 2 }], // 밭(±7.2, ±3.6) 밖 길가
     cart: [{ x: 2.4, z: -16, heading: Math.PI }, { x: 1.8, z: -5.4, heading: Math.PI / 2 }],
   },
   windmill: { x: -27, z: 15 },
@@ -40,7 +40,7 @@ export const LAYOUT = {
   // 과수원, 낚시 데크
   orchard: [
     { x: 7, z: -9, fruit: 'fruit_apple' }, { x: 10.5, z: -6.5, fruit: 'fruit_peach' },
-    { x: 7.5, z: -4, fruit: 'fruit_pear' }, { x: 10.5, z: -1.5, fruit: 'fruit_persimmon' },
+    { x: 8.6, z: -4.4, fruit: 'fruit_pear' }, { x: 10.5, z: -1.5, fruit: 'fruit_persimmon' },
     { x: -7, z: 12, fruit: 'fruit_apple' }, { x: -3.5, z: 14.5, fruit: 'fruit_peach' },
   ],
   dock: { x: -8.9, z: 14.8, rot: 2.38 },
@@ -79,7 +79,7 @@ export const LAYOUT = {
   ],
   // 소품 배치
   props: [
-    ['lamp', 3.4, 7.6, 0], ['lamp', -1.9, -3, Math.PI], ['lamp', 1.9, -12.5, 0], ['lamp', -6, 10.8, Math.PI / 2], ['lamp', 6.5, 7.6, 0],
+    ['lamp', 3.4, 7.6, 0], ['lamp', -1.9, -4.7, Math.PI], ['lamp', 1.9, -12.5, 0], ['lamp', -6, 10.8, Math.PI / 2], ['lamp', 6.5, 7.6, 0],
     ['lamp', -11, 3.4, Math.PI], ['lamp', 11.5, 5.4, 0], ['lamp', -1.9, -16, Math.PI],
     ['bench', -3.2, 11.6, Math.PI], ['bench', 3.6, -12.4, 0], ['bench', -2.7, 18.4, -2.0], ['bench', -17.6, 27.2, Math.PI / 2 + 0.3], ['bench', -17.4, 34.6, Math.PI / 2 + 1.1],
     ['lamp', -10.4, 23.4, 0], ['lamp', -6.9, 25.6, 0], ['lamp', -14.15, 32.35, 0], ['lamp', -10.85, 32.35, 0], ['barrel', -1.7, 26.6, 0], ['crate', -1.5, 30.6, 0.3], ['crate', -1.9, 31.4, -0.2],

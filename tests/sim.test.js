@@ -216,3 +216,13 @@ test('자전거: 트랙터와 다른 조작감 (가벼운 출발·프리휠·손
   for (let i = 0; i < 60; i++) z.step(1 / 60, 0, 1);
   assert.ok(Math.abs(z.heading) > 1 && Math.abs(z.speed) < 0.01);
 });
+
+test('배치: 밭 칸 위에는 가로등·나무·세워 둔 탈것·주민이 없음 (겹쳐 보이지 않게)', async () => {
+  const { LAYOUT: L } = await import('../src/game/world.js');
+  const F = L.farm, hx = F.cols * F.tile / 2, hz = F.rows * F.tile / 2;
+  const inFarm = (x, z, r) => Math.abs(x - F.origin.x) < hx + r && Math.abs(z - F.origin.z) < hz + r;
+  for (const [n, x, z] of L.props) assert.ok(!inFarm(x, z, 0.3), `${n} (${x}, ${z})`);
+  for (const [k, list] of Object.entries(L.rides)) for (const p of list) assert.ok(!inFarm(p.x, p.z, k === 'bike' ? 0.8 : 1.2), `${k} (${p.x}, ${p.z})`);
+  for (const t of L.orchard) assert.ok(!inFarm(t.x, t.z, 1), `나무 (${t.x}, ${t.z})`);
+  for (const [k, n] of Object.entries(L.npcs)) assert.ok(!inFarm(n.x, n.z, 0.5), k);
+});
