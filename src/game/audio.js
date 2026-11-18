@@ -172,6 +172,8 @@ export class Audio {
         [523, 659, 784, 1046, 1319, 1568].forEach((f, i) => this.pluck(f, v * 1.1, i * 0.07, undefined, 1.4));
         return this.noise(0.8, v * 0.25, { type: 'highpass', freq: 6000, q: 0.5, at: 0.42 });
       case 'pop': return this.pluck(1319, v * 0.6, 0, undefined, 0.25);
+      // 자전거 종: 따르릉 (높은 금속음 두 번, 살짝 떨림)
+      case 'bell': for (const at of [0, 0.13]) { this.pluck(2637, v * 0.75, at, undefined, 0.5); this.pluck(3520, v * 0.35, at + 0.01, undefined, 0.35); } return;
       case 'caw': this.tone(620, 0.16, 'sawtooth', v * 0.12, -260, { lp: 1800, rev: 0.2 }); return this.tone(560, 0.18, 'sawtooth', v * 0.1, -240, { lp: 1600, at: 0.22, rev: 0.2 });
       case 'howl': return this.tone(330, 1.6, 'sine', v * 0.18, 140, { lp: 1200, rev: 0.5 });
       case 'shoo': this.noise(0.25, v * 0.9, { type: 'bandpass', freq: 1800, q: 0.7 }); this.tone(180, 0.12, 'triangle', v * 0.4, -60, { rev: 0.05 }); return this.tone(170, 0.12, 'triangle', v * 0.4, -60, { at: 0.18, rev: 0.05 });

@@ -185,3 +185,34 @@ test('수확 축제: 7일마다 작물·생산물 1.3배, 저장·불러오기',
   assert.equal(e.festival, null);
   assert.equal(e.sellPrice('carrot'), base);
 });
+
+test('자전거: 트랙터와 다른 조작감 (가벼운 출발·프리휠·손 브레이크·기울여 돌기·서서 방향 바꾸기)', () => {
+  const B = RIDE_SPECS.bike, T = RIDE_SPECS.tractor;
+  const go = (spec, s) => { const v = new Vehicle(0, 0, 0, spec); for (let i = 0; i < s * 60; i++) v.step(1 / 60, 1, 0); return v; };
+  const b1 = go(B, 1), t1 = go(T, 1);
+  assert.ok(b1.speed > 4 && b1.speed > t1.speed * 2, `1초 뒤 자전거 ${b1.speed.toFixed(2)} · 트랙터 ${t1.speed.toFixed(2)}`);
+  const b = go(B, 4);
+  assert.ok(b.speed > 8.5, `달리기(4.6)보다 훨씬 빠름: ${b.speed.toFixed(2)}`);
+  // 페달 박자: 밟는 동안 가속이 출렁임
+  const acc = []; let prev = 0; const p = new Vehicle(0, 0, 0, B);
+  for (let i = 0; i < 60; i++) { p.step(1 / 60, 1, 0); acc.push(p.speed - prev); prev = p.speed; }
+  assert.ok(Math.max(...acc.slice(10)) > Math.min(...acc.slice(10)) * 1.5, '박자에 따라 가속이 달라짐');
+  // 프리휠: 손을 떼면 2초 뒤에도 대부분의 속도가 남음 (트랙터는 더 많이 줄어듦)
+  const keep = (v) => { const s0 = v.speed; for (let i = 0; i < 120; i++) v.step(1 / 60, 0, 0); return v.speed / s0; };
+  assert.ok(keep(go(B, 3)) > 0.75 && keep(go(B, 3)) > keep(go(T, 3)));
+  // 손 브레이크: 1초 안에 멈추고, 계속 누르면 잠깐 뒤에야 아주 천천히 뒤로
+  const k = go(B, 3);
+  for (let i = 0; i < 60; i++) k.step(1 / 60, -1, 0);
+  assert.equal(k.speed, 0);
+  for (let i = 0; i < 90; i++) k.step(1 / 60, -1, 0);
+  assert.ok(k.speed < 0 && k.speed >= -B.REV_MAX);
+  // 기울여 돌기: 돌면 기울고, 빠를수록 넓게 돎
+  const turn = (s) => { const v = go(B, s); const h0 = v.heading; for (let i = 0; i < 30; i++) v.step(1 / 60, s ? 1 : 0, 1); return { d: Math.abs(v.heading - h0), lean: v.lean, r: v.speed / (Math.abs(v.heading - h0) * 2) }; };
+  const slow = turn(0.4), fast = turn(4);
+  assert.ok(fast.lean > 0.2, '돌면 몸이 기울어짐');
+  assert.ok(fast.r > slow.r, `빠를수록 넓게: 반지름 ${slow.r.toFixed(1)} → ${fast.r.toFixed(1)}m`);
+  // 멈춘 채로도 발로 끌며 방향을 바꿀 수 있음
+  const z = new Vehicle(0, 0, 0, B);
+  for (let i = 0; i < 60; i++) z.step(1 / 60, 0, 1);
+  assert.ok(Math.abs(z.heading) > 1 && Math.abs(z.speed) < 0.01);
+});

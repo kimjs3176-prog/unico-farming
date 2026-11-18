@@ -52,7 +52,7 @@ export const ActivityUI = {
   hideThresh() { this.threshPanel?.remove(); this.threshPanel = null; this._th = null; },
 
   /** 탈것 운전 버튼 (마우스·터치, 누르고 있는 동안 동작). plow = 트랙터 쟁기 버튼 */
-  showDrivePad({ plow: hasPlow = false } = {}) {
+  showDrivePad({ plow: hasPlow = false, bike = false } = {}) {
     this.hideDrivePad();
     const inp = this.game.input;
     const pad = h('div', 'drive-pad');
@@ -71,13 +71,18 @@ export const ActivityUI = {
     steer.append(hold('◀', 'pad-btn', () => (inp.virtual.x = -1), () => inp.virtual.x === -1 && (inp.virtual.x = 0)),
       hold('▶', 'pad-btn', () => (inp.virtual.x = 1), () => inp.virtual.x === 1 && (inp.virtual.x = 0)));
     const pedals = h('div', 'pad-pedals');
-    pedals.append(hold('▲<small>전진</small>', 'pad-btn gas', () => (inp.virtual.y = -1), () => inp.virtual.y === -1 && (inp.virtual.y = 0)),
-      hold('▼<small>후진</small>', 'pad-btn', () => (inp.virtual.y = 1), () => inp.virtual.y === 1 && (inp.virtual.y = 0)));
+    pedals.append(hold(bike ? '▲<small>페달</small>' : '▲<small>전진</small>', 'pad-btn gas', () => (inp.virtual.y = -1), () => inp.virtual.y === -1 && (inp.virtual.y = 0)),
+      hold(bike ? '▼<small>브레이크</small>' : '▼<small>후진</small>', 'pad-btn', () => (inp.virtual.y = 1), () => inp.virtual.y === 1 && (inp.virtual.y = 0)));
     const extra = h('div', 'pad-extra');
     if (hasPlow) {
       const plow = h('button', 'pad-small', '🪓 쟁기');
       plow.onclick = () => { this.game.ride.plowDown = !this.game.ride.plowDown; this.game.audio.play('click'); };
       extra.append(plow);
+    }
+    if (bike) {
+      const bell = h('button', 'pad-small', '🔔 따르릉');
+      bell.onclick = () => this.game.ride.ringBell();
+      extra.append(bell);
     }
     const exit = h('button', 'pad-small ghost', '🚪 내리기');
     exit.onclick = () => this.game.ride.dismount();

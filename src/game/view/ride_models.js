@@ -70,7 +70,9 @@ export function makeBike() {
   steer.add(tube([0, 0.72, 0], [0, 0.36, 0.1], 0.025, frame), tube([0, 0.72, 0], [0, 1.02, -0.04], 0.026, frame));
   steer.add(tube([-0.27, 1.04, -0.08], [0.27, 1.04, -0.08], 0.02, mat(C.steel, { metal: 0.6, rough: 0.35 })));
   for (const s of [-1, 1]) steer.add(mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.1, 10).rotateZ(Math.PI / 2), mat(C.brown), s * 0.26, 1.04, -0.08));
-  steer.add(mesh(new THREE.SphereGeometry(0.04, 10, 8), mat(C.yellow, { rough: 0.3 }), 0.17, 1.07, -0.08)); // 따르릉 종
+  const bell = mesh(new THREE.SphereGeometry(0.04, 10, 8), mat(C.yellow, { rough: 0.3 }), 0.17, 1.07, -0.08); // 따르릉 종 (Space 로 울리면 떪)
+  bell.name = 'Bell';
+  steer.add(bell);
   // 바구니 (등나무) + 당근·잎·꽃
   const basket = new THREE.Group();
   basket.position.set(0, 0.88, 0.14);

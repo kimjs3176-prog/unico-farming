@@ -2207,10 +2207,19 @@ export class Unico {
       if (bp) { // 의자에 앉아 두 손으로 핸들
         bodyY = BODY_Y - 0.1;
         bodyPitch = 0;
-        // 자전거(pedalPhase 가 숫자)면 두 다리가 번갈아 페달을 밟음
         const pp = this.pedalPhase;
-        legs.forEach((l, i) => { l.rotation.x = -1.4 + (pp == null ? 0 : Math.sin(pp + i * Math.PI) * 0.38); l.scale.y = 1; });
-        arms[0].rotation.set(-1.15, 0, 0.35); arms[1].rotation.set(-1.15, 0, -0.35);
+        if (pp == null) { // 트랙터·카트: 의자에 앉아 다리를 앞으로
+          legs.forEach((l) => { l.rotation.x = -1.4; l.scale.y = 1; });
+          arms[0].rotation.set(-1.15, 0, 0.35); arms[1].rotation.set(-1.15, 0, -0.35);
+        } else { // 자전거: 다리를 아래 페달까지 내려 번갈아 밟음, 손 뗀(프리휠) 동안은 페달 위에 얹고 쉼, 몸은 핸들 쪽으로 숙임
+          bodyPitch = 0.14;
+          const rest = this.pedalRest;
+          legs.forEach((l, i) => {
+            const c = rest ? (i ? -0.5 : 0.5) : Math.sin(pp + i * Math.PI); // 크랭크 위치 (+ = 앞·위)
+            l.rotation.x = -0.72 - c * 0.42; l.scale.y = 1 - Math.max(0, c) * 0.12; // 위로 올라온 발은 무릎을 굽힌 만큼 짧게
+          });
+          arms[0].rotation.set(-1.25, 0, 0.22); arms[1].rotation.set(-1.25, 0, -0.22);
+        }
         tailBase = 0.4;
       } else {
         bodyY = BODY_Y - 0.28;

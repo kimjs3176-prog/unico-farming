@@ -296,6 +296,8 @@ class Game {
       || this.herding?.active || this.smartfarm?.active || this.home?.inside || document.querySelector('.mg-count, .mg-wrap')) return false;
     if (!this.player.jump()) return false;
     this.audio.play('pop', 0.35);
+    const b = this.ui.jumpBtn; // 버튼도 같이 통 (Space 로 뛰어도 어디 있는지 보이게)
+    if (b) { b.classList.remove('hop'); void b.offsetWidth; b.classList.add('hop'); }
     return true;
   }
 

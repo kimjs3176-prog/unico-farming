@@ -116,7 +116,7 @@ export class NPCs {
     const tr = this.game.ride, tv = tr?.driving ? tr.vehicle : null;
     for (const e of this.list) {
       const p = e.u.group.position;
-      if (tv && Math.abs(tv.speed) > 1.2 && Math.hypot(p.x - tv.x, p.z - tv.z) < 2.9) this.startle(e, tv);
+      if (tv && Math.abs(tv.speed) > 1.2 && Math.hypot(p.x - tv.x, p.z - tv.z) < 2.9 && !((e.bellUntil || 0) > performance.now() / 1000)) this.startle(e, tv); // 자전거 종을 들었으면 안 놀람
       const d = Math.hypot(p.x - playerPos.x, p.z - playerPos.z);
       // 꼬마는 들판을 돌아다님 (플레이어가 가까우면 멈춰서 바라봄)
       if (e.n.wander && d > 3) {

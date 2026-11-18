@@ -93,10 +93,24 @@ export class FreeField {
  */
 export const TRACTOR = { MAX: 5.5, REV_MAX: 2.2, ACC: 4.2, REV_ACC: 2.0, BRAKE: 6.5, DRAG: 0.9, ROLL: 0.6, PEDAL_RATE: 2.4, STEER_RATE: 4, STEER_MAX: 0.6, TURN: 0.45, WHEEL: 0.6 };
 
+/**
+ * 자전거: 트랙터(무거운 엔진·전진/후진 기어)와 다르게
+ * - 페달 박자: 크랭크 반 바퀴마다 한 번씩 밀어 줌 (속도가 박자에 맞춰 살짝 출렁임), 출발이 가볍고 최고 속도가 빠름
+ * - 프리휠: 페달을 멈추면 다리는 쉬고 바퀴는 오래 굴러감 (구름 저항이 작음)
+ * - 기울여 돌기: 조향 입력이 몸·차체를 기울이고, 기운 만큼 돎. 느릴수록 작게, 빠를수록 크게 돌아감
+ *   (서 있을 때도 발로 끌며 천천히 방향을 바꿀 수 있음)
+ * - 손 브레이크: 뒤(S)는 브레이크, 멈춘 뒤에만 발로 밀어 아주 천천히 뒤로
+ */
+export const BIKE = {
+  BIKE: true, MAX: 10.5, REV_MAX: 0.8, ACC: 7.5, REV_ACC: 2.5, BRAKE: 9, DRAG: 0.25, ROLL: 0.18,
+  PEDAL_RATE: 5, CADENCE: 1.9, SURGE: 0.45, LEAN_MAX: 0.42, LEAN_RATE: 7, G: 9.8, WALK_TURN: 1.6,
+  STEER_MAX: 0.75, STEER_RATE: 7, TURN: 0.75, SCRUB: 0.35, WHEEL: 0.36, R: 0.6,
+};
+
 /** 마을 탈것별 주행 성격: 자전거는 가볍고 날렵하게, 농장 카트는 트랙터보다 빠르고 잘 돔. R = 충돌 반지름(m) */
 export const RIDE_SPECS = {
   tractor: { ...TRACTOR, R: 1.4 },
-  bike: { MAX: 7.5, REV_MAX: 1.2, ACC: 5.5, REV_ACC: 1.6, BRAKE: 9, DRAG: 0.6, ROLL: 0.5, PEDAL_RATE: 3.2, STEER_RATE: 6, STEER_MAX: 0.75, TURN: 0.75, WHEEL: 0.36, R: 0.6 },
+  bike: BIKE,
   cart: { MAX: 6.5, REV_MAX: 2.5, ACC: 5, REV_ACC: 2.4, BRAKE: 7.5, DRAG: 0.8, ROLL: 0.6, PEDAL_RATE: 2.8, STEER_RATE: 5, STEER_MAX: 0.65, TURN: 0.55, WHEEL: 0.33, R: 1.1 },
 };
 
@@ -106,6 +120,7 @@ export class Vehicle {
   }
   step(dt, throttle, steerInput) {
     const T = this.spec;
+    if (T.BIKE) return this._stepBike(dt, throttle, steerInput);
     // 페달: 목표 입력으로 서서히 이동 (놓을 때는 조금 더 빨리)
     const rate = Math.abs(throttle) > Math.abs(this.pedal) ? T.PEDAL_RATE : T.PEDAL_RATE * 1.6;
     this.pedal += (throttle - this.pedal) * Math.min(1, dt * rate);
@@ -126,6 +141,45 @@ export class Vehicle {
     const target = steerInput * T.STEER_MAX / (1 + Math.abs(this.speed) * 0.12);
     this.steer += (target - this.steer) * Math.min(1, dt * T.STEER_RATE);
     this.heading -= this.steer * this.speed * dt * T.TURN;
+    this.x += Math.sin(this.heading) * this.speed * dt;
+    this.z += Math.cos(this.heading) * this.speed * dt;
+    this.wheelSpin += this.speed * dt / T.WHEEL;
+  }
+
+  /** 자전거 한 걸음 (BIKE 주석 참고). lean = 차체 기울기(rad, +면 오른쪽), crank = 페달 각, pushing = 지금 밟는 중 */
+  _stepBike(dt, throttle, steerInput) {
+    const T = this.spec;
+    this.lean ??= 0; this.crank ??= 0;
+    const fwd = Math.max(0, throttle), back = Math.max(0, -throttle);
+    // 페달: 밟을 때는 빨리 들어가고, 놓으면 바로 쉼
+    this.pedal += (fwd - this.pedal) * Math.min(1, dt * (fwd > this.pedal ? T.PEDAL_RATE : T.PEDAL_RATE * 2));
+    this.pushing = this.pedal > 0.05 && this.speed >= -0.05;
+    if (this.pushing) {
+      // 크랭크 반 바퀴마다 힘이 실림 (|sin| 박자). 속도가 오를수록 페달이 빨리 돌아감
+      this.crank += dt * Math.PI * 2 * (T.CADENCE * (0.55 + 0.45 * Math.min(1, this.speed / T.MAX)));
+      const beat = 1 - T.SURGE + T.SURGE * 2 * Math.abs(Math.sin(this.crank));
+      this.speed += this.pedal * T.ACC * beat * Math.max(0, 1 - this.speed / T.MAX) * dt;
+    }
+    if (back <= 0.02 || this.speed > 0.05) this._stopT = 0;
+    if (back > 0.02) {
+      if (this.speed > 0.05) this.speed = Math.max(0, this.speed - T.BRAKE * back * dt); // 손 브레이크
+      else if ((this._stopT = (this._stopT || 0) + dt) > 0.35) this.speed = Math.max(-T.REV_MAX, this.speed - T.REV_ACC * back * dt); // 멈추고 잠깐 뒤: 발로 밀어 뒤로
+    } else if (this.speed < 0) this.speed = Math.min(0, this.speed + T.BRAKE * 0.5 * dt);
+    // 프리휠 감속 (작음)
+    const dec = (T.ROLL + Math.abs(this.speed) * T.DRAG * 0.3) * dt;
+    this.speed = Math.sign(this.speed) * Math.max(0, Math.abs(this.speed) - dec);
+    // 기울기: 입력을 따라 빠르게, 멈춰 있으면 거의 안 기움
+    const v = Math.abs(this.speed), moving = Math.min(1, v / 2);
+    const leanT = steerInput * T.LEAN_MAX * moving;
+    this.lean += (leanT - this.lean) * Math.min(1, dt * T.LEAN_RATE);
+    this.steer = this.lean / T.LEAN_MAX * T.STEER_MAX; // 핸들 모양 (보이기용)
+    // 회전 속도: 기운 만큼 (v·tanθ/… 대신 게임용으로 낮은 속도에서 날렵하게, 높은 속도에서 넓게)
+    let yawRate = (this.lean / T.LEAN_MAX) * (2.6 / (1 + v * 0.12)) * moving;
+    if (v < 0.6) yawRate += steerInput * T.WALK_TURN * (1 - v / 0.6); // 거의 멈춤: 발로 끌며 방향 바꾸기
+    this.heading -= yawRate * dt * Math.sign(this.speed || 1);
+    // 급하게 돌면 속도가 조금 줄어듦
+    this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), Math.abs(yawRate) * v * T.SCRUB * 0.1 * dt);
+    this.speed = Math.max(-T.REV_MAX, Math.min(T.MAX, this.speed));
     this.x += Math.sin(this.heading) * this.speed * dt;
     this.z += Math.cos(this.heading) * this.speed * dt;
     this.wheelSpin += this.speed * dt / T.WHEEL;

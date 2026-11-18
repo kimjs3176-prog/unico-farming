@@ -90,6 +90,7 @@ export class RideView {
       obstacle: { x: home.x, z: home.z, r: spec.R + 0.4 },
     };
     model.traverse((o) => { if (/^Wheel/.test(o.name)) ride.wheels.push(o); else if (/^Steer/.test(o.name)) ride.steers.push(o); });
+    ride.bell = model.getObjectByName('Bell') || null;
     g.world.obstacles.push(ride.obstacle);
     this._sync(ride);
     return ride;
@@ -139,16 +140,37 @@ export class RideView {
     this.rider.pedalPhase = ride.pedal ? 0 : null;
     this.riderGroup.add(this.rider.group);
     g.world.scene.add(this.riderGroup);
+    if (g.player.ring) g.player.ring.visible = false; // 발밑 고리는 안장 높이에 떠 보이니 숨김 (내리면 player.update 가 다시 켬)
     ride.obstacle.r = 0;
     ride.vehicle.speed = 0; ride.vehicle.pedal = 0;
     g.audio.play(ride.sound);
-    g.ui.showDrivePad({ plow: !!ride.plow });
+    g.ui.showDrivePad({ plow: !!ride.plow, bike: !!ride.pedal });
     g.onEvent('ride');
     this._seen ||= new Set();
     if (!this._seen.has(ride.id)) {
       this._seen.add(ride.id);
-      const how = touchUI() ? '화면 버튼으로 운전, 🚪 로 내려요' : 'WASD·화살표로 운전, E 로 내려요';
+      const how = ride.pedal
+        ? (touchUI() ? '▲ 페달 · ▼ 브레이크 · ◀▶ 몸 기울이기 · 🔔 따르릉, 🚪 로 내려요' : 'W 페달 · S 브레이크 · A/D 몸 기울이기 · Space 따르릉, E 로 내려요')
+        : (touchUI() ? '화면 버튼으로 운전, 🚪 로 내려요' : 'WASD·화살표로 운전, E 로 내려요');
       g.ui.toast(`${ride.icon} ${ride.name}${josa(ride.name, '을/를')} 탔어요! ${how}${ride.plow ? ' · 밭에서 쟁기를 내리면 밭을 갈아요' : ''}`);
+    }
+  }
+
+  /** 자전거 따르릉: 종이 떨고, 앞쪽 가까운 주민은 놀라지 않고 손을 흔듦 */
+  ringBell() {
+    const g = this.game, ride = this.current;
+    if (!ride?.pedal || this._bellT > 0.2) return;
+    this._bellT = 0.5;
+    g.audio.play('bell');
+    const v = ride.vehicle, fx = Math.sin(v.heading), fz = Math.cos(v.heading), now = performance.now() / 1000;
+    for (const e of g.npcs?.list || []) {
+      const p = e.u.group.position, dx = p.x - v.x, dz = p.z - v.z, d = Math.hypot(dx, dz);
+      if (d > 9 || (dx * fx + dz * fz) / (d || 1) < 0.3) continue; // 앞쪽 9m 안만
+      e.bellUntil = now + 4; // 종을 들었으니 지나가도 놀라지 않음
+      e.u.facing = Math.atan2(-dx, -dz);
+      e.u.playAction?.('wave', 1.2);
+      // 돌아다니던 주민은 길 옆으로 비켜 줌
+      if (e.n.wander) { const side = dx * fz - dz * fx >= 0 ? 1 : -1; e.target = { x: p.x + fz * side * 2, z: p.z - fx * side * 2 }; e.wait = 0; e.spd = 2.5; }
     }
   }
 
@@ -158,7 +180,8 @@ export class RideView {
     if (!ride) return;
     this.current = null;
     g.player.frozen = false;
-    this.rider.pedalPhase = null;
+    this.rider.pedalPhase = null; this.rider.pedalRest = false;
+    this.rider.facing = this.rider.yaw = ride.vehicle.heading; // 무리 안에서 0 이던 방향을 세상 방향으로
     this.rider.clearAction();
     g.world.scene.remove(this.riderGroup);
     g.world.scene.add(this.rider.group);
@@ -200,7 +223,10 @@ export class RideView {
     v.step(dt, -ax.y, ax.x);
     // 언덕 오르막은 조금 느리게
     const slope = heightAt(v.x, v.z) - heightAt(prevX, prevZ);
-    if (slope > 0 && Math.abs(v.speed) > 0.5) v.speed *= Math.max(0.85, 1 - slope * 2);
+    if (ride.pedal) { // 자전거: 오르막은 힘들고 내리막은 저절로 빨라짐 (경사 × 중력 절반)
+      const ds = Math.hypot(v.x - prevX, v.z - prevZ);
+      if (ds > 1e-4) v.speed -= Math.sign(v.speed) * 4.9 * (slope / ds) * dt;
+    } else if (slope > 0 && Math.abs(v.speed) > 0.5) v.speed *= Math.max(0.85, 1 - slope * 2);
     // 건물·연못·울타리
     const next = new THREE.Vector3(v.x, 0, v.z);
     g.world.resolveCollision(next, R);
@@ -215,7 +241,7 @@ export class RideView {
       v.speed *= want > 1e-4 ? Math.max(0.3, Math.min(1, got / want)) : 0.3;
       v.x = next.x; v.z = next.z;
     }
-    const bump = () => { v.speed *= -0.25; v.pedal = 0; v.x = prevX; v.z = prevZ; g.juice?.shake(0.35); };
+    const bump = () => { v.speed *= ride.pedal ? 0.1 : -0.25; v.pedal = 0; v.x = prevX; v.z = prevZ; g.juice?.shake(ride.pedal ? 0.15 : 0.35); }; // 자전거는 튕기지 않고 멈춤
     // 주민에게 부딪히면: 탈것이 튕겨 멈추고 주민이 깜짝 놀람
     for (const e of g.npcs?.list || []) {
       const p = e.u.group.position;
@@ -238,20 +264,34 @@ export class RideView {
     // 좌석 위 유니코
     const S = ride.seat, fx = Math.sin(v.heading), fz = Math.cos(v.heading);
     this.riderGroup.position.set(v.x - fx * S.back + fz * S.side, ride.model.position.y + S.h, v.z - fz * S.back - fx * S.side);
-    this.riderGroup.rotation.set(ride.model.rotation.x * 0.6, 0, ride.model.rotation.z * 0.6);
+    // 방향은 무리 쪽에서 돌리고(YXZ: 방향 → 앞뒤 기울기 → 좌우 기울기가 몸 기준), 유니코는 무리 안에서 앞(0)을 봄
+    this.riderGroup.rotation.order = 'YXZ';
+    this.riderGroup.rotation.set(ride.model.rotation.x * 0.6, v.heading, ride.model.rotation.z * 0.6);
     this.riderGroup.scale.setScalar(S.scale);
     this.rider.group.position.set(0, 0, 0);
-    this.rider.facing = v.heading;
+    this.rider.facing = this.rider.yaw = 0;
     if (ride.pedal) {
-      this.rider.pedalPhase += v.speed * dt * 4.5;
-      // 자전거는 돌 때 살짝 안쪽으로 기울임
-      const lean = THREE.MathUtils.clamp(v.steer * v.speed * 0.09, -0.3, 0.3);
-      ride.model.rotation.z += lean; this.riderGroup.rotation.z += lean;
+      // 페달: 밟을 때만 크랭크를 따라 돌고, 프리휠(손 뗌)이면 발을 페달 위에 얹고 쉼
+      this.rider.pedalPhase = v.crank ?? 0;
+      this.rider.pedalRest = !v.pushing;
+      // 기울여 돌기: 차체와 몸이 같이 기울고(몸은 조금 더), 밟을 때는 박자에 맞춰 좌우로 살짝 흔들림
+      const lean = -(v.lean || 0);
+      const sway = v.pushing ? Math.sin(v.crank) * 0.035 * Math.min(1, v.pedal * 1.5) : 0;
+      ride.model.rotation.z += lean + sway * 0.5;
+      this.riderGroup.rotation.z += lean * 1.15 + sway;
+      // 기울면 안장도 그 방향으로 옮겨 감 (몸이 바퀴 접지점을 축으로 돎)
+      const sh = Math.sin(lean) * (S.h + 0.25);
+      this.riderGroup.position.x -= Math.cos(v.heading) * sh;
+      this.riderGroup.position.z += Math.sin(v.heading) * sh;
+      // 따르릉: Space (터치는 🔔 버튼)
+      if (input.justPressed('Space')) this.ringBell();
+      if (this._bellT > 0) { this._bellT -= dt; const b = ride.bell; if (b) b.rotation.z = Math.sin(this._bellT * 60) * 0.5 * this._bellT; }
     }
     this.rider.update(dt, g.followCam.camera, g.world.daylight);
     // 내리기: E (터치는 화면의 🚪 내리기 버튼 — 운전 중엔 E 버튼이 숨음)
     if (input.justPressed('KeyE')) { this.dismount(); return null; }
     const how = touchUI() ? '🚪 버튼으로 내리기' : 'E 내리기';
+    if (ride.pedal) return { label: `${ride.icon} ${v.pushing ? '페달 밟는 중' : Math.abs(v.speed) > 0.3 ? '쌩~ 굴러가는 중' : '자전거 위'} · ${touchUI() ? '🔔 따르릉' : 'Space 따르릉'} · ${how}`, key: 'driving' };
     if (!ride.plow) return { label: `${ride.icon} ${ride.name} 운전 중 · ${how}`, key: 'driving' };
     const F = this.field;
     return { label: `🚜 쟁기 ${this.plowDown ? '내림 🟢' : '올림 ⚪'} · 갈린 밭 ${F.plowedCount}/${F.open} · ${touchUI() ? '🪓 버튼 전환' : 'SPACE 전환'} · ${how}`, key: 'driving' };
