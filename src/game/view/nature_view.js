@@ -158,7 +158,7 @@ export class NatureView {
     const g = this.game;
     tr.shakenDay = g.world.day;
     tr.shake = 0.8;
-    g.audio.play('dig', 0.5);
+    g.audio.play('rustle');
     g.player.unico.facing = Math.atan2(tr.x - g.player.position.x, tr.z - g.player.position.z);
     g.player.unico.playAction('push', 0.9);
     const wp = new THREE.Vector3();
@@ -187,7 +187,8 @@ export class NatureView {
     g.economy.addItem(b.kind, 1);
     const rec = g.collection.add(b.kind, { day: g.world.day });
     g.onEvent('bug');
-    g.audio.play('harvest');
+    g.audio.play('swish'); // 잠자리채 휙 + 잡은 뽁
+    setTimeout(() => g.audio.play('pop'), 160);
     g.player.unico.facing = Math.atan2(b.g.position.x - g.player.position.x, b.g.position.z - g.player.position.z);
     g.player.unico.playAction('net', 0.7);
     g.fx.pop(b.g.position.x, b.g.position.z, ITEMS[b.kind].emoji, { to: 'bag' });
@@ -225,7 +226,7 @@ export class NatureView {
     this.fishShadow.visible = true;
     const a = Math.random() * 6.28;
     this.fishShadow.position.set(spot.x + Math.cos(a) * 2, 0.04, spot.z + Math.sin(a) * 2);
-    g.audio.play('click', 0.5);
+    g.audio.play('swish', 0.6); // 낚싯대 휘두르기
     g.ui.toast(bait ? `🪱 떡밥을 달았어요 (남은 ${g.economy.count('bait')}) · 찌가 쑥 들어가면 E/탭으로 당기기!` : '🎣 찌가 쑥 들어갈 때 E 또는 화면을 눌러 당기세요! (톡톡 건드리는 건 가짜 입질)');
   }
 
@@ -285,7 +286,7 @@ export class NatureView {
     const base = 0.06 + Math.sin(f.t * 3) * 0.01;
     if (ev === 'nibble') { this.bobber.userData.dip = 0.25; g.audio.play('click', 0.3); this.splash(0.6); }
     if (ev === 'bite') {
-      this.bobber.userData.dip = 1; this.splash(1.6); g.audio.play('bump', 0.6); g.juice?.haptic?.([10, 40, 20]);
+      this.bobber.userData.dip = 1; this.splash(1.6); g.audio.play('bite'); g.juice?.haptic?.([10, 40, 20]);
       this.alert = makeLabel('❗', { bg: 'rgba(0,0,0,0)', size: 72, scale: 0.01 });
       this.alert.position.copy(this.spot).add(new THREE.Vector3(0, 0.9, 0));
       g.world.scene.add(this.alert);
@@ -320,7 +321,7 @@ export class NatureView {
     const it = ITEMS[r.fish];
     this.hud.name.textContent = it.rarity >= 4 ? '엄청난 녀석이다!!' : it.rarity >= 3 ? '묵직한 녀석이다!' : '힘겨루기!';
     this.splash(2);
-    g.audio.play('bump', 0.8);
+    g.audio.play('bite');
     g.juice.shake(0.2);
     g.ui.toast('🎣 큰 녀석이 물었다! 꾹 눌러 감고, 빨개지거나 몸부림치면 잠깐 놓아 주세요');
     return { d: -1, label: '🎣 힘겨루기!', key: 'fishing', onInteract: () => {} };
@@ -330,6 +331,7 @@ export class NatureView {
     const g = this.game, f = this.fishing, u = g.player.unico, F = this.fight, input = g.input;
     const reeling = !!(input.isDown('KeyE') || input.isDown('Space') || this.holdBtn || input.looking || input.joy.active);
     const ev = F.tick(dt, reeling);
+    g.audio.reel?.(reeling ? 0.7 + F.tension * 0.9 : 0); // 릴 째깍째깍: 감는 동안, 팽팽할수록 빠르게
     f.fightT += dt;
     u.reelTension = reeling ? F.tension : F.tension * 0.4;
     // 물고기: 줄 길이만큼 떨어진 곳에서 좌우로 몸부림
@@ -398,6 +400,7 @@ export class NatureView {
   endFishing(r) {
     const g = this.game, f = this.fishing, u = g.player.unico;
     this.fishing = null;
+    g.audio.reelStop?.();
     this.bobber.visible = this.line.visible = this.fishShadow.visible = false;
     this.fishShadow.scale.set(0.6, 1.4, 1);
     this.line.material.color.set(0xffffff);

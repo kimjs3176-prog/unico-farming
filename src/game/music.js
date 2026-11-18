@@ -9,6 +9,10 @@ const CHORDS = { C: [60, 64, 67], Am: [57, 60, 64], F: [53, 57, 60], G: [55, 59,
 const DAY = ['C', 'Am', 'F', 'G', 'C', 'Em', 'F', 'G'];
 const NIGHT = ['Am', 'F', 'C', 'G', 'Dm', 'F', 'C', 'G'];
 const PENTA = [0, 2, 4, 7, 9]; // C D E G A
+/** 음악 층별 크기 (scripts/audio-levels.mjs: 낮 음악 가장 큰 구간 ≈ -27dB, 평균 ≈ -33dB) */
+export const MUSIC_LEVEL = { pad: 1, bass: 0.5, shaker: 1.2, melody: 0.8 };
+/** 비 소리 크기: 효과음(1~2kHz)을 덮지 않게 0.02 + 강수 × 0.07 (최대 0.09) */
+export const rainGainFor = (kind, precip) => (kind === 'rain' || kind === 'storm' ? 0.02 + Math.max(0, Math.min(1, precip)) * 0.07 : 0);
 
 export class Music {
   constructor(audio) {
@@ -55,6 +59,9 @@ export class Music {
     this.timer = setInterval(() => this.schedule(), 25);
   }
 
+  /** 지금 날씨의 비 소리 크기 */
+  rainLevel() { return rainGainFor(this.scene.kind, this.scene.precip); }
+
   setScene(s) { this.scene = s; this.mood = s.daylight < 0.35 ? 'night' : 'day'; }
 
   schedule() {
@@ -72,23 +79,23 @@ export class Music {
     }
     // 환경음
     const t = c.currentTime, S = this.scene;
-    this.rainGain.gain.setTargetAtTime(['rain', 'storm'].includes(S.kind) ? 0.05 + S.precip * 0.22 : 0, t, 1.5);
+    this.rainGain.gain.setTargetAtTime(this.rainLevel(), t, 1.5);
     this.windGain.gain.setTargetAtTime(0.01 + S.wind * 0.12, t, 2);
     if (!night && !['rain', 'storm', 'snow'].includes(S.kind) && t > this.nextBird) { this.bird(); this.nextBird = t + 2 + Math.random() * 5; }
     if (night && S.kind !== 'snow' && t > this.nextCricket) { this.crickets(); this.nextCricket = t + 0.6 + Math.random() * 1.2; }
   }
 
   playStep(step, at, night, eighth) {
-    const a = this.audio, out = a.music;
+    const a = this.audio, out = a.music, L = MUSIC_LEVEL;
     const prog = night ? NIGHT : DAY;
     const bar = Math.floor(step / 8) % prog.length, beat = step % 8;
     const chord = CHORDS[prog[bar]];
     // 패드: 마디 시작에 코드 (부드러운 어택, 길게)
-    if (beat === 0) for (const n of chord) a.tone(NOTE(n), eighth * 8.5, 'triangle', night ? 0.028 : 0.034, 0, { at, rev: 0.6, lp: 1300, out });
+    if (beat === 0) for (const n of chord) a.tone(NOTE(n), eighth * 8.5, 'triangle', (night ? 0.028 : 0.034) * L.pad, 0, { at, rev: 0.6, lp: 1300, out });
     // 베이스: 1·5 박
-    if (beat === 0 || beat === 4) a.tone(NOTE(chord[0] - 12), eighth * 3.5, 'sine', 0.07, 0, { at, rev: 0.1, lp: 500, out });
+    if (beat === 0 || beat === 4) a.tone(NOTE(chord[0] - 12), eighth * 3.5, 'sine', 0.07 * L.bass, 0, { at, rev: 0.1, lp: 500, out });
     // 셰이커 (낮만): 엇박
-    if (!night && beat % 2 === 1) a.noise(0.05, beat === 3 || beat === 7 ? 0.018 : 0.011, { type: 'highpass', freq: 6500, q: 0.3, at, out });
+    if (!night && beat % 2 === 1) a.noise(0.05, (beat === 3 || beat === 7 ? 0.018 : 0.011) * L.shaker, { type: 'highpass', freq: 6500, q: 0.3, at, out });
     // 칼림바 멜로디: 코드음 위주 오음계 랜덤 워크, 쉼표 많게
     const restP = night ? 0.6 : 0.42;
     if (Math.random() > restP) {
@@ -98,7 +105,7 @@ export class Music {
       let n = near[Math.floor(Math.random() * near.length)] ?? 76;
       if (beat === 0 && Math.random() < 0.6) n = chord[Math.floor(Math.random() * 3)] + 12 * (chord[0] < 60 ? 2 : 1);
       this.melodyNote = n;
-      a.pluck(NOTE(night ? n - 12 : n), night ? 0.05 : 0.065, at, out, night ? 1.4 : 1.0);
+      a.pluck(NOTE(night ? n - 12 : n), (night ? 0.05 : 0.065) * L.melody, at, out, night ? 1.4 : 1.0);
     }
   }
 

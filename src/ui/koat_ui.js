@@ -87,7 +87,7 @@ export function installKoatUI(UI) {
       b.textContent = Math.round(score * (1 - (1 - k) ** 3));
       if (k < 1 && p.isConnected) return requestAnimationFrame(up);
       const icons = st.querySelectorAll('i');
-      for (let i = 0; i < stars; i++) setTimeout(() => { icons[i].classList.add('on', 'pop'); g.audio.pluck([1047, 1319, 1568][i], 0.6, 0, undefined, 0.3); }, 200 * i + 100);
+      for (let i = 0; i < stars; i++) setTimeout(() => { icons[i].classList.add('on', 'pop'); g.audio.play('star', 1, { freq: [1047, 1319, 1568][i] }); }, 200 * i + 100);
       setTimeout(() => {
         if (r.newStamp) { // 스탬프가 위에서 쾅 찍힘
           const stamp = h('div', 'koat-stampfx', `<span>${d.emoji}</span><b>${d.name.replace('본부', '')}</b><small>KOAT</small>`);
@@ -137,8 +137,8 @@ export function installKoatUI(UI) {
       results[i] = { ok, left: Math.max(0, left / o.timePer), v };
       combo = ok ? combo + 1 : 0;
       acts.querySelectorAll('button').forEach((b) => { const bv = b.dataset.v; if (o.correct(it, bv === 'true' ? true : bv === 'false' ? false : isNaN(+bv) ? bv : +bv)) b.classList.add('right'); else if (String(v) === bv) b.classList.add('wrong'); b.disabled = true; });
-      g.audio.play(ok ? 'coin' : 'bump', ok ? 0.7 : 0.5);
-      if (ok && combo >= 3) g.audio.pluck(1568, 0.5, 0, undefined, 0.2);
+      g.audio.play(ok ? 'coin' : 'deny', ok ? 0.7 : 0.8);
+      if (ok && combo >= 3) g.audio.play('combo');
       why.innerHTML = `${ok ? '⭕' : v === undefined ? '⏰ 시간 초과!' : '❌'} ${o.why(it, ok)}`;
       why.className = `koat-why show ${ok ? 'ok' : 'ng'}`;
       p.classList.toggle('shake', !ok);
@@ -283,8 +283,8 @@ export function installKoatUI(UI) {
         if (s.done || st.over) return;
         s.done = true;
         b.classList.add(kind.bad ? 'got' : 'oops');
-        if (kind.bad) { st.hit++; st.combo++; g.audio.pluck(880 + Math.min(st.combo, 10) * 60, 0.5, 0, undefined, 0.1); pop(s.x, s.y, st.combo >= 3 ? `+${st.combo}🔥` : '✔', 'ok'); }
-        else { st.wrong++; st.combo = 0; g.audio.play('bump', 0.5); pop(s.x, s.y, '좋은 종자!', 'ng'); belt.classList.add('shake'); setTimeout(() => belt.classList.remove('shake'), 250); }
+        if (kind.bad) { st.hit++; st.combo++; g.audio.play('catch', 1, { freq: 880 + Math.min(st.combo, 10) * 60, dur: 0.1 }); pop(s.x, s.y, st.combo >= 3 ? `+${st.combo}🔥` : '✔', 'ok'); }
+        else { st.wrong++; st.combo = 0; g.audio.play('deny'); pop(s.x, s.y, '좋은 종자!', 'ng'); belt.classList.add('shake'); setTimeout(() => belt.classList.remove('shake'), 250); }
         setTimeout(() => b.remove(), 260);
       };
       st.live.push(s);

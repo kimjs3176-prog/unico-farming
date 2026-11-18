@@ -224,7 +224,8 @@ test('오류가 계속될 때: 루프를 멈추고 오류 직전 저장(crash) �
 });
 
 test('발 먼지: 셋째 인자(달리기 섞임 r)가 오면 뛸 때만, 없으면 예전처럼 매 걸음', () => {
-  assert.match(read('src/main.js'), /onStep = \(x, z, r\) => \{ if \(r === undefined \|\| r > 0\.5\) this\.fx\.dust\(x, z\); \}/);
+  // 발소리(audio.step)가 같은 함수에 붙어도 먼지 조건은 그대로
+  assert.match(read('src/main.js'), /onStep = \(x, z, r\) => \{\s*if \(r === undefined \|\| r > 0\.5\) this\.fx\.dust\(x, z\);/);
 });
 
 // ---------------------------------------------------------------- 부팅 오류 안내 (멈춘 로딩 카드 대신)

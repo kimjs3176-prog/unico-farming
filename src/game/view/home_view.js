@@ -297,7 +297,7 @@ export class HomeView {
     const g = this.game, cam = g.followCam;
     if (this.inside || this._fadeT || this._sleeping || g.ride.driving) return; // 페이드 중 E 를 또 눌러도 한 번만
     g.ui.closePanel();
-    g.audio.play('click');
+    g.audio.play('door');
     this._warmRoom();
     this._fade('🏠', () => {
       if (this.inside) return;
@@ -341,7 +341,7 @@ export class HomeView {
       cam.first = true;
       if (g.world.scenery?.sky) g.world.scenery.sky.visible = true;
     };
-    if (quick) go(); else { g.audio.play('click'); this._fade('🚪', go); }
+    if (quick) go(); else { g.audio.play('door', 1, { close: true }); this._fade('🚪', go); }
   }
 
   /** 실내 충돌: 방 안쪽 + 가구 상자 */

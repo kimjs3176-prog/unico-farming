@@ -73,7 +73,7 @@ export function mgCountdown(g) {
     const next = () => {
       if (i >= steps.length) { el.remove(); resolve(); return; }
       el.innerHTML = `<span class="${i === 3 ? 'go' : ''}">${steps[i]}</span>`;
-      g.audio.pluck(i === 3 ? 1568 : 784, 0.7, 0, undefined, i === 3 ? 0.5 : 0.2);
+      g.audio.play(i === 3 ? 'go' : 'count');
       i++;
       setTimeout(next, i === 4 ? 550 : 650);
     };
@@ -84,7 +84,7 @@ export function mgCountdown(g) {
 /** 남은 시간 경고: 5초부터 1초마다 째깍. @returns 경고 중인가 */
 export function mgTick(g, left, ref) {
   const s = Math.ceil(left);
-  if (left > 0 && s <= 5 && s !== ref.last) { ref.last = s; g.audio.pluck(s <= 2 ? 1319 : 988, 0.45, 0, undefined, 0.08); }
+  if (left > 0 && s <= 5 && s !== ref.last) { ref.last = s; g.audio.play('count', 0.8, { freq: s <= 2 ? 1319 : 988, dur: 0.08 }); }
   return left > 0 && left <= 5;
 }
 
@@ -124,7 +124,7 @@ export function mgResult(g, o) {
     if (k < 1 && p.isConnected) requestAnimationFrame(up);
     else {
       const icons = st.querySelectorAll('i');
-      for (let i = 0; i < stars; i++) setTimeout(() => { icons[i].classList.add('on', 'pop'); g.audio.pluck([1047, 1319, 1568][i], 0.6, 0, undefined, 0.3); }, 220 * i + 100);
+      for (let i = 0; i < stars; i++) setTimeout(() => { icons[i].classList.add('on', 'pop'); g.audio.play('star', 1, { freq: [1047, 1319, 1568][i] }); }, 220 * i + 100);
       setTimeout(() => {
         grade.textContent = GRADE[stars];
         grade.classList.add('show');

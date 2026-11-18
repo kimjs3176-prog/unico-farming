@@ -193,7 +193,7 @@ export class TownView {
         else s.scaf.userData.levels.forEach((lv, k) => { lv.visible = pr >= k * 0.22; });
         s.dust -= dt;
         const near = Math.hypot(s.p.x - pp.x, s.p.z - pp.z) < 14;
-        if (s.dust <= 0) { s.dust = 1.1 + Math.random() * 0.6; g.fx.burst(s.p.x + (Math.random() - 0.5) * 3, 0.3, s.p.z + (Math.random() - 0.5) * 3, 0xb89a74, 6); if (near) g.audio.play('dig', 0.35); }
+        if (s.dust <= 0) { s.dust = 1.1 + Math.random() * 0.6; g.fx.burst(s.p.x + (Math.random() - 0.5) * 3, 0.3, s.p.z + (Math.random() - 0.5) * 3, 0xb89a74, 6); if (near) g.audio.play('hammer', 0.5); } // 공사 망치 소리
       }
       const d = Math.hypot(s.p.x - pp.x, s.p.z - pp.z);
       if (d < bd) { bd = d; best = s; }

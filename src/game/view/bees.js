@@ -59,7 +59,7 @@ export class Bees {
       }
     }
     this.points.geometry.attributes.position.needsUpdate = true;
-    if (best && working && Math.random() < dt * 1.5) g.audio.tone(220 + Math.random() * 40, 0.25, 'sawtooth', 0.012, 10, { lp: 700, rev: 0.05 }); // 윙윙
+    if (best && working && Math.random() < dt * 1.5) g.audio.play('buzz'); // 윙윙
     return best;
   }
 

@@ -20,7 +20,7 @@ export function playEggCatch(game) {
     const hens = [0, 1, 2, 3, 4].map((i) => ({ x: 90 + i * 135, bob: Math.random() * 6, lay: 0 }));
     const st = { t: 0, score: 0, combo: 0, maxCombo: 0, caught: 0, basket: W / 2, bv: 0, eggs: [], fx: [], spawn: 1, started: false, over: false, keys: new Set() };
     let raf = 0, last = performance.now();
-    const snd = (f, d = 0.12) => game.audio.pluck(f, 0.5, 0, undefined, d);
+    const snd = (f, d = 0.12) => game.audio.play('catch', 1, { freq: f, dur: d });
 
     const pos = (e) => { const r = cv.getBoundingClientRect(); return ((e.touches ? e.touches[0].clientX : e.clientX) - r.left) * (W / r.width); };
     const move = (e) => { if (st.over) return; st.started = true; st.target = pos(e); };
@@ -60,7 +60,7 @@ export function playEggCatch(game) {
         e.vy += 260 * dt; e.y += e.vy * dt; e.rot += dt * 3;
         if (!e.done && e.y > H - 78 && e.y < H - 50 && Math.abs(e.x - st.basket) < 54) {
           e.done = true;
-          if (e.kind === 'rotten') { st.score = Math.max(0, st.score - 3); st.combo = 0; burst(e.x, e.y, '#8bbf4a', 14); text(e.x, e.y - 20, '-3 으악!', '#6a8f2a'); game.audio.play('bump', 0.5); }
+          if (e.kind === 'rotten') { st.score = Math.max(0, st.score - 3); st.combo = 0; burst(e.x, e.y, '#8bbf4a', 14); text(e.x, e.y - 20, '-3 으악!', '#6a8f2a'); game.audio.play('deny'); }
           else {
             st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo); st.caught++;
             const mult = st.combo >= 20 ? 3 : st.combo >= 10 ? 2 : 1, pts = (e.kind === 'gold' ? 5 : 1) * mult;

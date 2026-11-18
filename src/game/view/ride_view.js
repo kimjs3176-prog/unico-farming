@@ -34,9 +34,9 @@ export function dismountSpot(v, yard, isBlocked = () => false, D = 2.4, pad = 0.
  * 내릴 때 D = 차체 옆으로 비켜서는 거리
  */
 export const RIDES = [
-  { id: 'tractor', name: '트랙터', icon: '🚜', seat: { back: 0.72, side: 0, h: 1.42, scale: 0.72 }, reach: 3.2, D: 2.4, plow: true, sound: 'engine' },
-  { id: 'bike', name: '자전거', icon: '🚲', seat: { back: 0.22, side: 0, h: 0.62, scale: 0.72 }, reach: 2.2, D: 1.3, pedal: true, sound: 'click' },
-  { id: 'cart', name: '농장 카트', icon: '🛻', seat: { back: -0.02, side: -0.28, h: 0.66, scale: 0.72 }, reach: 2.8, D: 2.0, sound: 'engine' },
+  { id: 'tractor', name: '트랙터', icon: '🚜', seat: { back: 0.72, side: 0, h: 1.42, scale: 0.72 }, reach: 3.2, D: 2.4, plow: true, sound: 'ignite', engine: 'tractor' },
+  { id: 'bike', name: '자전거', icon: '🚲', seat: { back: 0.22, side: 0, h: 0.62, scale: 0.72 }, reach: 2.2, D: 1.3, pedal: true, sound: 'click', engine: 'bike' },
+  { id: 'cart', name: '농장 카트', icon: '🛻', seat: { back: -0.02, side: -0.28, h: 0.66, scale: 0.72 }, reach: 2.8, D: 2.0, sound: 'ignite', engine: 'cart' },
 ];
 
 /** 트랙터·자전거·농장 카트: 마을 어디서나 타고(E) 내리는(E) 탈것. 트랙터는 쟁기를 내리면 밭을 갈아 코인을 조금 받음 */
@@ -144,6 +144,7 @@ export class RideView {
     ride.obstacle.r = 0;
     ride.vehicle.speed = 0; ride.vehicle.pedal = 0;
     g.audio.play(ride.sound);
+    g.audio.engineStart?.(ride.engine); // 시동 소리 뒤로 공회전 (자전거는 바퀴 구르는 소리)
     g.ui.showDrivePad({ plow: !!ride.plow, bike: !!ride.pedal });
     g.onEvent('ride');
     this._seen ||= new Set();
@@ -179,6 +180,7 @@ export class RideView {
     const g = this.game, ride = this.current;
     if (!ride) return;
     this.current = null;
+    g.audio.engineStop?.();
     g.player.frozen = false;
     this.rider.pedalPhase = null; this.rider.pedalRest = false;
     this.rider.facing = this.rider.yaw = ride.vehicle.heading; // 무리 안에서 0 이던 방향을 세상 방향으로
@@ -288,6 +290,9 @@ export class RideView {
       if (this._bellT > 0) { this._bellT -= dt; const b = ride.bell; if (b) b.rotation.z = Math.sin(this._bellT * 60) * 0.5 * this._bellT; }
     }
     this.rider.update(dt, g.followCam.camera, g.world.daylight);
+    // 엔진·바퀴 소리: 빠르기를 따라감 (트랙터는 쟁기질 소리, 자전거는 페달을 안 밟을 때 따르르)
+    g.audio.engineStart?.(ride.engine); // 화면을 벗어났다 돌아오면 다시 켬 (켜져 있으면 그대로)
+    g.audio.engineSet?.(Math.abs(v.speed) / (ride.spec.MAX || 1), ride.plow ? this.plowDown : !v.pushing);
     // 내리기: E (터치는 화면의 🚪 내리기 버튼 — 운전 중엔 E 버튼이 숨음)
     if (input.justPressed('KeyE')) { this.dismount(); return null; }
     const how = touchUI() ? '🚪 버튼으로 내리기' : 'E 내리기';

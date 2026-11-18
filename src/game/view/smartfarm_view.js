@@ -18,7 +18,7 @@ export class SmartFarmView {
     g.farm.sim.boost = this.t < this.boostUntil ? this.boostMult : 1;
     if (this.active) {
       const done = this.sim.tick(dt);
-      if (this.sim.newEvent) { g.ui.smartEvent?.(this.sim.newEvent.name); g.audio.play('bump', 0.4); this.sim.newEvent = null; }
+      if (this.sim.newEvent) { g.ui.smartEvent?.(this.sim.newEvent.name); g.audio.play('alert', 0.8); this.sim.newEvent = null; }
       g.ui.updateSmartfarm(this.sim, mgTick(g, this.sim.time, this.tickRef));
       if (done) this.finish();
       return { d: -1, label: '스마트팜 제어 중… 패널의 버튼으로 환경을 맞추세요', key: 'smart' };
@@ -61,7 +61,7 @@ export class SmartFarmView {
     g.onEvent('smartfarm');
     if (r.boostSeconds) { this.boostUntil = this.t + r.boostSeconds; this.boostMult = r.boost; }
     g.ui.hideSmartfarm();
-    g.audio.play(r.score >= 50 ? 'win' : 'bump');
+    g.audio.play(r.score >= 50 ? 'win' : 'deny');
     g.player.unico.playAction(r.score >= 50 ? 'cheer' : 'think', 2);
     if (this.onFinish) { const cb = this.onFinish; this.onFinish = null; cb(r); return; } // KOAT 체험관에서 시작한 경우
     mgResult(g, {

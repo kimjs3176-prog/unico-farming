@@ -595,7 +595,7 @@ export class FarmView {
     });
     else if (type === 'weed') this.hoe(i, 2, () => {
       if (!this.sim.weed(i)) return;
-      g.onEvent('weed'); g.audio.play('harvest', 0.6);
+      g.onEvent('weed'); g.audio.play('pull');
       const wn = 1 + (Math.random() < 0.5 ? 1 : 0);
       g.economy.addItem('weed', wn);
       g.fx.pop(t.x, t.z, '🌿'); g.ui.toast(`🌿 김매기 완료! 흙이 부드러워져 한동안 더 잘 자라요 (잡초 ${wn}개 → 퇴비통 재료)`);

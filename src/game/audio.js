@@ -1,14 +1,72 @@
 /**
  * 사운드 (외부 파일 없이 WebAudio 합성)
- * 믹서: 마스터 ← 효과음 / 음악 / 환경음, 공용 잔향(컨볼버) 센드
- * 효과음은 부드러운 어택·릴리즈와 저역통과로 '삑' 소리 대신 나무·물방울 같은 질감
+ * 믹서: 효과음·목소리 → 마스터 / 음악·환경음 → 낮춤(덕킹) → 마스터 / 공용 잔향(컨볼버) 센드
+ * 마스터 → 묶음 압축기 → 리미터 → 출력 (폭풍+천둥+레벨업이 겹쳐도 깨지지 않게)
+ * 효과음은 이름마다 목표 크기(MIX_DB)가 있고, scripts/audio-levels.mjs 로 실제 소리를 재서 MIX 를 맞춤
  */
+
+/** 이름별 목표 크기: 마스터 뒤 가장 큰 50ms 구간(dBFS). 자주 나는 작은 소리 < 도구 < 줍기 < 큰 보상 */
+export const MIX_DB = {
+  tap: -32, blip: -32, open: -30, close: -30, click: -27,
+  dig: -22, plant: -22, water: -22, stroke: -24, splash: -22, shoo: -22, bump: -22,
+  hammer: -22, rustle: -23, pull: -23, swish: -23, door: -24, deny: -24, bite: -22, alert: -22, startle: -26, land: -27,
+  coin: -20, pop: -21, harvest: -20, catch: -21, combo: -20, pickup: -20, buy: -20, count: -20, star: -20, sale: -20,
+  go: -17, quest: -17, warp: -20, ignite: -24, engine: -24, bell: -22,
+  win: -16, levelup: -15,
+  caw: -32, howl: -32, bark: -30, buzz: -36, tune: -28,
+  thunder: -16,
+};
+
+/** 이름별 크기 배율 (scripts/audio-levels.mjs 로 잰 값에서 맞춤) */
+export const MIX = {
+  tap: 23.173, blip: 26.002, open: 1.549, close: 1.549, click: 10.116, dig: 16.983, plant: 1.072, water: 2.042,
+  stroke: 31.624, splash: 2.09, shoo: 3.311, bump: 7.586, hammer: 1.719, rustle: 2.541, pull: 1.679, swish: 7.328,
+  door: 1.072, deny: 1.203, bite: 13.032, alert: 0.902, startle: 20.418, land: 10.353, coin: 1.698, pop: 12.588,
+  harvest: 0.556, catch: 35.89, combo: 19.498, pickup: 1.679, buy: 1.718, count: 18.621, star: 8.71, sale: 1.622,
+  go: 3.055, quest: 0.966, warp: 5.309, ignite: 4.027, engine: 3.549, bell: 0.676, win: 0.822, levelup: 0.724,
+  caw: 3.507, howl: 1.23, bark: 3.389, buzz: 2.042, tune: 10.115, thunder: 3.846,
+};
+
+/** 변주 종류: 음 있는 소리는 음 하나 ±1.2%, 두드리는·노이즈 소리는 높이·길이 ±10%, 팡파르는 그대로 */
+const VARY_NONE = new Set(['win', 'levelup', 'quest', 'go', 'tune', 'sale', 'count', 'star', 'thunder']);
+const VARY_PERC = new Set(['dig', 'stroke', 'splash', 'shoo', 'bump', 'hammer', 'rustle', 'pull', 'swish', 'door', 'bite', 'land', 'buzz', 'caw', 'bark', 'startle', 'deny']);
+/** 같은 이름이 45ms 안에 또 나도, 소리 수가 넘쳐도 꼭 내는 소리 */
+const KEEP = new Set(['click', 'levelup']);
+/** 이어서 하면 오음계로 한 칸씩 오르는 소리와 그 소리의 가장 높은 음 (2.4kHz 를 넘지 않게) */
+const COMBO_TOP = { harvest: 1319, water: 1568, plant: 784 };
+/** C장조 오음계 비율 (음악과 같은 조) */
+export const COMBO_STEPS = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3, 2];
+export const COMBO_WINDOW = 2.5;
+const COMBO_CAP = 2400;
+/** 이 소리가 나면 음악을 잠깐 낮춤 [dB, 유지 초] */
+const DUCK = { levelup: [-5, 1.2], win: [-3, 0.6], quest: [-3, 0.6] };
+
+/** 발소리: 바닥 종류 (footsteps.js surfaceAt 결과) */
+export const STEP_KINDS = ['grass', 'dirt', 'wood', 'floor', 'snow', 'stone'];
+/** 발소리 목표 크기 (달릴 때, dBFS) — 도구 소리보다 8dB 쯤 작게 */
+export const STEP_DB = { grass: -31, dirt: -30, wood: -29, floor: -30, snow: -30, stone: -30 };
+/** 발소리 배율 (scripts/audio-levels.mjs 로 맞춤) */
+export const STEP_MIX = {
+  grass: 51.286, dirt: 52.481, wood: 18.62, floor: 22.387, snow: 6.998, stone: 51.286,
+};
+
+export const dbToGain = (db) => Math.pow(10, db / 20);
+
 export class Audio {
   constructor() {
     this.ctx = null;
     this.enabled = true;
     this.musicOn = true;
     this.volume = { master: 0.9, sfx: 0.8, music: 0.5, amb: 0.6 };
+    this.maxVoices = 24; // 동시에 울리는 효과음 재료(오실레이터·노이즈) 상한, 낮은 품질은 16 (main.js)
+    this.rng = Math.random;
+    this._pm = 1; this._vm = 1; this._lm = 1; this._inPlay = false;
+    this._live = 0; this._made = 0; this._cost = {}; // 지금 울리는 효과음 재료 수, 이름별 재료 수
+    this._lastAt = {};
+    this._combo = {};
+    this._ducks = new Map(); this._duckId = 0;
+    this._stepAt = -1; this._stepPan = 0.1;
+    this._eng = null; this._reel = null;
   }
 
   _ctx() {
@@ -17,11 +75,18 @@ export class Audio {
       try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch { this.enabled = false; return null; }
       const c = this.ctx;
       this.master = c.createGain(); this.master.gain.value = this.volume.master;
-      const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 3;
-      this.master.connect(comp).connect(c.destination);
+      // 묶음 압축(살짝) → 리미터(벽): 무릎 값을 꼭 적음 (기본값이 브라우저마다 다름)
+      const comp = (o) => { const n = c.createDynamicsCompressor(); for (const k in o) if (n[k]) n[k].value = o[k]; return n; };
+      const glue = comp({ threshold: -18, knee: 6, ratio: 3, attack: 0.003, release: 0.25 });
+      const lim = comp({ threshold: -3, knee: 0, ratio: 20, attack: 0.001, release: 0.1 });
+      this.master.connect(glue).connect(lim).connect(c.destination);
       this.sfx = c.createGain(); this.sfx.gain.value = this.volume.sfx; this.sfx.connect(this.master);
-      this.music = c.createGain(); this.music.gain.value = this.volume.music; this.music.connect(this.master);
-      this.amb = c.createGain(); this.amb.gain.value = this.volume.amb; this.amb.connect(this.master);
+      this.voiceBus = c.createGain(); this.voiceBus.gain.value = this.volume.sfx; this.voiceBus.connect(this.master);
+      // 음악·환경음 → 낮춤 전용 게인 → 마스터 (음악 버튼이 쓰는 게인과 따로)
+      this.duckGain = c.createGain(); this.duckGain.gain.value = 1; this.duckGain.connect(this.master);
+      this.ambDuck = c.createGain(); this.ambDuck.gain.value = 1; this.ambDuck.connect(this.master);
+      this.music = c.createGain(); this.music.gain.value = this.volume.music; this.music.connect(this.duckGain);
+      this.amb = c.createGain(); this.amb.gain.value = this.volume.amb; this.amb.connect(this.ambDuck);
       // 잔향: 지수 감쇠 노이즈 임펄스
       this.reverb = c.createConvolver();
       const len = c.sampleRate * 2.4, ir = c.createBuffer(2, len, c.sampleRate);
@@ -55,9 +120,11 @@ export class Audio {
     } catch { /* 잠금 해제용, 실패해도 무시 */ }
   }
 
-  /** 화면을 벗어날 때: 소리 장치를 멈춰 배터리 절약 */
+  /** 화면을 벗어날 때: 소리 장치를 멈춰 배터리 절약 (엔진·릴 소리도 끔) */
   sleep() {
     this.hold = true;
+    this.engineStop(true);
+    this.reelStop(true);
     const c = this.ctx;
     if (c?.state === 'running') c.suspend()?.catch?.(() => {});
   }
@@ -88,12 +155,69 @@ export class Audio {
     const t = this.ctx.currentTime;
     this.master.gain.setTargetAtTime(this.enabled ? this.volume.master : 0, t, 0.1);
     this.music.gain.setTargetAtTime(this.musicOn ? this.volume.music : 0, t, 0.3);
+    if (!this.enabled) { this.engineStop(true); this.reelStop(true); }
   }
+
+  // ------------------------------------------------------------ 음악 낮추기 (덕킹)
+  /**
+   * 음악·환경음을 잠깐 낮춤. 여러 번 겹치면 가장 깊은 값, 가장 늦게 끝나는 것이 이김
+   * @param db 낮출 크기(음수 dB). 0~1 사이 값이면 배율로 봄 (reward.js 의 duck(0.6, 1.5))
+   * @param hold 유지 초
+   */
+  duck(db = -5, hold = 0.6) {
+    const c = this.ctx;
+    if (!c || !this.duckGain) return;
+    if (db > 0 && db <= 1) db = 20 * Math.log10(db);
+    this._ducks.set(++this._duckId, { db, until: c.currentTime + hold });
+    this._applyDuck();
+  }
+
+  /** 계속 낮춤 (대화 중 등). 돌려준 함수를 부르면 풀림 */
+  duckHold(db = -3) {
+    const id = ++this._duckId;
+    this._ducks.set(id, { db, until: Infinity });
+    this._applyDuck();
+    return () => { if (this._ducks.delete(id)) this._applyDuck(); };
+  }
+
+  /** 지금 살아 있는 낮춤 중 가장 깊은 값으로 (끝나는 시각에 다시 계산) */
+  _applyDuck() {
+    const c = this.ctx;
+    if (!c || !this.duckGain) return;
+    const t = c.currentTime;
+    let db = 0, next = Infinity;
+    for (const [id, d] of this._ducks) {
+      if (d.until <= t) { this._ducks.delete(id); continue; }
+      db = Math.min(db, d.db);
+      if (d.until < next) next = d.until;
+    }
+    this.duckDb = db;
+    const down = db < (this._duckNow ?? 0);
+    this._duckNow = db;
+    for (const [node, k] of [[this.duckGain, 1], [this.ambDuck, 0.6]]) {
+      node.gain.cancelScheduledValues(t);
+      node.gain.setTargetAtTime(dbToGain(db * k), t, down ? 0.04 : 0.25);
+    }
+    clearTimeout(this._duckTimer);
+    if (next < Infinity && typeof setTimeout === 'function') { this._duckTimer = setTimeout(() => this._applyDuck(), (next - t) * 1000 + 20); this._duckTimer?.unref?.(); }
+  }
+
+  // ------------------------------------------------------------ 소리 재료
+  /** play()·step() 안에서 만든 소리 재료(오실레이터·노이즈) 수 세기: 끝나면 줄어듦 */
+  _track(src) {
+    if (!this._inPlay) return;
+    this._live++; this._made++;
+    src.onended = () => { this._live = Math.max(0, this._live - 1); };
+  }
+
+  /** 이 소리를 내도 상한(소리 재료 수)을 넘지 않는가. 재료 수는 지난번에 센 값 (처음은 3) */
+  _room(key) { return this._live + (this._cost[key] ?? 3) <= this.maxVoices; }
 
   /** 부드러운 톤: 어택 5ms, 지수 릴리즈, 저역통과, 잔향 센드 */
   tone(freq, dur = 0.12, type = 'sine', vol = 0.15, slide = 0, { at = 0, rev = 0.25, lp = 6000, out } = {}) {
     const c = this._ctx();
     if (!c || !this.enabled) return;
+    freq *= this._pm; slide *= this._pm; dur *= this._lm; vol *= this._vm;
     const t = c.currentTime + at;
     const o = c.createOscillator(), g = c.createGain(), f = c.createBiquadFilter();
     o.type = type; o.frequency.setValueAtTime(freq, t);
@@ -105,19 +229,23 @@ export class Audio {
     o.connect(f).connect(g);
     g.connect(out || this.sfx);
     if (rev > 0) { const s = c.createGain(); s.gain.value = rev; g.connect(s).connect(this.reverb); }
+    this._track(o);
     o.start(t); o.stop(t + dur + 0.05);
   }
 
-  /** 짧은 노이즈 (흙·물 질감) */
-  noise(dur = 0.15, vol = 0.1, { type = 'bandpass', freq = 1200, q = 1, at = 0, out } = {}) {
+  /** 짧은 노이즈 (흙·물 질감). sweep: 필터 주파수를 이 값까지 미끄러뜨림, attack: 올라오는 시간 */
+  noise(dur = 0.15, vol = 0.1, { type = 'bandpass', freq = 1200, q = 1, at = 0, out, sweep = 0, attack = 0.01 } = {}) {
     const c = this._ctx();
     if (!c || !this.enabled) return;
+    freq *= this._pm; sweep *= this._pm; dur *= this._lm; vol *= this._vm;
     const t = c.currentTime + at;
     const s = c.createBufferSource(); s.buffer = this.noiseBuf;
     const f = c.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    if (sweep) { f.frequency.setValueAtTime(freq, t); f.frequency.exponentialRampToValueAtTime(sweep, t + dur); }
     const g = c.createGain();
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, attack + 0.01));
     s.connect(f).connect(g).connect(out || this.sfx);
+    this._track(s);
     s.start(t, Math.random()); s.stop(t + dur + 0.05);
   }
 
@@ -125,6 +253,7 @@ export class Audio {
   pluck(freq, vol = 0.12, at = 0, out, dur = 0.9) {
     const c = this._ctx();
     if (!c || !this.enabled) return;
+    freq *= this._pm; vol *= this._vm;
     const t = c.currentTime + at;
     const o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain(), g2 = c.createGain();
     o.type = 'sine'; o.frequency.value = freq;
@@ -134,26 +263,113 @@ export class Audio {
     o.connect(g); o2.connect(g2).connect(g);
     g.connect(out || this.sfx);
     const s = c.createGain(); s.gain.value = 0.35; g.connect(s).connect(this.reverb);
+    this._track(o);
     o.start(t); o2.start(t); o.stop(t + dur + 0.05); o2.stop(t + 0.2);
   }
 
-  /** 효과음. opts.freq: 음 높이를 바꿀 수 있는 소리('coin')의 기준 음 (코인이 하나씩 닿을 때 반음씩 올림) */
+  /** 같은 일을 2.5초 안에 이어 하면 오음계로 한 칸씩 올라감 (맨 위에서 멈춤). @returns 음 높이 배율 */
+  combo(key, now = this.ctx?.currentTime ?? 0) {
+    const s = this._combo[key];
+    const i = s && now - s.t <= COMBO_WINDOW ? Math.min(s.i + 1, COMBO_STEPS.length - 1) : 0;
+    this._combo[key] = { t: now, i };
+    let r = COMBO_STEPS[i];
+    const top = COMBO_TOP[key];
+    if (top) for (let k = i; k > 0 && top * r > COMBO_CAP; k--) r = COMBO_STEPS[k - 1];
+    return r;
+  }
+
+  /** 효과음. opts.freq: 음 높이를 바꿀 수 있는 소리('coin' 등)의 기준 음, opts.amount: 'sale' 금액 */
   play(name, vol = 1, opts = {}) {
-    const v = 0.16 * vol;
-    const det = () => 1 + (Math.random() - 0.5) * 0.06; // ±3% (같은 소리가 연달아 나도 덜 기계적)
+    const c = this._ctx();
+    if (!c || !this.enabled) return;
+    const now = c.currentTime, key = opts.freq ? `${name}:${opts.freq}` : name;
+    if (!KEEP.has(name)) {
+      if (now - (this._lastAt[key] ?? -1) < 0.045) return; // 같은 소리가 한꺼번에 겹치지 않게 (음 높이가 다르면 다른 소리)
+      if (!this._room(name)) return; // 소리 재료 수 상한 (낮은 품질 16, 그 밖 24)
+    }
+    this._lastAt[key] = now;
+    const r = () => this.rng() * 2 - 1;
+    let pm = 1, lm = 1;
+    const vm = VARY_NONE.has(name) ? 1 : 1 + r() * 0.1;
+    if (COMBO_TOP[name]) pm = this.combo(name, now);
+    else if (VARY_PERC.has(name)) { pm = 1 + r() * 0.1; lm = 1 + r() * 0.1; }
+    else if (!VARY_NONE.has(name)) pm = 1 + r() * 0.012;
+    this._pm = pm; this._vm = vm; this._lm = lm; this._inPlay = true; this._made = 0;
+    try { this._sound(name, 0.16 * vol * (MIX[name] ?? 1), opts); } finally { this._pm = this._vm = this._lm = 1; this._inPlay = false; this._cost[name] = this._made; }
+    const d = DUCK[name];
+    if (d) this.duck(d[0], d[1]);
+  }
+
+  /** 소리 조리법 (v = 기준 크기) */
+  _sound(name, v, opts) {
     switch (name) {
+      // ---- 화면·대화
+      case 'tap': return this.pluck(opts.freq || 2093, v * 0.35, 0, undefined, 0.07);
+      case 'blip': return this.tone(opts.freq || 660, 0.05, 'triangle', v * 0.5, 0, { rev: 0.05, lp: 3000 });
       case 'click': return this.pluck(1568, v * 0.45, 0, undefined, 0.18);
-      case 'dig': this.noise(0.18, v * 1.2, { freq: 420, q: 0.8 }); return this.tone(110, 0.16, 'triangle', v * 0.8, -40, { lp: 900, rev: 0.1 });
+      case 'open': this.pluck(1175, v * 0.4, 0, undefined, 0.12); return this.pluck(1568, v * 0.4, 0.05, undefined, 0.16);
+      case 'close': this.pluck(1568, v * 0.4, 0, undefined, 0.12); return this.pluck(1175, v * 0.4, 0.05, undefined, 0.16);
+      // 안 됨: 부드러운 두 음이 내려감 (부딪힘 소리와 다름)
+      case 'deny': this.tone(440, 0.12, 'sine', v * 0.6, 0, { rev: 0.08 }); return this.tone(370, 0.18, 'sine', v * 0.6, -10, { at: 0.11, rev: 0.08 });
+      // ---- 도구 (폰 스피커에도 들리게 1.5~3kHz 짧은 어택을 얹음)
+      case 'dig': this.noise(0.18, v * 1.2, { freq: 420, q: 0.8 }); this.noise(0.035, v * 1.8, { freq: 2200, q: 1.2 }); return this.tone(110, 0.16, 'triangle', v * 0.8, -40, { lp: 900, rev: 0.1 });
       case 'plant': this.noise(0.08, v * 0.5, { freq: 900 }); return this.pluck(784, v * 0.7, 0.05);
       case 'splash': this.noise(0.5, v * 1.1, { type: 'bandpass', freq: 850, q: 0.6 }); this.noise(0.35, v * 0.7, { type: 'highpass', freq: 3200, q: 0.4, at: 0.04 }); return this.tone(150, 0.2, 'sine', v * 0.5, -70, { rev: 0.15 });
       case 'stroke': return this.noise(0.2, v * 0.8, { type: 'bandpass', freq: 1100 + Math.random() * 700, q: 0.9 });
       case 'water': this.noise(0.35, v * 0.7, { type: 'highpass', freq: 2200, q: 0.4 }); this.pluck(1175, v * 0.4, 0.05, undefined, 0.3); return this.pluck(1568, v * 0.35, 0.14, undefined, 0.3);
       case 'harvest': this.pluck(784, v, 0); this.pluck(988, v, 0.08); return this.pluck(1319, v, 0.16);
+      // 망치: 나무 두드림 + 딱 소리, 2~3번 (박자 조금씩 다르게)
+      case 'hammer': {
+        const n = opts.n || 2 + (Math.random() < 0.5 ? 1 : 0);
+        for (let i = 0; i < n; i++) {
+          const at = i * 0.17 + Math.random() * 0.03;
+          this.tone(220, 0.09, 'triangle', v * 0.8, -60, { at, lp: 1400, rev: 0.12 });
+          this.noise(0.025, v * 0.6, { freq: 1800, q: 1.5, at });
+        }
+        return;
+      }
+      // 나뭇잎 흔들림: 부스럭 두 번
+      case 'rustle': this.noise(0.38, v * 0.9, { freq: 2500, q: 0.8, sweep: 1800, attack: 0.05 }); return this.noise(0.3, v * 0.7, { freq: 3200, q: 0.9, at: 0.12, attack: 0.04 });
+      // 잡초 뽑기: 뿌리 뜯기 + 뽁
+      case 'pull': this.noise(0.12, v * 0.9, { type: 'lowpass', freq: 700, q: 0.7 }); this.noise(0.05, v * 0.5, { freq: 2000, q: 1, at: 0.02 }); return this.pluck(659, v * 0.6, 0.09, undefined, 0.15);
+      // 잠자리채 휙
+      case 'swish': return this.noise(0.18, v * 0.9, { freq: 900, q: 1.2, sweep: 3600, attack: 0.06 });
+      // 문: 삐걱 + 닫힘(툭)
+      case 'door': this.tone(opts.close ? 260 : 300, 0.22, 'sawtooth', v * 0.12, opts.close ? -50 : 70, { lp: 900, rev: 0.1 }); this.tone(140, 0.12, 'sine', v * 0.7, -30, { at: 0.18, rev: 0.15 }); return this.noise(0.035, v * 1.6, { freq: 1800, q: 1.2, at: 0.18 });
+      // 물리 부딪힘만 (안 됨은 'deny')
+      case 'bump': this.noise(0.22, v * 0.8, { type: 'lowpass', freq: 300 }); this.noise(0.035, v * 3, { freq: 1800, q: 1.2 }); return this.tone(70, 0.25, 'sine', v * 0.6, -25, { rev: 0.05 });
+      // 착지: 부드러운 툭
+      case 'land': this.tone(120, 0.14, 'sine', v * 0.5, -40, { rev: 0.05 }); this.noise(0.1, v * 0.5, { type: 'lowpass', freq: 500, q: 0.7 }); return this.noise(0.03, v * 2.5, { freq: 1800, q: 1.2 });
+      // 입질: 물방울 퐁 + 1.2kHz 째깍
+      case 'bite': this.noise(0.12, v * 0.8, { freq: 900, q: 1.2, sweep: 500 }); this.tone(620, 0.09, 'sine', v * 0.7, -300, { rev: 0.15 }); return this.tone(1200, 0.03, 'triangle', v * 0.4, 0, { at: 0.06, rev: 0 });
+      // 알림: 두 음 차임
+      case 'alert': this.pluck(880, v * 0.7, 0, undefined, 0.4); return this.pluck(1175, v * 0.7, 0.13, undefined, 0.5);
+      // 깜짝: 가벼운 뽁
+      case 'startle': this.pluck(1175, v * 0.5, 0, undefined, 0.12); return this.noise(0.05, v * 0.4, { freq: 2400, q: 1 });
+      // ---- 줍기·보상
       case 'coin': { const f = opts.freq || 1976; this.pluck(f, v * 0.7, 0, undefined, 0.35); return this.pluck(f * 1.335, v * 0.6, 0.07, undefined, 0.45); }
       // 작은 보상(1단계): 맑은 두 음 (주울 때)
-      case 'pickup': { const k = det(); this.pluck(1319 * k, v * 0.7, 0, undefined, 0.3); return this.pluck(1760 * k, v * 0.65, 0.07, undefined, 0.4); }
+      case 'pickup': this.pluck(1319, v * 0.7, 0, undefined, 0.3); return this.pluck(1760, v * 0.65, 0.07, undefined, 0.4);
       // 사기·넓히기: 계산대 두 음 + 동전 짤랑
       case 'buy': this.pluck(1568, v * 0.6, 0, undefined, 0.3); this.pluck(2093, v * 0.6, 0.08, undefined, 0.4); return this.noise(0.12, v * 0.5, { type: 'highpass', freq: 3000, q: 0.6, at: 0.14 });
+      // 팔기: 금액에 따라 3단계 (작음: 코인 · 중간: + 높은 음 · 큼/모두 팔기: 세 음 + 반짝임)
+      case 'sale': {
+        const n = opts.amount ?? 0;
+        if (opts.all || n >= 300) {
+          [1568, 1976, 2637].forEach((f, i) => this.pluck(f, v * 0.75, i * 0.08, undefined, 0.5));
+          return this.noise(0.4, v * 0.3, { type: 'highpass', freq: 6000, q: 0.5, at: 0.2 });
+        }
+        this.pluck(1976, v * 0.7, 0, undefined, 0.35); this.pluck(2637, v * 0.6, 0.07, undefined, 0.45);
+        if (n >= 60) this.pluck(3136, v * 0.45, 0.15, undefined, 0.4);
+        return;
+      }
+      case 'pop': return this.pluck(1319, v * 0.6, 0, undefined, 0.25);
+      // 미니게임: 잡기(음 높이 opts.freq) · 연속 · 카운트 · 시작 · 별
+      case 'catch': this.pluck(opts.freq || 988, v * 0.7, 0, undefined, opts.dur || 0.12); return this.noise(0.03, v * 0.25, { type: 'highpass', freq: 4000, q: 0.5 });
+      case 'combo': return this.pluck(opts.freq || 1568, v * 0.7, 0, undefined, 0.2);
+      case 'count': return this.pluck(opts.freq || 784, v * 0.7, 0, undefined, opts.dur || 0.2);
+      case 'go': this.pluck(1568, v * 0.7, 0, undefined, 0.5); return this.pluck(2093, v * 0.45, 0.06, undefined, 0.45);
+      case 'star': this.pluck(opts.freq || 1319, v * 0.7, 0, undefined, 0.3); return this.noise(0.2, v * 0.2, { type: 'highpass', freq: 6000, q: 0.5, at: 0.03 });
       // 중간 보상(2단계): 5도 차이 종 두 번 + 6kHz 반짝임
       case 'win': {
         const bell = (f, at) => { this.pluck(f, v, at, undefined, 1.4); this.tone(f * 2.76, 0.5, 'sine', v * 0.12, 0, { at, rev: 0.4 }); };
@@ -162,22 +378,179 @@ export class Audio {
       }
       // 퀘스트 완료: 세 음 오름 + 반짝
       case 'quest': [784, 988, 1319].forEach((f, i) => this.pluck(f, v * 0.85, i * 0.09, undefined, 0.8)); return this.noise(0.35, v * 0.3, { type: 'highpass', freq: 6000, q: 0.5, at: 0.22 });
-      case 'bump': this.noise(0.22, v * 1.3, { type: 'lowpass', freq: 300 }); return this.tone(70, 0.25, 'sine', v, -25, { rev: 0.05 });
-      case 'engine': return this.tone(65, 0.7, 'sawtooth', v * 0.45, 30, { lp: 400, rev: 0.05 });
-      case 'thunder': this.noise(2.2, v * 2.2, { type: 'lowpass', freq: 180, q: 0.5 }); return this.noise(1.2, v * 1.4, { type: 'lowpass', freq: 600, q: 0.5, at: 0.1 });
       // 큰 보상(3단계): 삼각파 바닥음 + 화음 패드 위로 오르는 여섯 음
       case 'levelup':
         this.tone(131, 1.6, 'triangle', v * 0.55, 0, { lp: 900, rev: 0.4 });
         for (const f of [262, 330, 392]) this.tone(f, 1.8, 'triangle', v * 0.16, 0, { at: 0.05, lp: 1800, rev: 0.6 });
         [523, 659, 784, 1046, 1319, 1568].forEach((f, i) => this.pluck(f, v * 1.1, i * 0.07, undefined, 1.4));
         return this.noise(0.8, v * 0.25, { type: 'highpass', freq: 6000, q: 0.5, at: 0.42 });
-      case 'pop': return this.pluck(1319, v * 0.6, 0, undefined, 0.25);
+      // 순간 이동: 노이즈가 400→1600Hz 로 쓸려 올라가고 맑은 음이 미끄러짐
+      case 'warp': this.noise(0.5, v * 0.8, { freq: 400, q: 1.5, sweep: 1600, attack: 0.15 }); return this.tone(520, 0.5, 'sine', v * 0.5, 700, { rev: 0.4 });
+      // ---- 탈것
+      case 'engine': return this.tone(65, 0.7, 'sawtooth', v * 0.45, 30, { lp: 400, rev: 0.05 });
+      // 시동: 털털 하다 올라가는 소리
+      case 'ignite': this.tone(48, 0.55, 'sawtooth', v * 0.5, 50, { lp: 700, rev: 0.05 }); for (let i = 0; i < 3; i++) this.noise(0.04, v * 0.5, { freq: 1500, q: 1, at: i * 0.09 }); return;
       // 자전거 종: 따르릉 (높은 금속음 두 번, 살짝 떨림)
       case 'bell': for (const at of [0, 0.13]) { this.pluck(2637, v * 0.75, at, undefined, 0.5); this.pluck(3520, v * 0.35, at + 0.01, undefined, 0.35); } return;
+      case 'thunder': this.noise(2.2, v * 2.2, { type: 'lowpass', freq: 180, q: 0.5 }); return this.noise(1.2, v * 1.4, { type: 'lowpass', freq: 600, q: 0.5, at: 0.1 });
+      // ---- 동물
       case 'caw': this.tone(620, 0.16, 'sawtooth', v * 0.12, -260, { lp: 1800, rev: 0.2 }); return this.tone(560, 0.18, 'sawtooth', v * 0.1, -240, { lp: 1600, at: 0.22, rev: 0.2 });
       case 'howl': return this.tone(330, 1.6, 'sine', v * 0.18, 140, { lp: 1200, rev: 0.5 });
-      case 'shoo': this.noise(0.25, v * 0.9, { type: 'bandpass', freq: 1800, q: 0.7 }); this.tone(180, 0.12, 'triangle', v * 0.4, -60, { rev: 0.05 }); return this.tone(170, 0.12, 'triangle', v * 0.4, -60, { at: 0.18, rev: 0.05 });
+      case 'shoo': this.noise(0.25, v * 1.8, { type: 'bandpass', freq: 1800, q: 0.7 }); this.tone(180, 0.12, 'triangle', v * 0.4, -60, { rev: 0.05 }); return this.tone(170, 0.12, 'triangle', v * 0.4, -60, { at: 0.18, rev: 0.05 });
       case 'bark': this.tone(520, 0.09, 'square', v * 0.12, -200, { lp: 1500, rev: 0.1 }); return this.tone(480, 0.1, 'square', v * 0.1, -180, { lp: 1400, at: 0.16, rev: 0.1 });
+      // 벌 윙윙
+      case 'buzz': return this.tone(220 + Math.random() * 40, 0.25, 'sawtooth', v * 0.5, 10, { lp: 700, rev: 0.05 });
+      // 콩이 춤 노래: 한 음씩 (opts.k 번째)
+      case 'tune': return this.pluck([784, 988, 1175, 988, 1319][(opts.k ?? 0) % 5], v * 0.7, 0, undefined, 0.12);
     }
+  }
+
+  // ------------------------------------------------------------ 발소리
+  /**
+   * 발소리 한 번. 소리 장치를 새로 만들거나 켜지 않음 (켜져 있을 때만)
+   * @param kind 'grass' | 'dirt' | 'wood' | 'floor' | 'snow' | 'stone'
+   * @param s 빠르기 0..1 (달리면 큼)
+   * @param gain 추가 배율 (자동 놀이 0.6 등)
+   */
+  step(kind = 'grass', s = 1, gain = 1) {
+    const c = this.ctx;
+    if (!c || c.state !== 'running' || !this.enabled || this.hold) return;
+    const now = c.currentTime;
+    if (now - this._stepAt < 0.09) return;
+    if (!this._room('step')) return;
+    this._stepAt = now;
+    // 좌우 번갈아 (패너가 없는 브라우저는 가운데)
+    this._stepPan = -this._stepPan;
+    let out = this.sfx;
+    if (c.createStereoPanner) { out = c.createStereoPanner(); out.pan.value = this._stepPan; out.connect(this.sfx); }
+    const r = () => this.rng() * 2 - 1;
+    const v = (STEP_MIX[kind] ?? STEP_MIX.grass) * 0.16 * (0.6 + 0.4 * Math.max(0, Math.min(1, s))) * gain * dbToGain(r() * 1.5);
+    this._pm = 1 + r() * 0.07; this._inPlay = true; this._made = 0;
+    try {
+      switch (kind) {
+        case 'dirt': this.noise(0.065, v * 1.3, { freq: 800, q: 1.0, out }); this.noise(0.04, v * 0.5, { type: 'lowpass', freq: 400, q: 0.7, out }); break;
+        case 'wood': this.tone(300, 0.06, 'triangle', v * 1.4, -70, { rev: 0, lp: 1500, out }); this.noise(0.015, v * 0.6, { freq: 1400, q: 2, out }); break;
+        case 'floor': this.tone(340, 0.045, 'triangle', v * 1.2, -70, { rev: 0.05, lp: 1600, out }); this.noise(0.012, v * 0.5, { freq: 1400, q: 2, out }); break;
+        case 'snow': this.noise(0.13, v * 1.3, { freq: 2800, q: 0.9, attack: 0.025, out }); this.noise(0.05, v * 0.4, { type: 'lowpass', freq: 450, q: 0.7, out }); break;
+        case 'stone': this.noise(0.025, v * 1.2, { freq: 2400, q: 1.5, out }); this.tone(600, 0.03, 'triangle', v * 0.6, 0, { rev: 0, lp: 2000, out }); break;
+        default: this.noise(0.04, v * 1.1, { freq: 1700, q: 0.9, out }); this.noise(0.05, v * 0.5, { type: 'lowpass', freq: 450, q: 0.7, out }); break; // grass
+      }
+    } finally { this._pm = 1; this._inPlay = false; this._cost.step = this._made; }
+  }
+
+  // ------------------------------------------------------------ 탈것 엔진 (계속 나는 소리)
+  /** 엔진 켜기 (여러 번 불러도 하나). kind: 'tractor' | 'cart' (털털 엔진) · 'bike' (바퀴 구르는 소리) */
+  engineStart(kind = 'tractor') {
+    const c = this.ctx;
+    if (!c || this.hold || !this.enabled) return;
+    if (this._eng) { if (this._eng.kind === kind) return; this.engineStop(true); }
+    const t = c.currentTime;
+    const out = c.createGain(); out.gain.setValueAtTime(0.0001, t); out.connect(this.sfx);
+    const e = { kind, out, nodes: [out], srcs: [], setAt: -1, tickAt: t };
+    if (kind !== 'bike') {
+      // 톱니파 70→105Hz → 저역통과 800Hz Q3 → 털털(7→14Hz 떨림) → 출력
+      const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = kind === 'cart' ? 85 : 70;
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 800; lp.Q.value = 3;
+      const amp = c.createGain(); amp.gain.value = 0.7;
+      const lfo = c.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 7;
+      const depth = c.createGain(); depth.gain.value = 0.3;
+      lfo.connect(depth).connect(amp.gain);
+      o.connect(lp).connect(amp).connect(out);
+      Object.assign(e, { o, lfo, lp });
+      e.nodes.push(o, lp, amp, lfo, depth); e.srcs.push(o, lfo);
+      o.start(t); lfo.start(t);
+    }
+    // 노이즈 층: 트랙터는 쟁기질(500Hz), 자전거는 바퀴 굴러가는 소리(저역)
+    const n = c.createBufferSource(); n.buffer = this.noiseBuf; n.loop = true;
+    const nf = c.createBiquadFilter(); nf.type = kind === 'bike' ? 'lowpass' : 'bandpass'; nf.frequency.value = kind === 'bike' ? 700 : 500; nf.Q.value = 0.8;
+    const ng = c.createGain(); ng.gain.value = 0;
+    n.connect(nf).connect(ng).connect(out);
+    e.noiseGain = ng; e.nodes.push(n, nf, ng); e.srcs.push(n);
+    n.start(t);
+    // 시동을 건 순간부터 공회전 크기
+    out.gain.setTargetAtTime(this._engLevel(kind, 0), t, 0.15);
+    this._eng = e;
+  }
+
+  _engLevel(kind, s) {
+    if (kind === 'bike') return 0.0001 + 0.03 * s;
+    return 0.16 * (0.19 + 0.21 * s); // 최고 속도 ≈ -26dB, 공회전 ≈ -30dB
+  }
+
+  /**
+   * 엔진 따라가기 (초당 10번까지만 반영)
+   * @param speed01 빠르기 0..1
+   * @param plowing 쟁기질 중 (트랙터) · 자전거는 페달을 안 밟고 굴러가는 중(프리휠)
+   */
+  engineSet(speed01, plowing = false) {
+    const c = this.ctx, e = this._eng;
+    if (!c || !e) return;
+    const t = c.currentTime;
+    if (t - e.setAt < 0.1) return;
+    e.setAt = t;
+    const s = Math.max(0, Math.min(1, speed01));
+    e.out.gain.setTargetAtTime(this._engLevel(e.kind, s), t, 0.08);
+    if (e.kind === 'bike') {
+      e.noiseGain.gain.setTargetAtTime(s > 0.05 ? 0.5 + s : 0, t, 0.08);
+      // 프리휠 따르르: 굴러가는 빠르기만큼 짧은 째깍 (다음 0.1초 분량)
+      if (plowing && s > 0.08) {
+        const rate = 6 + s * 10;
+        if (e.tickAt < t) e.tickAt = t;
+        while (e.tickAt < t + 0.1) {
+          this.tone(3200, 0.012, 'square', 0.16 * 0.05 * (0.5 + s), 0, { at: e.tickAt - t, rev: 0, lp: 5000 });
+          e.tickAt += 1 / rate;
+        }
+      }
+      return;
+    }
+    const base = e.kind === 'cart' ? 85 : 70;
+    e.o.frequency.setTargetAtTime(base + 35 * s, t, 0.08);
+    e.lfo.frequency.setTargetAtTime(7 + 7 * s, t, 0.08);
+    e.lp.frequency.setTargetAtTime(800 + 400 * s, t, 0.08);
+    e.noiseGain.gain.setTargetAtTime(plowing && s > 0.1 ? 0.6 : 0, t, 0.08);
+  }
+
+  /** 엔진 끄기: 0.25초 동안 줄이고 멈춘 뒤 연결을 끊음 (now: 바로) */
+  engineStop(now = false) {
+    const c = this.ctx, e = this._eng;
+    if (!e) return;
+    this._eng = null;
+    const t = c?.currentTime ?? 0, end = now ? 0.02 : 0.25;
+    try { e.out.gain.cancelScheduledValues(t); e.out.gain.setTargetAtTime(0, t, end / 4); } catch { /* 이미 끊김 */ }
+    for (const s of e.srcs) { try { s.stop(t + end + 0.05); } catch { /* 이미 멈춤 */ } }
+    const off = () => { for (const n of e.nodes) { try { n.disconnect(); } catch { /* 이미 끊김 */ } } };
+    if (e.srcs[0]) e.srcs[0].onended = off; else off();
+  }
+
+  // ------------------------------------------------------------ 낚싯줄 감는 소리
+  /** 릴 째깍째깍: 째깍 묶음 버퍼 하나를 반복 재생, 빠르기는 playbackRate (0 이면 조용히) */
+  reel(rate) {
+    const c = this.ctx;
+    if (!c || this.hold || !this.enabled) return;
+    if (!this._reel) {
+      if (!(rate > 0)) return;
+      if (!this._reelBuf) {
+        const sr = c.sampleRate, len = Math.round(sr), b = c.createBuffer(1, len, sr), d = b.getChannelData(0);
+        for (let k = 0; k < 10; k++) { // 1초에 10번 째깍 (2.8kHz 짧은 울림)
+          const s0 = Math.round((k / 10) * len);
+          for (let i = 0; i < sr * 0.006 && s0 + i < len; i++) d[s0 + i] = Math.sin((i / sr) * 2 * Math.PI * 2800) * Math.exp(-i / (sr * 0.0015)) * (0.8 + 0.2 * Math.sin(k * 2.1));
+        }
+        this._reelBuf = b;
+      }
+      const s = c.createBufferSource(); s.buffer = this._reelBuf; s.loop = true;
+      const g = c.createGain(); g.gain.value = 0;
+      s.connect(g).connect(this.sfx); s.start();
+      this._reel = { s, g };
+    }
+    const t = c.currentTime, R = this._reel;
+    R.s.playbackRate.setTargetAtTime(Math.max(0.5, Math.min(1.8, rate || 0.5)), t, 0.05);
+    R.g.gain.setTargetAtTime(rate > 0 ? 0.16 * 0.35 : 0, t, 0.04);
+  }
+
+  reelStop() {
+    const R = this._reel;
+    if (!R) return;
+    this._reel = null;
+    try { R.s.stop(); R.s.disconnect(); R.g.disconnect(); } catch { /* 이미 멈춤 */ }
   }
 }

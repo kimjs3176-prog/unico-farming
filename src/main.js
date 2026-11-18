@@ -11,7 +11,8 @@ import { World } from './game/world.js';
 import { Input, lookHold, touchUI } from './game/input.js';
 import { FollowCamera, BASE_FOV, releaseInput } from './game/camera.js';
 const CAM_KEY = 'unico.cam'; // 터치 기기에서 맞춘 카메라 거리·높이각
-import { Player } from './game/player.js';
+import { Player, RUN_SPEED } from './game/player.js';
+import { surfaceAt } from './game/footsteps.js';
 import { FarmView } from './game/view/farm_view.js';
 import { RanchView } from './game/view/ranch_view.js';
 import { Pet } from './game/view/pet.js';
@@ -111,8 +112,14 @@ class Game {
     this.flags = {};
     this.fx = new FX(this.world.scene, this.quality);
     this.waterfx = new WaterFX(this.world.scene, this.world.scenery, this.quality);
-    this.player.unico.onStep = (x, z, r) => { if (r === undefined || r > 0.5) this.fx.dust(x, z); }; // r: 달리기 섞임 (주는 쪽이 있으면 걸을 때는 먼지 없음)
-    this.player.onLand = () => { const p = this.player.position; this.fx.dust(p.x, p.z); this.fx.dust(p.x + 0.3, p.z - 0.2); this.audio.play('bump', 0.25); };
+    // 발: 먼지(달릴 때만, r = 달리기 섞임) + 바닥에 따라 다른 발소리 (빠를수록 큼, 자동 놀이는 작게)
+    this.player.unico.onStep = (x, z, r) => {
+      if (r === undefined || r > 0.5) this.fx.dust(x, z);
+      const v = this.player.vel, sp = v ? Math.hypot(v.x, v.z) / RUN_SPEED : 1;
+      this.audio.step(surfaceAt(this, x, z), sp, this.autoplay?.on ? 0.6 : 1);
+    };
+    // 점프 착지: 먼지 두 줌 + 부드러운 툭 + 그 바닥 발소리
+    this.player.onLand = () => { const p = this.player.position; this.fx.dust(p.x, p.z); this.fx.dust(p.x + 0.3, p.z - 0.2); this.audio.play('land'); this.audio.step(surfaceAt(this, p.x, p.z), 0.8); };
     this.farm = new FarmView(this);
     this.ranch = new RanchView(this);
     this.ride = new RideView(this); // 마을 탈것 (트랙터·자전거·농장 카트)
@@ -487,6 +494,7 @@ class Game {
     SURF.time.value += dt;
     SURF.seeCam.value.copy(this.camera.position);
     SURF.seeTarget.value.copy(this.followCam.smooth);
+    this.audio.maxVoices = this.quality.level === 'low' ? 16 : 24; // 동시에 나는 효과음 수 상한
     if (this.music.on) { const W = this.world.weatherCur || {}; this.music.setScene({ daylight: this.world.daylight, kind: this.world.weatherKind || 'clear', precip: W.precip || 0, wind: W.wind || 0.15 }); }
     SURF.wind.value = this.world.weatherCur?.wind ?? 0.15;
     // 눈 쌓임/녹음: 날씨가 바뀌면 서서히, 처음 접속했을 때 이미 눈이면 바로 덮인 상태

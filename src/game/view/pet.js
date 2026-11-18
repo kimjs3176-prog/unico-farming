@@ -155,7 +155,7 @@ export class Pet {
       this._hop = Math.abs(Math.sin(tr.t * Math.PI * 2.5)) * 0.22;
       if (tr.t < 1.8) e.m.rotation.y += Math.cos(tr.t * Math.PI * 2.5) * dt * 3.2;
       else e.m.rotation.y += dt * Math.PI * 2 / 0.8;
-      for (let k = 0; k < 5; k++) if (at(0.2 + k * 0.4)) { g.fx.pop(p.x, p.z, k % 2 ? '🎶' : '🎵'); g.audio.pluck([784, 988, 1175, 988, 1319][k], 0.35, 0, undefined, 0.12); }
+      for (let k = 0; k < 5; k++) if (at(0.2 + k * 0.4)) { g.fx.pop(p.x, p.z, k % 2 ? '🎶' : '🎵'); g.audio.play('tune', 1, { k }); }
     }
     this._mix(dt);
     if (tr.t > (TRICK_TIME[tr.id] || 1.2)) {
