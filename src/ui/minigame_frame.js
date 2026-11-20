@@ -114,11 +114,13 @@ export function mgResult(g, o) {
   const btns = h('div', 'mg-btns');
   if (o.onRetry) { const r = h('button', 'ghost', '🔁 다시 하기'); r.onclick = () => { ui.closePanel(); o.onRetry(); }; btns.append(r); }
   const ok = h('button', 'gold', '확인');
-  // 확인·✕·바깥 누르기 모두 onClose 를 한 번만 (ui.dismiss 가 onDismiss 를 부름)
+  // 확인·✕ 모두 onClose 를 한 번만 (✕ 는 여기서 직접 이음 · ui 에 dismiss 가 생기면 onDismiss 로도)
   let closed = false;
   const close = () => { if (closed) return; closed = true; o.onClose?.(); };
   ok.onclick = () => { ui.closePanel(); close(); };
   p.onDismiss = close;
+  const x = p.querySelector('h2 .close');
+  if (x) x.onclick = () => { ui.closePanel(); close(); };
   btns.append(ok);
   p.append(btns);
   // 점수 카운트업 → 별이 하나씩 → 등급

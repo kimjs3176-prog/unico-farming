@@ -25,7 +25,7 @@ export const FESTIVALS = {
     colors: [0xf28bb0, 0xfff1f5, 0xb6e07a, 0xffd6e4], lantern: 0xe2558a,
     stall: ['fest_lantern', 'fest_azalea'],
     skin: {
-      title: '진달래 꽃잎 받기', icon: '🌸', sky: ['#ffe9f1', '#f9c7d8'], ground: '#a8d86a', branch: '#7a5236', bloom: '#f28bb0',
+      title: '진달래 꽃잎 받기', icon: '🌸', sky: ['#ffe9f1', '#f9c7d8'], ground: '#a8d86a', branch: '#7a5236', bloom: '#f28bb0', deco: 'azalea', hills: '#c98fb0',
       good: ['🌸', '🌺'], gold: '🥞', bad: '🐝', goodName: '꽃잎', goldName: '화전', badName: '벌',
     },
   },
@@ -36,8 +36,8 @@ export const FESTIVALS = {
     colors: [0x3170c9, 0xffffff, 0x4fb06a, 0xf6c63c], lantern: 0x2f7fd0,
     stall: ['fest_kite', 'fest_lantern'],
     skin: {
-      title: '앵두·창포 받기', icon: '🍒', sky: ['#dff4ff', '#a9dcf2'], ground: '#5fae4a', branch: '#5a3a22', bloom: '#4fb06a',
-      good: ['🍒', '🌿'], gold: '🟢', bad: '🦟', goodName: '앵두·창포', goldName: '수리취떡', badName: '모기',
+      title: '앵두·창포 받기', icon: '🍒', sky: ['#dff4ff', '#a9dcf2'], ground: '#5fae4a', branch: '#5a3a22', bloom: '#4fb06a', deco: 'iris', hills: '#6fa8c8',
+      good: ['🍒', '🌿'], gold: '🍡', bad: '🦟', goodName: '앵두·창포', goldName: '수리취떡', badName: '모기',
     },
   },
   autumn: {
@@ -47,7 +47,7 @@ export const FESTIVALS = {
     colors: [0xe0802c, 0xf6d64a, 0xd4372c, 0xfff3c4], lantern: 0xe8901c,
     stall: ['fest_scarecrow', 'fest_lantern'],
     skin: {
-      title: '송편·밤 받기', icon: '🌰', sky: ['#2b2f5a', '#5a4a7a'], ground: '#c99a52', branch: '#5a3a22', bloom: '#e0802c', moon: true,
+      title: '송편·밤 받기', icon: '🌰', sky: ['#2b2f5a', '#5a4a7a'], ground: '#c99a52', branch: '#5a3a22', bloom: '#e0802c', deco: 'persimmon', hills: '#1f2347', moon: true,
       good: ['🌰', '🍎'], gold: '🥟', bad: '🐛', goodName: '밤·햇과일', goldName: '송편', badName: '송충이',
     },
   },
@@ -58,7 +58,7 @@ export const FESTIVALS = {
     colors: [0x8e7cc3, 0xffffff, 0xd4372c, 0x6cc4ec], lantern: 0x7a5cc8,
     stall: ['fest_snowman', 'fest_kite'],
     skin: {
-      title: '새알심 받기', icon: '⚪', sky: ['#e6eef7', '#b9cbe0'], ground: '#f4f7fb', branch: '#6a5a4a', bloom: '#ffffff',
+      title: '새알심 받기', icon: '⚪', sky: ['#e6eef7', '#b9cbe0'], ground: '#f4f7fb', branch: '#6a5a4a', bloom: '#ffffff', deco: 'snow', hills: '#9fb2cc',
       good: ['⚪', '❄️'], gold: '🥣', bad: '🧊', goodName: '새알심·눈송이', goldName: '팥죽', badName: '고드름',
     },
   },

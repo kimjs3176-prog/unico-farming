@@ -24,6 +24,22 @@ export const FEST_DECOR_BY_ID = Object.fromEntries(FEST_DECOR.map((d) => [d.id, 
 const register = D['registerDecor'] || ((d) => { if (D.DECOR_BY_ID[d.id]) return; D.DECOR.push(d); D.DECOR_BY_ID[d.id] = d; });
 for (const d of FEST_DECOR) if (!D.DECOR_BY_ID[d.id]) register(d);
 
+/** 엽전으로만 바꾸는 소품은 보관함에 있을 때만 놓을 수 있음 (값 0 이라 그냥 두면 끝없이 공짜로 놓임) */
+export const TOKEN_ONLY_WHY = '축제 장터에서 엽전으로 바꿔요';
+const P = D.DecorSim?.prototype;
+if (P && !P.whyNot.festGuard) {
+  const base = P.whyNot;
+  P.whyNot = function whyNot(id, ctx) {
+    const why = base.call(this, id, ctx);
+    if (why || this.storedOf(id) > 0) return why;
+    return D.DECOR_BY_ID[id]?.tokens ? TOKEN_ONLY_WHY : null;
+  };
+  P.whyNot.festGuard = true;
+}
+
+/** 엽전 그림 (가운데 네모 구멍 난 둥근 동전, css/festival.css) — 글자만 쓰는 알림은 ITEMS.fest_token.emoji */
+export const FEST_COIN = '<i class="fest-coin" aria-hidden="true"></i>';
+
 /** 꾸미기 보관함에 하나 넣기 (보관함 것은 놓을 때 무료) */
 function store(sim, id) {
   if (typeof sim.store === 'function') return sim.store(id, 1);
@@ -44,22 +60,22 @@ export function openFestival(g, view) {
   p.append(h('p', 'fest-desc', f.desc));
   p.append(h('div', 'fest-fact', `<b>📜 절기 이야기</b><span>${f.fact}</span>`));
   // 엽전 지갑 + 받는 법
-  p.append(h('div', 'fest-purse', `<span class="fp-n">${ITEMS.fest_token.emoji} <b>${tokens}</b> 엽전</span><small>놀이 ${st.act}/${ACT_TOKEN_CAP} · ${eco.festival ? `판매 ${st.saleTok}/${SALE_TOKEN_CAP} (${SALE_COINS}🪙 팔 때마다 1개)` : '판매 보너스는 축제 날 낮에만'}</small>`));
+  p.append(h('div', 'fest-purse', `<span class="fp-n">${FEST_COIN} <b>${tokens}</b> 엽전</span><small>놀이 ${st.act}/${ACT_TOKEN_CAP} · ${eco.festival ? `판매 ${st.saleTok}/${SALE_TOKEN_CAP} (${SALE_COINS}🪙 팔 때마다 1개)` : '판매 보너스는 축제 날 낮에만'}</small>`));
   // 놀이
   const play = h('button', 'gold fest-play', `▶ ${f.skin.title} <small>별만큼 엽전</small>`);
   play.onclick = () => view.play();
   p.append(play);
   // 축제 음식
   const food = ITEMS[f.food];
-  p.append(h('div', 'fest-food', st.food ? `${food.emoji} 오늘의 축제 음식 <b>${food.name}</b> · 받았어요 ✅` : `${food.emoji} 오늘의 축제 음식 <b>${food.name}</b> · 마당에 모인 주민에게 말을 걸면 나눠 줘요`));
+  p.append(h('div', 'fest-food', st.food ? `<span class="ff-ic">${food.emoji}</span> 오늘의 축제 음식 <b>${food.name}</b> · 받았어요 ✅` : `<span class="ff-ic">${food.emoji}</span> 오늘의 축제 음식 <b>${food.name}</b> · 마당에 모인 주민에게 말을 걸면 나눠 줘요`));
   // 엽전 장터: 이번 축제 한정 꾸미기 + 이미 가진 축제 소품 놓기
-  p.append(h('h3', '', '🏮 축제 장터 (엽전으로 바꿔요)'));
+  p.append(h('h3', '', `🎪 축제 장터 <small>(${FEST_COIN} 엽전으로 바꿔요)</small>`));
   const rows = h('div', 'rows');
   const sim = g.decor?.sim;
   const owned = FEST_DECOR.filter((d) => (sim?.storedOf(d.id) || 0) > 0 && !f.stall.includes(d.id));
   for (const d of [...f.stall.map((id) => FEST_DECOR_BY_ID[id]).filter(Boolean), ...owned]) {
     const inStall = f.stall.includes(d.id), have = sim?.storedOf(d.id) || 0;
-    const r = h('div', 'row fest-row', `<span class="ic">${d.icon}</span><span class="nm">${d.name}${inStall ? ' <span class="qty">이번 축제 한정</span>' : ''}${have ? `<br><small>🧺 보관함 ${have}개</small>` : ''}</span><span class="pr">${inStall ? `${ITEMS.fest_token.emoji} ${d.tokens}` : ''}</span>`);
+    const r = h('div', 'row fest-row', `<span class="ic">${d.icon}</span><span class="nm">${d.name}${inStall ? ' <span class="qty">이번 축제 한정</span>' : ''}${have ? `<br><small>🧺 보관함 ${have}개</small>` : ''}</span><span class="pr">${inStall ? `${FEST_COIN} ${d.tokens}` : ''}</span>`);
     if (inStall) {
       const b = h('button', '', '바꾸기');
       b.disabled = tokens < d.tokens || !sim;

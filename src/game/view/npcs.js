@@ -9,11 +9,17 @@ import { talkShot, speakerShot, cheatYaw, liftFor, hudFrac } from '../cutscene.j
 import { setHeroLabel, setLabelOccluders } from '../label.js';
 import { heightAt } from '../terrain.js';
 import { pickLine, remember, REACT, OUT_OF_LINES, OUT_OF_LINES_BY, WAKE, FESTIVAL_LINES } from '../sim/villager_lines.js';
-import { festivalAt, festState, takeFood } from '../sim/festival.js';
+import { festivalAt, festivalOf, festState, takeFood } from '../sim/festival.js';
 import { ITEMS, inSeason } from '../sim/items.js';
-import { slotAt, legOf, hourOf, isNight, canDepart, ROUTINE_CHECK } from '../sim/routine.js';
+import { slotAt, legOf, hourOf, isNight, canDepart, ROUTINE_CHECK, FEST_LOW, FEST_IDLE, FEST_LOOK_AT } from '../sim/routine.js';
 import { seasonOf } from '../sim/season.js';
 
+/** 축제 음식을 건넨 뒤 손에 들고 있는 시간(초) */
+const FOOD_HOLD = 4;
+/** 낮음 품질: 마당에 모인 주민 이름표는 이 거리(m) 안에서만 */
+const FEST_LABEL_LOW = 6;
+/** 손에 드는 축제 음식 모양: [떡·그릇 색, 고명 색] */
+const FOOD_PROP = { fest_hwajeon: [0xfff1dc, 0xf28bb0], fest_surichwi: [0x6f9a3a, 0x93b85a], fest_songpyeon: [0xf6f1e4, 0x9cc46a], fest_patjuk: [0x7a2a22, 0xfaf6ee] };
 const ROLE_ICON = { merchant: '🛒', researcher: '🔬', guide: '📣', granny: '🌾', kid: '🦋', fisher: '🎣' };
 /** 대화창 이름표 색 (역할별) */
 const NPC_COLOR = { merchant: '#f28c28', researcher: '#8e7cc3', guide: '#6dbb4f', granny: '#a07e5c', kid: '#f28bb0', fisher: '#3170c9' };
@@ -151,13 +157,15 @@ export class NPCs {
     // 일과: 시각·비 (1초마다 자리 확인), 플레이어 얼굴 높이
     const hour = hourOf(W.time ?? 0.3), night = isNight(hour), rain = W.weatherKind === 'rain' || W.weatherKind === 'storm';
     const fest = festivalAt(W.day ?? 1, W.time ?? 0.3)?.id ?? null; // 축제 마당이 열려 있으면 네 주민이 모임
+    const festLow = g.quality?.level === 'low'; // 낮음: 안내 강아지만 모임 (그리기 수를 늘리지 않게)
     const pHeadY = (g.player?.position?.y ?? 0) + (g.player?.unico?.headH ?? 1.2);
     for (const e of this.list) {
       const p = e.u.group.position, u = e.u;
       if (tv && Math.abs(tv.speed) > 1.2 && Math.hypot(p.x - tv.x, p.z - tv.z) < 2.9 && !((e.bellUntil || 0) > performance.now() / 1000)) this.startle(e, tv); // 자전거 종을 들었으면 안 놀람
       const d = Math.hypot(p.x - playerPos.x, p.z - playerPos.z);
       const talking = this.talking === e;
-      this._routine(e, dt, d, hour, rain, talking, cam, fest);
+      this._routine(e, dt, d, hour, rain, talking, cam, fest && (!festLow || FEST_LOW.includes(e.id)) ? fest : null);
+      if (e.foodT > 0 && (e.foodT -= dt) <= 0 && u.holding === 'festfood') u.holding = null; // 건넨 축제 음식은 잠깐 들고 있다 내림
       // 비: 우산 (바뀔 때만)
       if (!!e.umb !== rain) { e.umb = rain; u.setUmbrella(rain, UMB_COLORS[e.id]); }
       if (e.route) this._walkRoute(e, dt);
@@ -215,7 +223,8 @@ export class NPCs {
       if (e.idle > e.nextIdle && !u.moving && !e.dozing && !talking) {
         e.idle = 0;
         const work = e.cur?.act;
-        if (work && d > 3.5) { u.playAction(work, 3 + Math.random() * 2); e.nextIdle = 2.8 + Math.random(); }
+        if (e.cur?.fest && !e.route) this._festIdle(e, d);
+        else if (work && d > 3.5) { u.playAction(work, 3 + Math.random() * 2); e.nextIdle = 2.8 + Math.random(); }
         else {
           e.nextIdle = this._idleGap(u);
           const pool = [e.n.pose, ...(u.species?.idles || [])];
@@ -223,6 +232,7 @@ export class NPCs {
         }
       }
       u.update(dt, cam);
+      if (festLow && e.cur?.fest && d > FEST_LABEL_LOW && u.label) u.label.visible = false; // 낮음: 마당에 모인 주민 이름표는 가까이(6m) 와야
       if (d < TALK_R) { const sc = talkScore(d, pfx, pfz, p.x - playerPos.x, p.z - playerPos.z); if (sc < hs) { hs = sc; hd = d; hit = e; } }
     }
     this._heroGaze(playerPos);
@@ -321,6 +331,19 @@ export class NPCs {
     this._wake(e, false);
     e.u.lookTarget = null;
     if (e.u.action && e.u.action !== 'talk') e.u.clearAction();
+  }
+
+  /**
+   * 축제 마당에 모인 주민: 4~8초마다 (주민마다 어긋나게) 가판대·마당 가운데를 번갈아 보며 박수·깡충·만세
+   * 플레이어가 가까우면(3.5m) 자기 일(확성기·응원)만 짧게
+   */
+  _festIdle(e, d) {
+    const u = e.u, k = (e.festK = (e.festK || 0) + 1);
+    const look = FEST_LOOK_AT[k % FEST_LOOK_AT.length], p = u.group.position;
+    if (d > 3.5) e.restFacing = Math.atan2(look.x - p.x, look.z - p.z);
+    const pool = [e.cur.act, ...FEST_IDLE];
+    u.playAction(d > 3.5 ? pool[(k + e.id.length) % pool.length] : e.cur.act, 1.8);
+    e.nextIdle = 4 + ((k * 7 + e.id.length * 3) % 5); // 4~8초, 주민마다 다르게
   }
 
   /** 자리에 닿음: 장애물을 새 자리로, 그 자리 방향·일 */
@@ -604,7 +627,8 @@ export class NPCs {
     let line = next(r.gained > 0) ?? OUT_OF_LINES_BY[id] ?? OUT_OF_LINES, out = false;
     // 축제 마당: 축제마다 주민별 첫마디 + 축제 음식 한 번 (먼저 말 건 주민이 나눠 줌)
     const W = g.world, fest = festivalAt(W.day ?? 1, W.time ?? 0.3);
-    const festLine = fest && e.festSaid !== fest.key ? FESTIVAL_LINES[id]?.[fest.id] : null;
+    // 장터 여우의 축제 말은 모두 값 얘기 → 장터 값 축제(economy.festival)가 켜진 날에만
+    const festLine = fest && e.festSaid !== fest.key && (id !== 'merchant' || g.economy.festival) ? FESTIVAL_LINES[id]?.[fest.id] : null;
     if (festLine) {
       e.festSaid = fest.key;
       line = festLine;
@@ -672,7 +696,8 @@ export class NPCs {
     const g = this.game, W = g.world, day = W.day ?? 1, k = W.weatherKind;
     return {
       season: seasonOf(day).id, weather: k === 'rain' || k === 'storm' ? 'rain' : k === 'snow' ? 'snow' : null,
-      night: isNight(hourOf(W.time ?? 0.3)), hearts: g.villagers.hearts(e.id), festival: festivalAt(day, W.time ?? 0.3)?.id ?? false,
+      // 축제 말(값을 더 쳐 준다 등)은 장터 값 축제가 켜진 날(economy.festival, 그날 하루)과 맞춤 — 마당이 열린 시각(6시~다음 날 6시)과 다름
+      night: isNight(hourOf(W.time ?? 0.3)), hearts: g.villagers.hearts(e.id), festival: g.economy.festival ? festivalOf(day)?.id ?? false : false,
       done: g.quests?.claimed || {}, species: !!e.u.species,
     };
   }
@@ -691,9 +716,36 @@ export class NPCs {
     const g = this.game, it = ITEMS[food], p = e.u.group.position;
     g.economy.addItem(food, 1);
     e.u.playAction('present', 1.4);
+    this._holdFood(e, food);
     g.fx?.pop?.(p.x, p.z, it.emoji, { to: 'bag' });
     g.ui.toast(`${it.emoji} ${e.name}에게 ${it.name}${josa(it.name, '을/를')} 받았어요! 축제 날 별미예요`);
     g.audio.play('pop');
+  }
+
+  /** 축제 음식을 손에 잠깐 듦 (작은 접시 + 떡/그릇, 처음 한 번만 만듦) */
+  _holdFood(e, food) {
+    const u = e.u, look = FOOD_PROP[food];
+    if (!look || !u.biped || !u.arms?.[1]) return;
+    let m = u.props.festfood;
+    if (!m) {
+      const ref = u.prop('coins'); // 손바닥 자리 (손 도구와 같은 곳)
+      m = new THREE.Group();
+      const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.02, 12), new THREE.MeshStandardMaterial({ color: 0xd8b07a, roughness: 0.7 }));
+      const cake = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ roughness: 0.6 }));
+      cake.scale.y = 0.8; cake.position.y = 0.01;
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 4), new THREE.MeshStandardMaterial({ roughness: 0.6 }));
+      dot.position.y = 0.055;
+      m.add(plate, cake, dot);
+      m.userData.cake = cake; m.userData.dot = dot;
+      m.rotation.copy(ref.rotation); m.position.copy(ref.position); m.rotation.x += Math.PI / 2; // 손바닥 위
+      m.visible = false;
+      u.arms[1].add(m);
+      u.props.festfood = m;
+    }
+    m.userData.cake.material.color.setHex(look[0]);
+    m.userData.dot.material.color.setHex(look[1]);
+    u.holding = 'festfood';
+    e.foodT = FOOD_HOLD + 1.4;
   }
 
   /** 하트 단계 보상 지급 */

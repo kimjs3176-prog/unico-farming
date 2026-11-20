@@ -95,6 +95,12 @@ export const FEST_SLOTS = {
   researcher: { at: { x: -5.4, z: -6.6 }, act: 'cheer', via: [[-12.6, -0.5], [-7.6, -0.5], [-7.6, -4.2], [-5.4, -4.2]] },
 };
 for (const s of Object.values(FEST_SLOTS)) Object.assign(s, { from: 0, to: 24, face: FEST_FACE(s.at.x, s.at.z), awake: true, fest: true });
+/** 낮음 품질: 안내 강아지만 마당에 모임 (화면에 주민이 몰려 그리기 수가 늘지 않게 — 축제 날 늘어나는 그리기 10번 안쪽) */
+export const FEST_LOW = ['guide'];
+/** 마당에 모인 주민이 번갈아 하는 동작 (박수 대신 기뻐하기·주먹 불끈·끄덕·만세) */
+export const FEST_IDLE = ['glad', 'fistpump', 'nod', 'cheer'];
+/** 모인 주민이 번갈아 바라보는 곳: 축제 가판대 · 마당 가운데(길 쪽) */
+export const FEST_LOOK_AT = [{ x: 6.0, z: -6.6 }, { x: 0.4, z: -3.0 }];
 
 /** id 주민이 hour 시에 있을 자리 (비가 오면 dry 자리는 제자리로, 축제 마당이 열려 있으면(fest) 마당 자리). 일과가 없으면 null */
 export function slotAt(id, hour, rain = false, fest = null) {

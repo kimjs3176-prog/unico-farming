@@ -3,7 +3,7 @@ import { josa } from '../../game/sim/josa.js';
 
 /**
  * 미니게임: 달걀 받기 (닭장) · 축제 놀이 (skin 을 주면 같은 규칙에 계절 그림: sim/festival.js FESTIVALS[id].skin)
- *  skin: { title, icon, sky:[위, 아래], ground, branch, bloom, moon?, good:[이모지…], gold, bad, goodName, goldName, badName }
+ *  skin: { title, icon, sky:[위, 아래], ground, branch, bloom, deco('azalea'|'iris'|'persimmon'|'snow'), hills, moon?, good:[이모지…], gold, bad, goodName, goldName, badName }
  *  횃대 위 암탉들이 낳는 달걀을 바구니로 받기. 마우스/터치로 끌거나 ←→ / A·D 키.
  *  흰·갈색 달걀 +1, 황금 달걀 +5(반짝), 썩은 달걀 -3(콤보 끊김). 10연속부터 콤보 ×2, 20연속 ×3.
  *  45초 동안 점점 빨라짐. 결과: 달걀(점수/5) + 코인(점수×2), 최고 기록 저장.
@@ -100,15 +100,56 @@ export function playEggCatch(game, skin = null) {
       c.fillStyle = '#efe6d4'; c.beginPath(); c.ellipse(-4, 2, 18, 11, -0.2, 0, 7); c.fill(); // 날개
       c.restore();
     }
-    /** 축제: 떨어지는 것 (이모지), 땅에 떨어지면 흐려지며 사라짐 */
+    /** 축제: 떨어지는 것 (이모지 1.3배), 금빛(+5)은 반짝이 꼬리, 땅에 떨어지면 흐려지며 사라짐 */
     function festItem(e) {
+      if (e.kind === 'gold' && !e.splat) { // 반짝이 꼬리: 지나온 자리 위로 작은 별
+        for (let i = 1; i <= 5; i++) { const y = e.y - i * 13, a = 0.5 - i * 0.08, r = 4.5 - i * 0.6; c.fillStyle = `rgba(255,214,90,${a})`; star(e.x + Math.sin(st.t * 9 + i) * 5, y, r); }
+      }
       c.save(); c.translate(e.x, e.y);
       if (e.splat) c.globalAlpha = Math.min(1, e.splat) * 0.5;
       else c.rotate(Math.sin(e.rot) * 0.35);
-      c.font = `${e.kind === 'gold' ? 34 : 28}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
-      if (e.kind === 'gold' && !e.splat) { c.fillStyle = 'rgba(255,230,120,0.45)'; c.beginPath(); c.arc(0, 0, 22 + Math.sin(st.t * 8) * 3, 0, 7); c.fill(); }
+      c.font = `${e.kind === 'gold' ? 44 : 36}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      if (e.kind === 'gold' && !e.splat) { c.fillStyle = 'rgba(255,230,120,0.5)'; c.beginPath(); c.arc(0, 0, 28 + Math.sin(st.t * 8) * 4, 0, 7); c.fill(); }
       c.fillText(e.em, 0, 0);
       c.restore();
+    }
+    /** 네 꼭지 반짝 별 */
+    function star(x, y, r) { c.beginPath(); c.moveTo(x, y - r * 2); c.lineTo(x + r * 0.5, y - r * 0.5); c.lineTo(x + r * 2, y); c.lineTo(x + r * 0.5, y + r * 0.5); c.lineTo(x, y + r * 2); c.lineTo(x - r * 0.5, y + r * 0.5); c.lineTo(x - r * 2, y); c.lineTo(x - r * 0.5, y - r * 0.5); c.fill(); }
+    /** 먼 산 능선 + 초가 지붕 실루엣 (계절 색) */
+    function festHills() {
+      c.fillStyle = S.hills || 'rgba(0,0,0,0.15)';
+      c.globalAlpha = 0.55;
+      c.beginPath(); c.moveTo(0, H - 40);
+      for (let x = 0; x <= W; x += 40) c.lineTo(x, H - 120 - Math.sin(x / 130) * 30 - Math.sin(x / 47 + 1) * 10);
+      c.lineTo(W, H - 40); c.fill();
+      c.globalAlpha = 0.85;
+      for (const [x, w] of [[90, 120], [560, 140]]) { // 초가집: 둥근 지붕 + 벽
+        c.beginPath(); c.ellipse(x, H - 92, w / 2, 26, 0, Math.PI, 0); c.fill();
+        c.fillRect(x - w / 2 + 14, H - 92, w - 28, 52);
+      }
+      c.globalAlpha = 1;
+      if (S.deco === 'snow') { c.fillStyle = 'rgba(255,255,255,0.9)'; for (const [x, w] of [[90, 120], [560, 140]]) { c.beginPath(); c.ellipse(x, H - 108, w / 2 - 6, 12, 0, Math.PI, 0); c.fill(); } }
+    }
+    /** 가지 장식 (계절마다): 봄 진달래 · 여름 창포 잎 · 가을 감·단풍 · 겨울 눈 쌓인 가지 */
+    function festDeco(sh) {
+      const d = S.deco;
+      if (d === 'iris') { // 길쭉한 창포 잎 셋 + 보라 꽃 하나
+        c.fillStyle = '#4fa34a';
+        for (const [dx, a] of [[-8, -0.35], [0, 0], [8, 0.35]]) { c.save(); c.rotate(a); c.beginPath(); c.ellipse(dx, -20, 4, 22, 0, 0, 7); c.fill(); c.restore(); }
+        c.fillStyle = '#7a5cc8'; c.beginPath(); c.arc(0, -40, 7, 0, 7); c.fill();
+      } else if (d === 'persimmon') { // 단풍 잎 둘 + 주황 감 둘 (꼭지 초록)
+        c.fillStyle = '#c9542a'; for (const [dx, dy] of [[-14, -14], [12, -18]]) { c.save(); c.translate(dx, dy); c.rotate(sh * 0.05 + dx); c.beginPath(); for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 - Math.PI / 2; c.lineTo(Math.cos(a) * 11, Math.sin(a) * 11); c.lineTo(Math.cos(a + 0.6) * 4, Math.sin(a + 0.6) * 4); } c.fill(); c.restore(); }
+        for (const [dx, dy] of [[-3, -2], [9, 4]]) { c.fillStyle = '#f08a24'; c.beginPath(); c.arc(dx, dy, 10, 0, 7); c.fill(); c.fillStyle = '#4e7a2a'; c.fillRect(dx - 4, dy - 12, 8, 3); }
+      } else if (d === 'snow') { // 가지 위 눈 덩이
+        c.fillStyle = '#ffffff'; for (const [dx, dy, r] of [[-10, -8, 9], [4, -12, 10], [14, -6, 7]]) { c.beginPath(); c.arc(dx, dy, r, Math.PI, 0); c.fill(); }
+        c.fillStyle = 'rgba(180,200,230,0.8)'; c.fillRect(-14, -8, 30, 3);
+      } else { // 진달래: 분홍 다섯 잎 꽃 셋
+        for (const [dx, dy, r] of [[-12, -12, 10], [10, -16, 11], [0, -28, 9]]) {
+          c.fillStyle = S.bloom;
+          for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; c.beginPath(); c.arc(dx + Math.cos(a) * r * 0.55, dy + Math.sin(a) * r * 0.55, r * 0.5, 0, 7); c.fill(); }
+          c.fillStyle = '#fff2f6'; c.beginPath(); c.arc(dx, dy, r * 0.25, 0, 7); c.fill();
+        }
+      }
     }
     /** 축제 배경: 하늘·땅·나뭇가지(꽃)·연등 줄 */
     function festBg() {
@@ -119,6 +160,7 @@ export function playEggCatch(game, skin = null) {
       c.strokeStyle = 'rgba(90,58,26,0.45)'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, 30); c.quadraticCurveTo(W / 2, 70, W, 30); c.stroke();
       const cols = ['#e8495a', '#fac03e', '#30b6aa', '#8e7cc3', '#f28bb0'];
       for (let i = 1; i < 12; i++) { const x = (i * W) / 12, y = 30 + Math.sin((i / 12) * Math.PI) * 32; c.fillStyle = cols[i % cols.length]; c.beginPath(); c.moveTo(x - 9, y); c.lineTo(x + 9, y); c.lineTo(x, y + 18); c.fill(); }
+      festHills();
       c.fillStyle = S.ground; c.fillRect(0, H - 40, W, 40);
       c.fillStyle = 'rgba(0,0,0,0.06)'; for (let i = 0; i < 40; i++) c.fillRect((i * 97) % W, H - 34 + (i * 13) % 26, 10, 3);
       // 나뭇가지 (암탉 자리): 가지 + 꽃송이, 떨어뜨릴 때 흔들림
@@ -128,8 +170,7 @@ export function playEggCatch(game, skin = null) {
         const sh = h.lay > 0 ? Math.sin((h.lay / 0.3) * Math.PI) * 5 : 0, b = Math.sin(h.bob) * 1.5;
         c.save(); c.translate(h.x + sh, 100 + b);
         c.strokeStyle = S.branch; c.lineWidth = 5; c.beginPath(); c.moveTo(0, 6); c.lineTo(0, -14); c.stroke();
-        c.fillStyle = S.bloom; for (const [dx, dy, r] of [[-14, -12, 11], [12, -14, 12], [0, -26, 12], [-4, 2, 9], [10, 2, 8]]) { c.beginPath(); c.arc(dx, dy, r, 0, 7); c.fill(); }
-        c.fillStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.arc(-3, -24, 4, 0, 7); c.fill();
+        festDeco(sh);
         c.restore();
       }
     }

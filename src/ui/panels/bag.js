@@ -6,6 +6,15 @@ import { ITEMS, CATEGORY_NAMES, itemsOf, inSeason, seasonOnly } from '../../game
 import { seasonOf, SEASON } from '../../game/sim/season.js';
 import { BOOK_CATS, COMPLETE_REWARD } from '../../game/sim/collection.js';
 
+/** 도감 못 만난 칸 힌트: '여름 밤 풀숲', '봄 연못' 처럼 계절·때·곳 */
+export function bookHint(it) {
+  const when = (it.seasons || []).map((x) => SEASON[x]?.name).filter(Boolean).join('·');
+  const time = it.night ? ' 밤' : it.rain ? ' 비 오는 날' : it.cold ? ' 추운 날' : '';
+  const where = it.cat === 'fish' ? (it.where === 'pond' ? '연못' : it.where === 'lake' ? '낚시터 호수' : '연못·호수')
+    : it.cat === 'bug' ? (it.ground ? '풀숲' : '꽃밭') : it.cat === 'fruit' ? '과수원' : '';
+  return `${when}${time} ${where}`.trim();
+}
+
 /** 가방·도감·씨앗 창 메서드 (UI.prototype 에 합쳐짐) */
 export const BagPanel = {
   openBook(cat = 'fish') {
@@ -28,12 +37,13 @@ export const BagPanel = {
     const grid = h('div', 'book-grid');
     for (const k of list) {
       const it = ITEMS[k], e = c.entries[k];
-      // 계절 표시: 제철 계절 아이콘, 지금 철이면 강조, 한 계절에만 나오면 ⏳
-      const on = it.seasons && inSeason(k, now.id), only = on && seasonOnly(k);
-      const chip = it.seasons ? `<small class="bk-ss${on ? ' on' : ''}">${only ? '⏳ 이 계절에만 ' : ''}${it.seasons.map((x) => SEASON[x].icon).join('')}${on ? ' 제철' : ''}</small>` : '';
-      grid.append(h('div', `book-cell${e ? '' : ' locked'}${on ? ' in-season' : ''}`, e
-        ? `<span class="em">${it.emoji}</span><b>${it.name}</b><small>${e.count}마리·개${e.best ? ` · 최대 ${e.best}cm` : ''}</small><small>${'⭐'.repeat(it.rarity || 1)}</small>${chip}`
-        : `<span class="em">❔</span><b>???</b><small>${'⭐'.repeat(it.rarity || 1)}</small>${chip}`));
+      // 계절 알약: 계절마다 색 (지금 계절은 진하게, 나머지는 흐리게), 한 계절에만 나오면 ⏳ · 못 만난 칸엔 어디서 찾는지 힌트
+      const on = !!(it.seasons && inSeason(k, now.id)), only = on && seasonOnly(k);
+      const pills = it.seasons ? `<span class="bk-pills">${it.seasons.map((x) => `<span class="bk-pill s-${x}${x === now.id ? ' now' : ''}">${only && x === now.id ? '⏳ ' : ''}${SEASON[x].name}</span>`).join('')}</span>` : '';
+      const hint = !e && it.seasons ? `<small class="bk-hint">${bookHint(it)}</small>` : '';
+      grid.append(h('div', `book-cell${e ? '' : ' locked'}${on ? ' in-season' : it.seasons ? ' off-season' : ''}`, e
+        ? `<span class="em">${it.emoji}</span><b>${it.name}</b><small>${e.count}마리·개${e.best ? ` · 최대 ${e.best}cm` : ''}</small><small>${'⭐'.repeat(it.rarity || 1)}</small>${pills}`
+        : `<span class="em">❔</span><b>???</b><small>${'⭐'.repeat(it.rarity || 1)}</small>${pills}${hint}`));
     }
     p.append(grid);
     const pr = c.progress(cat);

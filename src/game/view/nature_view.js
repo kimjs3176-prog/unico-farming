@@ -1,5 +1,6 @@
 import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { heightAt } from '../terrain.js';
 import { LAYOUT } from '../world.js';
 import { ITEMS, treeStage } from '../sim/items.js';
@@ -11,8 +12,20 @@ import { makeLabel } from '../label.js';
 import { touchUI } from '../input.js';
 
 const FRUIT_COLOR = { fruit_apple: 0xe0413a, fruit_peach: 0xf7a8a0, fruit_pear: 0xd9d26a, fruit_persimmon: 0xf08a24 };
-/** 철 아닌 과일나무 모습: 봄 꽃송이(분홍), 여름 풋열매(작은 초록), 그 밖엔 열매 없음 · 겨울 감나무는 홍시 하나를 까치밥으로 남김 */
-const BLOSSOM_COLOR = 0xf6c9d8, UNRIPE_COLOR = 0x8fbf4a, HONGSI_COLOR = 0xe5541c;
+/** 철 아닌 과일나무 모습: 봄 꽃송이(분홍·흰), 여름 풋열매(작은 초록), 그 밖엔 열매 없음 · 겨울 감나무는 잎을 줄이고 홍시를 드러냄 (하나는 까치밥) */
+const BLOSSOM_COLOR = 0xf6c9d8, BLOSSOM_COLORS = [0xf49ab8, 0xfff2f6, 0xf6b9cc], UNRIPE_COLOR = 0x8fbf4a, HONGSI_COLOR = 0xe5541c;
+/**
+ * 열매 자리: 잎뭉치(타원체, 나무 모델 기준 가운데·반지름) 바깥 겉면 1.02배에 7곳 — 모델의 열매 소켓은 압축 때 빠져서 여기서 정함
+ * 높이각을 번갈아(15°·40°) 어느 쪽 카메라에서도 반쯤 보이게
+ */
+const CANOPY_C = [0, 1.78, 0], CANOPY_R = [0.985, 0.72, 0.91], FRUIT_N = 7, FRUIT_OUT = 1.02;
+/** 열매·꽃 크기 (제철 열매, 풋열매, 꽃송이 — 공 반지름 0.13 기준 배율) */
+const FRUIT_SC = { ripe: 1.5, green: 0.8, blossom: 1.6 };
+/** 겨울 감나무: 잎뭉치를 이만큼 줄여 홍시가 보이게, 홍시 수(마지막 하나는 까치밥) */
+const WINTER_CANOPY = 0.6, HONGSI_N = 5;
+/** 열매·꽃이 은은하게 빛나는 정도 (밤에도 색이 보이게) */
+const FRUIT_GLOW = 0.15, BLOSSOM_GLOW = 0.12;
+const _v = new THREE.Vector3(), _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _c = new THREE.Color();
 /** '여름에 열려요' 의 계절 이름 */
 const seasonsText = (fruit) => (ITEMS[fruit]?.seasons || []).map((k) => SEASON[k]?.name).filter(Boolean).join('·');
 const BUG_COLOR = { bug_butterfly: 0xffffff, bug_swallowtail: 0xf6d64a, bug_dragonfly: 0xe0413a, bug_ladybug: 0xd93025, bug_beetle: 0x5a3a22, bug_firefly: 0xd8ff6a };
@@ -29,27 +42,30 @@ export class NatureView {
     const scene = game.world.scene;
     this.t = 0;
     // ---- 과일 나무 ----
+    // 열매는 나무 넷 모두 한 덩어리(인스턴스, 그리기 1번), 봄 꽃송이도 한 덩어리 — 색은 인스턴스 색
     this.trees = LAYOUT.orchard.map((o, i) => {
       const m = game.world.place('fruit_tree', o.x, o.z, i * 1.3, 1.1, { r: 0.5, dynamic: true });
-      const mat = new THREE.MeshStandardMaterial({ color: FRUIT_COLOR[o.fruit], roughness: 0.45 });
-      const fruits = [];
-      for (let k = 0; k < 6; k++) {
-        const sock = m.getObjectByName(`Fruit${k}`);
-        if (!sock) continue;
-        const f = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), mat);
-        f.castShadow = true;
-        sock.add(f);
-        fruits.push(f);
-      }
       const canopy = m.getObjectByName('Canopy');
-      return { ...o, m, canopy, fruits, mat, shakenDay: 0, shake: 0, stage: null };
+      return { ...o, i, m, canopy, canopyS: canopy?.scale.x ?? 1, fruits: [], shakenDay: 0, shake: 0, stage: null };
     });
-    // 철 아닌 나무 재질 (모든 나무가 같이 씀)
-    this.stageMat = {
-      blossom: new THREE.MeshStandardMaterial({ color: BLOSSOM_COLOR, roughness: 0.7 }),
-      green: new THREE.MeshStandardMaterial({ color: UNRIPE_COLOR, roughness: 0.5 }),
-      hongsi: new THREE.MeshStandardMaterial({ color: HONGSI_COLOR, roughness: 0.35 }),
+    const nF = this.trees.length * FRUIT_N, low = game.quality?.level === 'low';
+    const glowMat = (glow, key) => {
+      const mt = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45 });
+      mt.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += vColor.rgb * ${glow.toFixed(2)};`); };
+      mt.customProgramCacheKey = () => key;
+      return mt;
     };
+    this.fruitIM = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 12, 10), glowMat(FRUIT_GLOW, 'fruit-glow'), nF);
+    // 꽃송이: 작은 공 다섯 (가운데 + 둘레 넷)
+    const parts = [[0, 0.03, 0, 0.07], [0.07, 0, 0, 0.06], [-0.07, 0, 0, 0.06], [0, 0, 0.07, 0.06], [0, 0, -0.07, 0.06]].map(([x, y, z, r]) => new THREE.SphereGeometry(r, 7, 5).translate(x, y, z));
+    this.blossomIM = new THREE.InstancedMesh(mergeGeometries(parts), glowMat(BLOSSOM_GLOW, 'blossom-glow'), nF);
+    for (const q of parts) q.dispose();
+    for (const im of [this.fruitIM, this.blossomIM]) {
+      im.castShadow = !low; im.receiveShadow = false; im.count = nF; im.visible = false;
+      for (let k = 0; k < nF; k++) im.setColorAt(k, _c.set(0xffffff));
+      scene.add(im);
+    }
+    this._fruitDirty = true;
     // ---- 곤충 ----
     const wing = new THREE.PlaneGeometry(0.16, 0.12).translate(0.08, 0, 0);
     this.bugs = [];
@@ -93,14 +109,52 @@ export class NatureView {
   /** 지금 계절 id */
   get season() { return seasonOf(this.game.world.day ?? 1).id; }
 
-  /** 계절이 바뀌면 나무 모습을 바꿈 (열매 색·크기만, 그리기 수 그대로) */
+  /** 계절이 바뀌면 나무 모습을 바꿈: 열매 자리·색·크기, 겨울 감나무는 잎뭉치를 줄임 */
   _treeLook(tr, season) {
     const stage = treeStage(tr.fruit, season), kkachi = stage === 'ripe' && season === 'winter';
     if (tr.stage === stage && tr.kkachi === kkachi) return;
     tr.stage = stage; tr.kkachi = kkachi;
-    const mat = stage === 'ripe' ? (kkachi ? this.stageMat.hongsi : tr.mat) : this.stageMat[stage] || tr.mat;
-    const sc = stage === 'blossom' ? 1.35 : stage === 'green' ? 0.55 : 1;
-    for (const f of tr.fruits) { f.material = mat; f.scale.setScalar(sc); }
+    const k = kkachi ? WINTER_CANOPY : 1;
+    if (tr.canopy) { tr.canopy.scale.setScalar(tr.canopyS * k); tr.canopy.updateMatrix?.(); }
+    tr.m.updateMatrixWorld(true);
+    const col = stage === 'ripe' ? (kkachi ? HONGSI_COLOR : FRUIT_COLOR[tr.fruit]) : UNRIPE_COLOR;
+    const nShow = kkachi ? HONGSI_N : FRUIT_N;
+    tr.fruits = [];
+    for (let j = 0; j < FRUIT_N; j++) {
+      const a = (j / FRUIT_N) * Math.PI * 2 + tr.i * 0.7, el = (j % 2 ? 40 : 15) * Math.PI / 180;
+      const lp = new THREE.Vector3(
+        CANOPY_C[0] + CANOPY_R[0] * Math.cos(el) * Math.cos(a) * FRUIT_OUT * k,
+        CANOPY_C[1] + CANOPY_R[1] * Math.sin(el) * FRUIT_OUT * k,
+        CANOPY_C[2] + CANOPY_R[2] * Math.cos(el) * Math.sin(a) * FRUIT_OUT * k);
+      const wp = lp.applyMatrix4(tr.m.matrixWorld);
+      tr.fruits.push({ idx: tr.i * FRUIT_N + j, home: wp, y: wp.y, v: 0, falling: false, on: j < nShow, shown: false });
+      const blossom = stage === 'blossom';
+      (blossom ? this.blossomIM : this.fruitIM).setColorAt(tr.i * FRUIT_N + j, _c.set(blossom ? BLOSSOM_COLORS[j % 3] : col));
+    }
+    this.fruitIM.instanceColor.needsUpdate = true; this.blossomIM.instanceColor.needsUpdate = true;
+    this._fruitDirty = true;
+  }
+
+  /** 열매·꽃 인스턴스 자리 다시 씀 (바뀐 때만): 숨김은 크기 0 */
+  _writeFruits() {
+    const day = this.game.world.day;
+    let anyF = false, anyB = false;
+    for (const tr of this.trees) {
+      const fresh = tr.shakenDay !== day, blossom = tr.stage === 'blossom';
+      const sc = (FRUIT_SC[tr.stage] ?? 1) * tr.m.scale.x;
+      for (const f of tr.fruits) {
+        // 제철이면 흔들기 전까지 (겨울 감나무는 흔든 뒤에도 까치밥 하나), 꽃·풋열매는 늘, 빈 가지는 없음
+        const vis = f.on && (f.falling || (tr.stage === 'ripe' ? fresh || (tr.kkachi && f === tr.fruits[HONGSI_N - 1]) : tr.stage !== 'bare'));
+        const showF = vis && !blossom, showB = vis && blossom;
+        anyF ||= showF; anyB ||= showB;
+        _s.setScalar(showF ? sc : 0);
+        this.fruitIM.setMatrixAt(f.idx, _m4.compose(_v.set(f.home.x, f.y, f.home.z), _q, _s));
+        _s.setScalar(showB ? sc : 0);
+        this.blossomIM.setMatrixAt(f.idx, _m4.compose(_v.set(f.home.x, f.home.y, f.home.z), _q, _s));
+      }
+    }
+    for (const im of [this.fruitIM, this.blossomIM]) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }
+    this.fruitIM.visible = anyF; this.blossomIM.visible = anyB;
   }
 
   spawnBug(b) {
@@ -133,17 +187,17 @@ export class NatureView {
     for (const tr of this.trees) {
       this._treeLook(tr, season);
       const fresh = tr.shakenDay !== day, ripe = fresh && tr.stage === 'ripe';
-      // 열매: 제철이면 흔들기 전까지, 꽃·풋열매는 늘, 빈 가지는 없음, 겨울 감나무는 흔든 뒤에도 까치밥 하나
-      tr.fruits.forEach((f, i) => { if (!f.userData.falling) f.visible = tr.stage === 'ripe' ? fresh || (tr.kkachi && i === tr.fruits.length - 1) : tr.stage !== 'bare'; });
+      if (tr.seenDay !== day) { tr.seenDay = day; this._fruitDirty = true; } // 날이 바뀌면 다시 열림
       if (tr.shake > 0) {
         tr.shake -= dt;
         if (tr.canopy) tr.canopy.rotation.z = Math.sin(this.t * 40) * 0.06 * tr.shake;
       }
       for (const f of tr.fruits) {
-        if (!f.userData.falling) continue;
-        f.userData.v -= 9.8 * dt;
-        f.position.y += f.userData.v * dt;
-        if (f.position.y < f.userData.floor) { f.position.y = 0; f.userData.falling = false; f.visible = false; }
+        if (!f.falling) continue;
+        f.v -= 9.8 * dt;
+        f.y += f.v * dt;
+        if (f.y < f.floor) { f.y = f.home.y; f.falling = false; }
+        this._fruitDirty = true;
       }
       const d = Math.hypot(tr.x - playerPos.x, tr.z - playerPos.z);
       const nm = tr.kkachi ? '홍시' : ITEMS[tr.fruit].name;
@@ -151,6 +205,7 @@ export class NatureView {
         : fresh ? { label: `${tr.stage === 'blossom' ? '🌸 ' : ''}${ITEMS[tr.fruit].name} 나무 · ${seasonsText(tr.fruit)}에 열려요`, key: 'shake', onInteract: () => this.shakeTree(tr) }
           : { label: `${ITEMS[tr.fruit].name} 나무 · 내일 다시${tr.stage === 'ripe' ? ' 열려요' : ' 흔들 수 있어요'}`, key: 'tree' });
     }
+    if (this._fruitDirty) { this._fruitDirty = false; this._writeFruits(); }
     // ---- 곤충 ----
     const night = this.night;
     for (const b of this.bugs) {
@@ -192,14 +247,14 @@ export class NatureView {
     g.player.unico.facing = Math.atan2(tr.x - g.player.position.x, tr.z - g.player.position.z);
     g.player.unico.playAction('push', 0.9);
     if (tr.stage && tr.stage !== 'ripe') return this._shakeBare(tr);
-    const wp = new THREE.Vector3();
     tr.fruits.forEach((f, i) => {
-      if (i > 2 || (tr.kkachi && i === tr.fruits.length - 1)) return; // 3개만 떨어짐 (겨울 감나무 까치밥은 남김)
-      f.getWorldPosition(wp);
-      f.userData.falling = true;
-      f.userData.v = 0;
-      f.userData.floor = f.position.y - (wp.y - 0.1) / tr.m.scale.y;
+      if (i > 2 || !f.on) return; // 3개만 떨어짐 (겨울 감나무 까치밥은 남김)
+      f.falling = true;
+      f.v = 0;
+      f.y = f.home.y;
+      f.floor = heightAt(f.home.x, f.home.z) + 0.1;
     });
+    this._fruitDirty = true;
     g.economy.addItem(tr.fruit, 3);
     const rec = g.collection.add(tr.fruit, { day: g.world.day });
     g.onEvent('shake', 1, tr.fruit);

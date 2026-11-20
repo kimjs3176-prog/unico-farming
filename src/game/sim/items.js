@@ -92,11 +92,11 @@ export const ITEMS = {
   fruit_pear: { name: '배', emoji: '🍐', price: 45, cat: 'fruit', seasons: ['autumn'] },
   fruit_persimmon: { name: '감', emoji: '🟠', price: 55, cat: 'fruit', seasons: ['autumn', 'winter'] },
   // 계절 축제 (sim/festival.js): 축제 음식은 주민이 축제마다 한 번 나눠 줌 (팔기·선물 가능), 엽전은 축제 장터에서만 씀 (팔기 목록 제외)
-  fest_hwajeon: { name: '진달래 화전', emoji: '🌸', price: 90, cat: 'goods' },
-  fest_surichwi: { name: '수리취떡', emoji: '🟢', price: 90, cat: 'goods' },
+  fest_hwajeon: { name: '진달래 화전', emoji: '🥞', price: 90, cat: 'goods' },
+  fest_surichwi: { name: '수리취떡', emoji: '🍡', price: 90, cat: 'goods' },
   fest_songpyeon: { name: '송편', emoji: '🥟', price: 90, cat: 'goods' },
   fest_patjuk: { name: '동지 팥죽', emoji: '🥣', price: 90, cat: 'goods' },
-  fest_token: { name: '축제 엽전', emoji: '🏮', price: 0, cat: 'seed' },
+  fest_token: { name: '축제 엽전', emoji: '🎫', price: 0, cat: 'seed' },
 };
 
 export const CATEGORY_NAMES = { ranch: '특별 생산물', goods: '가공품', treasure: '물속 보물', fish: '물고기', bug: '곤충', fruit: '과일', rice: '쌀', seed: '씨앗' };

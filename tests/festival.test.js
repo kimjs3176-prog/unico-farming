@@ -133,7 +133,7 @@ test('축제 모이기: 안내·연구원·할머니·꼬마만 (여우·낚시�
 });
 
 test('축제 모이기 길: 구간마다 NavGrid.lineFree, 밭·자전거 자리를 밟지 않고, 다른 주민 자리와 가판대를 스치지 않음', () => {
-  const BOOTH = { x: 6.0, z: -6.6, r: 1.0 };
+  const BOOTH = { x: 6.0, z: -6.6, r: 1.2 }; // festival_view.js BOOTH (가판대를 1.3배로 키움)
   const segD = (p, a, b) => { const dx = b.x - a.x, dz = b.z - a.z, l2 = dx * dx + dz * dz || 1; const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / l2)); return Math.hypot(p.x - a.x - dx * t, p.z - a.z - dz * t); };
   for (const [id, s] of Object.entries(FEST_SLOTS)) {
     const n = LAYOUT.npcs[id];
@@ -183,4 +183,40 @@ test('축제 꾸미기: 꾸미기 표에 등록되어 놓은 축제 소품이 �
   assert.equal(back.storedOf('fest_snowman'), 2);
   // 코인으로는 꾸미기 창에 안 나옴 (축제 장터에서만)
   assert.ok(!D.DECOR_CATS.some(([c]) => c === 'fest'));
+});
+
+test('축제 꾸미기: 엽전으로 바꾼 소품은 보관함 수만큼만 놓이고, 다 놓으면 더 놓을 수 없음 (공짜로 끝없이 놓이지 않음)', async () => {
+  // 준비: 연등 하나를 엽전으로 바꿔 보관함에 넣음
+  const { TOKEN_ONLY_WHY } = await import('../src/ui/panels/festival.js');
+  const sim = new DecorSim();
+  sim.stored.fest_lantern = 1;
+  // 실행·확인: 첫 번째는 무료로 놓이고, 두 번째는 못 놓음
+  assert.equal(sim.place('fest_lantern', 12.5, 15, 0, { money: 99999, level: 99 }), 0);
+  assert.equal(sim.whyNot('fest_lantern', { money: 99999, level: 99 }), TOKEN_ONLY_WHY);
+  assert.equal(sim.place('fest_lantern', 14, 15, 0, { money: 99999, level: 99 }), -1);
+  assert.equal(sim.count, 1);
+  // 치웠다 다시 놓기(옮기기)는 그대로 됨
+  assert.equal(sim.move(0, 13, 16, 1), true);
+  assert.equal(sim.count, 1);
+  // 코인 소품은 그대로 코인으로
+  assert.equal(sim.whyNot('bench', { money: 500, level: 99 }), null);
+});
+
+test('축제 낮음 품질: 마당에 모이는 주민은 안내 강아지 하나뿐이고, 번갈아 보는 곳은 가판대·마당 가운데', async () => {
+  const { FEST_LOW, FEST_IDLE, FEST_LOOK_AT } = await import('../src/game/sim/routine.js');
+  assert.deepEqual(FEST_LOW, ['guide']);
+  for (const id of FEST_LOW) assert.ok(FEST_SLOTS[id], id);
+  assert.equal(FEST_LOOK_AT.length, 2);
+  assert.deepEqual(FEST_LOOK_AT[0], { x: 6.0, z: -6.6 }, '가판대');
+  assert.ok(FEST_IDLE.length >= 3, `동작 ${FEST_IDLE.length}개`);
+});
+
+test('축제 음식·엽전 그림: 음식은 색 동그라미가 아닌 음식 그림, 엽전은 연등(🏮)과 다른 그림, 가을 놀이엔 봄꽃 대신 감', () => {
+  for (const f of Object.values(FESTIVALS)) {
+    assert.doesNotMatch(ITEMS[f.food].emoji, /[🟢🟠🟡🔴🟣🟤⚫⚪]/u, f.food);
+    assert.doesNotMatch(f.skin.gold, /[🟢🟠🟡🔴🟣🟤]/u, `${f.id} 금빛 아이템`);
+    assert.ok(['azalea', 'iris', 'persimmon', 'snow'].includes(f.skin.deco), `${f.id} 가지 장식 ${f.skin.deco}`);
+  }
+  assert.equal(FESTIVALS.autumn.skin.deco, 'persimmon');
+  assert.notEqual(ITEMS.fest_token.emoji, '🏮');
 });
