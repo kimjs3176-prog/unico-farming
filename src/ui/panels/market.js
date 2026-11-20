@@ -96,7 +96,7 @@ export const MarketPanel = {
       const scroll = body.scrollTop;
       const cur = this.marketTab;
       top.innerHTML = '';
-      const coin = h('div', 'mk-coin', `🪙 <b class="money">${Math.max(0, eco.money - (this.coinHold || 0)).toLocaleString()}</b> 코인${eco.festival ? ` <span class="mk-ev fest">🎉 수확 축제 · 모두 ${eco.festival.mult}배</span>` : ''}${eco.event ? ` <span class="mk-ev">🔥 ${eco.event.name}</span>` : ''}`);
+      const coin = h('div', 'mk-coin', `🪙 <b class="money">${Math.max(0, eco.money - (this.coinHold || 0)).toLocaleString()}</b> 코인${eco.festival ? ` <span class="mk-ev fest">🎉 ${(eco.festival.name || '축제').split('!')[0]} · 모두 ${eco.festival.mult}배</span>` : ''}${eco.event ? ` <span class="mk-ev">🔥 ${eco.event.name}</span>` : ''}`);
       const tabs = h('div', 'mk-tabs');
       for (const [id, label] of TABS) {
         const n = id === 'sell' ? sellables().filter(([k]) => eco.count(k) > 0).length : 0;
@@ -235,7 +235,7 @@ export const MarketPanel = {
             b.onclick = () => { cs.wear(wearing ? null : c.id); g.applyLook(); if (!wearing) { reward(g, 1); this.toast(`${c.icon} ${c.name} · ${c.perkText}`); } else g.audio.play('pop', 0.7); render(); };
             btnsOf(r).append(b);
           } else if (why && !/모자라요/.test(why)) {
-            const b = h('button', 'locked', lockHtml(why.replace('부터 살 수 있어요', ' 해금').replace('체험관 스탬프 6개를 모으면 받아요', '스탬프 6개').replace('수확 축제 날에만 팔아요', '축제 날에만')));
+            const b = h('button', 'locked', lockHtml(why.replace('부터 살 수 있어요', ' 해금').replace('체험관 스탬프 6개를 모으면 받아요', '스탬프 6개').replace('축제 날에만 팔아요', '축제 날에만')));
             b.disabled = true; btnsOf(r).append(b);
           } else {
             const b = h('button', '', '사기');

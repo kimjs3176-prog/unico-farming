@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { heightAt } from '../terrain.js';
 import { LAYOUT } from '../world.js';
 import { routineSpots } from '../sim/routine.js';
+import { BOOTH } from './festival_view.js';
 import { DecorSim, DECOR_ALL, DECOR_BY_ID, DECOR_CATS_ALL, DECOR_MAX, outsideZones, snapAhead } from '../sim/decor.js';
 import { saveGame } from '../save.js';
 import { touchUI } from '../input.js';
@@ -54,6 +55,7 @@ export class DecorView {
     const Y = L.tractorYard; if (Y) z.push([Y.x0, Y.z0, Y.x1, Y.z1]);
     const F = L.farm; if (F) { const hw = (F.cols * F.tile) / 2 + 0.8, hh = (F.rows * F.tile) / 2 + 0.8; z.push([F.origin.x - hw, F.origin.z - hh, F.origin.x + hw, F.origin.z + hh]); }
     const R = L.ranch; if (R) z.push([R.x0, R.z0, R.x1, R.z1]);
+    z.push({ x: BOOTH.x, z: BOOTH.z, r: BOOTH.r + 0.6 }); // 축제 가판대
     const P = L.paddy; if (P) z.push([P.x0 - 1, P.z0 - 1, P.x0 + P.cols * P.size + 1, P.z0 + P.rows * P.size + 1]);
     for (const s of L.town?.sites || []) z.push({ x: s.x, z: s.z, r: 3.4 });
     if (L.town?.sign) z.push({ ...L.town.sign, r: 1.2 });

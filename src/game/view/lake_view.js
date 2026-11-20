@@ -1,3 +1,4 @@
+import { cloneMaterial } from '../surface.js';
 import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
@@ -60,7 +61,7 @@ export class LakeView {
     // 낚시 가게: 체험관 부스 모델 + 파란 지붕 + 간판
     const S = K.shop;
     this.shop = W.place('booth', S.x, S.z, S.rot, 0.95);
-    this.shop.traverse((o) => { if (o.isMesh && (o.parent?.name === 'RoofTint' || o.name === 'RoofTint')) { o.material = o.material.clone(); o.material.color.setHex(0x3a8fd8); } });
+    this.shop.traverse((o) => { if (o.isMesh && (o.parent?.name === 'RoofTint' || o.name === 'RoofTint')) { o.material = cloneMaterial(o.material); o.material.color.setHex(0x3a8fd8); } });
     attachSign(this.shop, signTexture('🎣 유니코 낚시 가게', '낚싯대 · 떡밥 · 오늘의 의뢰', '#ffffff', '#1d4f7a'));
     // 가게 옆 낚싯대 거치대 + 물고기 양동이
     const rack = new THREE.Group();

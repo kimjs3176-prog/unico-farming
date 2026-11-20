@@ -171,7 +171,7 @@ test('축제 첫마디: 주민마다 축제 4개, 반말 (할머니 해라체), 
 test('축제 꾸미기: 꾸미기 표에 등록되어 놓은 축제 소품이 저장·불러오기를 견딤 (보관함도)', async () => {
   const { FEST_DECOR } = await import('../src/ui/panels/festival.js');
   const D = await import('../src/game/sim/decor.js');
-  for (const d of FEST_DECOR) { assert.equal(D.DECOR_BY_ID[d.id]?.model, d.model, d.id); assert.ok(D.DECOR.some((x) => x.id === d.id), d.id); }
+  for (const d of FEST_DECOR) { assert.equal(D.DECOR_BY_ID[d.id]?.model, d.model, d.id); assert.ok(D.DECOR_ALL.some((x) => x.id === d.id), d.id); } // registerDecor 는 기본 20개(DECOR)는 두고 전체 목록(DECOR_ALL)에 더함
   for (const f of Object.values(FESTIVALS)) for (const id of f.stall) assert.ok(D.DECOR_BY_ID[id], `${f.id} 장터 ${id}`);
   const sim = new DecorSim();
   sim.stored.fest_lantern = 1;

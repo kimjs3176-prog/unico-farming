@@ -1,3 +1,4 @@
+import { cloneMaterial } from '../surface.js';
 import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -117,7 +118,7 @@ export class RanchView {
     const W = game.world, WS = LAYOUT.ranchWork;
     this.work = new Processor({ recipes: RANCH_RECIPES, prices: WORKSHOP_PRICES, jars: 2 });
     this.booth = W.place('booth', WS.x, WS.z, WS.rot, 0.95);
-    this.booth.traverse((o) => { if (o.isMesh && (o.parent?.name === 'RoofTint' || o.name === 'RoofTint')) { o.material = o.material.clone(); o.material.color.setHex(0xf2c84b); } });
+    this.booth.traverse((o) => { if (o.isMesh && (o.parent?.name === 'RoofTint' || o.name === 'RoofTint')) { o.material = cloneMaterial(o.material); o.material.color.setHex(0xf2c84b); } });
     attachSign(this.booth, signTexture('🧀 목장 가공소', '치즈 · 털실 · 카스텔라', '#ffffff', '#7a5418'));
     const cheese = new THREE.MeshStandardMaterial({ color: 0xf5c84c, roughness: 0.55 });
     this.wheels = [0, 1, 2].map((k) => {

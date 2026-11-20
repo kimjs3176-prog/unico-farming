@@ -1,3 +1,4 @@
+import { cloneMaterial } from '../surface.js';
 import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { HILLS, CHESTS, heightAt } from '../terrain.js';
@@ -28,7 +29,7 @@ export class ExploreView {
     // 보물 상자: 나무 상자 + 금빛 띠, 근처에 오면 반짝
     this.chests = CHESTS.map((c) => {
       const m = game.assets.clone('crate');
-      m.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.color.multiply(new THREE.Color(0xffe0a0)); o.material.emissive = new THREE.Color(0x553300); o.material.emissiveIntensity = 0.25; } });
+      m.traverse((o) => { if (o.isMesh) { o.material = cloneMaterial(o.material); o.material.color.multiply(new THREE.Color(0xffe0a0)); o.material.emissive = new THREE.Color(0x553300); o.material.emissiveIntensity = 0.25; } });
       m.scale.setScalar(0.8);
       m.position.set(c.x, heightAt(c.x, c.z) - 0.05, c.z);
       m.rotation.y = (c.x * 7 + c.z * 3) % 6.28;

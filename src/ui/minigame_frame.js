@@ -103,6 +103,7 @@ export function mgResult(g, o) {
   if (stars > 0) g.onEvent?.('mgstars', stars, o.id); // 하루 첫 3판까지 별당 경험치
   const p = ui.openPanel(`${o.icon} ${o.title}`);
   p.classList.add('mg-result');
+  p.onDismiss = () => { ui.closePanel(); o.onClose?.(); }; // 배경막 탭·✕·Esc 로 닫아도 onClose
   if (isNew && prev > 0) p.append(h('div', 'mg-ribbon', '🏆 새 최고 기록!'));
   const sc = h('div', 'mg-score', `<b>0</b><small>${o.unit}</small>`);
   p.append(sc);

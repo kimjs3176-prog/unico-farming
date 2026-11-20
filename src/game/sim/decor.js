@@ -80,6 +80,7 @@ export function registerDecor(def) {
   const d = { id: def.id, name: def.name, icon: def.icon || '🎁', price, lv, model: def.model, scale: +def.scale > 0 ? +def.scale : 1, r: Math.max(0, +def.r || 0), cat: def.cat || 'special' };
   if (def.tint && Number.isFinite(+def.tint.color)) d.tint = Array.isArray(def.tint.mats) ? { color: +def.tint.color, mode: 'mats', mats: def.tint.mats.map(String) } : { color: +def.tint.color, mode: def.tint.mode === 'green' ? 'green' : 'all' };
   if (def.limited) d.limited = true;
+  if (def.tokens) d.tokens = def.tokens; // 축제 엽전으로만 바꾸는 소품 (코인으로는 못 삼)
   // 기본 목록(DECOR)·기본 탭은 그대로 → 도트 판·레벨 해금 카드는 기본 20개만 봄
   if (!DECOR_CATS_ALL.some(([c]) => c === d.cat)) DECOR_CATS_ALL.push([d.cat, def.catLabel || d.cat]);
   DECOR_ALL.push(d);
@@ -98,6 +99,9 @@ export class DecorSim {
 
   get count() { return this.placed.length; }
   storedOf(id) { return this.stored[id] || 0; }
+  /** 보관함에 넣기 (레벨 선물·별 보상·축제 경품). 없는 id 면 false */
+  store(id, n = 1) { if (!DECOR_BY_ID[id] || n <= 0) return false; this.stored[id] = Math.min(99, this.storedOf(id) + n); return true; }
+  give(id, n = 1) { return this.store(id, n); }
 
   /** 놓을 수 없는 이유 (돈·레벨·개수, 자리 검사는 화면 쪽) */
   whyNot(id, { money = 0, level = 99 } = {}) {

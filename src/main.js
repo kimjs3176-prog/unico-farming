@@ -257,7 +257,7 @@ class Game {
     window.addEventListener('popstate', () => {
       if (history.state?.unicoBack) return;
       let closed = false;
-      if (this.ui.panel) { this.ui.closePanel(); closed = true; } else if (this.decor.mode) { this.decor.stop(); closed = true; }
+      if (this.ui.panel) { this.ui.dismiss ? this.ui.dismiss() : this.ui.closePanel(); closed = true; } else if (this.decor.mode) { this.decor.stop(); closed = true; }
       if (closed || this.cinema.locked || this.dialogue.active) { pushBackGuard(); return; }
       this.save();
       this.ui.toast('↩️ 한 번 더 누르면 게임에서 나가요');
@@ -406,7 +406,7 @@ class Game {
       }
     } else if (this.governor.frames === 0) this.ui.updateFps?.(this.governor.fps);
     const input = this.input;
-    if (input.justPressed('Escape') && this.ui.panel) this.ui.closePanel();
+    if (input.justPressed('Escape') && this.ui.panel) { if (this.ui.dismiss) this.ui.dismiss(); else this.ui.closePanel(); } // 창마다 닫을 때 할 일(onDismiss)까지
     if (!this.busy()) { // 대화·컷신 중에는 단축키로 창을 열지 않음
       if (input.justPressed('KeyI')) this.ui.panel ? this.ui.closePanel() : this.ui.openInventory();
       if (input.justPressed('KeyQ')) this.ui.panel ? this.ui.closePanel() : this.ui.openQuests();

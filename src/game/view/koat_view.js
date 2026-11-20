@@ -1,3 +1,4 @@
+import { cloneMaterial } from '../surface.js';
 import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
 import { Unico, PALETTES } from '../unico.js';
@@ -60,10 +61,10 @@ export class KoatView {
       const d = divisionById(b.id);
       const m = W.place('booth', b.x, b.z, b.rot, 1);
       m.traverse((o) => {
-        if (o.isMesh && o.parent?.name === 'RoofTint' || o.name === 'RoofTint') { o.material = o.material.clone(); o.material.color.setHex(d.color); }
+        if (o.isMesh && o.parent?.name === 'RoofTint' || o.name === 'RoofTint') { o.material = cloneMaterial(o.material); o.material.color.setHex(d.color); }
       });
       const roof = m.getObjectByName('RoofTint');
-      roof?.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.color.setHex(d.color); } });
+      roof?.traverse((o) => { if (o.isMesh) { o.material = cloneMaterial(o.material); o.material.color.setHex(d.color); } });
       attachSign(m, signTexture(`${d.emoji} ${d.name}`, d.game.title, '#ffffff', '#231916'));
       const fwd = new THREE.Vector3(Math.sin(b.rot), 0, Math.cos(b.rot));
       // 부스 담당 유니코 (네 발, 본부 색 갈기)

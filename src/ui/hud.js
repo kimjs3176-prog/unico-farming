@@ -232,7 +232,7 @@ export const HudUI = {
           batch.left -= part;
           this.coinHold = Math.max(0, this.coinHold - part);
           this._paintCoin(true);
-          g.audio.play('coin', 0.6, { freq: 1976 * 2 ** (k / 12) });
+          if (k >= n - 5) g.audio.play('coin', 0.6, { freq: 1976 * 2 ** ((k - Math.max(0, n - 5)) / 12) }); // 마지막 5개만 짤랑 (한꺼번에 쌓이지 않게)
           if (k === n - 1) finish();
         }, COIN_FLIGHT);
       }, k * COIN_STAGGER);

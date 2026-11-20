@@ -160,10 +160,22 @@ const LEAF_SEASON = `
   }
   snowW = 1.0 + 0.6 * isCan + 0.2 * isCon;`;
 
+/** 셰이더를 붙인 재질 (userData 표시는 clone 에 복사되지만 onBeforeCompile 은 안 따라가므로 인스턴스로 셈) */
+const ENHANCED = new WeakSet();
+
+/** 재질을 복사해 색 등을 바꿀 때: 원본에 붙어 있던 디테일·시야 구멍 셰이더를 복사본에도 다시 붙임 */
+export function cloneMaterial(m) {
+  const c = m.clone();
+  if (m.userData?.enhanced) enhanceMaterial(c, m.userData.enhanced, m.userData.enhOpts || {});
+  return c;
+}
+
 /** 재질에 디테일 셰이더 주입 (한 재질에 한 번) */
 export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim = 0, spots = 0 } = {}) {
-  if (!m || m.userData.enhanced || m.transparent || !m.isMeshStandardMaterial) return m;
+  if (!m || ENHANCED.has(m) || m.transparent || !m.isMeshStandardMaterial) return m;
+  ENHANCED.add(m);
   m.userData.enhanced = kind;
+  m.userData.enhOpts = { contact, rim, spots };
   const prev = m.onBeforeCompile;
   m.onBeforeCompile = (sh, r) => {
     prev?.call(m, sh, r);
