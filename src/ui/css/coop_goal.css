@@ -1,26 +1,54 @@
-/* 함께하기 목표 — W5-D 가 채움 (coop_goal.js) */
+/* 함께하기 목표 (coop_goal.js) · 내 농장 옮기기 (settings.js) · 휴대폰으로 이어하기 카드 (boot.js) */
 /* 주의: theme.css 가 이 파일 뒤에 읽혀 button(.gold·.ghost)·.panel·.panel h2(::after)·.panel h3 을 다시 칠함 → 같은 세기면 테마가 이김.
    덮으려면 클래스 하나 더: .panel.coop-goal h2, .coop-goal button.gold (.row 배경은 테마가 !important) */
 
-/* 함께 수확 한 줄: 접속 표시(👥) 바로 아래, 글자 + 얇은 막대 */
-.chat > .coop-goal { display: flex; flex-direction: column; gap: 3px; width: fit-content; min-width: 150px; margin: 4px 0 4px; padding: 4px 10px 5px; border-radius: 12px; background: rgba(35,25,22,0.62); color: #fff; font-family: var(--display); font-size: 13px; line-height: 1.2; }
-.coop-goal .cg-bar { display: block; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.28); overflow: hidden; }
-.coop-goal .cg-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #ffd75a, #9fe07a); transition: width 0.6s ease; }
-.coop-goal.all-done .cg-bar i { background: #ffd75a; }
+/* 함께 수확 알약: 크림 HUD 칩 (목표 칩·지갑과 같은 판) — 왼쪽 작물 그림, 굵은 숫자, 둥근 막대, 오른쪽 끝에 접속 수(👥) */
+.chat > .coop-goal { display: flex; align-items: center; gap: 8px; box-sizing: border-box; width: fit-content; min-width: 190px; max-width: 100%; margin: 4px 0 6px; padding: 5px 10px 6px 8px;
+  border-radius: 14px; background: var(--panel); border: 2px solid var(--panel-edge); box-shadow: 0 3px 0 rgba(107,74,46,0.15); color: var(--brown); font-family: var(--display); line-height: 1.15; pointer-events: auto; }
+.coop-goal .cg-ic { flex: none; font-size: 20px; line-height: 1; }
+.coop-goal .cg-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.coop-goal .cg-top { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.coop-goal .cg-t { font-size: 13px; color: #6b5a48; }
+.coop-goal .cg-n { margin-left: auto; font-size: 15px; font-family: 'Unico Coin', var(--display); font-variant-numeric: tabular-nums; color: var(--brown); }
+.coop-goal .cg-bar { display: block; height: 7px; border-radius: 999px; background: #eadfc8; box-shadow: inset 0 1px 1px rgba(107,74,46,0.18); overflow: hidden; }
+.coop-goal .cg-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #ffcf4a, #8fd46a); transition: width 0.6s ease; }
+.coop-goal .cg-who { flex: none; font-size: 13px; padding: 2px 7px; border-radius: 999px; background: #f3e7cf; color: #5a4632; white-space: nowrap; }
+.coop-goal .cg-who:empty { display: none; }
+.coop-goal.all-done .cg-bar i { background: linear-gradient(90deg, #ffd75a, #f2b632); }
+/* 달성 순간: 금빛 테두리가 반짝 */
+.coop-goal.party { border-color: #f2b632; background: #fff6d6; animation: cg-party 0.9s ease-in-out 3; }
+.coop-goal.party .cg-t { color: #8a5a00; font-weight: 700; }
+.coop-goal.party .cg-n { color: #8a5a00; font-size: 14px; }
+@keyframes cg-party { 0%, 100% { box-shadow: 0 3px 0 rgba(107,74,46,0.15), 0 0 0 0 rgba(242,182,50,0); } 50% { box-shadow: 0 3px 0 rgba(107,74,46,0.15), 0 0 0 5px rgba(242,182,50,0.45); } }
+/* 알약이 접속 수를 품으면 따로 떠 있던 '👥 N' 알약은 숨김 (한 덩어리로) */
+.chat > .online.online-pill:has(+ .coop-goal.with-room:not([style*="none"])) { display: none !important; }
 #ui.net-off > .chat > .coop-goal { display: none !important; }
+/* 폰(세로·가로): 아래 줄은 안내 말풍선·채팅·메뉴 단추와 다툼 → 왼쪽 위 목표 칩 바로 아래 (알림·팁 카드는 잠깐 위에 덮음) */
 @media (max-width: 600px), (pointer: coarse) and (max-height: 500px) {
-  /* 폰: 아래 가운데 안내 말풍선(E·가까운 사람) 줄과 겹치지 않게 한 줄 위로 */
-  .chat > .coop-goal { min-width: 0; font-size: 11px; padding: 3px 8px 4px; margin: 2px 0 48px; }
+  .chat > .coop-goal { position: fixed; left: calc(4px + var(--sal)); top: calc(var(--hud-b, 40px) + 38px); margin: 0; min-width: 0; max-width: min(calc(100vw / var(--ui-zoom, 1) - 100px - var(--sal) - var(--sar)), 260px);
+    gap: 6px; padding: 3px 7px 4px 6px; border-radius: 12px; box-shadow: 0 2px 0 rgba(107,74,46,0.15); pointer-events: none; }
+  body.obj-peek .chat > .coop-goal { top: calc(var(--hud-b, 40px) + 86px); } /* 펼친 목표 칩 아래로 */
+  .coop-goal .cg-ic { font-size: 15px; }
+  .coop-goal .cg-main { gap: 3px; }
+  .coop-goal .cg-t { font-size: 11px; }
+  .coop-goal .cg-n { font-size: 12px; }
+  .coop-goal .cg-bar { height: 5px; min-width: 96px; }
+  .coop-goal .cg-who { font-size: 11px; padding: 1px 5px; }
+  /* 대화·컷신 중에는 숨김 */
+  #ui:has(> .dlg:not(.hidden)) > .chat > .coop-goal, body.cine .chat > .coop-goal { visibility: hidden; }
 }
-@media (prefers-reduced-motion: reduce) { .coop-goal .cg-bar i { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .coop-goal .cg-bar i { transition: none; } .coop-goal.party { animation: none; } }
 
 /* 내 농장 옮기기·보관 (환경설정) */
 .farm-move .fm-btns { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 8px; }
 .farm-move .fm-btns button { min-height: 44px; font-size: 14px; padding: 8px 10px; }
 .farm-move .fm-btns button[hidden] { display: none; }
+.farm-move .fm-btns .fm-main { grid-column: 1 / -1; min-height: 48px; font-size: 16px; } /* 주된 일: 코드 복사 */
+.farm-move .fm-btns .fm-wide { grid-column: 1 / -1; }
+.farm-move .fm-keep-st { margin: 4px 2px 0; color: #2f6b2a; word-break: keep-all; }
 .farm-move .fm-note { opacity: 1; color: #4a3a2c; word-break: keep-all; }
 .farm-move .fm-note.warn { color: #9a4a10; }
-.farm-move .fm-code { display: block; box-sizing: border-box; width: 100%; min-height: 72px; margin-top: 8px; padding: 8px; border: 2px solid var(--panel-edge); border-radius: 10px; font: 12px/1.35 ui-monospace, monospace; word-break: break-all; resize: vertical; background: #fff; color: var(--ink); }
+.fm-code { display: block; box-sizing: border-box; width: 100%; min-height: 72px; margin-top: 8px; padding: 8px; border: 2px solid var(--panel-edge); border-radius: 10px; font: 12px/1.35 ui-monospace, monospace; word-break: break-all; resize: vertical; background: #fff; color: var(--ink); }
 .farm-move .fm-load-row { display: flex; gap: 6px; margin-top: 6px; }
 .farm-move .fm-load-row button { flex: 1; min-height: 44px; }
 .farm-move .fm-qr { display: flex; flex-direction: column; align-items: center; margin-top: 10px; }
@@ -31,14 +59,18 @@
 .farm-compare .fc-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: #fff; word-break: keep-all; }
 .farm-compare .fc-row.in { background: #eaf8e2; }
 .farm-compare .fc-k { font-size: 12px; color: #6b5a48; }
-.farm-compare .fc-arrow { text-align: center; font-size: 18px; color: #8a7a66; line-height: 1.3; }
+.farm-compare .fc-arrow { display: flex; justify-content: center; margin: -4px 0; position: relative; z-index: 1; }
+.farm-compare .fc-arrow span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--gold, #f6c445); border: 2px solid #fff; color: var(--brown); font-size: 16px; line-height: 1; box-shadow: 0 2px 0 rgba(107,74,46,0.2); }
+.farm-compare .fc-same { margin: 8px 2px 0; padding: 6px 10px; border-radius: 10px; background: #fff3d0; color: #7a4f00; font-size: 13px; word-break: keep-all; }
 .farm-compare .fc-note { font-size: 13px; color: #4a3a2c; margin: 8px 2px; word-break: keep-all; }
 .farm-compare .fc-btns { display: flex; gap: 8px; }
 .farm-compare .fc-btns button { flex: 1; min-height: 44px; }
 
 /* 휴대폰으로 이어하기 주소로 들어왔을 때 (로딩 화면 위) */
-.farm-in { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(35,25,22,0.45); }
+.farm-in { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(35,25,22,0.62); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.farm-in .fi-sub { margin: 6px 2px 0; font-size: 12px; color: #6b5a48; text-align: center; word-break: keep-all; }
 .farm-in .fi-card { box-sizing: border-box; width: min(calc(100vw - 32px), 420px); padding: 18px 16px 16px; border-radius: 20px; background: var(--panel); color: var(--ink); box-shadow: 0 10px 30px rgba(35,25,22,0.3); text-align: left; }
 .farm-in h2 { margin: 0 0 4px; font-size: 20px; color: #6b4a2e; }
 .farm-in .fi-note { font-size: 14px; word-break: keep-all; }
 .farm-in .fi-card > button { width: 100%; min-height: 44px; }
+.fm-tipbox .fm-code { margin: 8px 0 0; }

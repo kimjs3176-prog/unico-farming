@@ -146,6 +146,21 @@ export function saveSettings(s) {
 /** 자동 모드에서 지금 쓰는 단계 (이번 접속에서 낮췄으면 그 단계) */
 export const autoNow = (s) => (LEVELS.includes(s?.sessionLevel) ? s.sessionLevel : s?.autoLevel);
 
+/** 세부 항목이 어느 프리셋과 똑같은지 (아니면 사용자 지정) */
+export function matchPreset(s) {
+  const keys = Object.keys(PRESETS.high);
+  return Object.keys(PRESETS).find((p) => keys.every((k) => PRESETS[p][k] === s[k])) || 'custom';
+}
+
+/**
+ * 자동 내림: 이번 접속 단계(sessionLevel)와 세부 항목을 함께 그 단계 값으로
+ *  (세부 항목이 예전 단계로 남으면 환경설정 표시가 틀리고, 항목 하나만 바꿔도 '사용자 지정'으로 다시 높아짐)
+ *  저장해도 됨: 다음 부팅에 loadSettings 가 autoLevel 값으로 다시 채움
+ */
+export function sessionDrop(s, level) {
+  return { ...s, ...PRESETS[level], sessionLevel: level };
+}
+
 /** 프리셋 선택: 세부 항목을 그 프리셋 값으로 */
 export function applyPreset(s, preset) {
   const level = preset === 'auto' ? autoNow(s) || autoStartLevel() : preset;
@@ -196,9 +211,13 @@ export function levelExtras(level) {
 /**
  * 자동 품질 조절기: 창(4초)마다 프레임 시간의 가운데 값(중앙값)을 보고, 두 창 잇달아 36ms(약 28fps)보다 길면 한 단계 내림을 제안.
  *  - 30fps 로 꾸준히 도는 화면(33ms)은 내리지 않음, 한 번 끊김(중앙값에 안 걸림)으로도 내리지 않음
+ *  - 가벼운 판단(light, 이미 가장 낮은 단계 → 저장하지 않는 절전 단계만 남음): 예전처럼 한 창 평균 32fps 미만이거나
+ *    중앙값 31ms 초과면 바로 (폰이 29~31fps 로 버틸 때도 풀·해상도 절전을 받게)
  *  - 올리는 건 하지 않음(오르내림 반복 방지). 순수 로직 → tests/quality.test.js
  */
 export const SLOW_MS = 36;
+export const LIGHT_FPS = 32;
+export const LIGHT_MS = 31;
 export class FpsGovernor {
   constructor({ window = 4, slowMs = SLOW_MS, strikes = 2, grace = 6 } = {}) {
     this.window = window; this.slowMs = slowMs; this.strikes = strikes; this.grace = grace;
@@ -209,8 +228,8 @@ export class FpsGovernor {
   /** 탭 전환 등으로 측정을 처음부터 (유예 시간 포함) */
   reset() { this.t = 0; this.frames = 0; this.maxDt = 0; this.cool = this.grace; this.slow = 0; }
 
-  /** 매 프레임 호출. 내려야 하면 true */
-  tick(dt) {
+  /** 매 프레임 호출. 내려야 하면 true (light: 가장 낮은 단계의 절전 판단) */
+  tick(dt, light = false) {
     this.buf[Math.min(this.frames, this.buf.length - 1)] = dt;
     this.t += dt; this.frames++;
     if (dt > this.maxDt) this.maxDt = dt;
@@ -221,6 +240,11 @@ export class FpsGovernor {
     this.p50 = this.buf.subarray(0, n).slice().sort()[n >> 1] * 1000;
     this.t = 0; this.frames = 0; this.maxDt = 0;
     if (this.cool > 0) { this.slow = 0; return false; }
+    if (light) { // 예전 기준 그대로 (멈춤도 평균에 들어감)
+      this.slow = 0;
+      if (this.fps < LIGHT_FPS || this.p50 > LIGHT_MS) { this.cool = this.grace; return true; }
+      return false;
+    }
     if (stall) return false; // 한 프레임이 창의 절반을 넘게 차지(한 번 멈춤): 판단하지 않음
     this.slow = this.p50 > this.slowMs ? this.slow + 1 : 0;
     if (this.slow >= this.strikes) { this.slow = 0; this.cool = this.grace; return true; }

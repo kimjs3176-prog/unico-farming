@@ -221,8 +221,8 @@ export class Net {
         this.id = m.id; this.room = m.room; this.count = m.count; g.ui.setOnline(m.count, m.room); for (const p of m.players) this.upsert(p);
         if (m.goal) this.setGoal(m.goal); // Cloudflare 릴레이는 welcome 에, Node 서버는 바로 뒤 'goal' 로
         break;
-      case 'joined': this.upsert(m.p); this.count = m.count; g.ui.setOnline(m.count, this.room); g.ui.toast(g.social?.isFriend(m.p.name) ? `⭐ 친구 ${m.p.name} 님이 들어왔어요!` : `🦄 ${m.p.name} 님이 입장했어요`); break;
-      case 'left': this.removeRemote(m.id); this.count = m.count; g.ui.setOnline(m.count, this.room); break;
+      case 'joined': this.upsert(m.p); this.count = m.count; g.ui.setOnline(m.count, this.room); g.coopGoal?.room(m.count); g.ui.toast(g.social?.isFriend(m.p.name) ? `⭐ 친구 ${m.p.name} 님이 들어왔어요!` : `🦄 ${m.p.name} 님이 입장했어요`); break;
+      case 'left': this.removeRemote(m.id); this.count = m.count; g.ui.setOnline(m.count, this.room); g.coopGoal?.room(m.count); break;
       case 'state': for (const p of m.players) this.upsert(p); break;
       case 'chat': { const r = this.remote.get(m.id); if (m.id === this.id) { g.ui.chatLine(g.playerName, m.text, true); g.player.unico.say(m.text); } else { g.ui.chatLine(m.name, m.text); r?.unico.say(m.text); } break; }
       case 'full': g.ui.toast('⚠️ 모든 방이 가득 찼어요. 혼자 플레이하다가 자리가 나면 다시 들어가요'); break;

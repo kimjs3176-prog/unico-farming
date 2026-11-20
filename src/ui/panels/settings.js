@@ -1,10 +1,10 @@
 // 환경설정(그래픽 품질·글자 크기)·도움말 창
 import { h, esc } from '../dom.js';
-import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf, autoNow } from '../../game/quality.js';
+import { PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf, autoNow, matchPreset } from '../../game/quality.js';
 import { canVibrate, hapticPrefs, shakePrefs, reducedMotion } from '../../game/juice.js';
 import { copyDiag } from '../../game/crash.js';
 import { touchUI } from '../../game/input.js';
-import { parseCode, importSave, localSummary, CODE_ERR, QR_MAX } from '../../game/save.js';
+import { parseCode, importSave, localSummary, hasBrokenSave, CODE_ERR, QR_MAX } from '../../game/save.js';
 import { farmQrCanvas } from '../join_qr.js';
 
 /** 농장 요약 한 줄: '별님 · 12일차 · 3,450코인' */
@@ -20,16 +20,25 @@ export function farmFileName(d = new Date()) {
 }
 const isLocal = () => typeof location !== 'undefined' && /^(localhost|127\.|\[?::1\]?$)/.test(location.hostname);
 
+/** 두 농장 요약이 같은 농장으로 보이는지 (이름·날짜·코인이 모두 같음) */
+export const sameFarm = (a, b) => !!a && !!b && a.name === b.name && a.day === b.day && a.coins === b.coins;
+
 /**
  * 가져올 농장 비교 카드: '이 기기 → 가져올 농장' + [바꾸기]·[취소] (확인 없이는 덮어쓰지 않음)
+ * broken: 이 기기에 못 읽은 기록이 있음 (요약이 없어도 '농장 없음'이라 하지 않음)
  * @returns 카드 요소
  */
-export function compareCard(incoming, { local = localSummary(), okLabel = '가져온 농장으로 바꾸기', noLabel = '취소', onOk, onNo } = {}) {
+export function compareCard(incoming, { local = localSummary(), broken = !local && hasBrokenSave(), okLabel = '가져온 농장으로 바꾸기', noLabel = '취소', onOk, onNo } = {}) {
+  const here = local ? summaryText(local) : broken ? '읽지 못한 기록 있음' : '저장된 농장 없음';
+  const note = local ? '지금 농장은 백업으로 한 번 남겨 두고 바뀌어요.'
+    : broken ? '이 기기의 읽지 못한 기록은 지우지 않고 따로 남겨 둬요.' : '이 기기에는 아직 농장이 없어요.';
+  const same = sameFarm(local, incoming);
   const card = h('div', 'farm-compare', `
-    <div class="fc-row"><span class="fc-k">이 기기</span><b>${esc(summaryText(local))}</b></div>
-    <div class="fc-arrow" aria-hidden="true">↓</div>
+    <div class="fc-row"><span class="fc-k">이 기기</span><b>${esc(here)}</b></div>
+    <div class="fc-arrow" aria-hidden="true"><span>⬇</span></div>
     <div class="fc-row in"><span class="fc-k">가져올 농장</span><b>${esc(summaryText(incoming))}</b></div>
-    <p class="fc-note">${local ? '지금 농장은 백업으로 한 번 남겨 두고 바뀌어요.' : '이 기기에는 아직 농장이 없어요.'} 옮긴 뒤에는 두 기기의 농장이 따로 자라요.</p>
+    ${same ? '<p class="fc-same">🔁 같은 농장 같아요 — 바꿔도 거의 달라지지 않아요</p>' : ''}
+    <p class="fc-note">${note} 옮긴 뒤에는 두 기기의 농장이 따로 자라요.</p>
     <div class="fc-btns"><button class="gold fc-ok"></button><button class="ghost fc-no"></button></div>`);
   card.setAttribute('role', 'group');
   card.setAttribute('aria-label', '농장 비교');
@@ -38,6 +47,33 @@ export function compareCard(incoming, { local = localSummary(), okLabel = '가�
   card.querySelector('.fc-ok').onclick = () => onOk?.();
   card.querySelector('.fc-no').onclick = () => onNo?.();
   return card;
+}
+
+/**
+ * 농장 코드 복사: 누른 그 순간(사용자 동작 안)에 clipboard.write 를 부르고 내용은 약속으로 넘김
+ *  → 압축을 기다린 뒤 복사하면 막는 브라우저(사파리)도 복사됨. 안 되면 writeText → { ok, code }
+ *  주의: 클릭 처리에서 await 없이 맨 먼저 부를 것
+ */
+export async function copyFarmCode(g, nav = globalThis.navigator) {
+  const p = Promise.resolve(g.farmCode?.()).catch(() => null);
+  const cb = nav?.clipboard;
+  if (cb?.write && typeof ClipboardItem === 'function') {
+    try {
+      const blob = p.then((c) => { if (!c) throw new Error('농장 없음'); return new Blob([c], { type: 'text/plain' }); });
+      await cb.write([new ClipboardItem({ 'text/plain': blob })]);
+      return { ok: true, code: await p };
+    } catch { /* writeText 로 */ }
+  }
+  const c = await p;
+  if (!c) return { ok: false, code: null };
+  try { await cb.writeText(c); return { ok: true, code: c }; } catch { return { ok: false, code: c }; }
+}
+
+/** 복사가 막혔을 때: 직접 골라 복사할 수 있는 코드 칸 */
+function codeBox(c) {
+  const ta = h('textarea', 'fm-code');
+  ta.readOnly = true; ta.value = c; ta.setAttribute('aria-label', '농장 코드');
+  return ta;
 }
 
 /** 소리 크기 칸: 전체·음악·효과음·주변 소리 */
@@ -54,12 +90,6 @@ function volRow(k, n, v, mode) {
     + `<span style="width:auto;text-align:left">${n}</span>`
     + `<input type="range" min="0" max="100" step="5" data-vol="${k}" value="${pct}" aria-label="${n} 크기" aria-valuetext="${n} ${pct}%" style="min-height:44px">`
     + `<span style="width:auto">${pct}%</span></label>`;
-}
-
-/** 세부 항목이 어느 프리셋과 똑같은지 (아니면 사용자 지정) */
-function matchPreset(s) {
-  const keys = Object.keys(PRESETS.high);
-  return Object.keys(PRESETS).find((p) => keys.every((k) => PRESETS[p][k] === s[k])) || 'custom';
 }
 
 /** 환경설정·도움말 창 메서드 (UI.prototype 에 합쳐짐) */
@@ -176,12 +206,13 @@ export const SettingsPanel = {
       <h3>💾 내 농장 옮기기·보관</h3>
       <p class="gfx-tip">농장은 이 브라우저에만 저장돼요. 다른 기기로 옮기거나 지켜 두려면 농장 코드나 파일로 보관하세요.</p>
       <div class="fm-btns">
-        <button class="ghost" data-fm="copy">📋 농장 코드 복사</button>
+        <button class="gold fm-main" data-fm="copy">📋 농장 코드 복사</button>
         <button class="ghost" data-fm="file">💾 파일로 저장</button>
         <button class="ghost" data-fm="load">📥 코드·파일로 불러오기</button>
-        <button class="ghost" data-fm="qr">📱 휴대폰으로 이어하기</button>
-        <button class="ghost" data-fm="keep" hidden>🛡️ 이 브라우저에 오래 보관</button>
+        <button class="ghost fm-wide" data-fm="qr">📱 휴대폰으로 이어하기</button>
+        <button class="ghost fm-wide" data-fm="keep" hidden>🛡️ 이 브라우저에 오래 보관</button>
       </div>
+      <p class="gfx-tip fm-keep-st" hidden></p>
       <div class="fm-out" aria-live="polite"></div>
       <div class="pwa-slot"></div>`);
     const out = sec.querySelector('.fm-out');
@@ -192,15 +223,13 @@ export const SettingsPanel = {
       return c;
     };
     sec.querySelector('[data-fm="copy"]').onclick = async () => {
-      const c = await code();
-      if (!c) return;
-      try { await navigator.clipboard.writeText(c); say(`✅ 농장 코드를 복사했어요 (${c.length.toLocaleString()}자). 다른 기기의 ⚙️ 환경설정 → '코드·파일로 불러오기'에 붙여 넣으세요`); }
-      catch { // 복사가 막힌 브라우저: 직접 고를 수 있게 보여 줌
-        const ta = h('textarea', 'fm-code');
-        ta.readOnly = true; ta.value = c; ta.setAttribute('aria-label', '농장 코드');
-        out.replaceChildren(h('p', 'gfx-tip fm-note', '아래 코드를 모두 골라 복사해 주세요'), ta);
-        ta.focus(); ta.select();
-      }
+      const r = await copyFarmCode(g); // await 전에 복사를 시작 (사파리)
+      if (!r.code) { say('아직 저장된 농장이 없어요. 조금 놀고 나서 다시 해 주세요', 'warn'); return; }
+      if (r.ok) { say(`✅ 농장 코드를 복사했어요 (${r.code.length.toLocaleString()}자). 다른 기기의 ⚙️ 환경설정 → '코드·파일로 불러오기'에 붙여 넣으세요`); return; }
+      // 복사가 막힌 브라우저: 직접 고를 수 있게 보여 줌
+      const ta = codeBox(r.code);
+      out.replaceChildren(h('p', 'gfx-tip fm-note', '아래 코드를 모두 골라 복사해 주세요'), ta);
+      ta.focus(); ta.select();
     };
     sec.querySelector('[data-fm="file"]').onclick = async () => {
       if (!(await code())) return;
@@ -223,10 +252,13 @@ export const SettingsPanel = {
         note.textContent = '확인하는 중…';
         const r = await parseCode(text);
         if (!r.ok) { note.textContent = `⚠️ ${CODE_ERR[r.reason] || CODE_ERR.format}`; note.classList.add('warn'); return; }
-        out.replaceChildren(compareCard(r.summary, {
+        const card = compareCard(r.summary, {
           onOk: () => { g.save?.(); say('🔄 가져온 농장으로 바꾸는 중…'); importSave(r.data); },
           onNo: () => say('취소했어요. 이 기기 농장은 그대로예요'),
-        }));
+        });
+        out.replaceChildren(card);
+        card.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }); // 긴 창 아래에 생겨도 보이게
+        card.querySelector('.fc-ok')?.focus({ preventScroll: true });
       };
       form.querySelector('.fm-go').onclick = () => check(ta.value);
       form.querySelector('.fm-pick').onclick = () => form.querySelector('input[type=file]').click();
@@ -249,16 +281,17 @@ export const SettingsPanel = {
       out.replaceChildren(box);
     };
     // 오래 보관 (Firefox 등 묻는 브라우저는 여기서 직접 누를 때만)
-    const keep = sec.querySelector('[data-fm="keep"]'), st = globalThis.navigator?.storage;
+    const keep = sec.querySelector('[data-fm="keep"]'), keepSt = sec.querySelector('.fm-keep-st'), st = globalThis.navigator?.storage;
+    const kept = () => {
+      keep.disabled = true; keep.textContent = '🛡️ 오래 보관 켜짐 ✓';
+      keepSt.hidden = false; keepSt.textContent = '저장 공간이 모자라도 브라우저가 이 농장을 지우지 않아요';
+    };
     if (st?.persist && st.persisted) {
-      st.persisted().then((on) => {
-        keep.hidden = false;
-        if (on) { keep.disabled = true; keep.textContent = '✅ 이 브라우저에 오래 보관 중'; }
-      }).catch(() => {});
+      st.persisted().then((on) => { keep.hidden = false; if (on) kept(); }).catch(() => {});
       keep.onclick = async () => {
         let on = false;
         try { on = await st.persist(); } catch { /* 거절 */ }
-        if (on) { keep.disabled = true; keep.textContent = '✅ 이 브라우저에 오래 보관 중'; say('✅ 저장 공간이 모자라도 브라우저가 농장을 지우지 않게 했어요'); }
+        if (on) kept();
         else say('이 브라우저가 오래 보관을 허락하지 않았어요. 가끔 농장 코드를 저장해 두세요', 'warn');
       };
     }
@@ -281,15 +314,20 @@ export const SettingsPanel = {
     const note = h('p', 'gfx-tip fm-note', '');
     note.setAttribute('aria-live', 'polite');
     const copy = h('button', 'gold', '📋 농장 코드 복사');
+    const box = h('div', 'fm-tipbox', '');
     copy.onclick = async () => {
-      const c = await g.farmCode?.();
-      if (!c) { note.textContent = '아직 저장된 농장이 없어요'; return; }
-      try { await navigator.clipboard.writeText(c); note.textContent = '✅ 복사했어요. 이제 공유 → 홈 화면에 추가를 눌러 주세요'; }
-      catch { note.textContent = '복사가 막혔어요. ⚙️ 환경설정 → 내 농장 옮기기에서 코드를 직접 골라 복사해 주세요'; }
+      const r = await copyFarmCode(g); // await 전에 복사를 시작 (사파리)
+      if (!r.code) { note.textContent = '아직 저장된 농장이 없어요'; return; }
+      if (r.ok) { box.replaceChildren(); note.textContent = '✅ 복사했어요. 이제 공유 → 홈 화면에 추가를 눌러 주세요'; return; }
+      // 복사가 막힘: 여기서 바로 골라 복사
+      const ta = codeBox(r.code);
+      box.replaceChildren(ta);
+      note.textContent = '복사가 막혔어요. 위 코드를 길게 눌러 모두 선택 → 복사해 주세요';
+      ta.focus(); ta.select();
     };
     const later = h('button', 'ghost', '나중에');
     later.onclick = () => this.closePanel();
-    p.append(copy, later, note);
+    p.append(copy, later, box, note);
   },
 
   openHelp() {

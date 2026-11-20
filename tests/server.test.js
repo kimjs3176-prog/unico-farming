@@ -150,10 +150,10 @@ test('함께 수확: 소수·문자·음수·도배 기여는 무시', () => {
   for (const n of [1.5, '5', -3, 0, null]) rooms.handle(a, { t: 'contrib', n });
   assert.equal(a.room.goalState?.goal.progress ?? 0, 0);
   for (let i = 0; i < 10; i++) rooms.handle(a, { t: 'contrib', n: 10 });
-  assert.equal(a.room.goalState.goal.progress, 38, '한 사람 몫(1/4)에서 멈춤');
+  assert.equal(a.room.goalState.goal.progress, 60, '10초에 6번만 (도배 방지, 혼자 몫 75 보다 먼저 걸림)');
   const c = rooms.join(fakeWs(), 'c');
   for (let i = 0; i < 10; i++) rooms.handle(c, { t: 'contrib', n: 1 });
-  assert.equal(a.room.goalState.goal.progress, 44, '10초에 6번만 (도배 방지)');
+  assert.equal(a.room.goalState.goal.progress, 66, '다른 사람도 10초에 6번만');
 });
 
 test('함께 수확: 다 채우면 사람마다 기여한 수와 함께 goal_done, 다음 목표로', () => {
@@ -165,7 +165,8 @@ test('함께 수확: 다 채우면 사람마다 기여한 수와 함께 goal_don
   rooms.tick();
   const done = (p) => p.ws.sent.filter((m) => m.t === 'goal_done');
   assert.equal(done(ps[0]).length, 1);
-  assert.equal(done(ps[0])[0].mine, 38, '기여한 수');
+  assert.equal(done(ps[0])[0].mine, 40, '기여한 수');
+  assert.equal(done(ps[3])[0].mine, 30, '넷째는 남은 만큼만');
   assert.equal(done(idle)[0].mine, 0, '기여 안 한 사람은 0');
   assert.equal(idle.ws.sent.filter((m) => m.t === 'goal').at(-1).key, '2026-11-20#2', '다음 목표');
 });

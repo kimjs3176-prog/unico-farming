@@ -134,10 +134,14 @@ export async function askFarmImport(code) {
     card.append(compareCard(r.summary, {
       local,
       okLabel: '가져온 농장으로 시작',
-      noLabel: local ? '이 기기 농장 그대로' : '새 농장',
+      noLabel: local ? '이 기기 농장 그대로' : '가져오지 않고 새 농장',
       onOk: () => done(importSave(r.data, { reload: false })), // 아직 게임을 만들기 전: 쓰기만 하고 이어서 부팅
       onNo: () => done(false),
     }));
+    const sub = document.createElement('p');
+    sub.className = 'fi-sub';
+    sub.textContent = local ? '그대로 두면 가져온 코드는 쓰지 않고 버려요' : '새 농장으로 시작하면 가져온 코드는 버려요 (보낸 기기의 농장은 그대로예요)';
+    card.append(sub);
     card.querySelector('.fc-ok')?.focus();
   });
 }

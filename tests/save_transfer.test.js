@@ -1,7 +1,7 @@
 // 농장 옮기기: 농장 코드 내보내기/읽기·가져오기 (src/game/save.js)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { exportCode, parseCode, importSave, saveGame, setReadOnly, saveSummary, fnv1a, takeImportMark, CODE_MAX, QR_MAX, SAVE_KEY, BAK_KEY } from '../src/game/save.js';
+import { exportCode, parseCode, importSave, saveGame, setReadOnly, saveSummary, fnv1a, takeImportMark, CODE_MAX, QR_MAX, SAVE_KEY, BAK_KEY, BROKEN_KEY, hasBrokenSave, localSummary } from '../src/game/save.js';
 
 /** W4 칸까지 든 저장 기록 (마을 별·계절 도전·편지·집 꾸미기·꾸미기 창고·의상 색·축제 엽전) */
 function sampleSave() {
@@ -97,7 +97,53 @@ test('가져오기(부팅 중): 저장을 막지 않고 쓰기만', (t) => {
   assert.equal(store.has(BAK_KEY), false, '이 기기에 기록이 없었으면 백업도 없음');
 });
 
+test('가져오기: 이 기기 기록이 망가져 있으면 덮기 전에 망가진 기록 칸에 남기고, 비교 카드는 \'못 읽은 기록\'을 앎', (t) => {
+  // 준비
+  const store = withStorage(t);
+  store.set(SAVE_KEY, '{"farm": 깨진');
+  // 실행 (부팅 중 #farm= 가져오기와 같음)
+  assert.equal(hasBrokenSave(), true);
+  assert.equal(localSummary(), null);
+  assert.equal(importSave(sampleSave(), { reload: false }), true);
+  // 확인
+  assert.equal(store.get(BROKEN_KEY), '{"farm": 깨진', '망가진 원문 보관');
+  assert.equal(store.has(BAK_KEY), false, '못 읽는 기록은 .bak 으로 쓰지 않음');
+  assert.equal(JSON.parse(store.get(SAVE_KEY)).name, '별님');
+  assert.equal(hasBrokenSave(), false);
+});
+
 test('요약: 이상한 값은 기본값으로', () => {
   assert.deepEqual(saveSummary({ name: '', world: { day: 'x' }, economy: {} }), { name: '이름 없음', day: 1, coins: 0, at: 0 });
   assert.equal(saveSummary(null), null);
+});
+
+test('코드 복사: 누른 그 순간(압축을 기다리기 전)에 clipboard.write 를 부름 → 사파리도 복사, 안 되면 writeText', async (t) => {
+  // 준비
+  const { copyFarmCode } = await import('../src/ui/panels/settings.js');
+  const realCI = globalThis.ClipboardItem;
+  globalThis.ClipboardItem = class { constructor(o) { this.o = o; } };
+  t.after(() => { globalThis.ClipboardItem = realCI; });
+  let resolveCode;
+  const g = { farmCode: () => new Promise((r) => { resolveCode = r; }) };
+  const calls = [];
+  const nav = { clipboard: { write: async (items) => { calls.push('write'); const b = await items[0].o['text/plain']; calls.push(await b.text()); }, writeText: async () => calls.push('writeText') } };
+  // 실행
+  const p = copyFarmCode(g, nav);
+  // 확인: 코드가 나오기 전에 이미 write
+  assert.deepEqual(calls, ['write']);
+  resolveCode('UF1.abc');
+  assert.deepEqual(await p, { ok: true, code: 'UF1.abc' });
+  assert.deepEqual(calls, ['write', 'UF1.abc']);
+  // write 가 없으면 writeText, 둘 다 막히면 ok:false (코드는 돌려줘 직접 고르게)
+  const nav2 = { clipboard: { writeText: async () => { throw new Error('막힘'); } } };
+  assert.deepEqual(await copyFarmCode({ farmCode: async () => 'UF1.x' }, nav2), { ok: false, code: 'UF1.x' });
+  assert.deepEqual(await copyFarmCode({ farmCode: async () => null }, nav), { ok: false, code: null });
+});
+
+test('비교 카드: 이름·날짜·코인이 모두 같으면 같은 농장으로 봄', async () => {
+  const { sameFarm } = await import('../src/ui/panels/settings.js');
+  const a = { name: '별님', day: 12, coins: 3450, at: 1 };
+  assert.equal(sameFarm(a, { ...a, at: 2 }), true);
+  assert.equal(sameFarm(a, { ...a, coins: 3451 }), false);
+  assert.equal(sameFarm(null, a), false);
 });

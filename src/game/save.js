@@ -225,6 +225,11 @@ export function saveSummary(d) {
 }
 
 /** 이 기기의 지금 농장 요약 (없거나 못 읽으면 null) */
+/** 이 기기에 못 읽는(망가진) 기록이 있는지 (비교 카드에서 '농장 없음' 대신 알림) */
+export function hasBrokenSave() {
+  return loadSaveInfo().status === 'broken';
+}
+
 export function localSummary() {
   const i = loadSaveInfo();
   return i.status === 'ok' || i.status === 'newer' ? saveSummary(i.data) : null;
@@ -294,7 +299,12 @@ export function importSave(data, { reload = true } = {}) {
   if (reload) blocked = true;
   try {
     const cur = localStorage.getItem(KEY);
-    if (cur) { try { if (isObj(JSON.parse(cur))) localStorage.setItem(BAK_KEY, cur); } catch { /* 못 읽는 기록은 백업하지 않음 */ } }
+    if (cur) {
+      let ok = false;
+      try { ok = isObj(JSON.parse(cur)); } catch { /* 못 읽는 기록 */ }
+      if (ok) localStorage.setItem(BAK_KEY, cur);
+      else keepBroken(cur); // 못 읽는 기록은 .bak 대신 망가진 기록 칸에 (나중에 되살릴 수 있게, 그냥 덮지 않음)
+    }
     localStorage.setItem(KEY, JSON.stringify(data));
     localStorage.removeItem(CRASH_MARK);
     if (cur) localStorage.setItem(IMPORT_MARK, '1'); // 다음 부팅이 .bak(옮기기 전 농장)을 덮지 않게

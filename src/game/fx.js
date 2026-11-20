@@ -39,6 +39,7 @@ export class FX {
     this.items = [];
     this.live = 0; // 지금 떠 있는 입자 수
     this.shells = []; // 기다리는 불꽃 (fireworks)
+    this.rockets = []; // 올라가거나 터진 불꽃
     this.setQuality(quality);
     // 입자는 이 묶음 안에서 보이기만 껐다 켬 (장면에 넣고 빼기를 반복하지 않음)
     this.group = new THREE.Group();
@@ -250,29 +251,121 @@ export class FX {
   }
 
   /**
-   * 불꽃놀이 (함께 수확 목표 달성): 머리 위 하늘에 둥근 불꽃 몇 발. 품질에 맞춰 — 낮음은 작은 한 발, 보통 3발, 높음 5발
-   * 입자 상한(cap) 안에서만 (넘치면 개수를 줄임)
+   * 불꽃놀이 (함께 수확 목표 달성): 머리 위 3~4m 하늘에 둥근 불꽃 몇 발. 품질에 맞춰 — 낮음은 작은 한 발, 보통 3발, 높음 5발
+   * 한 발 = 점 묶음(Points) 하나 → 그리기 한 번. 올라가는 꼬리 → 가운데 번쩍 → 색 구슬이 둥글게 퍼짐
+   * 카메라 쪽으로 조금 당겨 3인칭 화면 위쪽에 들어오게
    */
   fireworks(x, z, level = 'medium') {
     const plan = FIREWORKS[level] || FIREWORKS.medium;
-    const y0 = heightAt(x, z) + 6;
+    const c = SURF.seeCam.value, dx = c.x - x, dz = c.z - z, d = Math.hypot(dx, dz) || 1;
+    const cx = x + (dx / d) * 1.2, cz = z + (dz / d) * 1.2; // 카메라 쪽으로 1.2m
+    const ground = heightAt(x, z);
     for (let i = 0; i < plan.shots; i++) {
-      const a = (i / plan.shots) * Math.PI * 2 + 0.6;
-      this.shells.push({ t: i * 0.32, x: x + Math.cos(a) * (i ? 2.2 : 0), y: y0 + (i % 2) * 1.2, z: z + Math.sin(a) * (i ? 2.2 : 0), color: SHELL_COLORS[i % SHELL_COLORS.length], n: plan.n });
+      const a = (i / plan.shots) * Math.PI * 2 + 0.6, r = i ? 2.4 : 0;
+      const sx = cx + Math.cos(a) * r, sz = cz + Math.sin(a) * r;
+      this.shells.push({ t: i * 0.38, x: sx, z: sz, y0: ground + 0.8, y: ground + 3.4 + (i % 2) * 0.7, color: SHELL_COLORS[i % SHELL_COLORS.length], n: plan.n });
     }
   }
 
-  /** 불꽃 한 발: 고르게 퍼지는 구 모양 (burst 와 같은 별 입자를 씀) */
+  /** 둥근 빛 점 그림 (한 번 만들어 함께 씀) */
+  _glowTex() {
+    if (this._glow) return this._glow;
+    const S = 64, data = new Uint8Array(S * S * 4);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const r = Math.hypot(x + 0.5 - S / 2, y + 0.5 - S / 2) / (S / 2);
+      const a = r >= 1 ? 0 : r < 0.35 ? 1 : Math.max(0, 1 - (r - 0.35) / 0.65) ** 1.6; // 가운데 꽉 찬 원 + 부드러운 빛 테두리
+      const i = (y * S + x) * 4, wv = r < 0.25 ? 255 : 230; // 가운데는 하얗게
+      data[i] = data[i + 1] = data[i + 2] = wv; data[i + 3] = Math.round(a * 255);
+    }
+    const t = new THREE.DataTexture(data, S, S);
+    t.needsUpdate = true;
+    t.colorSpace = THREE.SRGBColorSpace;
+    return (this._glow = t);
+  }
+
+  /** 불꽃 한 발 시작: 꼬리를 달고 올라감 (점 묶음 하나, 다 쓰면 모아 두었다가 다시 씀) */
   _shell(s) {
-    const before = this.items.length;
-    this.burst(s.x, s.y, s.z, s.color, s.n);
-    for (let i = before; i < this.items.length; i++) {
-      const it = this.items[i], k = i - before, n = this.items.length - before;
-      const yv = 1 - (2 * (k + 0.5)) / n, r = Math.sqrt(1 - yv * yv), th = k * 2.39996; // 피보나치 구
-      const sp = 3.6 + Math.random() * 0.6;
-      it.obj.userData.v.set(Math.cos(th) * r * sp, yv * sp + 2.2, Math.sin(th) * r * sp);
-      it.life = 1.1 + Math.random() * 0.3;
-      it.big = 1.7; // 하늘에서도 보이게 조금 크게
+    const N = 32;
+    let o = (this.shellPool ||= []).pop();
+    if (!o) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+      const mat = new THREE.PointsMaterial({ size: 0.42, map: this._glowTex(), vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true, fog: false });
+      o = new THREE.Points(geo, mat);
+      o.frustumCulled = false;
+      o.onBeforeRender = skipOverride; // 주변광 차폐(덮어쓰기) 패스에서는 그리지 않음 (검은 판이 생김)
+      o.userData.vel = new Float32Array(N * 3);
+      const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: this._glowTex(), color: 0xfff6d8, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+      flash.onBeforeRender = skipOverride;
+      o.userData.flash = flash;
+    }
+    const n = Math.min(N, s.n), geo = o.geometry, col = geo.attributes.color.array, base = new THREE.Color(s.color);
+    for (let k = 0; k < N; k++) {
+      // 넷 중 하나는 밝은 색(하양 섞음) → 반짝이는 느낌
+      const w = k % 4 === 0 ? 0.55 : 0;
+      col[k * 3] = base.r + (1 - base.r) * w; col[k * 3 + 1] = base.g + (1 - base.g) * w; col[k * 3 + 2] = base.b + (1 - base.b) * w;
+    }
+    geo.attributes.color.needsUpdate = true;
+    geo.setDrawRange(0, n);
+    o.material.opacity = 1;
+    o.material.size = 0.3;
+    o.visible = true;
+    if (o.parent !== this.group) this.group.add(o);
+    const f = o.userData.flash;
+    f.visible = false;
+    if (f.parent !== this.group) this.group.add(f);
+    this.rockets.push({ o, s, n, phase: 0, t: 0, rise: 0.45 });
+  }
+
+  /** 불꽃 한 프레임: 오름(꼬리) → 터짐(번쩍 + 구 모양으로 퍼지고 떨어지며 흐려짐) */
+  _stepRockets(dt) {
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const r = this.rockets[i], { o, s, n } = r, pos = o.geometry.attributes.position.array, vel = o.userData.vel, f = o.userData.flash;
+      r.t += dt;
+      if (r.phase === 0) {
+        // 머리가 올라가고 나머지 점은 뒤로 줄지어 꼬리 (아래로 갈수록 흐린 대신 촘촘히)
+        const k0 = Math.min(1, r.t / r.rise), head = s.y0 + (s.y - s.y0) * (1 - (1 - k0) ** 2);
+        for (let k = 0; k < n; k++) {
+          const back = (k / n) * Math.min(1.4, head - s.y0);
+          pos[k * 3] = s.x; pos[k * 3 + 1] = head - back; pos[k * 3 + 2] = s.z;
+        }
+        o.material.size = 0.22;
+        o.material.opacity = 0.85;
+        if (k0 >= 1) { // 터짐
+          r.phase = 1; r.t = 0; r.life = 1.5;
+          for (let k = 0; k < n; k++) {
+            const yv = 1 - (2 * (k + 0.5)) / n, rr = Math.sqrt(1 - yv * yv), th = k * 2.39996; // 피보나치 구
+            const sp = 3.2 + Math.random() * 0.5;
+            vel[k * 3] = Math.cos(th) * rr * sp; vel[k * 3 + 1] = yv * sp + 0.6; vel[k * 3 + 2] = Math.sin(th) * rr * sp;
+            pos[k * 3] = s.x; pos[k * 3 + 1] = s.y; pos[k * 3 + 2] = s.z;
+          }
+          f.position.set(s.x, s.y, s.z);
+          f.visible = true;
+        }
+      } else {
+        const drag = Math.exp(-2.2 * dt);
+        for (let k = 0; k < n; k++) {
+          vel[k * 3] *= drag; vel[k * 3 + 1] = vel[k * 3 + 1] * drag - 2.4 * dt; vel[k * 3 + 2] *= drag;
+          pos[k * 3] += vel[k * 3] * dt; pos[k * 3 + 1] += vel[k * 3 + 1] * dt; pos[k * 3 + 2] += vel[k * 3 + 2] * dt;
+        }
+        const left = 1 - r.t / r.life;
+        o.material.size = 0.42 + 0.12 * Math.min(1, r.t * 4);
+        o.material.opacity = Math.max(0, Math.min(1, left * 1.6));
+        // 가운데 번쩍: 0.3초 동안 커지며 사라짐
+        if (f.visible) {
+          const fk = r.t / 0.3;
+          if (fk >= 1) f.visible = false;
+          else { f.scale.setScalar(1.2 + fk * 2.6); f.material.opacity = 1 - fk; }
+        }
+        if (left <= 0) {
+          o.visible = false; f.visible = false;
+          this.shellPool.push(o);
+          this.rockets.splice(i, 1);
+          continue;
+        }
+      }
+      o.geometry.attributes.position.needsUpdate = true;
     }
   }
 
@@ -281,6 +374,7 @@ export class FX {
       for (const s of this.shells) s.t -= dt;
       while (this.shells.length && this.shells[0].t <= 0) this._shell(this.shells.shift());
     }
+    if (this.rockets.length) this._stepRockets(dt);
     this._stepItem(dt);
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
@@ -292,7 +386,7 @@ export class FX {
         it.obj.position.addScaledVector(v, dt);
         it.obj.rotation.x += dt * 8; it.obj.rotation.y += dt * 6;
         it.obj.material.opacity = Math.min(1, it.life * 2);
-        it.obj.scale.setScalar((0.6 + it.life) * (it.big || 1));
+        it.obj.scale.setScalar(0.6 + it.life);
       }
       if (it.grow) it.obj.scale.multiplyScalar(1 + it.grow * dt);
       if (it.fade) it.obj.material.opacity = Math.max(0, it.life * 1.5);

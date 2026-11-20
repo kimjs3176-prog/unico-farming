@@ -221,7 +221,7 @@ export class Rooms {
     for (const d of r.goalDone.splice(0)) {
       for (const p of r.players.values()) p.send({ t: 'goal_done', key: d.goal.key, seq: d.goal.seq, target: d.goal.target, mine: d.tally[contribKey(p)] || 0 });
     }
-    const msg = goalMsg(st.goal);
+    const msg = goalMsg(st.goal, st.tally);
     if (r.goalDirty && t - r.goalSentAt >= GOAL_FLUSH_MS) {
       r.goalDirty = false; r.goalSentAt = t;
       r.broadcast(msg);

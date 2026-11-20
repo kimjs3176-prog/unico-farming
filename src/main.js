@@ -396,9 +396,9 @@ class Game {
 
   /** 로직: 품질 자동 조절·단축키·월드·시스템 갱신·카메라·HUD */
   stepLogic(dt, rawDt) {
-    // 자동 품질: 프레임 중앙값이 두 창 잇달아 느리면 한 단계 낮춤 (탭을 숨겼다 돌아온 공백은 visibilitychange 에서 측정 초기화)
+    // 자동 품질: 프레임 중앙값이 두 창 잇달아 느리면 한 단계 낮춤, 이미 낮음이면 예전 기준(평균 32fps)으로 절전 단계 (탭을 숨겼다 돌아온 공백은 visibilitychange 에서 측정 초기화)
     // 컷신 중에는 측정하지 않음: 전경 샷은 평소보다 1.5배 무거워 화질이 중간에 바뀌며(화면 재구성) 더 끊김
-    if (rawDt < 3 && !this.cinema.locked && this.governor.tick(rawDt)) {
+    if (rawDt < 3 && !this.cinema.locked && this.governor.tick(rawDt, this.lightGovern())) {
       this.ui.updateFps?.(this.governor.fps);
       if (this.gfx.preset === 'auto') {
         // 이번 접속에서만 낮춤 (한 번 끊긴 일로 좋은 PC 의 화질이 굳지 않게). 다음 접속에서도 끊기면 그때 시작 단계로 저장

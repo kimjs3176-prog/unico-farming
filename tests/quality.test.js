@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PRESETS, applyPreset, resolveQuality, FpsGovernor, autoStartLevel, gpuTier, resolveAuto, noteAutoDrop, saveSettings, loadSettings, AUTO_DROP_DAYS, SLOW_MS } from '../src/game/quality.js';
+import { PRESETS, applyPreset, resolveQuality, FpsGovernor, autoStartLevel, gpuTier, resolveAuto, noteAutoDrop, saveSettings, loadSettings, AUTO_DROP_DAYS, SLOW_MS, LIGHT_FPS, sessionDrop, matchPreset } from '../src/game/quality.js';
 
 const base = { preset: 'auto', autoLevel: 'high', showFps: false, ...PRESETS.high };
 
@@ -64,6 +64,46 @@ test('자동 조절기: 한 번 크게 끊기거나(1초 멈춤) 한 창만 느�
   for (let i = 0; i < 20; i++) down ||= g.tick(1 / 20); // 한 창만 느림
   for (let i = 0; i < 120; i++) down ||= g.tick(1 / 60);
   assert.equal(down, false);
+});
+
+test(`가장 낮은 단계의 절전 판단(light): 29~31fps 로 버티는 폰도 한 창(평균 ${LIGHT_FPS}fps 미만)에 절전 단계를 받음`, () => {
+  // 준비
+  const g = new FpsGovernor({ window: 1, grace: 0 }), strict = new FpsGovernor({ window: 1, grace: 0 });
+  let at = -1, down = false;
+  // 실행: 30fps 로 꾸준히
+  for (let i = 0; i < 300; i++) { if (g.tick(1 / 30, true) && at < 0) at = i; down ||= strict.tick(1 / 30); }
+  // 확인: 첫 창 끝(30~31프레임, 더한 시간의 반올림)에 절전, 보통 판단은 그대로
+  assert.ok(at >= 29 && at <= 30, `절전 프레임 ${at}`);
+  assert.equal(down, false);
+  const fast = new FpsGovernor({ window: 1, grace: 0 });
+  let d2 = false;
+  for (let i = 0; i < 300; i++) d2 ||= fast.tick(1 / 45, true);
+  assert.equal(d2, false, '45fps 는 절전하지 않음');
+});
+
+test('자동 내림(sessionDrop): 세부 항목도 내린 단계 값 → 항목 하나만 바꿔도 내린 단계보다 높아지지 않음', () => {
+  // 준비: 높음에서 시작한 자동
+  const s = { preset: 'auto', autoLevel: 'high', showFps: false, uiScale: 1, ...PRESETS.high };
+  // 실행: 보통으로 내림 → 미니어처 초점만 끔
+  const d = sessionDrop(s, 'medium');
+  const edit = { ...d, ao: false };
+  edit.preset = matchPreset(edit);
+  const q = resolveQuality(edit, 1, 1280 * 800);
+  // 확인
+  assert.equal(d.sessionLevel, 'medium');
+  assert.equal(d.shadows, 'medium');
+  assert.equal(d.ao, false);
+  assert.equal(d.tiltShift, false);
+  assert.equal(edit.preset, 'medium');
+  assert.equal(q.ao, false);
+  assert.equal(q.shadows, 'medium');
+  const edit2 = { ...d, grass: 0.4 };
+  edit2.preset = matchPreset(edit2);
+  const q2 = resolveQuality(edit2, 1, 1280 * 800);
+  assert.equal(edit2.preset, 'custom');
+  assert.equal(q2.ao, false, '사용자 지정이 되어도 주변광 차폐는 꺼진 채');
+  assert.equal(q2.tiltShift, false);
+  assert.equal(q2.shadows, 'medium');
 });
 
 test('자동 조절기: 시작 직후 유예 시간에는 내리지 않음', () => {

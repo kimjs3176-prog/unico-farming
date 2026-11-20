@@ -157,7 +157,7 @@ export class FarmRoom {
       if (!p?.name) continue;
       for (const d of done) { try { ws.send(JSON.stringify({ t: 'goal_done', key: d.goal.key, seq: d.goal.seq, target: d.goal.target, mine: d.tally[contribKey(p)] || 0 })); } catch { /* 끊김 */ } }
     }
-    this.broadcast(goalMsg(st.goal));
+    this.broadcast(goalMsg(st.goal, st.tally));
   }
 
   players() {
@@ -283,7 +283,7 @@ export class FarmRoom {
       p.l = String(m.l || '').replace(/[^a-z0-9.-]/g, '').slice(0, 48); // 옷차림
       ws.serializeAttachment(p);
       const n = this.players().length;
-      ws.send(JSON.stringify({ t: 'welcome', id: p.id, room: p.room, count: n, players: this.players().filter((x) => x.id !== p.id).map((x) => this.pub(x)), goal: goalMsg(this.goalState?.goal) }));
+      ws.send(JSON.stringify({ t: 'welcome', id: p.id, room: p.room, count: n, players: this.players().filter((x) => x.id !== p.id).map((x) => this.pub(x)), goal: goalMsg(this.goalState?.goal, this.goalState?.tally) }));
       this.broadcast({ t: 'joined', p: this.pub(p), count: n }, p.id);
       return;
     }

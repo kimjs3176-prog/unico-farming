@@ -3,6 +3,8 @@
 import { exportCode, currentSaveRaw, takeImportMark, saveGame, loadSaveInfo, loadBackup, backupSave, keepBroken, clearSave, setReadOnly, saveBlocked, lastSaveError, crashMarked, clearCrashMark, claimOwner, SAVE_KEY, OWNER_KEY } from './save.js';
 import { record, showOverlay, OVERLAY_ICON } from './crash.js';
 import { TOUR_REWARD } from './sim/koat.js';
+import { tipBusy } from '../ui/tip.js';
+import { COOP_REWARD } from '../ui/coop_goal.js';
 
 const KOAT_TITLE = TOUR_REWARD.title;
 
@@ -172,7 +174,8 @@ export const GameSave = {
       const own = Array.isArray(this.flags.titles) ? this.flags.titles.filter((t) => typeof t === 'string') : [];
       if (this.koat.book.rewarded && !own.includes(KOAT_TITLE)) own.push(KOAT_TITLE);
       this.flags.titles = own;
-      const cur = own.includes(this.flags.title) ? this.flags.title : own[own.length - 1];
+      // 단 칭호가 적혀 있지 않은 예전 기록은 마지막 칭호를 닮. 받기만 하는 칭호(함께 수확)는 저절로 달지 않음
+      const cur = own.includes(this.flags.title) ? this.flags.title : own.filter((t) => t !== COOP_REWARD.title).at(-1);
       if (cur) this.player.setTitle(cur);
     });
     step('world', () => {
@@ -257,7 +260,7 @@ export const GameSave = {
     this._careArmed = true;
     const nav = globalThis.navigator, f = () => (this.flags ||= {});
     const idle = (fn, ms) => setTimeout(() => (typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 4000 }) : fn()), ms);
-    const calm = () => !this._introPending && !!f().intro && !this.busy?.() && !this.ui?.panel && !this._stale;
+    const calm = () => !this._introPending && !!f().intro && !tipBusy(this) && !this._stale; // 대화·컷신·창·낚시·오토플레이·미니게임 중이 아닐 때
     if (nav?.userAgentData && nav.storage?.persist) idle(async () => {
       if ((this.world?.day || 0) < 2 || this._introPending) return;
       try { if (!(await nav.storage.persisted())) await nav.storage.persist(); } catch { /* 안내 없이 */ }
@@ -281,5 +284,5 @@ export const GameSave = {
       };
       idle(nudge, 120000);
     }
-  }, // clearSave 뒤에는 떠날 때 저장이 막힘 (지운 농장이 되살아나지 않게)
+  },
 };

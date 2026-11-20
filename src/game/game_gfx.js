@@ -5,7 +5,7 @@ import { DEFERRED_MODELS } from './assets.js';
 import { fovFor } from './camera.js';
 import { Unico } from './unico.js';
 import { PostFX } from './postfx.js';
-import { saveSettings, resolveQuality, uiScaleOf, LEVELS, autoNow, noteAutoDrop } from './quality.js';
+import { saveSettings, resolveQuality, uiScaleOf, LEVELS, autoNow, noteAutoDrop, sessionDrop } from './quality.js';
 import { shadowRadiusFor } from './shadow_soft.js';
 
 export const GameGfx = {
@@ -33,7 +33,7 @@ export const GameGfx = {
     if (i <= 0) { this.lighten(); return null; }
     const level = LEVELS[i - 1];
     const { settings } = noteAutoDrop(this.gfx, level, Date.now(), (this._dropSess ||= {}));
-    const next = { ...settings, sessionLevel: level };
+    const next = sessionDrop(settings, level); // 세부 항목도 내린 단계 값으로 (환경설정 표시·항목 하나 바꾸기)
     this.saver = 0;
     this.gfx = next;
     saveSettings(next); // 내린 기록(autoDrop)과, 두 번째 접속이면 시작 단계(autoLevel)
@@ -73,6 +73,11 @@ export const GameGfx = {
   },
 
   /** 자동 품질이 이미 가장 낮은데도 끊길 때: 저장하지 않는 절전 단계 (새로 고치거나 설정을 바꾸면 원래대로) */
+  /** 조절기가 가벼운 기준(평균 32fps)으로 볼 때: 자동이 이미 가장 낮고 절전 단계가 남았을 때 */
+  lightGovern() {
+    return this.gfx?.preset === 'auto' && autoNow(this.gfx) === LEVELS[0] && (this.saver || 0) < 2;
+  },
+
   lighten() {
     if ((this.saver || 0) >= 2) return;
     this.saver = (this.saver || 0) + 1;
