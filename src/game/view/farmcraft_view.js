@@ -235,9 +235,11 @@ export class FarmCraftView {
       const list = O.today(g.world.day, g.quests.level, this.farmLevel);
       body.append(h('div', 'chip', `매일 아침 새 주문 · 3건 모두 납품하면 보너스 ${ORDER_ALL_BONUS}🪙 · 지금까지 ${O.count}건 납품`));
       const rows = h('div', 'rows');
+      rows.dataset.icoSet = '';
+      const baked = g.ui.itemIconsBaked?.(list.map((o) => o.item)) ?? false;
       list.forEach((o, i) => {
         const it = info(o.item), have = eco.count(o.item);
-        const r = h('div', 'row', `<span>${it.emoji}</span><span class="nm">${o.from}<br><small>${o.name} ${o.n}개 · 보유 ${have}</small></span><span class="pr">${o.reward}🪙</span>`);
+        const r = h('div', 'row', `<span>${g.ui.itemIcon ? g.ui.itemIcon(o.item, { size: 24, baked }) : it.emoji}</span><span class="nm">${o.from}<br><small>${o.name} ${o.n}개 · 보유 ${have}</small></span><span class="pr">${o.reward}🪙</span>`);
         const b = h('button', o.done ? '' : 'gold', o.done ? '✅ 납품 완료' : '납품하기');
         b.disabled = o.done || have < o.n;
         b.onclick = () => {
@@ -249,6 +251,7 @@ export class FarmCraftView {
           reward(g, 2, { sound: null }); // 주문 납품: 중간 보상 (소리는 코인이 닿을 때)
           g.ui.toast(`📦 ${o.from}에 ${o.name} ${o.n}개 납품! +${res.reward}🪙${res.allBonus ? ` · 🎉 오늘 주문 모두 완료 보너스 +${res.allBonus}🪙` : ''}`);
           g.onEvent('order');
+          if (g.collection?.ship?.(o.item, o.n, { day: g.world.day })?.isNew) g.afterCollect?.(); // 출하 도감: 납품도 출하
           render();
         };
         r.append(b);

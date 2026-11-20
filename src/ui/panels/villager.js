@@ -82,15 +82,19 @@ export const VillagerPanel = {
   openGiftPicker(e) {
     const g = this.game, eco = g.economy;
     const p = this.openPanel(`🎁 ${e.name ?? e.n.name}에게 무엇을 줄까요?`);
-    const grid = h('div', 'seed-grid');
+    const grid = h('div', 'seed-grid gift-grid');
+    grid.dataset.icoSet = '';
     const all = { ...eco.inventory.crops, ...eco.inventory.products, ...eco.inventory.items };
+    const keys = Object.entries(all).filter(([k, n]) => n && ITEMS[k]?.cat !== 'seed').map(([k]) => k);
+    const baked = this.itemIconsBaked?.(keys) ?? false;
     let any = false;
     for (const [k, n] of Object.entries(all)) {
       if (!n || ITEMS[k]?.cat === 'seed') continue;
       any = true;
       const it = anyItem(k);
       const liked = VILLAGERS[e.id].likes.includes(k);
-      const b = h('button', '', `${it.emoji} ${it.name}${liked ? ' 💕' : ''}<span class="q">${n}개</span>`);
+      const ic = this.itemIcon ? this.itemIcon(k, { size: 24, baked }) : it.emoji;
+      const b = h('button', '', `${ic} ${it.name}${liked ? ' 💕' : ''}<span class="q">${n}개</span>`);
       b.onclick = () => {
         if (!eco.take(k, 1)) return;
         const r = g.villagers.gift(e.id, k, g.world.day, g.costume?.mult('friend') ?? 1);

@@ -16,8 +16,8 @@ const meta = (segs) => {
   // 짧은 마디(값·시간·'판매 42🪙')만 한 덩어리로 묶음 — 긴 설명 문장은 낱말 사이에서 줄바꿈
   return `<span class="meta">${list.map((t) => `<span${t.replace(/<[^>]*>/g, '').length <= 16 ? ' class="nw"' : ''}>${t}</span>`).join(' · ')}</span>`;
 };
-/** 잠긴 단추 글: 'Lv.3 해금' → 좁은 줄에서는 '🔒 Lv.3' 만 (뒷말은 .lk-x 로 숨김) */
-const lockHtml = (t) => { const m = /^(Lv\.\d+)( 해금)$/.exec(t); return m ? `🔒 ${m[1]}<span class="lk-x">${m[2]}</span>` : `🔒 ${t}`; };
+/** 잠긴 단추 글: 'Lv.3 해금' → 좁은 줄에서는 '🔒 Lv.3' 만 (뒷말은 .lk-x 로 숨김). 자물쇠는 UI 아이콘 세트가 있으면 그것 */
+const lockHtml = (t, lk = '🔒') => { const m = /^(Lv\.\d+)( 해금)$/.exec(t); return m ? `${lk} ${m[1]}<span class="lk-x">${m[2]}</span>` : `${lk} ${t}`; };
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** 장터 창 메서드 (UI.prototype 에 합쳐짐) */
@@ -39,6 +39,9 @@ export const MarketPanel = {
     p.append(foot);
     const TABS = [['buy', '🌱 사기'], ['sell', '💰 팔기'], ['today', '✨ 오늘'], ['cos', '👗 의상'], ['fac', '🛠️ 시설']];
     this._mkQty = new Map(); // 줄마다 지난번 개수 → 바뀐 줄만 숫자가 톡 (처음 열 때는 비교하지 않음)
+    const lk = () => this.ico?.('lock') ?? '🔒';
+    // 출하 도감: 판 만큼 기록 → 이정표·칭호 확인 (팔기 전 개수로)
+    const ship = (list) => { const c = g.collection; if (!c?.ship) return; let any = false; for (const [k, n] of list) if (n > 0 && c.ship(k, n, { day: g.world?.day ?? 1 }).isNew) any = true; if (any) g.afterCollect?.(); };
     const saveSoon = () => { g.saveTimer = Math.max(g.saveTimer || 0, 9); }; // 사고판 뒤 1초 안에 저장 (연달아 눌러도 한 번만)
     const sellables = () => {
       const list = [];
@@ -54,9 +57,11 @@ export const MarketPanel = {
       return r;
     };
     const btnsOf = (r) => r.querySelector('.btns');
-    const buyRow = (key, emoji, name, have, price, opts, note = '', locked = '') => {
-      const r = row('', key, have, emoji, `${name} <span class="qty">보유 ${have}</span>`, `${price}🪙`, meta(note));
-      if (locked) { const bt = h('button', 'locked', lockHtml(locked)); bt.disabled = true; btnsOf(r).append(bt); return r; }
+    let baked = false; // 이 탭 묶음을 구운 그림으로 그릴지 (한 탭 안에 이모지와 섞지 않음)
+    const icon = (key) => this.itemIcon ? this.itemIcon(key, { baked }) : '';
+    const buyRow = (key, _emoji, name, have, price, opts, note = '', locked = '') => {
+      const r = row('', key, have, icon(key), `${name} <span class="qty">보유 ${have}</span>`, `${price}🪙`, meta(note));
+      if (locked) { const bt = h('button', 'locked', lockHtml(locked, lk())); bt.disabled = true; btnsOf(r).append(bt); return r; }
       for (const [n, fn] of opts) {
         const bt = h('button', '', `${n}개`);
         bt.disabled = eco.money < price * n;
@@ -108,6 +113,7 @@ export const MarketPanel = {
       body.innerHTML = ''; foot.innerHTML = '';
       foot.style.display = 'none';
       if (cur === 'buy') {
+        baked = this.itemIconsBaked?.([...Object.keys(CROPS).map((k) => `seed:${k}`), 'feed', 'compost', 'rice_seed', 'pet_treat']) ?? false;
         body.append(h('h3', '', '🌱 씨앗 (레벨이 오르면 해금)'));
         const seeds = h('div', 'rows');
         for (const [k, c] of Object.entries(CROPS)) {
@@ -135,6 +141,8 @@ export const MarketPanel = {
         body.append(head);
         const rows = h('div', 'rows');
         let shown = 0;
+        baked = this.itemIconsBaked?.(sellables().filter(([k]) => all || eco.count(k) > 0).map(([k]) => k)) ?? false;
+        rows.dataset.icoSet = '';
         for (const [k, c] of sellables()) {
           const have = eco.count(k);
           if (!all && have <= 0) continue;
@@ -142,12 +150,12 @@ export const MarketPanel = {
           const tr = eco.prices[k]?.trend || 0;
           const trend = tr > 0 ? '<span class="trend-up">▲</span>' : tr < 0 ? '<span class="trend-down">▼</span>' : '<span class="trend-flat">–</span>';
           const ev = eco.event?.item === k ? ' 🔥' : '';
-          const r = row(have ? '' : 'none', `sell:${k}`, have, c.emoji, `${c.name}${ev} <span class="qty">보유 ${have}</span>`, `${eco.sellPrice(k)}🪙 ${trend}`);
-          if (have > 1) { const b1 = h('button', '', '1개'); b1.onclick = () => { const got = eco.sell(k, 1); g.onEvent('sell', 1); sold(got, b1); saveSoon(); render(); }; btnsOf(r).append(b1); }
+          const r = row(have ? '' : 'none', `sell:${k}`, have, icon(k), `${c.name}${ev} <span class="qty">보유 ${have}</span>`, `${eco.sellPrice(k)}🪙 ${trend}`);
+          if (have > 1) { const b1 = h('button', '', '1개'); b1.onclick = () => { const got = eco.sell(k, 1); g.onEvent('sell', 1); if (got > 0) ship([[k, 1]]); sold(got, b1); saveSoon(); render(); }; btnsOf(r).append(b1); }
           const b = h('button', 'gold', have > 1 ? `전부 ${(eco.sellPrice(k) * have).toLocaleString()}` : '판매');
           b.disabled = have <= 0;
           b.onclick = () => {
-            const got = eco.sell(k, have); g.onEvent('sell', have); sold(got, b); saveSoon();
+            const got = eco.sell(k, have); g.onEvent('sell', have); if (got > 0) ship([[k, have]]); sold(got, b); saveSoon();
             if (!all && got > 0) soldOut([r]); else render();
           };
           btnsOf(r).append(b);
@@ -161,7 +169,9 @@ export const MarketPanel = {
           foot.append(h('span', 'mk-total', `가방 속 판매 가능 <b>${total.toLocaleString()}🪙</b>`));
           const ab = h('button', 'gold', '🧺 모두 판매하기');
           ab.onclick = () => {
-            const n = sellables().reduce((a, [k]) => a + eco.count(k), 0); const got = eco.sellAll(); g.onEvent('sell', n); sold(got, ab, true); saveSoon();
+            const before = sellables().map(([k]) => [k, eco.count(k)]);
+            const n = before.reduce((a, [, c]) => a + c, 0); const got = eco.sellAll(); g.onEvent('sell', n);
+            if (got > 0) ship(before.map(([k, c]) => [k, c - eco.count(k)])); sold(got, ab, true); saveSoon();
             if (!all && got > 0) soldOut(rows.querySelectorAll('.mk-row')); else render();
           };
           foot.append(ab);
@@ -194,7 +204,7 @@ export const MarketPanel = {
           cards.append(c);
           const bx = c.querySelector('.btns');
           if (!isDecor && have) { const b = h('button', 'ghost', cs.wearing === it.id ? '입는 중' : '입기'); b.disabled = cs.wearing === it.id; b.onclick = () => { cs.wear(it.id); g.applyLook(); reward(g, 1); render(); }; bx.append(b); continue; }
-          if (why && /Lv/.test(why)) { const bt = h('button', 'locked', lockHtml(`Lv.${d.lv} 해금`)); bt.disabled = true; bx.append(bt); continue; }
+          if (why && /Lv/.test(why)) { const bt = h('button', 'locked', lockHtml(`Lv.${d.lv} 해금`, lk())); bt.disabled = true; bx.append(bt); continue; }
           const b = h('button', why ? '' : 'gold', have ? '하나 더 사기' : '사기');
           b.disabled = !!why;
           if (why) b.title = why;
@@ -235,7 +245,7 @@ export const MarketPanel = {
             b.onclick = () => { cs.wear(wearing ? null : c.id); g.applyLook(); if (!wearing) { reward(g, 1); this.toast(`${c.icon} ${c.name} · ${c.perkText}`); } else g.audio.play('pop', 0.7); render(); };
             btnsOf(r).append(b);
           } else if (why && !/모자라요/.test(why)) {
-            const b = h('button', 'locked', lockHtml(why.replace('부터 살 수 있어요', ' 해금').replace('체험관 스탬프 6개를 모으면 받아요', '스탬프 6개').replace('축제 날에만 팔아요', '축제 날에만')));
+            const b = h('button', 'locked', lockHtml(why.replace('부터 살 수 있어요', ' 해금').replace('체험관 스탬프 6개를 모으면 받아요', '스탬프 6개').replace('축제 날에만 팔아요', '축제 날에만'), lk()));
             b.disabled = true; btnsOf(r).append(b);
           } else {
             const b = h('button', '', '사기');

@@ -1,1 +1,26 @@
-/* 테마: 가방·도감 — 아직 규칙 없음 (도감 칸 카드 모양은 panels.css 의 공통 카드 규칙) */
+/* 테마: 가방·도감 — 칸 색(분류마다 옅은 바탕), 셈 배지, 씨앗 종이 봉투, 진행 막대 */
+.bag-slot { background: #fff; border-color: var(--line, #ead9b8) !important; box-shadow: 0 2px 0 #e6e0d2 !important; }
+.bag-slot.c-crop, .bag-slot.c-product { background: linear-gradient(180deg, #fbfff3, #eef8df); }
+.bag-slot.c-rice { background: linear-gradient(180deg, #fffdf2, #f6efd4); }
+.bag-slot.c-goods { background: linear-gradient(180deg, #fff8f0, #fbe7d6); }
+.bag-slot.c-ranch { background: linear-gradient(180deg, #fffbe6, #fbefb8); }
+.bag-slot.c-fish { background: linear-gradient(180deg, #f4fbff, #dceff9); }
+.bag-slot.c-bug { background: linear-gradient(180deg, #f6fff2, #e1f3d6); }
+.bag-slot.c-fruit { background: linear-gradient(180deg, #fff6f6, #fbe1e1); }
+.bag-slot.c-treasure { background: linear-gradient(180deg, #f9f6ff, #e9e2f8); }
+/* 씨앗: 크라프트 종이 봉투 칩 */
+.bag-slot.packet, .seed-pick .packet { background: linear-gradient(180deg, #f3e2c2, #e4c99a); }
+.seed-pick .packet { border-radius: 6px 6px 9px 9px; box-shadow: inset 0 4px 0 rgba(255,255,255,0.35), 0 1px 0 #b99560; }
+.bag-slot:hover, .bag-slot.on { border-color: var(--teal) !important; transform: translateY(-1px); }
+.bag-slot.on { box-shadow: 0 0 0 2px #bfe6df, 0 2px 0 #e6e0d2 !important; }
+.bag-slot .n { background: #5a3d26; color: #fff; box-shadow: 0 1px 0 rgba(0,0,0,0.25); }
+.bag-slot .pip { color: #f2a81d; text-shadow: 0 1px 0 #fff, 0 0 2px #fff; }
+.bag-slot .pip.r2 { color: #2f7fd0; } .bag-slot .pip.r3 { color: #9a4fd0; } .bag-slot .pip.r4 { color: #e08a00; }
+.bag-detail { background: #fff; border: 2px dashed #e3d3b4; color: var(--ink); }
+.bag-detail.show { border-style: solid; border-color: #bfe6df; }
+.bag-detail small { color: #6b5a48; }
+.bag-empty { color: var(--ink); }
+.bag-empty small { color: #6b5a48; }
+.book-prog .bp-bar { background: #e9dcc5; box-shadow: inset 0 1px 1px rgba(0,0,0,0.12); }
+.book-prog .bp-bar i { background: linear-gradient(180deg, var(--teal-hi, #5fd0c4), var(--teal)); }
+.book-cell.locked { background: #fbf7ee; }

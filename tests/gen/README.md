@@ -13,7 +13,7 @@
 
 ## 예시
 
-아래의 `node scripts/balance.mjs --md` 는 **아직 없는 옵션**입니다 (지금은 콘솔 표만 출력). 표 검사를 추가할 때 그 옵션도 함께 만듭니다.
+문서 수치 표 검사는 `docs_balance.check.mjs` 입니다 (다시 만들기: `node scripts/balance.mjs --md` 결과를 문서의 같은 `<!-- gen:balance-* -->` 칸에 붙이기). 아래는 새 검사를 쓸 때의 뼈대입니다.
 
 ```js
 // 문서 수치 표 = balance.mjs 결과 (다시 만들기: node scripts/balance.mjs --md)

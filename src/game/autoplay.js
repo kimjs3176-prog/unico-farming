@@ -325,8 +325,14 @@ export class AutoPlay {
   _shop() {
     const g = this.g, eco = g.economy;
     let sold = 0;
-    for (const k of Object.keys(eco.inventory.crops)) sold += eco.sell(k, eco.inventory.crops[k]);
-    for (const k of Object.keys(eco.inventory.products)) sold += eco.sell(k, eco.inventory.products[k]);
+    const shipped = [];
+    for (const bag of [eco.inventory.crops, eco.inventory.products]) {
+      for (const k of Object.keys(bag)) { const n = bag[k]; const got = eco.sell(k, n); sold += got; if (got > 0) shipped.push([k, n]); }
+    }
+    // 출하 도감: 자동 판매도 기록 (작물만 해당, 목장 기본 생산물은 출하 목록 밖이라 무시됨)
+    let newShip = false;
+    for (const [k, n] of shipped) if (g.collection?.ship?.(k, n, { day: g.world?.day ?? 1 })?.isNew) newShip = true;
+    if (newShip) g.afterCollect?.();
     this.earned += sold;
     const fs = g.farm.sim, rs = g.ranch.sim;
     const seedsOwned = Object.values(eco.inventory.seeds).reduce((a, n) => a + (n || 0), 0);

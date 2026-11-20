@@ -1,3 +1,5 @@
+import { TITLE_BY_ID } from './titles.js';
+
 /**
  * 코스튬 (렌더링 무관, 테스트: tests/costume.test.js)
  *  - 몸 전체 옷차림 6벌: 장터에서 사기 / 체험관 스탬프 투어 완주 / 계절 축제 때만 살 수 있는 것
@@ -115,19 +117,23 @@ function cleanSet(s, owned) {
   return { costume, hat: HATS.includes(s.hat) ? s.hat : null, scarf: SCARVES.includes(s.scarf) ? s.scarf : null, goggles: !!s.goggles, sprout: s.sprout === undefined ? true : !!s.sprout };
 }
 
-/** 다른 접속자에게 보낼 모습: "코스튬.모자.스카프.고글.새싹" (없으면 '-') */
-export function encodeLook({ costume = null, hat = null, scarf = null, goggles = false, sprout = true } = {}) {
-  return [costume || '-', hat || '-', scarf || '-', goggles ? 1 : 0, sprout === false ? 0 : 1].join('.');
+/** 다른 접속자에게 보낼 모습: "코스튬.모자.스카프.고글.새싹[.칭호]" (없으면 '-', 칭호는 정해진 id 일 때만 6번째 칸) */
+export function encodeLook({ costume = null, hat = null, scarf = null, goggles = false, sprout = true, title = null } = {}) {
+  const out = [costume || '-', hat || '-', scarf || '-', goggles ? 1 : 0, sprout === false ? 0 : 1];
+  if (title && TITLE_BY_ID[title]) out.push(title);
+  return out.join('.');
 }
 
 /** 받은 모습 문자열 검사 → 정해진 값만 (이상한 값은 기본값) */
 export function decodeLook(s) {
-  const [c, h, sc, gg, sp] = String(s || '').slice(0, 48).split('.');
-  return {
+  const [c, h, sc, gg, sp, tt] = String(s || '').slice(0, 48).split('.');
+  const out = {
     costume: COSTUME[c] ? c : null,
     hat: HATS.includes(h) ? h : null,
     scarf: SCARVES.includes(sc) ? sc : null,
     goggles: gg === '1',
     sprout: sp !== '0',
   };
+  if (TITLE_BY_ID[tt]) out.title = tt; // 칭호: 정해진 id 만 (글을 그대로 받지 않음), 없으면 칸도 없음 (예전 모습과 같게)
+  return out;
 }

@@ -1,6 +1,10 @@
 // Game 믹스인: 게임 이벤트 → 퀘스트 진행·보상·경험치, 계절 도전, 마을 별점·편지, 도감 완성 보상
 // main.js 에서 Object.assign(Game.prototype, …) 으로 붙임 (축약 메서드라 this 는 Game)
-import { CATEGORY_NAMES } from './sim/items.js';
+import { CATEGORY_NAMES, ITEMS } from './sim/items.js';
+import { BOOK_CATS_3D } from './sim/collection.js';
+import { checkTitles } from './sim/titles.js';
+import { FARM_LEVELS } from './sim/farm.js';
+import { VILLAGERS } from './sim/villagers.js';
 import { actionXp, MG_DAILY } from './sim/quests.js';
 import { LEVEL_GIFTS, giftCostume } from './sim/unlocks.js';
 import { rating, snapshot, latchStar, starLine, STAR_REWARDS } from './sim/town_rating.js';
@@ -14,6 +18,10 @@ import { sendLetter } from '../ui/letters.js';
 
 /** 마을 별점을 다시 셀 이벤트 (매 프레임 아님) */
 const RATING_EVENTS = new Set(['built', 'decor', 'hearts', 'book', 'koatstamp', 'homeup', 'farmlv', 'thresh']);
+/** 칭호를 다시 살필 이벤트 (주민·동물 하트, 밭농사 숙련도) */
+const TITLE_EVENTS = new Set(['hearts', 'farmlv', 'animalheart']);
+/** 함께하기 목표에 보탤 이벤트 (net.noteContrib) */
+const CONTRIB_EVENTS = new Set(['harvest', 'order']);
 /** 밤 (계절 도전 '밤에 낚기'): world.nightK 가 이보다 크면 */
 const NIGHT_K = 0.5;
 
@@ -40,12 +48,46 @@ export const FINALE_WITH_M = 6;
 export const GameProgress = {
   /** 도감 등록 후: 진행 퀘스트, 카테고리 완성 보상 */
   afterCollect() {
-    this.onEvent('book', Object.keys(this.collection.entries).length);
-    for (const r of this.collection.claimCompletions()) {
+    const C = this.collection;
+    this.onEvent('book', C.natureCount ? C.natureCount() : Object.keys(C.entries).length); // '도감 N종' 퀘스트는 자연 도감만
+    // 이정표 (탭마다 5종): 미끼·퇴비는 가방, 소품은 꾸미기 보관함 (놓을 때 무료)
+    const gifts = [];
+    for (const m of C.claimMilestones?.() || []) {
+      if (m.decor && giveDecor(this, m.decor, 1)) gifts.push(`${CATEGORY_NAMES[m.cat]} ${m.at}종 · ${DECOR_BY_ID[m.decor].icon} ${DECOR_BY_ID[m.decor].name} (꾸미기 보관함)`);
+      for (const [id, n] of Object.entries(m.item || {})) { this.economy.addItem(id, n); gifts.push(`${CATEGORY_NAMES[m.cat]} ${m.at}종 · ${ITEMS[id]?.emoji ?? ''} ${ITEMS[id]?.name ?? id} ${n}개`); }
+    }
+    if (gifts.length) {
+      reward(this, 2, { label: '📖' });
+      // 장터처럼 다른 창이 열려 있으면 그 창을 닫지 않고 알림만
+      if (this.ui.panel) this.ui.toast(`📖 도감 보상! ${gifts.join(' · ')}`, { type: 'reward', key: 'bookgift' });
+      else this.ui.result('📖 도감 이정표 보상!', gifts);
+    }
+    for (const r of C.claimCompletions(BOOK_CATS_3D)) {
       this.economy.earn(r.money);
       reward(this, 3, { label: '🏅' }); // 3단계 보상 연출 (만세·팡파르)
-      this.ui.result('🏅 도감 완성!', [`${CATEGORY_NAMES[r.cat] || r.cat} 도감을 모두 채웠어요!`, `보상 +${r.money}🪙`]);
+      const lines = [`${CATEGORY_NAMES[r.cat] || r.cat} 도감을 모두 채웠어요!`, `보상 +${r.money}🪙`, '🏆 집 책장 위에 트로피가 놓였어요'];
+      if (this.ui.panel) this.ui.toast(`🏅 ${lines.join(' · ')}`, { type: 'reward', key: 'bookdone' });
+      else this.ui.result('🏅 도감 완성!', lines);
     }
+    this.checkTitles();
+  },
+
+  /** 모은 기록으로 열린 칭호를 가진 칭호 목록(flags.titles)에 더함 (달기는 옷장 칭호 탭에서). 새로 연 이름 목록 */
+  checkTitles({ quiet = false } = {}) {
+    const C = this.collection, f = (this.flags ||= {});
+    if (!C?.progress) return [];
+    const rs = this.ranch?.sim;
+    const ctx = {
+      nature: C.natureCount ? C.natureCount() : 0, done: C.completed ? C.completed() : [], shipped: C.progress('ship').got,
+      rice5: !!C.entries.rice_5, farmLv: this.farm?.sim?.level ?? 0, farmMax: FARM_LEVELS.length,
+      ranchHeart5: !!rs?.animals?.some((a) => rs.hearts(a) >= 5),
+      villagerHeart5: Object.keys(VILLAGERS).some((id) => (this.villagers?.hearts?.(id) ?? 0) >= 5),
+    };
+    const got = checkTitles(ctx, f.titles || []);
+    if (!got.length) return got;
+    (f.titles ||= []).push(...got);
+    if (!quiet) this.ui.toast(`🏅 새 칭호 “${got.join('”, “')}”! 집 옷장의 🏅 칭호 탭에서 달 수 있어요`, { type: 'reward', key: 'title' });
+    return got;
   },
 
   /** 계절 도전 (저장 칸 'weekly'): 없으면 만듦 */
@@ -84,6 +126,8 @@ export const GameProgress = {
       if (this._winAt === undefined || now - this._winAt > 1500) { this._winAt = now; setTimeout(() => this.audio.play('win'), 350); }
     }
     this._actionXp(event, amount, key);
+    if (CONTRIB_EVENTS.has(event)) this.net?.noteContrib?.(event, amount); // 함께하기 목표 (net.js)
+    if (TITLE_EVENTS.has(event)) this.checkTitles();
     // 첫걸음 편지
     if (event === 'harvest' && this.quests.progress.harvest5 > 0) this._letter('harvest1');
     if (event === 'built') this._letter('build1');

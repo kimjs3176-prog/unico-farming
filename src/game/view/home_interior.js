@@ -67,6 +67,56 @@ export function mergeRoomMeshes(g) {
   return g;
 }
 
+/** 트로피 선반 자리 순서 (도감 탭) */
+export const TROPHY_CATS = ['fish', 'bug', 'fruit', 'ship'];
+
+/**
+ * 책장 위(높이 y) 트로피 넷: 방 팔레트(MAT)만 써서 합치면 그리기 호출이 늘지 않음
+ * 방 안쪽(+x)을 보게 세움. 아직 못 채운 탭은 빈 받침 + 빈 액자
+ */
+function addTrophies(g, kx, y, kz, won) {
+  const x0 = kx - 0.06; // 벽 쪽
+  TROPHY_CATS.forEach((cat, i) => {
+    const z = kz - 0.54 + i * 0.36, from = g.children.length;
+    addTrophy(g, cat, kx, x0, y, z, won);
+    // 방 전체가 보이는 거리에서도 알아보게 받침 가운데 아래를 기준으로 키움
+    for (const o of g.children.slice(from)) { o.position.set(kx + (o.position.x - kx) * TROPHY_K, y + (o.position.y - y) * TROPHY_K, z + (o.position.z - z) * TROPHY_K); o.scale.multiplyScalar(TROPHY_K); }
+  });
+}
+const TROPHY_K = 1.3; // 트로피 크기 배수 (받침 0.27 × 1.3 ≈ 0.35 < 자리 간격 0.36: 이웃과 닿지 않음)
+
+function addTrophy(g, cat, kx, x0, y, z, won) {
+  g.add(box(0.27, 0.04, 0.27, MAT.woodD, kx, y + 0.02, z)); // 받침
+  if (!won.has(cat)) { // 빈 자리: 흐린 빈 액자
+    g.add(box(0.03, 0.26, 0.24, MAT.wood, x0, y + 0.17, z), box(0.035, 0.2, 0.18, MAT.wallB, x0 + 0.004, y + 0.17, z));
+    return;
+  }
+  if (cat === 'fish') { // 나무 액자에 붙인 주황 물고기
+    g.add(box(0.04, 0.3, 0.32, MAT.wood, x0, y + 0.19, z), box(0.045, 0.24, 0.26, MAT.white, x0 + 0.003, y + 0.19, z));
+    const f = ball(0.075, MAT.pot, x0 + 0.04, y + 0.19, z - 0.02); f.scale.set(0.45, 0.7, 1.45); g.add(f);
+    const t = box(0.03, 0.09, 0.07, MAT.pot, x0 + 0.04, y + 0.19, z + 0.11); t.rotation.x = 0.6; g.add(t);
+    g.add(ball(0.012, MAT.woodD, x0 + 0.07, y + 0.21, z - 0.11), box(0.02, 0.035, 0.12, MAT.woodD, x0 + 0.03, y + 0.06, z)); // 눈 · 이름표
+  } else if (cat === 'bug') { // 표본 상자: 액자 안 흰 바탕에 곤충 셋
+    g.add(box(0.05, 0.28, 0.32, MAT.woodD, x0, y + 0.18, z), box(0.055, 0.22, 0.26, MAT.white, x0 + 0.003, y + 0.18, z));
+    for (const [dz, dy, m] of [[-0.07, 0.05, MAT.red], [0.06, 0.06, MAT.teal], [0, -0.05, MAT.green]]) {
+      g.add(ball(0.022, m, x0 + 0.04, y + 0.18 + dy, z + dz));
+      for (const s of [-1, 1]) { const w = box(0.01, 0.03, 0.04, m === MAT.red ? MAT.yellow : m, x0 + 0.035, y + 0.18 + dy + 0.01, z + dz + s * 0.035); w.rotation.x = s * 0.5; g.add(w); }
+    }
+  } else if (cat === 'fruit') { // 과일 바구니
+    g.add(cyl(0.13, 0.1, 0.1, MAT.wood, kx, y + 0.09, z, 10), cyl(0.135, 0.135, 0.02, MAT.woodD, kx, y + 0.14, z, 10));
+    for (const [dx, dz, m] of [[-0.05, -0.04, MAT.red], [0.04, -0.05, MAT.pot], [0.0, 0.05, MAT.yellow], [0.05, 0.04, MAT.rug]]) g.add(ball(0.055, m, kx + dx, y + 0.18, z + dz));
+    g.add(ball(0.05, MAT.red, kx, y + 0.24, z));
+    const hd = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.012, 5, 12, Math.PI), MAT.woodD); hd.position.set(kx, y + 0.15, z); hd.rotation.y = Math.PI / 2; g.add(hd);
+  } else { // 황금 벼 다발 (출하 도감)
+    for (let k = 0; k < 7; k++) {
+      const a = (k / 7) * Math.PI * 2, r = 0.035;
+      const st = cyl(0.008, 0.01, 0.3, MAT.yellow, kx + Math.cos(a) * r, y + 0.19, z + Math.sin(a) * r, 5); st.rotation.set(Math.sin(a) * 0.15, 0, -Math.cos(a) * 0.15); g.add(st);
+      g.add(ball(0.022, MAT.yellow, kx + Math.cos(a) * r * 2.6, y + 0.35, z + Math.sin(a) * r * 2.6));
+    }
+    g.add(cyl(0.045, 0.045, 0.04, MAT.red, kx, y + 0.15, z, 10)); // 묶은 끈
+  }
+}
+
 /** 방 하나 만들기 → { group, solids: [{x0,z0,x1,z1}], spots: [{key, x, z, label}], entry: {x,z}, door: {x,z}, glass, lampMat, fire, furnAt: {가구 id: {x,y,z}} } */
 export function buildRoom(level, mats, opts = {}) {
   applyRoomStyle(opts.colors);
@@ -133,9 +183,13 @@ export function buildRoom(level, mats, opts = {}) {
     g.add(box(0.46, 0.05, 1.42, MAT.wood, kx + 0.02, 0.25 + sh * 0.48, kz));
     for (let b = 0; b < 6; b++) g.add(box(0.3, 0.32 - (b % 3) * 0.04, 0.16, MAT.book[(b + sh) % 5], kx + 0.06, 0.44 + sh * 0.48 - (b % 3) * 0.02, kz - 0.55 + b * 0.22));
   }
+  // 🏆 책장 위 트로피 선반: 도감 탭을 다 채우면 하나씩 (물고기 액자 · 곤충 표본 상자 · 과일 바구니 · 황금 벼 다발), 빈 자리는 빈 받침
   tag(m0, 'books');
+  const won = new Set(opts.trophies || []);
+  addTrophies(g, kx, 2.0, kz, won); // 자리 표시 없이 → 방의 같은 재질 메시와 합쳐짐
   solid(kx, kz, 0.55, 1.55);
-  spots.push({ key: 'books', x: kx + 0.95, z: kz, label: '📚 책장 · 유니코 도감' });
+  const tn = TROPHY_CATS.filter((c) => won.has(c)).length;
+  spots.push({ key: 'books', x: kx + 0.95, z: kz, label: `📚 책장 · 유니코 도감 (🏆 트로피 ${tn}/${TROPHY_CATS.length})` });
   // 탁자 + 의자 둘 + 깔개 (가운데) — 꾸밈
   const tx = 0.6, tz = 0.9;
   const rug = new THREE.Mesh(new THREE.CircleGeometry(1.35, 28), MAT.rug); rug.rotation.x = -Math.PI / 2; rug.position.set(tx, 0.012, tz); g.add(rug);

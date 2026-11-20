@@ -99,7 +99,7 @@ export const ITEMS = {
   fest_token: { name: '축제 엽전', emoji: '🎫', price: 0, cat: 'seed' },
 };
 
-export const CATEGORY_NAMES = { ranch: '특별 생산물', goods: '가공품', treasure: '물속 보물', fish: '물고기', bug: '곤충', fruit: '과일', rice: '쌀', seed: '씨앗' };
+export const CATEGORY_NAMES = { ranch: '특별 생산물', goods: '가공품', treasure: '물속 보물', fish: '물고기', bug: '곤충', fruit: '과일', rice: '쌀', seed: '씨앗', ship: '출하' }; // ship: 3D 판 출하 도감 탭 (도트 판은 BOOK_CATS 열쇠만 읽음)
 
 export const itemsOf = (cat) => Object.keys(ITEMS).filter((k) => ITEMS[k].cat === cat);
 

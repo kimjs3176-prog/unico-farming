@@ -7,6 +7,7 @@ import { COSTUMES, COSTUME, COSTUME_VARIANTS } from '../sim/costume.js';
 import { buildRoom, applyRoomStyle, IO } from './home_interior.js';
 import { SURF, enhanceMaterial } from '../surface.js';
 import { ITEMS } from '../sim/items.js';
+import { TITLES } from '../sim/titles.js';
 import { saveGame } from '../save.js';
 import { reward, BUY_SOUND } from '../reward.js';
 
@@ -191,7 +192,9 @@ export class HomeView {
   /** 실내 방 다시 짓기 (집 단계가 바뀌면) */
   buildRoom() {
     if (this.room) { this.game.world.scene.remove(this.room.group); this.room.group.traverse((o) => o.geometry?.dispose()); }
-    this.room = buildRoom(this.sim.level, { glass: this.roomGlass, lampMat: this.roomLampMat }, { colors: this.sim.colors(), furniture: this.sim.furniture });
+    const trophies = this.game.collection?.completed?.() || [];
+    this._trophyKey = trophies.join(',');
+    this.room = buildRoom(this.sim.level, { glass: this.roomGlass, lampMat: this.roomLampMat }, { colors: this.sim.colors(), furniture: this.sim.furniture, trophies });
     this.room.group.position.set(IO.x, IO.y, IO.z);
     this.game.world.scene.add(this.room.group);
     this.room.group.visible = this.inside;
@@ -298,6 +301,8 @@ export class HomeView {
     if (this.inside || this._fadeT || this._sleeping || g.ride.driving) return; // 페이드 중 E 를 또 눌러도 한 번만
     g.ui.closePanel();
     g.audio.play('door');
+    // 도감을 새로 다 채웠으면 책장 위 트로피를 놓은 방으로 다시 지음 (들어갈 때만, 그리기 호출 그대로)
+    if ((g.collection?.completed?.() || []).join(',') !== this._trophyKey) this.buildRoom();
     this._warmRoom();
     this._fade('🏠', () => {
       if (this.inside) return;
@@ -401,7 +406,10 @@ export class HomeView {
     if (key === 'wardrobe') return this.openWardrobe();
   }
 
-  /** 옷장: 🧥 코스튬 · 🎩 소품 · 💾 세트. 창은 옆에 붙고 카메라가 유니코 앞으로 다가가 입은 모습을 보여 줌 */
+  /** 잠김 표시: UI 아이콘 세트가 있으면 그 자물쇠 */
+  _lk() { return this.game.ui?.ico?.('lock') ?? '🔒'; }
+
+  /** 옷장: 🧥 코스튬 · 🎩 소품 · 💾 세트 · 🏅 칭호. 창은 옆에 붙고 카메라가 유니코 앞으로 다가가 입은 모습을 보여 줌 */
   openWardrobe(tab = this._wdTab || 'cos') {
     const g = this.game, ui = g.ui, cs = g.costume, cam = g.followCam;
     const el = (tag, cls, html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; e.innerHTML = html; return e; };
@@ -420,7 +428,7 @@ export class HomeView {
       this._wdTab = tab;
       body.innerHTML = '';
       const tabs = el('div', 'mk-tabs wd-tabs');
-      for (const [id, label] of [['cos', '🧥 코스튬'], ['acc', '🎩 소품'], ['set', '💾 세트']]) {
+      for (const [id, label] of [['cos', '🧥 코스튬'], ['acc', '🎩 소품'], ['set', '💾 세트'], ['title', '🏅 칭호']]) {
         const t = el('button', tab === id ? 'on' : '', label);
         t.onclick = () => { tab = id; g.audio.play('click', 0.5); render(); };
         tabs.append(t);
@@ -439,7 +447,7 @@ export class HomeView {
         for (const c of COSTUMES) {
           const owned = cs.has(c.id);
           const how = c.unlock === 'stamps' ? '🏢 체험관 스탬프 6개' : c.festival ? `🎉 축제 날 장터 ${c.price}🪙` : `🛒 장터 ${c.price}🪙 · Lv.${c.lv}`;
-          slot(c.id, c.icon, c.name, owned ? `✨ ${c.perkText}` : `🔒 ${how}`, !owned ? 'locked' : cs.wearing === c.id ? 'on' : 'own', () => { cs.wear(c.id); this._applyCos(c); render(); });
+          slot(c.id, c.icon, c.name, owned ? `✨ ${c.perkText}` : `${this._lk()} ${how}`, !owned ? 'locked' : cs.wearing === c.id ? 'on' : 'own', () => { cs.wear(c.id); this._applyCos(c); render(); });
         }
         // 색 바꾼 판은 가진 것만 (오늘의 특별 상품·레벨 보상으로 얻음)
         for (const c of COSTUME_VARIANTS) if (cs.has(c.id)) slot(c.id, c.icon, c.name, `🎨 색 바꾼 판 · ✨ ${c.perkText}`, cs.wearing === c.id ? 'on' : 'own', () => { cs.wear(c.id); this._applyCos(c); render(); });
@@ -462,6 +470,29 @@ export class HomeView {
         group('🥽 고글', [[false, '안 씀'], [true, '씀']], 'goggles');
         group('🌱 머리 새싹 (모자를 쓰면 가려져요)', [[true, '있음'], [false, '없음']], 'sprout');
         if (cover) body.append(el('p', 'mk-note', `${cover.icon} ${cover.name}${josa(cover.name, '을/를')} 입는 동안에는 옷에 따라 모자·스카프가 가려질 수 있어요`));
+      } else if (tab === 'title') {
+        // 🏅 칭호: 가진 칭호를 골라 이름표·프로필에 (다른 접속자에게도 보임). 못 연 칭호는 여는 방법
+        g.checkTitles?.({ quiet: true });
+        const f = (g.flags ||= {}), own = new Set(f.titles || []), cur = g.player.title;
+        const grid = el('div', 'cos-grid title-grid');
+        const pick = (name) => {
+          f.title = name; g.player.setTitle(name); g.applyLook?.();
+          reward(g, 1, { sound: 'pickup' }); ui.toast(`🏅 “${name}” 칭호를 달았어요`); saveGame(g); render();
+        };
+        const slot = (icon, name, sub, state, fn) => {
+          const b = el('button', `cos-slot ${state}`, `<span class="ic">${icon}</span><b>${state === 'locked' ? '???' : name}</b><small>${sub}</small>${state === 'on' ? '<i>다는 중</i>' : ''}`);
+          b.disabled = state === 'locked';
+          if (fn) b.onclick = fn;
+          grid.append(b);
+        };
+        const known = new Set(TITLES.map((t) => t.name));
+        for (const t of TITLES) {
+          const has = own.has(t.name);
+          slot(t.icon, t.name, has ? t.desc : `${this._lk()} ${t.desc}`, !has ? 'locked' : cur === t.name ? 'on' : 'own', () => pick(t.name));
+        }
+        for (const name of own) if (!known.has(name)) slot('💌', name, '받은 칭호', cur === name ? 'on' : 'own', () => pick(name));
+        body.append(el('p', 'mk-note', `가진 칭호 ${own.size}개 · 도감·출하·우정·체험관으로 더 모아요. 고른 칭호는 함께하는 친구들에게도 보여요`));
+        body.append(grid);
       } else {
         const rows = el('div', 'rows');
         const desc = (st) => st ? [st.costume ? `${COSTUME[st.costume].icon} ${COSTUME[st.costume].name}` : '🦄 기본', st.hat ? { straw: '👒', helmet: '⛑️' }[st.hat] : '', st.scarf ? { red: '🔴', green: '🟢', blue: '🔵' }[st.scarf] : '', st.goggles ? '🥽' : ''].filter(Boolean).join(' ') : '비어 있음';
@@ -534,7 +565,7 @@ export class HomeView {
     if (n) {
       const why = S.whyNotUpgrade(eco.money, g.quests.level);
       ur.innerHTML = `<span class="ic">🏡</span><span class="nm">${n.name}으로 넓히기<br><small>${n.desc}</small></span><span class="pr">${n.price.toLocaleString()}🪙</span>`;
-      const ub = document.createElement('button'); ub.className = why ? '' : 'gold'; ub.disabled = !!why; ub.textContent = why && /Lv/.test(why) ? `🔒 ${why.split('부터')[0]}` : '넓히기'; if (why) ub.title = why;
+      const ub = document.createElement('button'); ub.className = why ? '' : 'gold'; ub.disabled = !!why; ub.innerHTML = why && /Lv/.test(why) ? `${this._lk()} ${why.split('부터')[0]}` : '넓히기'; if (why) ub.title = why;
       ub.onclick = () => this.upgrade();
       ur.append(ub);
     } else ur.innerHTML = '<span class="ic">🏡</span><span class="nm">가장 큰 집이에요<br><small>매일 아침 우편함에 선물이 와요</small></span>';
@@ -589,7 +620,7 @@ export class HomeView {
       for (const x of list) {
         const own = S.hasStyle(kind, x.id), on = S.style[kind] === x.id, why = own ? null : S.whyNotStyle(kind, x.id, eco.money, lv);
         const lock = !!(why && /Lv/.test(why)), seeing = pv && pv.kind === kind && pv.id === x.id;
-        const sub = on ? '쓰는 중' : own ? '가진 것' : lock ? `🔒 Lv.${x.lv}` : `${x.price.toLocaleString()}🪙`;
+        const sub = on ? '쓰는 중' : own ? '가진 것' : lock ? `${this._lk()} Lv.${x.lv}` : `${x.price.toLocaleString()}🪙`;
         const bg = kind === 'wall' ? `linear-gradient(180deg, ${hex(x.wall)} 0 60%, ${hex(x.wallB)} 60% 100%)` : floorBg(x);
         const btn = document.createElement('button');
         btn.className = `cos-slot${on ? ' on' : ''}${lock ? ' locked' : ''}${seeing ? ' seeing' : ''}`;
@@ -627,7 +658,7 @@ export class HomeView {
       if (own) { r.append(Object.assign(document.createElement('span'), { className: 'furn-done', textContent: '✓ 놓음' })); continue; }
       const b = document.createElement('button');
       b.className = why ? (/Lv/.test(why) ? 'locked' : '') : 'gold';
-      b.textContent = why && /Lv/.test(why) ? `🔒 Lv.${x.lv}` : '사기';
+      b.innerHTML = why && /Lv/.test(why) ? `${this._lk()} Lv.${x.lv}` : '사기';
       b.disabled = !!why;
       if (why) b.title = why;
       b.onclick = () => {
