@@ -33,3 +33,18 @@ export function todaySpecial(day) {
   const item = (kind) => (d) => ({ kind, id: d.id, name: d.name, icon: d.icon, price: d.price, lv: d.lv });
   return [...pick(DECOR_LIMITED, SHELF_DECOR, rng).map(item('decor')), ...pick(COSTUME_VARIANTS, SHELF_COSTUME, rng).map(item('costume'))];
 }
+
+/** 다음 진열까지 남은 게임 시간 'HH:MM' (time: 하루 중 비율, 자정에 바뀜) */
+export function untilNextShelf(time) {
+  const t = Math.min(1, Math.max(0, +time || 0));
+  const mins = Math.max(0, Math.ceil((1 - t) * 24 * 60)); // 자정 바로 뒤면 24:00
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+/** 상품 카드 바탕 색 (색 바꾼 재질의 첫 색) → '#rrggbb', 없으면 null */
+export function shelfTint(def) {
+  const t = def?.tint;
+  if (!t) return null;
+  const c = Number.isFinite(+t.color) ? +t.color : Object.values(t).find((v) => Number.isFinite(+v));
+  return Number.isFinite(+c) ? `#${(+c >>> 0).toString(16).padStart(6, '0').slice(-6)}` : null;
+}

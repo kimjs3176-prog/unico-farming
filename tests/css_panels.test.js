@@ -76,3 +76,12 @@ test('장터 줄은 목록 폭에 맞춤: 좁으면 두 줄 격자, 설명 마�
   assert.match(narrow, /\.lk-x \{ display: none/);
   for (const env of [PHONE, DESK]) assert.equal(value(env, '.mk-row .nm', 'min-width'), undefined);
 });
+
+test('PC: 배경막은 조금 더 진하고, 창은 아래 행동 막대 위에서 끝남 · 바꿔 연 창은 등장 애니메이션 없음', () => {
+  assert.equal(value(DESK, '.scrim', 'background'), 'rgba(32, 22, 14, 0.45)');
+  assert.equal(value(PHONE, '.scrim', 'background'), 'rgba(32, 22, 14, 0.38)');
+  assert.match(value(DESK, '.panel:not(.wardrobe)', 'max-height'), /100dvh \/ var\(--ui-zoom, 1\) - 220px/);
+  assert.match(value(PHONE, '.panel:not(.wardrobe)', 'max-height'), /var\(--hud-b/, '폰 시트 높이는 그대로');
+  assert.equal(value(LAND, '.panel:not(.wardrobe)', 'max-height'), undefined, '가로 폰은 PC 높이 제한을 받지 않음');
+  assert.equal(value(DESK, '.panel.instant:not(.shake)', 'animation'), 'none');
+});

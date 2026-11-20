@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DecorSim, DECOR, DECOR_ALL, DECOR_BY_ID, DECOR_MAX, DECOR_CATS, DECOR_PREMIUM, DECOR_LIMITED, registerDecor, outsideZones, snapAhead } from '../src/game/sim/decor.js';
+import { DecorSim, DECOR, DECOR_ALL, DECOR_BY_ID, DECOR_MAX, DECOR_CATS, DECOR_CATS_ALL, DECOR_PREMIUM, DECOR_LIMITED, registerDecor, outsideZones, snapAhead } from '../src/game/sim/decor.js';
 
 test('꾸미기: 사서 놓기 · 레벨·코인 조건 · 치우면 보관함 → 다시 놓을 때 무료', () => {
   const d = new DecorSim();
@@ -91,7 +91,8 @@ test('registerDecor: 새 소품을 목록·찾기표에 더하고, 잘못된 id�
   const def = registerDecor({ id: 'test_lantern', name: '시험 등불', icon: '🏮', price: 300, lv: 2, model: 'lamp', cat: 'festival_t', catLabel: '🎉 축제' });
   assert.ok(def);
   assert.equal(DECOR_BY_ID.test_lantern, def);
-  assert.ok(DECOR_ALL.includes(def) && DECOR.includes(def));
+  assert.ok(DECOR_ALL.includes(def) && !DECOR.includes(def), '기본 목록(도트 판·해금 카드)에는 넣지 않음');
+  assert.ok(DECOR_CATS_ALL.some(([c]) => c === 'festival_t') && !DECOR_CATS.some(([c]) => c === 'festival_t'));
   assert.equal(registerDecor({ id: 'test_lantern', name: 'x', model: 'lamp' }), null, '겹치는 id');
   assert.equal(registerDecor({ id: 'Bad Id!', name: 'x', model: 'lamp' }), null);
   assert.equal(registerDecor({ id: 'no_model', name: 'x' }), null);
@@ -101,7 +102,13 @@ test('registerDecor: 새 소품을 목록·찾기표에 더하고, 잘못된 id�
   const back = new DecorSim(); back.load(d.toJSON());
   assert.equal(back.placed[0].id, 'test_lantern');
   // 되돌림 (다른 시험에 새지 않게)
-  for (const list of [DECOR, DECOR_ALL]) list.splice(list.indexOf(def), 1);
+  DECOR_ALL.splice(DECOR_ALL.indexOf(def), 1);
   delete DECOR_BY_ID.test_lantern;
-  DECOR_CATS.splice(DECOR_CATS.findIndex(([c]) => c === 'festival_t'), 1);
+  DECOR_CATS_ALL.splice(DECOR_CATS_ALL.findIndex(([c]) => c === 'festival_t'), 1);
+});
+
+test('도트 판이 읽는 기본 탭에는 빈 ✨ 특별 탭이 없음 (특별 소품은 DECOR_ALL 에만)', () => {
+  for (const [c] of DECOR_CATS) assert.ok(DECOR.some((d) => d.cat === c), `${c} 탭이 비어 있음`);
+  assert.ok(DECOR_CATS_ALL.some(([c]) => c === 'special'));
+  assert.equal(DECOR.length, 20);
 });

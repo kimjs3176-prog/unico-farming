@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
-import { TownSim, BUILDINGS, TIERS, MAX_TIER, tierPrice } from '../sim/town.js';
+import { TownSim, BUILDINGS, TIERS, MAX_TIER, tierPrice, tierLevel } from '../sim/town.js';
 import { reward, BUY_SOUND } from '../reward.js';
 import { ITEMS } from '../sim/items.js';
 import { confetti } from '../../ui/minigame_frame.js';
@@ -288,24 +288,25 @@ export class TownView {
     const p = g.ui.openPanel(`${B.emoji} ${B.name} ${'★'.repeat(tier)}${'☆'.repeat(MAX_TIER - tier)}`);
     p.classList.add('build-panel');
     const cur = tier > 1 ? TIERS[st.type][tier - 1].desc : B.desc;
-    p.append(Object.assign(document.createElement('p'), { className: 'mk-note', innerHTML: `지금 효과: <b>${cur}</b><br>${tier >= MAX_TIER ? '🥇 가장 높은 등급이에요 · 금빛 깃발이 펄럭여요' : `등급을 올리면 건물이 조금 커지고 ${tier >= 2 ? '금빛' : '은빛'} 깃발이 꽂혀요`}` }));
+    // 맨 위: 최고 등급이면 축하 띠, 아니면 다음에 바뀌는 것
+    if (tier >= MAX_TIER) p.append(Object.assign(document.createElement('div'), { className: 'tier-max', innerHTML: `🥇 최고 등급! <small>금빛 깃발이 펄럭여요</small>` }));
+    p.append(Object.assign(document.createElement('p'), { className: 'mk-note', innerHTML: `지금 효과: <b>${cur}</b>${tier >= MAX_TIER ? '' : `<br>등급을 올리면 건물이 조금 커지고 ${tier >= 2 ? '금빛' : '은빛'} 깃발이 꽂혀요`}` }));
     const rows = document.createElement('div'); rows.className = 'rows';
-    for (let t = 2; t <= MAX_TIER; t++) {
-      const T = TIERS[st.type][t - 1], done = tier >= t, isNext = t === tier + 1;
+    for (let t = 1; t <= MAX_TIER; t++) {
+      const desc = t > 1 ? TIERS[st.type][t - 1].desc : B.desc, done = tier > t, now = tier === t, isNext = t === tier + 1;
       const r = document.createElement('div');
-      r.className = 'row mk-row build-row' + (done ? '' : isNext ? '' : ' none');
-      const price = tierPrice(st.type, t);
-      r.innerHTML = `<span class="ic">${t === 2 ? '🥈' : '🥇'}</span><span class="nm">${'★'.repeat(t)} 등급<br><small>${T.desc}</small></span><span class="pr">${done ? '' : `${price.toLocaleString()}🪙`}</span>`;
+      r.className = 'row mk-row build-row tier-row' + (now ? ' now' : done ? ' done' : isNext ? '' : ' none');
+      const price = tierPrice(st.type, t), lv = tierLevel(st.type, t);
+      r.innerHTML = `<span class="ic">${['🏠', '🥈', '🥇'][t - 1]}</span><span class="nm">${'★'.repeat(t)} 등급${now ? ' <span class="tier-now">지금</span>' : ''}<br><small>${desc}</small></span>`;
+      if (now || done) { r.append(Object.assign(document.createElement('span'), { className: 'tier-done', textContent: now ? '✓ 지금 등급' : '✓ 지남' })); rows.append(r); continue; }
       const b = document.createElement('button');
-      if (done) { b.className = 'ghost'; b.textContent = '✅ 완료'; b.disabled = true; }
-      else {
-        const why = isNext ? this.sim.whyNotUpgrade(i, eco.money, g.quests.level) : `★${t - 1} 다음에`;
-        b.className = why ? (/Lv|다음/.test(why) ? 'locked' : '') : 'gold';
-        b.textContent = why && /Lv/.test(why) ? `🔒 ${why.split('부터')[0]}` : why && /다음/.test(why) ? `🔒 ${why}` : '올리기';
-        b.disabled = !!why;
-        if (why) b.title = why;
-        b.onclick = () => this.upgradeTier(i);
-      }
+      const why = isNext ? this.sim.whyNotUpgrade(i, eco.money, g.quests.level) : `★${t - 1} 다음에`;
+      b.className = 'tier-buy ' + (why ? (/Lv|다음/.test(why) ? 'locked' : '') : 'gold');
+      // 단추에 값과 레벨 조건을 함께: '2,000🪙 · Lv.4'
+      b.innerHTML = `${isNext ? '' : '🔒 '}${price.toLocaleString()}🪙 · Lv.${lv}`;
+      b.disabled = !!why;
+      if (why) { b.title = why; r.querySelector('small').insertAdjacentHTML('afterend', `<small class="tier-why">${/Lv/.test(why) ? '🔒 ' : ''}${why}</small>`); }
+      b.onclick = () => this.upgradeTier(i);
       r.append(b);
       rows.append(r);
     }

@@ -121,3 +121,17 @@ test('폰에서 창이 떠 있으면 아래·옆 조작 버튼과 미니맵을 �
   const rule = RULES.find((r) => r.sel.startsWith(PRE));
   for (const c of ['.touch-btn', '.actionbar', '.minimap', '.bar-toggle', '.objective']) assert.ok(rule.sel.includes(c), c);
 });
+
+test('PC: 창이 떠 있어도 위 HUD·행동 막대·미니맵·채팅은 배경막 위 (한 번 눌러 다른 창으로 바꿈), 폰은 그대로 숨김', () => {
+  const PRE = 'body.panel-open:not(.panel-see) #ui > :is(';
+  const zOf = (env, cls) => {
+    let v;
+    for (const r of RULES) if (r.sel.startsWith(PRE) && r.sel.includes(cls) && r.media.every((m) => mediaMatches(m, env))) for (const [p, x] of r.decls) if (p === 'z-index') v = x;
+    return v;
+  };
+  for (const c of ['.hud-top', '.actionbar', '.minimap', '.chat', '.objective']) {
+    assert.equal(zOf(DESK, c), '8', c);
+    assert.equal(zOf(PHONE, c), undefined, `폰 ${c}`);
+    assert.equal(zOf(LAND, c), undefined, `가로 폰 ${c}`);
+  }
+});

@@ -24,7 +24,7 @@ const FMAT = {
   frame: MAT.wood, gold: M(0xf2c14e, { roughness: 0.35, metalness: 0.55, emissive: 0x3a2a00 }), sky: M(0x9fd4f0), hill: MAT.green, sun: MAT.yellow,
   glass: new THREE.MeshStandardMaterial({ color: 0xbfe6ff, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.45, depthWrite: false }),
   fish: M(0xff8a3d), curtain: MAT.rug, flag: [MAT.red, MAT.yellow, MAT.green, MAT.teal, MAT.rug], shade: M(0xfff1c4, { emissive: 0xffd88a, emissiveIntensity: 0.35 }),
-  radio: MAT.woodD, rug: MAT.rug, rugB: MAT.teal, bear: MAT.wood, bearL: MAT.pillow, petal: MAT.rug, stone: MAT.stone,
+  radio: MAT.woodD, cord: MAT.woodD, rug: MAT.rug, rugB: MAT.teal, bear: MAT.wood, bearL: MAT.pillow, petal: MAT.rug, stone: MAT.stone,
 };
 
 /** 벽지·바닥 색 바꾸기 (재질 색만 → 방을 다시 짓지 않아도 됨, 그리기 호출 그대로) */
@@ -67,10 +67,11 @@ export function mergeRoomMeshes(g) {
   return g;
 }
 
-/** 방 하나 만들기 → { group, solids: [{x0,z0,x1,z1}], spots: [{key, x, z, label}], entry: {x,z}, door: {x,z}, glass, lampMat, fire } */
+/** 방 하나 만들기 → { group, solids: [{x0,z0,x1,z1}], spots: [{key, x, z, label}], entry: {x,z}, door: {x,z}, glass, lampMat, fire, furnAt: {가구 id: {x,y,z}} } */
 export function buildRoom(level, mats, opts = {}) {
   applyRoomStyle(opts.colors);
   const own = new Set(opts.furniture || []);
+  const furnAt = {}; // 산 가구 자리 (방 기준) → 산 뒤 반짝임 (home_view)
   const { w: W, d: D } = ROOM[level];
   const g = new THREE.Group(), solids = [], spots = [];
   // 가구 메시에 자리 표시: 누르면 겹쳐 보이는 옆 가구가 아니라 그 가구로 (pointer.js pickInside)
@@ -173,34 +174,45 @@ export function buildRoom(level, mats, opts = {}) {
   }
   // 산 가구 (꾸밈만: 벽에 걸거나 가구 위에 올려 길을 막지 않음)
   if (own.has('painting')) { // 침대 위 벽: 들판 그림
-    g.add(box(1.1, 0.75, 0.05, FMAT.frame, bx, 2.15, -D / 2 + 0.04), box(0.96, 0.6, 0.06, FMAT.sky, bx, 2.15, -D / 2 + 0.05));
-    g.add(box(0.96, 0.24, 0.07, FMAT.hill, bx, 1.97, -D / 2 + 0.06), ball(0.08, FMAT.sun, bx + 0.28, 2.28, -D / 2 + 0.08));
+    g.add(box(1.1, 0.75, 0.05, FMAT.frame, bx, 1.9, -D / 2 + 0.04), box(0.96, 0.6, 0.06, FMAT.sky, bx, 1.9, -D / 2 + 0.05));
+    g.add(box(0.96, 0.24, 0.07, FMAT.hill, bx, 1.72, -D / 2 + 0.06), ball(0.08, FMAT.sun, bx + 0.28, 2.03, -D / 2 + 0.08));
+    furnAt.painting = { x: bx, y: 1.9, z: -D / 2 + 0.2 };
   }
   if (own.has('clock')) { // 책상 위 벽
-    const c = cyl(0.26, 0.26, 0.06, FMAT.frame, dx, 2.2, -D / 2 + 0.05, 20); c.rotation.x = Math.PI / 2; g.add(c);
-    const f = cyl(0.21, 0.21, 0.07, MAT.white, dx, 2.2, -D / 2 + 0.06, 20); f.rotation.x = Math.PI / 2; g.add(f);
-    g.add(box(0.03, 0.15, 0.02, MAT.dark, dx, 2.26, -D / 2 + 0.1), box(0.11, 0.03, 0.02, MAT.dark, dx + 0.05, 2.2, -D / 2 + 0.1));
+    const c = cyl(0.26, 0.26, 0.06, FMAT.frame, dx, 2.0, -D / 2 + 0.05, 20); c.rotation.x = Math.PI / 2; g.add(c);
+    const f = cyl(0.21, 0.21, 0.07, MAT.white, dx, 2.0, -D / 2 + 0.06, 20); f.rotation.x = Math.PI / 2; g.add(f);
+    g.add(box(0.03, 0.15, 0.02, MAT.dark, dx, 2.06, -D / 2 + 0.1), box(0.11, 0.03, 0.02, MAT.dark, dx + 0.05, 2.0, -D / 2 + 0.1));
+    furnAt.clock = { x: dx, y: 2.0, z: -D / 2 + 0.2 };
   }
   if (own.has('teddy')) { // 베개 옆
-    const tx0 = bx + 0.45, tz0 = bz - 0.75;
-    g.add(ball(0.17, FMAT.bear, tx0, 0.78, tz0), ball(0.13, FMAT.bear, tx0, 1.03, tz0 + 0.02), ball(0.05, FMAT.bear, tx0 - 0.1, 1.14, tz0), ball(0.05, FMAT.bear, tx0 + 0.1, 1.14, tz0));
-    g.add(ball(0.06, FMAT.bearL, tx0, 1.0, tz0 + 0.12), ball(0.08, FMAT.bearL, tx0, 0.78, tz0 + 0.12));
+    const tx0 = bx + 0.45, tz0 = bz - 0.72, k = 1.3, y0 = 0.62; // 1.3배: 방 전체가 보이는 거리에서도 알아보게
+    const at = (dx0, dy, dz0) => [tx0 + dx0 * k, y0 + dy * k, tz0 + dz0 * k];
+    g.add(ball(0.17 * k, FMAT.bear, ...at(0, 0.16, 0)), ball(0.13 * k, FMAT.bear, ...at(0, 0.41, 0.02)), ball(0.05 * k, FMAT.bear, ...at(-0.1, 0.52, 0)), ball(0.05 * k, FMAT.bear, ...at(0.1, 0.52, 0)));
+    g.add(ball(0.06 * k, FMAT.bearL, ...at(0, 0.38, 0.12)), ball(0.08 * k, FMAT.bearL, ...at(0, 0.16, 0.12)));
+    furnAt.teddy = { x: tx0, y: 1.0, z: tz0 };
   }
+  if (own.has('sillflower')) furnAt.sillflower = { x: wx, y: 1.4, z: -D / 2 + 0.2 };
   if (own.has('sillflower')) for (let k = -1; k <= 1; k++) { // 창틀 위 화분 셋
     g.add(cyl(0.08, 0.06, 0.12, MAT.pot, wx + k * 0.4, 1.3, -D / 2 + 0.13, 10), ball(0.09, k ? FMAT.petal : MAT.yellow, wx + k * 0.4, 1.44, -D / 2 + 0.13));
   }
   if (own.has('fishbowl')) { // 가운데 탁자 위 (컵·사과 사이 뒤쪽)
-    g.add(ball(0.2, FMAT.glass, tx, 0.95, tz - 0.25), ball(0.05, FMAT.fish, tx + 0.04, 0.93, tz - 0.25));
+    g.add(ball(0.26, FMAT.glass, tx, 1.0, tz - 0.25), ball(0.07, FMAT.fish, tx + 0.05, 0.97, tz - 0.25)); // 1.3배
+    furnAt.fishbowl = { x: tx, y: 1.0, z: tz - 0.25 };
     g.children[g.children.length - 2].userData.keep = true; // 투명 유리는 따로 (합치면 그리는 순서가 섞임)
   }
+  if (own.has('curtain')) furnAt.curtain = { x: wx, y: 1.7, z: -D / 2 + 0.2 };
   if (own.has('curtain')) for (const s of [-1, 1]) g.add(box(0.32, 1.3, 0.05, FMAT.curtain, wx + s * 0.82, 1.7, -D / 2 + 0.09));
   if (own.has('garland')) for (let k = 0; k < 11; k++) { // 뒤 벽 위 깃발 줄
-    const x = -W / 2 + 0.6 + k * ((W - 1.2) / 10), y = 2.75 - Math.sin((k / 10) * Math.PI) * 0.18;
+    const x = -W / 2 + 0.6 + k * ((W - 1.2) / 10), y = 2.45 - Math.sin((k / 10) * Math.PI) * 0.18; // 잘린 벽 위 끝 아래로
     const f = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.24, 3), FMAT.flag[k % 5]); f.rotation.z = Math.PI; f.position.set(x, y, -D / 2 + 0.06); g.add(f);
   }
-  if (own.has('pendant')) g.add(cyl(0.012, 0.012, 1.1, MAT.dark, tx, 2.45, tz, 6), cyl(0.12, 0.34, 0.26, FMAT.shade, tx, 1.82, tz, 16));
+  if (own.has('garland')) furnAt.garland = { x: 0, y: 2.35, z: -D / 2 + 0.2 };
+  // 펜던트: 가늘고 따뜻한 갈색 줄, 탁자 바로 위까지만 (방 가운데를 길게 가르지 않게)
+  if (own.has('pendant')) { g.add(cyl(0.008, 0.008, 0.55, FMAT.cord, tx, 2.08, tz, 5), cyl(0.12, 0.34, 0.26, FMAT.shade, tx, 1.68, tz, 16)); furnAt.pendant = { x: tx, y: 1.7, z: tz }; }
+  if (own.has('radio')) furnAt.radio = { x: dx - 0.18, y: 1.0, z: dz + 0.05 };
   if (own.has('radio')) g.add(box(0.36, 0.22, 0.16, FMAT.radio, dx - 0.18, 0.93, dz + 0.05), cyl(0.06, 0.06, 0.02, MAT.yellow, dx - 0.26, 0.93, dz + 0.14, 12), box(0.01, 0.2, 0.01, MAT.dark, dx - 0.04, 1.12, dz));
   if (own.has('bigrug')) { // 앞쪽 바닥 (밟고 지나감)
+    furnAt.bigrug = { x: -1.5, y: 0.3, z: D / 2 - 1.0 };
     const r1 = new THREE.Mesh(new THREE.CircleGeometry(0.85, 24), FMAT.rug); r1.rotation.x = -Math.PI / 2; r1.position.set(-1.5, 0.011, D / 2 - 1.0); g.add(r1);
     const r2 = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.68, 24), FMAT.rugB); r2.rotation.x = -Math.PI / 2; r2.position.set(-1.5, 0.014, D / 2 - 1.0); g.add(r2);
   }
@@ -209,6 +221,7 @@ export function buildRoom(level, mats, opts = {}) {
     g.add(cyl(0.22, 0.26, 0.6, FMAT.stone, sx, 0.3, sz, 12), ball(0.16, FMAT.gold, sx, 0.78, sz), ball(0.1, FMAT.gold, sx, 1.0, sz + 0.08));
     const horn = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.14, 8), FMAT.gold); horn.position.set(sx, 1.12, sz + 0.12); horn.rotation.x = 0.5; g.add(horn);
     solid(sx, sz, 0.5, 0.5);
+    furnAt.statue = { x: sx, y: 1.0, z: sz };
   }
   // 🚪 문 (오른쪽 벽 앞쪽) — 나가기
   const doz = D / 2 - (level >= 2 ? 3.3 : 1.1);
@@ -220,5 +233,5 @@ export function buildRoom(level, mats, opts = {}) {
   spots.push({ key: 'door', x: W / 2 - 0.7, z: doz, label: '🚪 문 · 밖으로 나가기' });
   mergeRoomMeshes(g); // 약 110개 → 40개 안팎 (실내 그림자도 그리므로 두 배로 줄어듦)
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  return { group: g, solids, spots, entry: { x: W / 2 - 1.2, z: doz }, W, D, fire };
+  return { group: g, solids, spots, entry: { x: W / 2 - 1.2, z: doz }, W, D, fire, furnAt };
 }

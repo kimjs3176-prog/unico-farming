@@ -30,3 +30,15 @@ test('날짜 난수는 0 이상 1 미만이고 같은 날이면 같은 수열', 
   const r1 = dayRng(3), r2 = dayRng(3);
   for (let i = 0; i < 50; i++) { const v = r1(); assert.equal(v, r2()); assert.ok(v >= 0 && v < 1, String(v)); }
 });
+
+test('다음 진열까지 남은 시간·카드 바탕 색', async () => {
+  const { untilNextShelf, shelfTint } = await import('../src/game/sim/shelf.js');
+  assert.equal(untilNextShelf(0.5), '12:00');
+  assert.equal(untilNextShelf(0.75), '06:00');
+  assert.equal(untilNextShelf(0.999), '00:02');
+  assert.equal(untilNextShelf(0), '24:00');
+  assert.equal(untilNextShelf(1), '00:00');
+  assert.equal(shelfTint(DECOR_BY_ID.cherry), '#f7a8c4');
+  assert.equal(shelfTint(COSTUME.hanbok_mint), '#c8f0e0');
+  assert.equal(shelfTint(DECOR_BY_ID.postbox), null);
+});

@@ -1,5 +1,6 @@
 import { installKoatUI } from './koat_ui.js';
 import { h } from './dom.js';
+import { armScrim } from './scrim.js';
 import { HudUI } from './hud.js';
 import { ObjectiveUI } from './objective.js';
 import { PromptUI } from './prompt.js';
@@ -41,8 +42,8 @@ export class UI {
    * animate=false: 창을 바꿔 열 때 — 바로 지우고 소리도 내지 않음
    * 창이 건 멈춤('panel')만 풂: 대화·컷신·운전 같은 다른 까닭의 멈춤은 그대로
    */
-  closePanel(animate = true) {
-    const p = this.panel, scrim = this._scrim;
+  closePanel(animate = true, keepScrim = false) {
+    const p = this.panel, scrim = keepScrim ? null : this._scrim;
     this.panel = null; this._scrim = null;
     this.game.input.enabled = true;
     this.game.player.unhold?.('panel');
@@ -69,18 +70,19 @@ export class UI {
   openPanel(title) {
     const had = !!this.panel;
     clearTimeout(this._closeSnd);
-    this.closePanel(false);
+    const keep = had && this._scrim?.isConnected ? this._scrim : null; // 바꿔 열 때는 배경막을 그대로 (깜빡이지 않게)
+    this.closePanel(false, !!keep);
     for (const n of this.root.querySelectorAll(':scope > .closing')) n.remove(); // 닫히는 중인 창과 겹쳐 보이지 않게
     this.game.input.enabled = false;
     this.game.player.hold?.('panel');
     // 배경막: 창 밖을 누르면 닫힘. 옷장·꾸미기처럼 뒤를 봐야 하는 창은 body.panel-see 로 숨김
-    const scrim = h('div', 'scrim');
-    scrim.addEventListener('click', () => this.dismiss(true));
-    const p = h('div', 'panel');
+    // 누름이 배경막에서 시작했을 때만 닫음 (말풍선·대화창을 누른 손가락의 뒤늦은 click 무시)
+    const scrim = keep || armScrim(h('div', 'scrim'), () => this.dismiss(true));
+    const p = h('div', had ? 'panel instant' : 'panel'); // 바꿔 열 때는 등장 애니메이션 없이
     const head = h('h2', '', `${title} <button class="ghost close" aria-label="닫기">✕</button>`);
     head.querySelector('.close').onclick = () => this.dismiss();
     p.append(head);
-    this.root.append(scrim, p);
+    if (keep) this.root.append(p); else this.root.append(scrim, p);
     this.panel = p; this._scrim = scrim;
     document.body.classList.add('panel-open');
     // 부르는 쪽이 돌려받은 뒤 클래스를 붙이므로(옷장·꾸미기) 그림 그리기 전에 한 번 더 봄

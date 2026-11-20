@@ -99,3 +99,17 @@ test('집 꾸미기 저장·불러오기: 벽지·바닥·가구가 그대로, �
   assert.equal(odd.style.wall, 'cream', '안 가진 벽지는 입히지 않음');
   assert.deepEqual(odd.furniture, ['clock']);
 });
+
+test('벽지·바닥 미리보기: colors(over) 는 바꿔 본 색만 돌려주고 가진 것·입힌 것은 그대로', () => {
+  // 준비
+  const h = new HomeSim();
+  // 실행
+  const c = h.colors({ floor: 'marble' });
+  // 확인
+  assert.equal(c.floor, FLOORS.find((x) => x.id === 'marble').floor);
+  assert.equal(c.wall, WALLPAPERS[0].wall);
+  assert.equal(h.style.floor, 'oak');
+  assert.equal(h.hasStyle('floor', 'marble'), false);
+  assert.equal(h.colors().floor, FLOORS[0].floor);
+  for (const f of FLOORS) assert.ok(['plank', 'stripe', 'tile', 'mat'].includes(f.look), `${f.id} 견본 무늬 ${f.look}`);
+});

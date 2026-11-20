@@ -64,11 +64,14 @@ export const DECOR_LIMITED = [
 /** 꾸미기 창·불러오기에 쓰는 전체 목록 (DECOR 는 기본 20개 그대로 — 레벨 해금 카드 sim/unlocks.js 가 읽음) */
 export const DECOR_ALL = [...DECOR, ...DECOR_PREMIUM, ...DECOR_LIMITED];
 export const DECOR_BY_ID = Object.fromEntries(DECOR_ALL.map((d) => [d.id, d]));
-export const DECOR_CATS = [['garden', '🌷 정원'], ['furniture', '🪑 가구'], ['props', '📦 소품'], ['special', '✨ 특별']];
+/** 기본 탭 3개 (도트 판 꾸미기 창이 읽음 — 특별 소품은 DECOR 에 없으므로 여기에 넣지 않음) */
+export const DECOR_CATS = [['garden', '🌷 정원'], ['furniture', '🪑 가구'], ['props', '📦 소품']];
+/** 3D 꾸미기 창 탭: 기본 + ✨ 특별 + registerDecor 로 더한 탭 */
+export const DECOR_CATS_ALL = [...DECOR_CATS, ['special', '✨ 특별']];
 
 /**
  * 소품 더하기 (계절 축제 소품 등, 다른 모듈이 불러오기 전에 등록) → 더한 정의, 잘못되면 null
- * def: { id, name, icon, price, lv, model, scale?, r?, cat?, tint?, limited? } — cat 이 새것이면 catLabel 로 탭을 더함
+ * def: { id, name, icon, price, lv, model, scale?, r?, cat?, tint?, limited? } — cat 이 새것이면 catLabel 로 3D 창에 탭을 더함
  */
 export function registerDecor(def) {
   if (!def || typeof def.id !== 'string' || !/^[a-z0-9_]{2,32}$/.test(def.id) || DECOR_BY_ID[def.id]) return null;
@@ -77,8 +80,8 @@ export function registerDecor(def) {
   const d = { id: def.id, name: def.name, icon: def.icon || '🎁', price, lv, model: def.model, scale: +def.scale > 0 ? +def.scale : 1, r: Math.max(0, +def.r || 0), cat: def.cat || 'special' };
   if (def.tint && Number.isFinite(+def.tint.color)) d.tint = Array.isArray(def.tint.mats) ? { color: +def.tint.color, mode: 'mats', mats: def.tint.mats.map(String) } : { color: +def.tint.color, mode: def.tint.mode === 'green' ? 'green' : 'all' };
   if (def.limited) d.limited = true;
-  if (!DECOR_CATS.some(([c]) => c === d.cat)) DECOR_CATS.push([d.cat, def.catLabel || d.cat]);
-  DECOR.push(d);
+  // 기본 목록(DECOR)·기본 탭은 그대로 → 도트 판·레벨 해금 카드는 기본 20개만 봄
+  if (!DECOR_CATS_ALL.some(([c]) => c === d.cat)) DECOR_CATS_ALL.push([d.cat, def.catLabel || d.cat]);
   DECOR_ALL.push(d);
   DECOR_BY_ID[d.id] = d;
   return d;

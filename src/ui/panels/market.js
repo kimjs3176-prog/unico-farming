@@ -7,7 +7,7 @@ import { ITEMS } from '../../game/sim/items.js';
 import { reward, BUY_SOUND } from '../../game/reward.js';
 import { DECOR_BY_ID } from '../../game/sim/decor.js';
 import { COSTUME } from '../../game/sim/costume.js';
-import { todaySpecial } from '../../game/sim/shelf.js';
+import { todaySpecial, untilNextShelf, shelfTint } from '../../game/sim/shelf.js';
 
 /** 설명 줄: 짧은 마디는 한 덩어리(줄바꿈은 마디 사이에서만) → '판매 42🪙' 가 쪼개지지 않음 */
 const meta = (segs) => {
@@ -65,14 +65,15 @@ export const MarketPanel = {
       }
       return r;
     };
-    // 판 순간: 금액에 따라 다른 소리 · 단추 자리에 '+N🪙' · 코인이 장터 위쪽 숫자로 날아감 (닿을 때마다 숫자가 오름)
+    // 판 순간: 금액에 따라 다른 소리 · 누른 단추 한가운데 '+N🪙' 알약 · 코인이 장터 위쪽 숫자로 날아감 (닿을 때마다 숫자가 오름)
     // 알림 장은 장터를 닫은 뒤에만 (장터 안에서는 창 위의 +N 이 그 몫)
     const gain = (got, rect) => {
       const p0 = this.panel;
       if (!p0?.classList.contains('market')) return;
       const pr = p0.getBoundingClientRect(), z = pr.width / (p0.offsetWidth || pr.width) || 1;
       const f = h('div', 'mk-gain', `+${got.toLocaleString()}🪙`);
-      f.style.left = `${(rect.left + rect.width / 2 - pr.left) / z}px`; f.style.top = `${(rect.top - pr.top) / z - 6}px`;
+      const cx = (rect.left + rect.width / 2 - pr.left) / z, w0 = p0.offsetWidth || pr.width / z;
+      f.style.left = `${Math.max(56, Math.min(w0 - 56, cx))}px`; f.style.top = `${(rect.top + rect.height / 2 - pr.top) / z}px`; // 누른 단추 한가운데
       p0.append(f);
       f.addEventListener('animationend', () => f.remove());
       setTimeout(() => f.remove(), 1400);
@@ -166,23 +167,35 @@ export const MarketPanel = {
           foot.append(ab);
         }
       } else if (cur === 'today') {
-        // ✨ 오늘의 특별 상품: 날마다 바뀌는 색 바꾼 한정 소품·옷 (sim/shelf.js)
+        // ✨ 오늘의 특별 상품: 날마다 바뀌는 색 바꾼 한정 소품·옷 (sim/shelf.js) — 카드 3장, 바탕은 그 물건의 색
         const day = g.world?.day || 1, cs = g.costume, dsim = g.decor?.sim;
-        body.append(h('h3', '', '✨ 오늘의 특별 상품'));
-        body.append(h('p', 'mk-note mk-today', '🦊 여우 상인이 오늘만 들여온 물건이에요 · <b>내일 아침이면 바뀌어요</b>'));
-        const rows = h('div', 'rows');
+        const left = () => untilNextShelf(g.world?.time ?? 0);
+        const head = h('div', 'mk-todayhead', `<span>✨ 오늘의 특별 상품</span><span class="mk-clock nw" title="자정에 새 상품으로 바뀌어요">⏰ 다음 상품까지 <b>${left()}</b></span>`);
+        body.append(head);
+        body.append(h('p', 'mk-note mk-today', '🦊 여우 상인이 오늘만 들여온 물건이에요 · <b class="nw">자정이면 바뀌어요</b>'));
+        // 남은 시간: 게임 시계를 따라 1초마다 (바뀔 때만 씀, 탭을 떠나거나 창이 닫히면 멈춤)
+        clearInterval(this._mkClock);
+        const clk = head.querySelector('.mk-clock b');
+        this._mkClock = setInterval(() => { if (!clk.isConnected) { clearInterval(this._mkClock); return; } const v = left(); if (clk.textContent !== v) clk.textContent = v; }, 1000);
+        const cards = h('div', 'mk-cards');
         for (const it of todaySpecial(day)) {
           const isDecor = it.kind === 'decor', d = isDecor ? DECOR_BY_ID[it.id] : COSTUME[it.id];
           if (!d || (isDecor && !dsim) || (!isDecor && !cs)) continue;
           const have = isDecor ? dsim.storedOf(it.id) + dsim.placed.filter((x) => x.id === it.id).length : cs.has(it.id) ? 1 : 0;
           const why = isDecor ? dsim.whyNotBuy(it.id, { money: eco.money, level: g.quests.level }) : cs.whyNotBuy(it.id, { money: eco.money, level: g.quests.level, shelf: true });
-          const note = isDecor ? ['🪑 꾸미기 소품', '사면 보관함으로', '놓을 때 무료'] : [`👗 ${COSTUME[d.base]?.name || ''} 색 바꾼 판`, `✨ ${d.perkText}`];
-          const qty = isDecor ? (have ? ` <span class="qty">가진 것 ${have}</span>` : '') : have ? ' <span class="qty">보유</span>' : '';
-          const r = row('', `today:${it.id}`, have, d.icon, `${d.name}${qty}`, !isDecor && have ? '' : `${it.price.toLocaleString()}🪙`, meta(note));
-          rows.append(r);
-          if (!isDecor && have) { const b = h('button', 'ghost', cs.wearing === it.id ? '입는 중' : '입기'); b.disabled = cs.wearing === it.id; b.onclick = () => { cs.wear(it.id); g.applyLook(); reward(g, 1); render(); }; btnsOf(r).append(b); continue; }
-          if (why && /Lv/.test(why)) { const bt = h('button', 'locked', lockHtml(`Lv.${d.lv} 해금`)); bt.disabled = true; btnsOf(r).append(bt); continue; }
-          const b = h('button', why ? '' : 'gold', '사기');
+          const kind = isDecor ? '🪑 꾸미기 소품 · 보관함으로' : `👗 ${COSTUME[d.base]?.name || ''} 색 바꾼 판`;
+          const perk = isDecor ? '놓을 때 무료' : `✨ ${d.perkText}`;
+          const c = h('div', `mk-card${have ? ' owned' : ''}`, `<span class="mk-rib">${have ? '✓ 샀어요' : '오늘만'}</span><div class="mk-tile">${d.icon}</div>`
+            + `<div class="mk-cinfo"><b class="nm">${d.name}</b><span class="mk-kind">${kind}</span><span class="mk-perk">${perk}${isDecor && have ? ` · 가진 것 ${have}` : ''}</span>`
+            + `<span class="pr">${!isDecor && have ? '옷장에 있어요' : `${it.price.toLocaleString()}🪙`}</span></div><span class="btns"></span>`);
+          c.dataset.k = `today:${it.id}`; c.dataset.have = have;
+          const tint = shelfTint(d);
+          if (tint) c.style.setProperty('--tint', tint);
+          cards.append(c);
+          const bx = c.querySelector('.btns');
+          if (!isDecor && have) { const b = h('button', 'ghost', cs.wearing === it.id ? '입는 중' : '입기'); b.disabled = cs.wearing === it.id; b.onclick = () => { cs.wear(it.id); g.applyLook(); reward(g, 1); render(); }; bx.append(b); continue; }
+          if (why && /Lv/.test(why)) { const bt = h('button', 'locked', lockHtml(`Lv.${d.lv} 해금`)); bt.disabled = true; bx.append(bt); continue; }
+          const b = h('button', why ? '' : 'gold', have ? '하나 더 사기' : '사기');
           b.disabled = !!why;
           if (why) b.title = why;
           b.onclick = () => {
@@ -203,9 +216,9 @@ export const MarketPanel = {
             saveSoon();
             render();
           };
-          btnsOf(r).append(b);
+          bx.append(b);
         }
-        body.append(rows);
+        body.append(cards);
         body.append(h('p', 'mk-note', '🏠 집 책상에서는 벽지·바닥·가구를, 🪑 꾸미기의 ✨ 특별 탭에서는 큰 소품을 살 수 있어요'));
       } else if (cur === 'cos') {
         // 👗 의상: 코스튬 사기 · 바로 입기 (갈아입기·세트는 집 옷장)

@@ -22,7 +22,7 @@ export const MAIL = [null, { coins: 40, items: [] }, { coins: 100, items: [['com
 
 /**
  * 집 안 꾸미기 (꾸밈만, 수익 없음): 벽지·바닥 색 세트와 가구. 가진 것은 그대로 남고 언제든 바꿔 입힘
- *  wall/wallB: 벽 위·아랫단 색, floor/floorB: 널빤지 두 색 (home_interior.js 의 MAT 색만 바꿈 → 그리기 호출 그대로)
+ *  wall/wallB: 벽 위·아랫단 색, floor/floorB: 널빤지 두 색, look: 견본 무늬(plank 널빤지·stripe 줄무늬·tile 타일·mat 장판) (home_interior.js 의 MAT 색만 바꿈 → 그리기 호출 그대로)
  */
 export const WALLPAPERS = [
   { id: 'cream', name: '크림 벽지', icon: '🤍', price: 0, lv: 1, wall: 0xfff1dc, wallB: 0xf6dcc0 },
@@ -36,15 +36,15 @@ export const WALLPAPERS = [
   { id: 'night', name: '밤하늘 벽지', icon: '🌙', price: 2000, lv: 6, wall: 0x3c4a78, wallB: 0x27315a },
 ];
 export const FLOORS = [
-  { id: 'oak', name: '참나무 마루', icon: '🪵', price: 0, lv: 1, floor: 0xc99a63, floorB: 0xb8875a },
-  { id: 'pine', name: '밝은 소나무 마루', icon: '🌲', price: 300, lv: 1, floor: 0xe8c99a, floorB: 0xdcb784 },
-  { id: 'walnut', name: '호두나무 마루', icon: '🌰', price: 400, lv: 2, floor: 0x8a5a3a, floorB: 0x7a4c30 },
-  { id: 'check', name: '줄무늬 마루', icon: '🍬', price: 600, lv: 2, floor: 0xf4ede0, floorB: 0xd65a5a },
-  { id: 'jangpan', name: '노란 장판', icon: '🟨', price: 700, lv: 3, floor: 0xf2c46a, floorB: 0xe8b85a },
-  { id: 'mintile', name: '민트 타일', icon: '🟩', price: 900, lv: 3, floor: 0xbfe8d6, floorB: 0x9ad6bd },
-  { id: 'rose', name: '장미 마루', icon: '🌹', price: 1200, lv: 4, floor: 0xd9928a, floorB: 0xc77b74 },
-  { id: 'marble', name: '대리석', icon: '⬜', price: 1600, lv: 5, floor: 0xf2f0ec, floorB: 0xd8d4cc },
-  { id: 'starry', name: '별빛 마루', icon: '✨', price: 2000, lv: 6, floor: 0x3d3a5c, floorB: 0x4b4870 },
+  { id: 'oak', name: '참나무 마루', icon: '🪵', price: 0, lv: 1, floor: 0xc99a63, floorB: 0xb8875a, look: 'plank' },
+  { id: 'pine', name: '밝은 소나무 마루', icon: '🌲', price: 300, lv: 1, floor: 0xe8c99a, floorB: 0xdcb784, look: 'plank' },
+  { id: 'walnut', name: '호두나무 마루', icon: '🌰', price: 400, lv: 2, floor: 0x8a5a3a, floorB: 0x7a4c30, look: 'plank' },
+  { id: 'check', name: '줄무늬 마루', icon: '🍬', price: 600, lv: 2, floor: 0xf6eee4, floorB: 0xe8a49a, look: 'stripe' },
+  { id: 'jangpan', name: '노란 장판', icon: '🟨', price: 700, lv: 3, floor: 0xf2c46a, floorB: 0xe8b85a, look: 'mat' },
+  { id: 'mintile', name: '민트 타일', icon: '🟩', price: 900, lv: 3, floor: 0xbfe8d6, floorB: 0x9ad6bd, look: 'tile' },
+  { id: 'rose', name: '장미 마루', icon: '🌹', price: 1200, lv: 4, floor: 0xd9928a, floorB: 0xc77b74, look: 'plank' },
+  { id: 'marble', name: '대리석', icon: '⬜', price: 1600, lv: 5, floor: 0xf2f0ec, floorB: 0xd8d4cc, look: 'tile' },
+  { id: 'starry', name: '별빛 마루', icon: '✨', price: 2000, lv: 6, floor: 0x3d3a5c, floorB: 0x4b4870, look: 'plank' },
 ];
 /** 집 안 가구 (방에 고정된 자리, 지나다니는 길을 막지 않음) */
 export const FURNITURE = [
@@ -102,9 +102,10 @@ export class HomeSim {
     return true;
   }
 
-  /** 지금 방 색 { wall, wallB, floor, floorB } */
-  colors() {
-    const w = STYLE_BY_ID.wall[this.style.wall] || WALLPAPERS[0], f = STYLE_BY_ID.floor[this.style.floor] || FLOORS[0];
+  /** 지금 방 색 { wall, wallB, floor, floorB } (over 를 주면 그 무늬로 바꿔 본 색 — 사지 않고 미리보기) */
+  colors(over = null) {
+    const st = over ? { ...this.style, ...over } : this.style; // over: 미리보기 { wall?: id, floor?: id }
+    const w = STYLE_BY_ID.wall[st.wall] || WALLPAPERS[0], f = STYLE_BY_ID.floor[st.floor] || FLOORS[0];
     return { wall: w.wall, wallB: w.wallB, floor: f.floor, floorB: f.floorB };
   }
 

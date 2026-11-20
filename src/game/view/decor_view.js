@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { heightAt } from '../terrain.js';
 import { LAYOUT } from '../world.js';
 import { routineSpots } from '../sim/routine.js';
-import { DecorSim, DECOR_ALL, DECOR_BY_ID, DECOR_CATS, DECOR_MAX, outsideZones, snapAhead } from '../sim/decor.js';
+import { DecorSim, DECOR_ALL, DECOR_BY_ID, DECOR_CATS_ALL, DECOR_MAX, outsideZones, snapAhead } from '../sim/decor.js';
 import { saveGame } from '../save.js';
 import { touchUI } from '../input.js';
 import { reward, BUY_SOUND } from '../reward.js';
@@ -255,7 +255,7 @@ export class DecorView {
     p.append(el('p', 'soc-sub', `놓은 소품 ${sim.count}/${DECOR_MAX} · 고르면 유니코 앞에 미리보기가 나와요. 걸어가서 ${touchUI() ? 'E 버튼으로' : 'E 로'} 놓아요`));
     p.append(el('p', 'mk-note', '🏡 집 주변과 빈 풀밭에 놓을 수 있어요 (밭·논·목장·트랙터 마당·낚시터·길목·문 앞은 비워 둬요)'));
     const tabs = el('div', 'mk-tabs');
-    for (const [id, label] of DECOR_CATS) { const t = el('button', id === cat ? 'on' : '', label); t.onclick = () => this.open(id); tabs.append(t); }
+    for (const [id, label] of DECOR_CATS_ALL) { const t = el('button', id === cat ? 'on' : '', label); t.onclick = () => this.open(id); tabs.append(t); }
     p.append(tabs);
     const grid = el('div', 'cos-grid decor-grid');
     for (const d of DECOR_ALL.filter((x) => x.cat === cat && (!x.limited || sim.storedOf(x.id) > 0))) {
