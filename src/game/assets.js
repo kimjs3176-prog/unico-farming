@@ -39,6 +39,10 @@ export const ANIMATED_MODELS = ['q_cow', 'q_sheep', 'q_shiba'];
  *  2) 밤에만 나오는 늑대·여우: pests.js 가 assets.has() 로 확인
  */
 export const DEFERRED_MODELS = [['q_horse', 'q_donkey', 'q_alpaca'], ['q_wolf', 'q_fox']];
+/** 법선을 부드럽게 구운 목장 동물 (scripts/optimize-cc0.mjs --soften-animals): 주민과 같은 장난감 같은 털 질감 */
+const SOFT_FUR = new Set(['q_cow', 'q_sheep', 'q_shiba', 'q_alpaca', 'q_horse', 'q_donkey']);
+/** 키 큰 구경 동물은 조금 작게 (머리 꼭대기가 유니코 머리보다 높지 않게) */
+const LOAD_SCALE = { q_alpaca: 0.85, q_horse: 0.85 };
 /** 뼈대 동물 컬링 구 여유 배율: 걷기·뛰기·풀 뜯기 동작이 기본 자세 구 밖으로 나가지 않게 */
 const SKIN_SPHERE_PAD = 1.5;
 
@@ -174,7 +178,9 @@ export class Assets {
   async _loadAnimated(n, fallback) {
     try {
       const gltf = await this.loadGlb(n);
-      prepare(gltf.scene, { fur: true, spots: n === 'q_cow' ? 'Main' : null }); // 젖소: 얼룩무늬 (양은 털 질감)
+      prepare(gltf.scene, { fur: true, soft: SOFT_FUR.has(n), spots: n === 'q_cow' ? 'Main' : null }); // 젖소: 얼룩무늬 (양은 털 질감)
+      // 바깥 묶음 노드 배율만 바꿈 (목장 화면이 루트 배율을 새끼 크기로 덮어쓰므로)
+      if (LOAD_SCALE[n]) gltf.scene.children[0]?.scale.multiplyScalar(LOAD_SCALE[n]);
       skinSpheres(gltf.scene);
       this.anims.set(n, gltf.animations);
       this.scenes.set(n, gltf.scene);
@@ -237,19 +243,19 @@ export function skinSpheres(scene, pad = SKIN_SPHERE_PAD) {
   });
 }
 
-function prepare(scene, { fur = false, spots = null } = {}) {
+function prepare(scene, { fur = false, soft = false, spots = null } = {}) {
   scene.traverse((o) => {
     if (!o.isMesh) return;
     if (!o.isSkinnedMesh) dequantize(o.geometry);
     const m = o.material;
     if (m) {
       // 캐주얼 플랫 룩: 거칠기 높게, 금속성 제거
-      m.roughness = Math.max(m.roughness ?? 0.8, 0.7);
+      m.roughness = soft ? 0.6 : Math.max(m.roughness ?? 0.8, 0.7);
       m.metalness = 0;
       if (m.transparent) m.depthWrite = false;
       const glows = m.emissive && m.emissiveIntensity > 0 && (m.emissive.r + m.emissive.g + m.emissive.b) > 0.01;
       if (glows) m.toneMapped = false;
-      else enhanceMaterial(m, fur ? 'fur' : undefined, fur ? { contact: false, rim: 0.18, spots: m.name === spots ? 2.6 : 0 } : undefined);
+      else enhanceMaterial(m, fur ? 'fur' : undefined, fur ? { contact: false, rim: soft ? 0.3 : 0.18, spots: m.name === spots ? 2.6 : 0 } : undefined);
     }
     o.castShadow = true;
     o.receiveShadow = true;

@@ -16,7 +16,8 @@
 - KayKit 다시 만들기: 팩의 `Assets/gltf/**` 에서 필요한 `.gltf`·`.bin`·`hexagons_medieval.png` 를 한 폴더에 모은 뒤 `node scripts/pack-kaykit.mjs <폴더>`
 - 라이선스 전문: <https://creativecommons.org/publicdomain/zero/1.0/>
 
-닭(`hen.glb`)·까마귀(`crow.glb`)·벌통(`beehive.glb`)은 같은 저폴리 결로 이 저장소에서 직접 만든 모델입니다(`blender/build_environment.py` 의 `hen()`).
+닭(`hen.glb`)·까마귀(`crow.glb`)·벌통(`beehive.glb`)은 이 저장소에서 직접 만든 모델입니다(`blender/build_environment.py` 의 `hen()`). 닭은 주민·유니코와 어울리게 매끈한 구에 큰 머리(반지름 0.13)·큰 눈(0.026)+흰 반짝임으로 다듬었습니다 (`python3 blender/build_all.py hen` → `npm run models:compress`).
+아이템 아이콘 아틀라스(`public/ui/items.webp`, `items_deco.webp`)는 외부 그림 없이 이 저장소의 코드 메시(`src/game/iconmesh/`)·게임 모델·유니코를 `scripts/bake-item-icons.mjs` 로 구운 자체 제작물입니다 (입력: 위 CC0·자체 모델만).
 유니코 캐릭터(코드 생성), 논·스마트팜·장터·트랙터 등 나머지 모델은 이 저장소의 Blender 스크립트(`blender/build_environment.py`)로 만든 것입니다.
 
 ## 그 밖의 무료 에셋 (CC0 아님, 허용 라이선스)
@@ -45,6 +46,15 @@
    ```bash
    node scripts/optimize-cc0.mjs <중간 폴더> <애니>
    ```
+
+4. 부드러운 법선 굽기 (3 단계에 포함, 원본 없이 이미 만든 파일에 다시 할 때):
+   ```bash
+   node scripts/optimize-cc0.mjs --soften-nature    # q_nature 잎(leaf·leaf_dark·leaf_autumn*)만, 80° 안쪽 면끼리 넓이 가중 평균
+   node scripts/optimize-cc0.mjs --soften-animals   # 목장 동물 6종(소·양·시바·알파카·말·당나귀), 72°. 늑대·여우는 일부러 각진 그대로
+   ```
+   위치는 그대로 두고 법선만 바꾼 뒤 같은 정점을 다시 이어 붙입니다(정점 수: 잎 32,515 → 13,616, 동물 마리당 약 −40~60%).
+   경계 상자가 하나라도 바뀌거나 동물 정점이 5% 넘게 늘면 실패로 끝납니다. 확인: `tests/cc0_foliage.test.js`, `tests/animal_normals.test.js`.
+   CC0 원본을 고친 것이므로 라이선스는 그대로 CC0 입니다.
 
 재질 이름은 `src/game/surface.js` 의 `kindOf()` 규칙에 맞춰 바뀌므로(예: `LightRed` → `barn_red`, `Green` → `leaf`),
 게임 안에서 나무결·지붕·잎 흔들림 같은 절차적 질감이 그대로 적용됩니다.

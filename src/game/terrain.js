@@ -48,3 +48,42 @@ export function hillAt(x, z) {
   for (const H of HILLS) if (Math.hypot(x - H.x, z - H.z) < H.r) return H;
   return null;
 }
+
+/**
+ * 연못·호수 물가 모양 (동그라미 대신 자연스러운 굴곡). 물 메시·충돌·낚시 자리·풀·모래가 모두 이 한 곳을 따름.
+ * seed: 굴곡 위상 4개(주변 길·벤치·가로등·버드나무를 피하도록 고름), amp: 굴곡 세기, pins: 부두·낚시 데크 방향(a, 라디안, atan2(z,x))은 굴곡을 0 으로 (원래 반지름) → 부두 뿌리가 그대로 물가
+ */
+export const SHORES = {
+  pond: { seed: [2.29, 1.94, 0.96, 3.06], amp: 0.87, pins: [{ a: -0.80, w: 0.5 }] },
+  lake: { seed: [5.48, 5.23, 4.42, 0.46], amp: 0.88, pins: [{ a: -Math.PI / 2, w: 0.45 }] },
+};
+
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
+/** 물 W({id,x,z,r}) 의 각도 a 방향 물가 반지름(m). 굴곡은 ±15% 안 */
+export function shoreR(W, a) {
+  const S = SHORES[W?.id];
+  if (!S) return W.r;
+  let win = 1;
+  for (const p of S.pins) win *= smooth(Math.min(1, Math.abs(wrapA(a - p.a)) / p.w));
+  const [s1, s2, s3, s4] = S.seed;
+  let dev = 0.09 * Math.sin(2 * a + s1) + 0.06 * Math.sin(3 * a + s2) + 0.035 * Math.sin(5 * a + s3) + 0.015 * Math.sin(8 * a + s4);
+  dev *= S.amp;
+  return W.r * (1 + win * dev);
+}
+
+/** 물가까지 거리(m): 물 안이면 양수, 밖이면 음수 (반지름 방향 기준) */
+export function shoreDist(W, x, z) {
+  const dx = x - W.x, dz = z - W.z;
+  return shoreR(W, Math.atan2(dz, dx)) - Math.hypot(dx, dz);
+}
+
+/** 물가 다각형 [[x,z]...] (n 점, 반지름에 off m 더함) — 미니맵·모래 칠하기 */
+export function shorePolygon(W, n = 96, off = 0) {
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2, r = shoreR(W, a) + off;
+    pts.push([W.x + Math.cos(a) * r, W.z + Math.sin(a) * r]);
+  }
+  return pts;
+}

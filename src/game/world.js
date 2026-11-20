@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { heightAt, HILLS, CHESTS } from './terrain.js';
+import { heightAt, HILLS, CHESTS, shoreR, shoreDist, shorePolygon, SHORES } from './terrain.js';
 import { Scenery } from './scenery.js';
 import { Precipitation } from './precip.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -36,7 +36,7 @@ export const LAYOUT = {
     cart: [{ x: 2.4, z: -16, heading: Math.PI }, { x: 1.8, z: -5.4, heading: Math.PI / 2 }],
   },
   windmill: { x: -27, z: 15 },
-  pond: { x: -12, z: 18, r: 4.5 },
+  pond: { id: 'pond', x: -12, z: 18, r: 4.5 }, // id: 물가 굴곡 (terrain.js SHORES)
   // 논 (3x2), 탈곡장, 허수아비
   paddy: { cols: 3, rows: 2, size: 3.6, bund: 0.7, x0: -6.8, z0: -25.6 },
   thresher: { x: 10.2, z: -20.5 },
@@ -50,7 +50,7 @@ export const LAYOUT = {
   dock: { x: -8.9, z: 14.8, rot: 2.38 },
   // 유니코 낚시터 (남서쪽 호수): 물 위로 뻗은 부두(물에 뜬 나무 데크), 동쪽 물가에 낚시 가게·기록판
   lake: {
-    x: -12.5, z: 31, r: 6,
+    id: 'lake', x: -12.5, z: 31, r: 6,
     pier: [{ x0: -13.35, z0: 23.2, x1: -11.65, z1: 30.2 }, { x0: -14.4, z0: 29.4, x1: -10.6, z1: 32.6 }],
     shop: { x: -2.9, z: 28.6, rot: -Math.PI / 2 }, board: { x: -2.8, z: 24.2 }, entry: { x: -12.5, z: 23.2 },
   },
@@ -364,28 +364,25 @@ export class World {
            totalEmissiveRadiance += uSkyC * 0.9 * gPud * pf * uWet * 0.6;
          }`);
     };
-    // 연못 바닥 / 테두리 (물은 scenery 가 그림)
-    const pondBed = new THREE.Mesh(new THREE.CircleGeometry(LAYOUT.pond.r, 48), new THREE.MeshStandardMaterial({ color: 0x3f7fa8, roughness: 0.9 }));
+    // 연못 바닥 (물은 scenery 가 그림): 물가 굴곡과 같은 모양
+    const bedShape = new THREE.Shape(shorePolygon(LAYOUT.pond, 48).map(([x, z]) => new THREE.Vector2(x - LAYOUT.pond.x, -(z - LAYOUT.pond.z))));
+    const pondBed = new THREE.Mesh(new THREE.ShapeGeometry(bedShape), new THREE.MeshStandardMaterial({ color: 0x3f7fa8, roughness: 0.9 }));
     pondBed.rotation.x = -Math.PI / 2;
     pondBed.position.set(LAYOUT.pond.x, -0.05, LAYOUT.pond.z);
     this.scene.add(pondBed);
-    // 물 (연못·호수): 들어갈 수 없지만 부두 데크 위는 걸을 수 있음
+    // 물 (연못·호수): 들어갈 수 없지만 부두 데크 위는 걸을 수 있음. 경계 = 물가 굴곡(shoreR) - 0.3m
+    // r 은 예전 원 반지름(호환용), 실제 판정은 W(LAYOUT 물)의 shoreR
     this.waters = [
-      { x: LAYOUT.pond.x, z: LAYOUT.pond.z, r: LAYOUT.pond.r - 0.3, decks: [] },
-      { x: LAYOUT.lake.x, z: LAYOUT.lake.z, r: LAYOUT.lake.r - 0.3, decks: LAYOUT.lake.pier, swim: true }, // 호수는 헤엄쳐 들어갈 수 있음 (플레이어만)
+      { W: LAYOUT.pond, x: LAYOUT.pond.x, z: LAYOUT.pond.z, r: LAYOUT.pond.r - 0.3, decks: [] },
+      { W: LAYOUT.lake, x: LAYOUT.lake.x, z: LAYOUT.lake.z, r: LAYOUT.lake.r - 0.3, decks: LAYOUT.lake.pier, swim: true }, // 호수는 헤엄쳐 들어갈 수 있음 (플레이어만)
     ];
-    // 연못 가장자리 돌
-    const rnd = mulberry32(17);
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x9a9c9f, roughness: 0.95 });
-    for (let i = 0; i < 26; i++) {
-      const a = (i / 26) * Math.PI * 2 + rnd() * 0.1;
-      const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.22 + rnd() * 0.18, 0), stoneMat);
-      st.position.set(LAYOUT.pond.x + Math.cos(a) * (LAYOUT.pond.r + 0.1), 0.05, LAYOUT.pond.z + Math.sin(a) * (LAYOUT.pond.r + 0.1));
-      st.scale.y = 0.55;
-      st.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
-      st.castShadow = st.receiveShadow = true;
-      this.scene.add(st);
-    }
+    // 물가 돌·갈대는 _decorate 의 _shoreDress (정적 병합)
+  }
+
+  /** 물가 모양 다각형 [[x,z]...] (미니맵 등): id = 'pond' | 'lake' */
+  shoreShape(id, n = 64) {
+    const W = LAYOUT[id];
+    return W && SHORES[id] ? shorePolygon(W, n) : null;
   }
 
   /** 지면 텍스처 칠하기 (장식 배치 후 호출: 나무·건물 밑 AO 를 함께 굽는다) */
@@ -419,6 +416,16 @@ export class World {
       main.save(); main.imageSmoothingEnabled = true; main.imageSmoothingQuality = 'high';
       main.drawImage(sc, 0, 0, S, S);
       main.restore();
+    };
+    // 물가 굴곡을 off(a) m 만큼 밀어낸 다각형 채우기
+    const shoreFill = (W, off) => {
+      ctx.beginPath();
+      for (let i = 0; i < 96; i++) {
+        const a = (i / 96) * Math.PI * 2, r = shoreR(W, a) + off(a);
+        const x = P(W.x + Math.cos(a) * r), y = P(W.z + Math.sin(a) * r);
+        if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      ctx.closePath(); ctx.fill();
     };
     // 흙길: 넓고 흐린 가장자리 → 본체 → 자갈 점
     const stroke = (pts, w, color, alpha) => {
@@ -475,10 +482,14 @@ export class World {
       const kp = L.koat.plaza;
       ctx.fillStyle = '#cfc9bb'; // 흙 디테일이 연두 대신 밝기만 곱해져 밝아진 만큼 한 단계 낮춤
       ctx.fillRect(P(kp[0]), P(kp[1]), M(kp[2] - kp[0]), M(kp[3] - kp[1]));
-      // 연못 모래 테두리
+      // 연못·호수 모래 물가: 물가 굴곡을 따라 폭이 들쭉날쭉 (호수 부두 옆은 넓은 모래 물굽이)
       ctx.fillStyle = '#d0b886';
-      ctx.beginPath(); ctx.arc(P(L.pond.x), P(L.pond.z), M(L.pond.r + 0.9), 0, 7); ctx.fill();
-      ctx.beginPath(); ctx.arc(P(L.lake.x), P(L.lake.z), M(L.lake.r + 1.1), 0, 7); ctx.fill();
+      for (const W of [L.pond, L.lake]) shoreFill(W, (a) => 0.8 + 0.5 * (0.5 + 0.5 * Math.sin(3 * a + W.r) * Math.cos(5 * a - 1.3)) + (W === L.lake ? 1.3 * Math.max(0, 1 - Math.abs(Math.atan2(Math.sin(a + 1.15), Math.cos(a + 1.15))) / 0.35) : 0));
+    });
+    // 물에 젖은 모래 띠 (물가 바로 바깥, 짙게)
+    soft(M(0.25), () => {
+      ctx.fillStyle = '#b39663';
+      for (const W of [L.pond, L.lake]) shoreFill(W, () => 0.28);
     });
     // 광장 줄눈 + 중앙 엠블럼 원
     {
@@ -631,13 +642,14 @@ export class World {
       const n = treeName(true);
       this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.5) * treeScale(n), { r: 0.6 });
     }
-    const spots = [[-8, -6], [-5, -9], [-11, 13], [-28, -2], [30, 14], [20, 22], [-30, 22], [35.8, -4], [-18, 24], [-20, -18.5]]; // (-20,4)·(-22,10) 은 새 마을 길·부지와 겹쳐 뺌, 방앗간 앞 (-14,-18) 은 옆으로
+    const spots = [[-8, -6], [-5, -9], [-28, -2], [30, 14], [20, 22], [-30, 22], [35.8, -4], [-18, 24], [-20, -18.5]]; // (-20,4)·(-22,10) 은 새 마을 길·부지와 겹쳐 뺌, (-11,13) 은 원래 연못에 막혀 안 놓이던 자리라 뺌 (물가 굴곡으로 놓이지 않게), 방앗간 앞 (-14,-18) 은 옆으로
     for (const [x, z] of spots) { if (this.isBlocked(x, z, 1.0) || this.isReserved(x, z, 0) || this.onPath(x, z, 1.4)) continue; const n = Q ? pick(['tree_1', 'tree_2', 'tree_3', 'tree_4', 'tree_5', 'birch_1', 'birch_2', 'autumn_1']) : treeName(false); this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.4) * treeScale(n), { r: 0.6 }); }
     // 연못가 버드나무
     if (Q) for (const [x, z] of [[-17.6, 15.5], [-16.5, 21.8]]) if (!this.isBlocked(x, z, 1.6)) this.place(rnd() > 0.5 ? 'willow_1' : 'willow_2', x, z, rnd() * 6.28, 1.35, { r: 0.6 });
     // 연잎 (낚시 데크 반대편)
     if (Q) for (const [dx, dz, s] of [[-2.6, 1.2, 0.8], [-1.6, 2.6, 0.6], [-3.1, -0.6, 0.7], [-0.4, 3.3, 0.55], [1.4, 3.0, 0.65]]) {
-      const lp = this.place('lilypad', L.pond.x + dx, L.pond.z + dz, rnd() * 6.28, s, { collide: false });
+      const [px, pz] = insideShore(L.pond, L.pond.x + dx, L.pond.z + dz, 1);
+      const lp = this.place('lilypad', px, pz, rnd() * 6.28, s, { collide: false });
       lp.position.y = 0.05; // 정적 병합 전에 수면 위로
     }
     for (let i = 0; i < 26; i++) {
@@ -679,7 +691,7 @@ export class World {
     // 밤 가로등 불빛 웅덩이: 바닥에 부드러운 따뜻한 빛 (실제 광원 대신 가산 혼합 원판 → 가벼움)
     const poolTex = radialTexture();
     this.lampPools = [];
-    const inWaterCircle = (x, z) => [L.pond, L.lake].some((w) => Math.hypot(x - w.x, z - w.z) < w.r);
+    const inWaterCircle = (x, z) => [L.pond, L.lake].some((w) => shoreDist(w, x, z) > 0);
     for (const [name, x, z] of L.props) {
       if (name !== 'lamp' || inWaterCircle(x, z)) continue; // 부두 위 가로등: 빛 웅덩이가 물 위에만 떠 보여서 빼고 수면 빛줄기로
       const pool = new THREE.Mesh(new THREE.PlaneGeometry(6.5, 6.5), new THREE.MeshBasicMaterial({ map: poolTex, color: 0xffc06a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
@@ -699,6 +711,8 @@ export class World {
     this.signText(this.herdSign, '🐑 양 몰이', '양을 우리에 넣어요 →');
     this.place('scarecrow', L.scarecrow.x, L.scarecrow.z, 0.4, 1, { r: 0.35 });
     this.place('dock', L.dock.x, L.dock.z, L.dock.rot, 1, { collide: false });
+    // 연못가: 돌 무더기와 갈대 (낚시 데크 쪽은 비움)
+    this._shoreDress(L.pond, Q, mulberry32(17), { clusters: 6, keep: [{ a: Math.atan2(L.dock.z - L.pond.z, L.dock.x - L.pond.x), w: 0.75 }] });
     this._lake(Q, rnd);
     this._mountains();
     this.sun.position.set(30, 50, 20);
@@ -760,23 +774,64 @@ export class World {
     const rope = new THREE.Mesh(new THREE.TubeGeometry(sag, 8, 0.016, 4), new THREE.MeshStandardMaterial({ color: 0xc9a66b, roughness: 0.9 }) /* 짙은 나무와 같은 거칠기 → 같은 정적 묶음 */);
     this.scene.add(rope);
     this.staticObjs.push(rope);
-    // 물가: 돌, 갈대, 연잎 (부두 자리는 비움)
-    const nearPier = (x, z) => K.pier.some((b) => x > b.x0 - 1.2 && x < b.x1 + 1.2 && z > b.z0 - 1.2 && z < b.z1 + 1.2);
-    for (let i = 0; i < 30; i++) {
-      const a = (i / 30) * Math.PI * 2 + rnd() * 0.12, rr = K.r + 0.15 + rnd() * 0.3;
-      const x = K.x + Math.cos(a) * rr, z = K.z + Math.sin(a) * rr;
-      if (nearPier(x, z)) continue;
-      if (Q && i % 3 === 0) this.place(pick3(rnd, ['plant_1', 'plant_2', 'grass_q', 'grass_q2']), x + Math.cos(a) * 0.4, z + Math.sin(a) * 0.4, rnd() * 6.28, 1.1, { collide: false });
-      else this.place(Q ? pick3(rnd, ['rock_1', 'rock_2', 'mossrock_1', 'mossrock_2']) : 'rock', x, z, rnd() * 6.28, 0.45 + rnd() * 0.3, { collide: false });
-    }
+    // 물가: 돌 무더기·갈대 (부두 자리, 낚시꾼 고양이 앞 동쪽 물가는 낚시하기 좋게 비움), 연잎
+    const fisher = LAYOUT.npcs.fisher;
+    this._shoreDress(K, Q, rnd, { clusters: 7, keep: [{ a: -Math.PI / 2, w: 0.6 }, { a: Math.atan2(fisher.z - K.z, fisher.x - K.x), w: 0.35 }] });
     if (Q) {
       for (const [dx, dz, sc] of [[3.4, 2.6, 0.9], [4.1, 1.2, 0.7], [2.6, 3.8, 0.75], [-3.8, 3.2, 0.8], [-4.4, 1.6, 0.6], [3.2, -3.4, 0.7], [-2.2, 4.6, 0.65]]) {
-        const lp = this.place('lilypad', K.x + dx, K.z + dz, rnd() * 6.28, sc, { collide: false });
+        const [px, pz] = insideShore(K, K.x + dx, K.z + dz, 1);
+        const lp = this.place('lilypad', px, pz, rnd() * 6.28, sc, { collide: false });
         lp.position.y = 0.05;
       }
       this.place('willow_1', K.x - K.r - 2.6, K.z + 3.8, 1, 1.4, { r: 0.6 });
       this.place('log_moss', K.x + K.r + 2.2, K.z + 4.6, 0.6, 1, { r: 0.6 });
       this.place('stump', K.x - K.r - 1.8, K.z - 2.6, 0, 1, { r: 0.4 });
+    }
+  }
+
+  /**
+   * 물가 꾸미기: 돌·이끼 바위 2~4개 무더기를 고르지 않은 간격으로, 무더기 사이에는 물가에 걸친 갈대·풀 (모두 충돌 없음, 정적 병합)
+   * keep: 비워 둘 방향 [{a, w}] (부두·낚시 자리)
+   */
+  _shoreDress(W, Q, rnd, { clusters = 6, keep = [] } = {}) {
+    const blocked = (a) => keep.some((k) => Math.abs(Math.atan2(Math.sin(a - k.a), Math.cos(a - k.a))) < k.w);
+    const at = (a, off) => { const r = shoreR(W, a) + off; return [W.x + Math.cos(a) * r, W.z + Math.sin(a) * r]; };
+    // 낚시터 전체가 예약 구역이라 예약 대신 길·벤치·가로등만 피함
+    const free = (x, z) => !this.onPath(x, z, 0.3) && !this.obstacles.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + 0.5);
+    const rocks = Q ? ['rock_1', 'rock_2', 'rock_3', 'mossrock_1', 'mossrock_2', 'mossrock_3'] : ['rock'];
+    const reeds = ['grass_q', 'grass_q2', 'plant_1', 'plant_2'];
+    const base = rnd() * Math.PI * 2, step = (Math.PI * 2) / clusters;
+    const centers = [];
+    for (let i = 0; i < clusters; i++) {
+      const a = base + i * step + (rnd() - 0.5) * step * 0.55; // 고르지 않은 간격
+      if (blocked(a)) continue;
+      centers.push(a);
+      const n = 2 + Math.floor(rnd() * 3), R = shoreR(W, a);
+      for (let k = 0; k < n; k++) {
+        // 큰 돌 하나 + 작은 돌 몇 개, 일부는 물에 반쯤 잠김 (물가 - 0.2m)
+        const da = ((rnd() - 0.5) * 1.1) / R, off = k === 0 ? 0.25 + rnd() * 0.3 : -0.2 + rnd() * 0.6;
+        const [x, z] = at(a + da, off);
+        if (!free(x, z)) continue;
+        const sc = k === 0 ? 0.75 + rnd() * 0.35 : 0.35 + rnd() * 0.3;
+        this.place(pick3(rnd, rocks), x, z, rnd() * 6.28, sc * (Q ? 1 : 0.8), { collide: false });
+      }
+    }
+    if (!Q) return;
+    // 무더기 사이 갈대 덤불 (물가선에 걸치게), 비워 둘 곳 제외
+    centers.sort((p, q) => p - q);
+    for (let i = 0; i < centers.length; i++) {
+      const a0 = centers[i], a1 = i + 1 < centers.length ? centers[i + 1] : centers[0] + Math.PI * 2;
+      const gap = a1 - a0;
+      if (gap < 0.5) continue;
+      const m = 1 + Math.floor(rnd() * 2);
+      for (let j = 0; j < m; j++) {
+        const a = a0 + gap * (0.3 + 0.4 * ((j + rnd()) / m));
+        if (blocked(a)) continue;
+        for (let k = 0; k < 3; k++) {
+          const [x, z] = at(a + ((rnd() - 0.5) * 0.9) / shoreR(W, a), -0.15 + rnd() * 0.45);
+          if (free(x, z)) this.place(pick3(rnd, reeds), x, z, rnd() * 6.28, 0.9 + rnd() * 0.4, { collide: false });
+        }
+      }
     }
   }
 
@@ -1169,13 +1224,13 @@ export class World {
 
   /** 물 위인가 (부두 위는 제외) */
   inWater(x, z, r = 0) {
-    for (const w of this.waters) if (Math.hypot(x - w.x, z - w.z) < w.r + r && !w.decks.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1)) return true;
+    for (const w of this.waters) if (wShoreDist(w, x, z) > 0.3 - r && !w.decks.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1)) return true;
     return false;
   }
 
   /** 헤엄칠 수 있는 물(호수) 안인가 — 가장자리에서 pad 만큼 들어가야 수영 자세 */
   inSwimWater(x, z, pad = 0) {
-    for (const w of this.waters) if (w.swim && Math.hypot(x - w.x, z - w.z) < w.r + 0.3 - pad && !w.decks.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1)) return true;
+    for (const w of this.waters) if (w.swim && wShoreDist(w, x, z) > pad && !w.decks.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1)) return true;
     return false;
   }
 
@@ -1195,7 +1250,7 @@ export class World {
     // 물: 부두 위면 통과, 부두에서 막 벗어나려 하면 데크 안으로 되돌리고, 그 외에는 물가로 밀어냄
     for (const w of this.waters) {
       if (swim && w.swim) continue;
-      const dx = next.x - w.x, dz = next.z - w.z, d = Math.hypot(dx, dz), min = w.r + r;
+      const dx = next.x - w.x, dz = next.z - w.z, d = Math.hypot(dx, dz), min = (w.W ? shoreR(w.W, Math.atan2(dz, dx)) - 0.3 : w.r) + r;
       if (d >= min) continue;
       const m = r * 0.5;
       if (w.decks.some((b) => next.x > b.x0 + m && next.x < b.x1 - m && next.z > b.z0 + m && next.z < b.z1 - m)) continue;
@@ -1403,3 +1458,10 @@ function mulberry32(a) {
 }
 
 function pick3(rnd, arr) { return arr[Math.floor(rnd() * arr.length)]; }
+/** this.waters 항목의 물가 거리 (W 가 없는 예전 원 모양 항목도: r = 물가 - 0.3) */
+function wShoreDist(w, x, z) { return w.W ? shoreDist(w.W, x, z) : w.r + 0.3 - Math.hypot(x - w.x, z - w.z); }
+/** (x,z) 가 물가에서 pad m 안쪽이 아니면 중심 쪽으로 당김 (연잎이 모래 위에 놓이지 않게) */
+function insideShore(W, x, z, pad) {
+  const dx = x - W.x, dz = z - W.z, d = Math.hypot(dx, dz), lim = shoreR(W, Math.atan2(dz, dx)) - pad;
+  return d > lim && d > 1e-4 ? [W.x + (dx / d) * lim, W.z + (dz / d) * lim] : [x, z];
+}

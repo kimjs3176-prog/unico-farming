@@ -27,3 +27,26 @@ test('언덕 꼭대기는 높고, 경사는 걸어 오를 만함', () => {
 test('보물 상자는 맵 안(경계 39m)에', () => {
   for (const c of CHESTS) assert.ok(Math.abs(c.x) < 39 && Math.abs(c.z) < 39, c.id);
 });
+
+test('물가 굴곡: ±15% 안, 부두 뿌리는 뭍·데크 끝은 물 위, 낚시 데크는 물가에', async () => {
+  const { shoreR, shoreDist, shorePolygon } = await import('../src/game/terrain.js');
+  const K = LAYOUT.lake, P = LAYOUT.pond;
+  for (const W of [K, P]) {
+    let lo = 9, hi = 0;
+    for (let i = 0; i < 720; i++) { const r = shoreR(W, (i / 720) * Math.PI * 2) / W.r; lo = Math.min(lo, r); hi = Math.max(hi, r); }
+    assert.ok(lo >= 0.85 && hi <= 1.15, `${W.id} ${lo.toFixed(3)}~${hi.toFixed(3)}`);
+    assert.ok(hi - lo > 0.15, `${W.id} 굴곡이 너무 작음`);
+    assert.equal(shorePolygon(W, 32).length, 32);
+  }
+  assert.ok(shoreDist(K, -12.5, 23.4) < 0, '부두 뿌리는 뭍');
+  for (const b of K.pier) assert.ok(shoreDist(K, (b.x0 + b.x1) / 2, b.z1) > 0.5, '부두 끝은 물 위');
+  assert.ok(shoreDist(K, (K.pier[1].x0 + K.pier[1].x1) / 2, (K.pier[1].z0 + K.pier[1].z1) / 2) > 0.5);
+  assert.ok(Math.abs(shoreDist(P, LAYOUT.dock.x, LAYOUT.dock.z)) < 0.3, '낚시 데크는 연못 물가에');
+  assert.ok(shoreDist(K, K.entry.x, K.entry.z) < -0.8, '호수 입구는 뭍');
+  // 호수로 가는 길(부두 뿌리 전까지)·연못 옆 길은 물에 닿지 않음
+  const path = LAYOUT.paths.find((p) => p.pts.at(-1)[0] === -12.5);
+  for (const [x, z] of path.pts.slice(0, -1)) assert.ok(shoreDist(K, x, z) < -1.1 && shoreDist(P, x, z) < -1.1, `길 (${x},${z})`);
+  // 물가 벤치·가로등·낚시꾼 자리·버드나무는 뭍
+  for (const [x, z] of [[-17.6, 27.2], [-17.4, 34.6], [-10.4, 23.4], [-6.9, 25.6], [LAYOUT.npcs.fisher.x, LAYOUT.npcs.fisher.z]]) assert.ok(shoreDist(K, x, z) < 0, `호수가 (${x},${z})`);
+  for (const [x, z] of [[-17.6, 15.5], [-16.5, 21.8]]) assert.ok(shoreDist(P, x, z) < -0.6, `연못가 (${x},${z})`);
+});

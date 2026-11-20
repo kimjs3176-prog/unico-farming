@@ -1,7 +1,7 @@
 import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { heightAt } from '../terrain.js';
+import { heightAt, shoreR, shoreDist } from '../terrain.js';
 import { LAYOUT } from '../world.js';
 import { ITEMS, treeStage } from '../sim/items.js';
 import { seasonOf, SEASON } from '../sim/season.js';
@@ -227,9 +227,8 @@ export class NatureView {
     if (this.fishing) return this.updateFishing(dt);
     const g = this.game;
     if (!g.player.swimming) {
-      const P = LAYOUT.pond;
-      const dc = Math.hypot(P.x - playerPos.x, P.z - playerPos.z);
-      if (dc > P.r - 0.6 && dc < P.r + 2.2) consider(Math.max(0.1, dc - P.r), { label: '🎣 낚시하기', key: 'fish', onInteract: () => this.startFishing(playerPos) });
+      const sd = shoreDist(LAYOUT.pond, playerPos.x, playerPos.z); // 물가 굴곡을 따라 (물 안 +)
+      if (sd > -2.2 && sd < 0.6) consider(Math.max(0.1, -sd), { label: '🎣 낚시하기', key: 'fish', onInteract: () => this.startFishing(playerPos) });
       const lk = g.lake?.castFrom(playerPos, g.player.unico.facing);
       if (lk) {
         const bait = g.angling.useBait ? g.economy.count('bait') : 0;
@@ -309,9 +308,11 @@ export class NatureView {
     else {
       const P = LAYOUT.pond;
       dir = new THREE.Vector3(P.x - pos.x, 0, P.z - pos.z).normalize();
-      const dist = Math.hypot(P.x - pos.x, P.z - pos.z);
+      const dist = Math.hypot(P.x - pos.x, P.z - pos.z), out = -shoreDist(P, pos.x, pos.z); // 물가까지 (뭍 +)
       const cast = Math.min(dist - 0.6, 2.8);
-      spot = new THREE.Vector3(pos.x + dir.x * (dist - P.r + 0.9 + cast * 0.5), 0.05, pos.z + dir.z * (dist - P.r + 0.9 + cast * 0.5));
+      // 물가 굴곡 안쪽으로 (가운데를 넘지 않게)
+      const go = Math.min(dist - 0.3, out + 0.9 + cast * 0.5);
+      spot = new THREE.Vector3(pos.x + dir.x * go, 0.05, pos.z + dir.z * go);
     }
     u.facing = Math.atan2(dir.x, dir.z);
     g.player.frozen = true;
@@ -445,7 +446,7 @@ export class NatureView {
     const fx = pp.x + f.dir.x * dist + side.x * sway, fz = pp.z + f.dir.z * dist + side.z * sway;
     // 물 밖(물가·부두)으로 그려지지 않게 호수 안으로 당김
     const lake = f.lake ? LAYOUT.lake : LAYOUT.pond;
-    const dl = Math.hypot(fx - lake.x, fz - lake.z), lim = lake.r - 0.5;
+    const dl = Math.hypot(fx - lake.x, fz - lake.z), lim = shoreR(lake, Math.atan2(fz - lake.z, fx - lake.x)) - 0.5;
     const k = dl > lim ? lim / dl : 1;
     this.bobber.position.set(lake.x + (fx - lake.x) * k, 0.02 + (F.surging ? Math.abs(Math.sin(f.fightT * 14)) * 0.08 : 0), lake.z + (fz - lake.z) * k);
     this.fishShadow.position.set(this.bobber.position.x, 0.04, this.bobber.position.z);

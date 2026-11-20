@@ -1,4 +1,5 @@
 import { cloneMaterial } from '../surface.js';
+import { shoreR, shoreDist } from '../terrain.js';
 import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
@@ -149,7 +150,7 @@ export class LakeView {
   placeTreasure(tr) {
     const K = LAYOUT.lake, W = this.game.world;
     for (let k = 0; k < 20; k++) {
-      const a = Math.random() * 6.28, r = 1 + Math.random() * (K.r - 2.2);
+      const a = Math.random() * 6.28, r = 1 + Math.random() * (shoreR(K, a) - 2.2);
       const x = K.x + Math.cos(a) * r, z = K.z + Math.sin(a) * r;
       if (W.onDeck(x, z, -2.2) || this.treasures?.some((o) => o !== tr && o.g.visible && Math.hypot(o.g.position.x - x, o.g.position.z - z) < 2.5)) continue;
       tr.g.position.set(x, 0, z);
@@ -188,15 +189,16 @@ export class LakeView {
   }
 
   /** 낚시터 근처인가 (첫 방문 컷신·안내) */
-  near(p, pad = 5) { const K = LAYOUT.lake; return Math.hypot(p.x - K.x, p.z - K.z) < K.r + pad; }
+  near(p, pad = 5) { return shoreDist(LAYOUT.lake, p.x, p.z) > -pad; }
 
   /**
    * 이 자리에서 호수에 낚싯대를 던질 수 있으면 { dir, spot } (물가 또는 부두 위)
    */
   castFrom(p, facing) {
     const K = LAYOUT.lake, W = this.game.world;
-    const dc = Math.hypot(p.x - K.x, p.z - K.z);
-    const okSpot = (x, z) => Math.hypot(x - K.x, z - K.z) < K.r - 0.7 && !W.onDeck(x, z, -0.7);
+    // 물가 굴곡을 따라: sd = 물가까지 거리 (물 안 +, 뭍 -)
+    const sd = shoreDist(K, p.x, p.z);
+    const okSpot = (x, z) => shoreDist(K, x, z) > 0.7 && !W.onDeck(x, z, -0.7);
     if (W.onDeck(p.x, p.z)) {
       // 부두 위: 바라보는 쪽 → 좌우 → 뒤 순서로 물이 있는 쪽
       for (const off of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
@@ -206,9 +208,14 @@ export class LakeView {
       }
       return null;
     }
-    if (dc > K.r - 0.6 && dc < K.r + 2.2) {
-      const dir = new THREE.Vector3(K.x - p.x, 0, K.z - p.z).normalize();
-      const spot = new THREE.Vector3(p.x + dir.x * (dc - K.r + 2.2), 0.05, p.z + dir.z * (dc - K.r + 2.2));
+    if (sd > -2.2 && sd < 0.6) {
+      // 물 쪽(물가 거리가 커지는 쪽 = 기울기 방향)으로 물가에서 2.2m 안쪽에 찌
+      const e = 0.25, gx = shoreDist(K, p.x + e, p.z) - shoreDist(K, p.x - e, p.z), gz = shoreDist(K, p.x, p.z + e) - shoreDist(K, p.x, p.z - e);
+      const dir = new THREE.Vector3(gx, 0, gz);
+      if (dir.lengthSq() < 1e-8) dir.set(K.x - p.x, 0, K.z - p.z);
+      dir.normalize();
+      const go = 2.2 - sd;
+      const spot = new THREE.Vector3(p.x + dir.x * go, 0.05, p.z + dir.z * go);
       if (okSpot(spot.x, spot.z)) return { dir, spot, pier: false };
     }
     return null;

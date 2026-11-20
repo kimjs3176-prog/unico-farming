@@ -1,6 +1,8 @@
 // CC0 외부 에셋(Quaternius) 후처리: 재질 이름·색을 게임 팔레트로 맞추고, 애니메이션 정리, meshopt 압축
 // 사용: node scripts/optimize-cc0.mjs <blender/import_cc0.py 출력 폴더> <애니메이션 glTF 폴더>
 //       node scripts/optimize-cc0.mjs --prune-nature   (원본 없이 public/models/q_nature.glb 에서 안 쓰는 노드만 빼기)
+//       node scripts/optimize-cc0.mjs --soften-nature  (원본 없이 q_nature.glb 잎 법선만 부드럽게 굽기)
+//       node scripts/optimize-cc0.mjs --soften-animals (원본 없이 목장 동물 q_*.glb 법선만 부드럽게 굽기)
 // 결과: public/models/q_*.glb  (라이선스: docs/ASSETS_CC0.md)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,8 +11,9 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { dedup, prune, resample, meshopt, weld, joinPrimitives } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer';
 
-const PRUNE_NATURE = process.argv[2] === '--prune-nature';
-const [RAW, ANIM] = PRUNE_NATURE ? [] : process.argv.slice(2);
+const MODE = process.argv[2]?.startsWith('--') ? process.argv[2] : null;
+const PRUNE_NATURE = MODE === '--prune-nature';
+const [RAW, ANIM] = MODE ? [] : process.argv.slice(2);
 const OUT = path.resolve('public/models');
 // q_nature 안에서 게임이 쓰지 않는 노드 (겨울 나무·옥수수·밀·짧은 풀): 받는 용량만 늘리므로 뺌 (src/game/assets.js UNUSED_PACK_NODE 와 같게)
 const DROP = /^(snowpine_\d|snowtree_\d|corn_\d|wheat|grass_short)$/;
@@ -49,6 +52,9 @@ const ANIMALS = {
 };
 // 게임에서 쓰는 동작만 남김 (용량 절약). 반려견만 달리기·앉기 사용
 const USE = { default: ['walk', 'idle', 'eat', 'look'], q_sheep: ['walk', 'idle'], q_wolf: ['walk', 'idle', 'run', 'look', 'attack'], q_fox: ['walk', 'idle', 'run', 'look', 'attack'], q_shiba: ['walk', 'idle', 'idle2', 'look', 'run', 'eat', 'jump'] };
+/** 법선을 부드럽게 구울 동물 (늑대·여우는 일부러 각진 사실풍으로 남김: docs/CHARACTERS.md) */
+const SOFT_ANIMALS = ['q_cow', 'q_sheep', 'q_shiba', 'q_alpaca', 'q_horse', 'q_donkey'];
+const SOFT_DEG = { leaf: 80, animal: 72 };
 const CLIPS = { Attack: 'attack', Walk: 'walk', Idle: 'idle', Idle_2: 'idle2', Eating: 'eat', Idle_Headlow: 'look', Idle_2_HeadLow: 'look', Gallop: 'run', Jump_toIdle: 'jump', Jump_ToIdle: 'jump' };
 
 const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); };
@@ -109,7 +115,56 @@ function bakeVertexColors(doc) {
   }
 }
 
-async function finish(doc, out, { anim = false } = {}) {
+/**
+ * 부드러운 법선 굽기: 같은 위치(1e-4 격자)를 공유하는 면 중 제 면과 limit 도 안쪽인 면의 넓이 가중 법선 평균.
+ * 위치는 건드리지 않음. 원본은 면마다 정점이 나뉘어 있어 각진 곳은 저절로 갈라지고, 뒤의 weld 가 같은 정점을 다시 합침.
+ * 법선은 Int8 정규화(KHR_mesh_quantization)로 저장 → 정점 수: 원본보다 늘지 않음
+ */
+function softenNormals(doc, prims, deg) {
+  const COS = Math.cos(deg * Math.PI / 180);
+  for (const p of prims) {
+    const pos = p.getAttribute('POSITION'), idx = p.getIndices(), n = pos.getCount();
+    if (!idx) continue;
+    const P = new Float32Array(n * 3), e = [];
+    for (let i = 0; i < n; i++) { pos.getElement(i, e); P.set(e, i * 3); }
+    const I = idx.getArray();
+    const key = (i) => `${Math.round(P[i * 3] * 1e4)},${Math.round(P[i * 3 + 1] * 1e4)},${Math.round(P[i * 3 + 2] * 1e4)}`;
+    const own = new Float32Array(n * 3), groups = new Map();
+    for (let t = 0; t < I.length; t += 3) {
+      const a = I[t], b = I[t + 1], c = I[t + 2];
+      const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2];
+      const vx = P[c * 3] - P[a * 3], vy = P[c * 3 + 1] - P[a * 3 + 1], vz = P[c * 3 + 2] - P[a * 3 + 2];
+      const f = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx]; // 길이 = 넓이×2
+      for (const v of [a, b, c]) {
+        own[v * 3] += f[0]; own[v * 3 + 1] += f[1]; own[v * 3 + 2] += f[2];
+        const k = key(v);
+        let g = groups.get(k);
+        if (!g) groups.set(k, (g = []));
+        g.push(f);
+      }
+    }
+    const N = new Int8Array(n * 3);
+    for (let v = 0; v < n; v++) {
+      const ox = own[v * 3], oy = own[v * 3 + 1], oz = own[v * 3 + 2], ol = Math.hypot(ox, oy, oz) || 1;
+      let sx = 0, sy = 0, sz = 0;
+      for (const f of groups.get(key(v))) {
+        const fl = Math.hypot(f[0], f[1], f[2]) || 1;
+        if ((f[0] * ox + f[1] * oy + f[2] * oz) / (fl * ol) > COS) { sx += f[0]; sy += f[1]; sz += f[2]; }
+      }
+      const l = Math.hypot(sx, sy, sz) || 1;
+      N[v * 3] = Math.round(sx / l * 127); N[v * 3 + 1] = Math.round(sy / l * 127); N[v * 3 + 2] = Math.round(sz / l * 127);
+    }
+    const old = p.getAttribute('NORMAL');
+    p.setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(N).setNormalized(true).setBuffer(old?.getBuffer() || doc.getRoot().listBuffers()[0]));
+    if (old && !old.listParents().some((x) => x !== doc.getRoot())) old.dispose();
+  }
+}
+
+/** 나무·덤불 잎(leaf, leaf_dark, leaf_autumn*) 프리미티브만 부드럽게 — 줄기·바위·이끼는 재질로 걸러져 그대로 */
+const leafPrims = (doc) => doc.getRoot().listMeshes().flatMap((m) => m.listPrimitives()).filter((p) => /^leaf/.test(p.getMaterial()?.getName() || ''));
+function softenFoliage(doc) { softenNormals(doc, leafPrims(doc), SOFT_DEG.leaf); }
+
+async function finish(doc, out, { anim = false, soft = false } = {}) {
   if (anim) {
     console.log('  고정 채널 제거:', dropStaticChannels(doc));
     bakeVertexColors(doc);
@@ -122,6 +177,7 @@ async function finish(doc, out, { anim = false } = {}) {
       mesh.addPrimitive(merged);
     }
     await doc.transform(prune());
+    if (soft) softenNormals(doc, doc.getRoot().listMeshes().flatMap((m) => m.listPrimitives()), SOFT_DEG.animal);
     console.log('  프리미티브:', doc.getRoot().listMeshes().map((m) => m.listPrimitives().length).join(','));
   }
   await doc.transform(weld(), dedup(), prune(), resample(), meshopt({ encoder: MeshoptEncoder, level: anim ? 'high' : 'medium' }));
@@ -145,7 +201,7 @@ function dropUnused(doc) {
 if (RAW) for (const f of ['q_farm.glb', 'q_nature.glb']) {
   const doc = await io.read(path.join(RAW, f));
   remapStatic(doc, f === 'q_farm.glb' ? BUILDING : NATURE);
-  if (f === 'q_nature.glb') console.log('  안 쓰는 노드 제거:', dropUnused(doc).length);
+  if (f === 'q_nature.glb') { console.log('  안 쓰는 노드 제거:', dropUnused(doc).length); softenFoliage(doc); }
   await finish(doc, path.join(OUT, f));
 }
 
@@ -165,6 +221,26 @@ if (PRUNE_NATURE) {
   console.log(`  ${(before / 1024).toFixed(0)}KB → ${(fs.statSync(file).size / 1024).toFixed(0)}KB`);
   if (moved.length) process.exitCode = 1;
 }
+
+/** 이미 만든 GLB 의 법선만 다시 굽기 (다시 양자화하지 않음): 경계 상자가 그대로인지·정점 수가 늘지 않았는지 확인 */
+async function softenFile(name, pick, deg, maxGrow) {
+  const file = path.join(OUT, name + '.glb');
+  const before = fs.statSync(file).size;
+  const doc = await io.read(file);
+  const box = (d) => new Map(d.getRoot().listNodes().filter((n) => n.getMesh()).map((n) => [n.getName(), JSON.stringify(getBounds(n))]));
+  const count = (d) => pick(d).reduce((s, p) => s + p.getAttribute('POSITION').getCount(), 0);
+  const prev = box(doc), v0 = count(doc);
+  softenNormals(doc, pick(doc), deg);
+  await doc.transform(weld(), dedup(), prune());
+  await io.write(file, doc);
+  const after = await io.read(file), kept = box(after), v1 = count(after);
+  const moved = [...kept].filter(([k, v]) => prev.get(k) !== v).map(([k]) => k);
+  console.log(`${name}.glb: 정점 ${v0} → ${v1} (${((v1 / v0 - 1) * 100).toFixed(1)}%), ${(before / 1024).toFixed(0)}KB → ${(fs.statSync(file).size / 1024).toFixed(0)}KB, 경계 상자 바뀐 노드 ${moved.length}개${moved.length ? ` (${moved.join(', ')})` : ''}`);
+  if (moved.length || v1 > v0 * maxGrow) process.exitCode = 1;
+}
+const allPrims = (d) => d.getRoot().listMeshes().flatMap((m) => m.listPrimitives());
+if (MODE === '--soften-nature') await softenFile('q_nature', leafPrims, SOFT_DEG.leaf, 1);
+if (MODE === '--soften-animals') for (const n of SOFT_ANIMALS) await softenFile(n, allPrims, SOFT_DEG.animal, 1.05);
 
 const qmul = (a, b) => [
   a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
@@ -227,5 +303,5 @@ if (ANIM) for (const [file, cfg] of Object.entries(ANIMALS)) {
   const wrap = doc.createNode(cfg.name).setScale([cfg.scale, cfg.scale, cfg.scale]);
   for (const n of scene.listChildren()) { scene.removeChild(n); wrap.addChild(n); }
   scene.addChild(wrap);
-  await finish(doc, path.join(OUT, cfg.name + '.glb'), { anim: true });
+  await finish(doc, path.join(OUT, cfg.name + '.glb'), { anim: true, soft: SOFT_ANIMALS.includes(cfg.name) });
 }

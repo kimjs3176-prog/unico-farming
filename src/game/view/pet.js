@@ -49,6 +49,8 @@ export class Pet {
     if (!this.ok) return;
     const rig = game.assets.cloneAnimated('q_shiba');
     this.e = { m: rig.root, mixer: rig.mixer, clips: rig.clips };
+    // 머리·귀를 조금 크게 (아기 같은 비율). 동작에 배율 채널이 없어 그대로 유지됨. 귀가 머리 형제라 Head 대신 Neck3
+    rig.root.getObjectByName('Neck3')?.scale.setScalar(1.2);
     const p = game.player.position;
     this.e.m.position.set(p.x + 1.5, 0, p.z + 1);
     game.world.scene.add(this.e.m);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { heightAt } from './terrain.js';
+import { heightAt, shoreR, shoreDist } from './terrain.js';
 import { LAYOUT } from './world.js';
 import { IO } from './view/home_interior.js';
 import { SURF, seeFade } from './surface.js';
@@ -302,10 +302,11 @@ export class PointerNav {
     const pi = g.rice.paddyAt(p.x, p.z, 0.2);
     if (pi >= 0) { const pd = g.rice.paddies[pi]; return { target: { pos: () => new THREE.Vector3(pd.x, 0, pd.z), stop: 1.0 } }; }
     // 연못 물을 누르면 가장 가까운 물가로 가서 낚시
-    const P = LAYOUT.pond, dc = Math.hypot(p.x - P.x, p.z - P.z);
-    if (dc < P.r + 0.3) {
+    const P = LAYOUT.pond;
+    if (shoreDist(P, p.x, p.z) > -0.3) {
       const pl = g.player.position, dir = new THREE.Vector3(pl.x - P.x, 0, pl.z - P.z).normalize();
-      const rimPt = new THREE.Vector3(P.x + dir.x * (P.r + 0.6), 0, P.z + dir.z * (P.r + 0.6));
+      const rr = shoreR(P, Math.atan2(dir.z, dir.x)) + 0.6; // 물가 굴곡 바로 바깥
+      const rimPt = new THREE.Vector3(P.x + dir.x * rr, 0, P.z + dir.z * rr);
       return { target: { pos: () => rimPt, stop: 0.4, key: 'fish' } };
     }
     return { point: p };

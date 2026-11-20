@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { LAYOUT, cellKey } from './world.js';
-import { heightAt } from './terrain.js';
+import { heightAt, shoreR, shoreDist } from './terrain.js';
 import { SURF } from './surface.js';
 import { nightFactor } from './sim/tod.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
@@ -174,8 +174,7 @@ export class Scenery {
     while (n < COUNT && tries < COUNT * 6) {
       tries++;
       const x = (rnd() - 0.5) * 2 * B, z = (rnd() - 0.5) * 2 * B;
-      if (Math.hypot(x - LAYOUT.pond.x, z - LAYOUT.pond.z) < LAYOUT.pond.r + 1.5) continue;
-      if (Math.hypot(x - LAYOUT.lake.x, z - LAYOUT.lake.z) < LAYOUT.lake.r + 1.6) continue;
+      if (shoreDist(LAYOUT.pond, x, z) > -1.5 || shoreDist(LAYOUT.lake, x, z) > -1.6) continue; // 물·모래 물가 (굴곡을 따라)
       if (no.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1)) continue;
       if (this.world.isBare(x, z) || this.world.isReserved(x, z, -0.5, true)) continue;
       if (this.world.isBlocked(x, z, 0.3)) continue;
@@ -237,8 +236,7 @@ export class Scenery {
       const x = cx + (rnd() - 0.5) * 6, z = cz + (rnd() - 0.5) * 6;
       if (Math.abs(x) > B || Math.abs(z) > B) continue;
       if (this.world.isBare(x, z) || this.world.isBlocked(x, z, 0.4) || this.world.isReserved(x, z, 0, true)) continue;
-      if (Math.hypot(x - LAYOUT.pond.x, z - LAYOUT.pond.z) < LAYOUT.pond.r + 1) continue;
-      if (Math.hypot(x - LAYOUT.lake.x, z - LAYOUT.lake.z) < LAYOUT.lake.r + 1.2) continue;
+      if (shoreDist(LAYOUT.pond, x, z) > -1 || shoreDist(LAYOUT.lake, x, z) > -1.2) continue;
       p.set(x, heightAt(x, z), z);
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 6.28);
       const s = 0.8 + rnd() * 0.6;
@@ -268,7 +266,7 @@ export class Scenery {
 
   /** 물에 비칠 가로등 불빛 자리 (World 가 한 번 넣음): 연못·호수 가까운 것만 최대 4개 */
   setWaterLamps(heads) {
-    const near = (h) => [LAYOUT.pond, LAYOUT.lake].some((w) => Math.hypot(h.x - w.x, h.z - w.z) < w.r + 2.5);
+    const near = (h) => [LAYOUT.pond, LAYOUT.lake].some((w) => shoreDist(w, h.x, h.z) > -2.5);
     const list = heads.filter(near).slice(0, LAMP_SLOTS);
     this.lampsU ||= { value: Array.from({ length: LAMP_SLOTS }, () => new THREE.Vector3(0, -99, 0)) };
     this.lampsU.value.forEach((v, i) => (list[i] ? v.copy(list[i]) : v.set(0, -99, 0)));
@@ -315,7 +313,7 @@ export class Scenery {
       // 물가 거품 색: 낮은 흰색, 밤은 수면과 함께 어두운 달빛 회청색 (하얀 표시처럼 뜨지 않게)
       vec3 foamCol(){ return mix(vec3(0.97, 0.99, 1.0) * mix(uLit, vec3(1.0), 0.15), vec3(0.55, 0.62, 0.8) * uLit * 1.6, uNight); }
       uniform vec4 uRip[${RIPPLES}];
-      varying vec3 vW; varying vec3 vPool; // xy: 중심(x,z), z: 반지름
+      varying vec3 vW; varying vec4 vPool; // xy: 중심(x,z), z: 그 방향 물가 반지름, w: 물가까지 거리(굴곡을 따라)
       float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
         return mix(mix(hsh(i), hsh(i + vec2(1, 0)), u.x), mix(hsh(i + vec2(0, 1)), hsh(i + vec2(1, 1)), u.x), u.y); }
@@ -355,7 +353,7 @@ export class Scenery {
       }
       vec3 waterBase(out float fres, out float foam, out vec2 slope){
         vec2 center = vPool.xy; float radius = vPool.z;
-        float d = distance(vW.xz, center), edgeD = radius - d;
+        float d = distance(vW.xz, center), edgeD = vPool.w;
         float rfoam; vec3 s = surface(vW.xz, rfoam);
         slope = s.xy;
         vec3 V = normalize(cameraPosition - vW);
@@ -363,13 +361,15 @@ export class Scenery {
         fres = 0.06 + 0.94 * pow(1.0 - max(dot(V, N), 0.0), 5.0);
         // 깊이: 물가는 얕고 밝은 청록, 가운데는 깊은 파랑 (반경이 큰 호수가 더 깊게)
         float depth = smoothstep(0.0, radius * 0.75, edgeD);
-        vec3 base = mix(shallow, deep * (radius > 5.0 ? 0.85 : 1.0), depth);
+        vec3 base = mix(shallow, deep * mix(1.0, 0.85, smoothstep(4.8, 5.6, radius)), depth);
         // 물결 마루에 햇빛이 비쳐 살짝 밝아지는 산란
         base += vec3(0.05, 0.16, 0.14) * clamp(s.z * 14.0 + 0.3, 0.0, 1.0) * uDay * (1.0 - depth * 0.4);
         base *= uLit; // 밤·땅거미: 물이 빛나지 않게 주변과 같이 어둡게
         // 물가 거품: 노이즈로 얼룩진 띠가 밀려왔다 빠짐
         float surge = 0.5 + 0.5 * sin(uTime * 1.3 - d * 2.0);
-        float band = smoothstep(0.75 + surge * 0.25, 0.05, edgeD + (vnoise(vW.xz * 2.6 + uTime * 0.25) - 0.5) * 0.45);
+        // 띠는 0.5m 안팎으로 좁게, 큰 얼룩 노이즈로 군데군데만 (고른 흰 고리가 아니라 돌·부두 근처에 모인 거품처럼)
+        float band = smoothstep(0.45 + surge * 0.15, 0.03, edgeD + (vnoise(vW.xz * 2.6 + uTime * 0.25) - 0.5) * 0.3);
+        band *= smoothstep(0.35, 0.7, vnoise(vW.xz * 0.55 + center * 0.37 + vec2(0.0, uTime * 0.05)));
         float breakup = smoothstep(0.35, 0.75, vnoise(vW.xz * 7.0 - uTime * 0.4));
         foam = clamp(band * (0.35 + 0.65 * breakup) * mix(1.0, 0.5, uNight) + rfoam * (0.5 + 0.5 * breakup) * mix(1.0, 0.35, uNight), 0.0, 1.0); // 밤: 거품·고리는 은빛으로 은은하게
         // 햇빛 반짝임 (넓은 하이라이트 + 잘게 부서지는 반짝이)
@@ -402,12 +402,7 @@ export class Scenery {
         base += vec3(1.0, 0.6, 0.4) * 0.15 * (1.0 - uNight) * smoothstep(0.0, 0.3, uNight) * (0.6 + 0.4 * fres);
         return base + (pow(sd, 48.0) * 0.45 + glit) * glintCol;
       }`;
-    const geo = mergeGeo(waters.map((W) => {
-      const c = new THREE.CircleGeometry(W.r, W.r > 5 ? 80 : 64).translate(W.x, -W.z, 0); // 수면은 x 축으로 -90° 눕힘 → 로컬 y = -월드 z
-      const n = c.attributes.position.count;
-      c.setAttribute('pool', new THREE.BufferAttribute(new Float32Array(n * 3).map((_, i) => [W.x, W.z, W.r][i % 3]), 3));
-      return c;
-    }));
+    const geo = mergeGeo(waters.map((W) => shoreWaterGeo(W, W.r > 5 ? 96 : 72)));
     let water;
     if (q.post !== false && q.level !== 'low') {
       // 실제 반사: 거울 카메라로 연못 위 장면을 렌더 (연못이 화면에 있을 때만 그려짐)
@@ -417,7 +412,7 @@ export class Scenery {
         shader: {
           name: 'PondReflector',
           uniforms: { color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null }, ...shared },
-          vertexShader: `uniform mat4 textureMatrix; attribute vec3 pool; varying vec4 vUv; varying vec3 vW; varying vec3 vPool;
+          vertexShader: `uniform mat4 textureMatrix; attribute vec4 pool; varying vec4 vUv; varying vec3 vW; varying vec4 vPool;
             void main(){ vPool = pool; vUv = textureMatrix * vec4(position, 1.0); vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
           fragmentShader: `uniform vec3 color; uniform sampler2D tDiffuse; varying vec4 vUv; ${COMMON}
             void main(){
@@ -436,7 +431,7 @@ export class Scenery {
       // 저사양: 반사 대신 하늘색을 프레넬로 섞음
       water = new THREE.Mesh(geo, new THREE.ShaderMaterial({
         uniforms: shared, fog: false,
-        vertexShader: `attribute vec3 pool; varying vec3 vW; varying vec3 vPool; void main(){ vPool = pool; vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        vertexShader: `attribute vec4 pool; varying vec3 vW; varying vec4 vPool; void main(){ vPool = pool; vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
         fragmentShader: `${COMMON}
           void main(){ float fres, foam; vec2 slope; vec3 base = waterBase(fres, foam, slope);
             vec3 c = mix(base, skyCol, clamp(fres * 0.8, 0.0, 0.85)); c = mix(c, foamCol(), foam * 0.7); gl_FragColor = vec4(c, 1.0);
@@ -472,7 +467,7 @@ export class Scenery {
       const geos = [];
       for (let i = 0; i < 6; i++) {
         const g = new THREE.CircleGeometry(0.35 + Math.random() * 0.25, 14, 0.3, 5.6).rotateX(-Math.PI / 2);
-        const a = Math.random() * 6.28, r = Math.random() * (L.r - 1);
+        const a = Math.random() * 6.28, r = Math.random() * (shoreR(L, a) - 1);
         geos.push(g.translate(L.x + Math.cos(a) * r, 0.06, L.z + Math.sin(a) * r));
       }
       this.pads = new THREE.Mesh(mergeGeo(geos), padMat);
@@ -669,4 +664,31 @@ function mulberry32(a) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/**
+ * 물가 굴곡(terrain.js shoreR)을 따른 수면: 극좌표 격자 (가운데 부채꼴 + 고리 3겹, seg 방향).
+ * 로컬 (x, -z) 평면 (수면은 x 축으로 -90° 눕힘). pool 속성 = (중심 x, z, 그 방향 물가 반지름, 물가까지 거리) → 거품·깊이가 굴곡을 따름
+ */
+export function shoreWaterGeo(W, seg = 96, rings = [0.6, 0.88, 1]) {
+  const pos = [W.x, -W.z, 0], pool = [W.x, W.z, W.r, W.r], idx = [];
+  for (let j = 0; j < seg; j++) {
+    const a = (j / seg) * Math.PI * 2, R = shoreR(W, a); // 월드 각도 a: 로컬 y = -z 라 로컬에서는 시계 방향
+    for (const t of rings) {
+      pos.push(W.x + Math.cos(a) * R * t, -(W.z + Math.sin(a) * R * t), 0);
+      pool.push(W.x, W.z, R, R * (1 - t));
+    }
+  }
+  const K = rings.length, v = (j, k) => 1 + (j % seg) * K + k;
+  // 로컬에서 시계 방향으로 도므로 감는 순서를 뒤집어 위(+z 로컬 → 월드 +y)를 보게
+  for (let j = 0; j < seg; j++) {
+    idx.push(0, v(j + 1, 0), v(j, 0));
+    for (let k = 0; k < K - 1; k++) idx.push(v(j, k), v(j + 1, k + 1), v(j, k + 1), v(j, k), v(j + 1, k), v(j + 1, k + 1));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(pos.length).map((_, i) => (i % 3 === 2 ? 1 : 0)), 3));
+  g.setAttribute('pool', new THREE.Float32BufferAttribute(pool, 4));
+  g.setIndex(idx);
+  return g;
 }
