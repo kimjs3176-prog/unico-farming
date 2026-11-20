@@ -57,7 +57,7 @@ import { mgResult } from '../../ui/minigame_frame.js';
  */
 const MODEL = { cow: 'q_cow', sheep: 'q_sheep', chicken: 'hen' };
 /** 모델 키(m) — 머리 위 '!' 표시 높이 */
-const HEIGHT = { q_cow: 1.45, q_sheep: 1.15, q_horse: 1.75, q_donkey: 1.3, q_alpaca: 1.6, hen: 0.75 };
+const HEIGHT = { q_cow: 1.45, q_sheep: 1.15, q_horse: 1.5, q_donkey: 1.3, q_alpaca: 1.36, hen: 0.75 };
 /** 몸 반지름(m) — 겹침 방지·장애물 충돌 */
 const RADIUS = { q_cow: 0.75, q_sheep: 0.5, hen: 0.25, chicken: 0.25, q_horse: 0.7, q_donkey: 0.55, q_alpaca: 0.5 };
 /** 걷기 동작 재생 속도 배율 (발이 미끄러지지 않게) */

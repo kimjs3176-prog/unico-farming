@@ -24,7 +24,8 @@
 
 | 파일 | 내용 | 원작자 | 라이선스 |
 |---|---|---|---|
-| `public/fonts/unico-coin.woff2` | 🪙 코인 아이콘 한 글자짜리 컬러 글꼴 (COLRv0, 528바이트). 시스템에 코인 이모지가 없는 기기(오래된 Windows 등)에서도 보이게 | Microsoft — [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) `Coin/Flat` | MIT (`scripts/coin/LICENSE-fluentui-emoji.txt`) |
+| `public/fonts/unico-coin.woff2` | 🪙 코인 아이콘 한 글자짜리 컬러 글꼴 (COLRv0, 596바이트). 시스템에 코인 이모지가 없는 기기(오래된 Windows 등)에서도 보이게 | 자체 제작 — `scripts/coin/coin.svg` 를 `scripts/coin/build_coin_font.py` 로 변환 | 이 프로젝트 소유 (제3자 라이선스 없음) |
+| `src/ui/icons.svg` | 화면(HUD·메뉴·창) UI 아이콘 51개 | 자체 제작 (외부 출처 없음) | 이 프로젝트 소유 |
 
 - 다시 만들기: `pip install fonttools brotli` → `python3 scripts/coin/build_coin_font.py`
 - 대화창 초상화(`public/portraits/*.webp`)는 처음 받은 유니코 캐릭터 원본 그림에서 잘라 낸 것으로, 외부 에셋이 아닙니다.
