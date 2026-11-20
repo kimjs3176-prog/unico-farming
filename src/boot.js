@@ -4,6 +4,7 @@ import { Assets } from './game/assets.js';
 import { LAYOUT } from './game/world.js';
 import { isSubmitEnter } from './game/input.js';
 import { Audio } from './game/audio.js';
+import { Ambience } from './game/ambience.js';
 import { loadSaveInfo, loadBackup } from './game/save.js';
 import { record, copyDiag } from './game/crash.js';
 import { onFetchRetry } from './game/fetch_gz.js';
@@ -291,7 +292,7 @@ export async function boot(Game) {
     const ld = document.getElementById('loading');
     try {
       // iOS: 소리 장치는 탭 처리 안에서(첫 await 전에) 만들고 켜야 함
-      const audio = new Audio();
+      const audio = new Audio({ prefs: true }); // 저장된 소리 설정(끔·크기)을 되살림
       audio.unlock();
       if (isMobileDevice()) pushBackGuard(); // 뒤로 가기 기록도 탭 처리 안에서 (사용자 동작 없이 넣은 기록은 브라우저가 건너뜀)
       const name = (nick.value.trim() || randomName()).slice(0, 12);
@@ -302,7 +303,9 @@ export async function boot(Game) {
       window.game = new Game(canvas, assets, name, audio);
       bump();
       window.game.audio.play('click'); // 입장 소리 (소리 장치는 위에서 탭 처리 안에 이미 켬)
-      window.game.music.start();
+      // 3D 판만: 상태·계절별 테마 음악 + 장소 환경음 (도트 판은 예전 음악 그대로)
+      window.game.music.attach?.(window.game, { themes: true, ambience: new Ambience(audio, { layout: LAYOUT }) });
+      if (audio.enabled) window.game.music.start(); // 소리를 꺼 두었으면 켤 때(소리 버튼·N 키) 시작
       // 첫 화면 끊김 방지: 로딩 화면 뒤에서 셰이더를 미리 컴파일(가능하면 병렬)하고 두 프레임 그린 뒤 보여 줌
       if (lt) lt.textContent = '화면 준비 중…';
       await new Promise((r) => requestAnimationFrame(r)); // '화면 준비 중' 문구가 먼저 보이게

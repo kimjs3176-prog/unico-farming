@@ -1,7 +1,13 @@
 // 환경설정(그래픽 품질·글자 크기)·도움말 창
 import { h } from '../dom.js';
 import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf } from '../../game/quality.js';
-import { canVibrate, hapticPrefs } from '../../game/juice.js';
+import { canVibrate, hapticPrefs, shakePrefs } from '../../game/juice.js';
+import { copyDiag } from '../../game/crash.js';
+import { touchUI } from '../../game/input.js';
+
+/** 소리 크기 칸: 전체·음악·효과음·주변 소리 */
+const VOL_ROWS = [['master', '전체'], ['music', '음악'], ['sfx', '효과음'], ['amb', '주변 소리']];
+const SOUND_MODES = [['all', '🔊 모두 켬'], ['sfx', '🎵 효과음만'], ['off', '🔇 끔']];
 
 /** 세부 항목이 어느 프리셋과 똑같은지 (아니면 사용자 지정) */
 function matchPreset(s) {
@@ -38,8 +44,15 @@ export const SettingsPanel = {
         <div class="gfx-presets ui-scales">${UI_SCALES.map((u) => `<button class="gfx-preset ${uiScaleOf(s) === u.v ? 'on' : ''}" data-ui="${u.v}" style="font-size:${Math.round(14 * u.v)}px"><b>${u.name}</b></button>`).join('')}</div>
         ${canVibrate() ? `<h3>📳 진동</h3>
         <label class="gfx-row check"><input type="checkbox" data-pref="haptics" ${hapticPrefs.get() ? 'checked' : ''}> 진동 (수확·입질·버튼을 누를 때 살짝)</label>` : ''}
+        <h3>🔊 소리${touchUI() ? '' : ' <small style="font-weight:normal">N 키로도 바꿔요</small>'}</h3>
+        <div class="gfx-presets snd-modes">${SOUND_MODES.map(([k, n]) => `<button class="gfx-preset ${(g.audio.mode ?? 'all') === k ? 'on' : ''}" data-snd="${k}" aria-pressed="${(g.audio.mode ?? 'all') === k}"><b>${n}</b></button>`).join('')}</div>
+        ${VOL_ROWS.map(([k, n]) => `<label class="gfx-row"><span style="display:inline-block;min-width:4.6em">${n}</span> <input type="range" min="0" max="100" step="5" data-vol="${k}" value="${Math.round((g.audio.volume?.[k] ?? 0) * 100)}"><span>${Math.round((g.audio.volume?.[k] ?? 0) * 100)}%</span></label>`).join('')}
+        <h3>🎥 화면 움직임</h3>
+        <label class="gfx-row check"><input type="checkbox" data-pref="shake" ${shakePrefs.get() ? 'checked' : ''}> 화면 흔들림 (천둥·수확 때 카메라가 살짝 흔들려요)</label>
         <p class="gfx-tip">💡 끊긴다면: 품질 '낮음' → 해상도 낮추기 → 그림자 끄기 순으로 시도해 보세요. 설정은 이 브라우저에 저장돼요.</p>
-        <button class="ghost gfx-help" style="margin-top:6px">❓ 도움말 · 조작법 보기</button>`);
+        <button class="ghost gfx-help" style="margin-top:6px">❓ 도움말 · 조작법 보기</button>
+        <button class="ghost gfx-diag" style="margin-top:6px">📋 진단 정보 복사</button>
+        <p class="gfx-tip gfx-diag-note" aria-live="polite"></p>`);
       p.append(body);
       body.querySelectorAll('.gfx-preset[data-p]').forEach((b) => (b.onclick = () => { g.setGraphics(applyPreset(g.gfx, b.dataset.p)); render(); }));
       body.querySelectorAll('[data-ui]').forEach((b) => (b.onclick = () => { g.setGraphics({ ...g.gfx, uiScale: +b.dataset.ui }); g.audio.play('click'); render(); }));
@@ -47,6 +60,24 @@ export const SettingsPanel = {
       const hp = body.querySelector('[data-pref="haptics"]');
       if (hp) hp.onchange = () => { hapticPrefs.set(hp.checked); if (hp.checked) g.juice?.haptic?.(15); };
       body.querySelector('.gfx-help').onclick = () => this.openHelp();
+      // 진단 정보: 문의할 때 붙여 넣을 글 (기기·품질·최근 오류)
+      const note = body.querySelector('.gfx-diag-note');
+      body.querySelector('.gfx-diag').onclick = () => copyDiag(note, note);
+      // 소리: 세 단추(모두 켬·효과음만·끔) + 크기 (움직이는 동안 바로 반영, 놓으면 저장하고 들려 줌)
+      const A = g.audio;
+      body.querySelectorAll('[data-snd]').forEach((b) => (b.onclick = () => {
+        const st = A.setMode ? A.setMode(b.dataset.snd) : b.dataset.snd;
+        this.afterSound?.(st);
+        if (st !== 'off') A.play('click');
+        render();
+      }));
+      body.querySelectorAll('[data-vol]').forEach((el) => {
+        const k = el.dataset.vol;
+        el.oninput = () => { A.volume[k] = +el.value / 100; A.apply?.(); el.nextElementSibling.textContent = el.value + '%'; };
+        el.onchange = () => { A.save?.(); A.play(k === 'music' || k === 'amb' ? 'pop' : 'click'); };
+      });
+      const sk = body.querySelector('[data-pref="shake"]');
+      sk.onchange = () => { shakePrefs.set(sk.checked); if (g.juice) g.juice.screenShake = sk.checked; if (sk.checked) g.juice?.shake?.(0.3); };
       body.querySelectorAll('[data-k]').forEach((el) => {
         const k = el.dataset.k;
         const commit = () => {
@@ -72,6 +103,7 @@ export const SettingsPanel = {
       '🎥 <b>시점</b> 마우스 드래그(왼쪽/오른쪽) 또는 오른쪽 화면 드래그로 회전 · 휠 또는 두 손가락으로 확대/축소 · 나무·건물이 가리면 그 부분만 투명해져요',
       '⚙️ <b>환경설정</b> 오른쪽 위 ⚙️ 버튼 → 그래픽 품질(자동·낮음·보통·높음)과 해상도·그림자·풀 양 조절. 화면이 끊기면 \'낮음\'을 골라 보세요',
       '🗺️ <b>지도</b> 오른쪽 위 미니맵을 누르거나 M 키 → 큰 지도에서 원하는 곳이나 장소 버튼을 누르면 바로 이동',
+      '🔊 <b>소리</b> N 키 또는 행동 막대 소리 버튼: 모두 켬 → 음악 끔 → 모두 끔. 환경설정에서 전체·음악·효과음·주변 소리 크기를 따로 맞출 수 있고, 다음에 와도 그대로예요',
       '🌱 <b>농사</b> 밭 근처에서 E: 갈기 → 씨앗 심기 → 물 주기 → 수확. 물을 주면 3배 빨리 자라요',
       '🛒 <b>장터</b> 북쪽 장터 여우에게 씨앗·사료를 사고 작물을 팔아요. 시세는 매일 바뀌고 수요 이벤트가 생겨요',
       '🚜 <b>탈것</b> 마을의 트랙터·자전거·농장 카트 앞에서 E 로 타요. 트랙터는 쟁기를 내려(SPACE·🪓 버튼) 밭을 갈 수 있어요',

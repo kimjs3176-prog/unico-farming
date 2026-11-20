@@ -55,7 +55,7 @@ export class Pests {
     const p = { kind: 'crow', name: '까마귀', root, plot: i, state: 'arrive', t: 0, from, to: new THREE.Vector3(tx, 0.2, tz),
       wings: [root.getObjectByName('WingL'), root.getObjectByName('WingR')], head: root.getObjectByName('Head'), body: root.getObjectByName('Body') };
     this.list.push(p);
-    g.audio.play('caw');
+    this._say(p.to, 'caw', 1, 0.35); // 내려앉을 자리에서 (멀어도 들리게)
     this._warn(p, '🐦‍⬛ 까마귀가 밭에 내려앉았어요! 가까이 가서 쫓아내세요 (E)');
   }
 
@@ -75,7 +75,7 @@ export class Pests {
     const p = { kind: wolf ? 'wolf' : 'fox', name: wolf ? '늑대' : '산여우', root: rig.root, mixer: rig.mixer, clips: rig.clips, state: 'approach', t: 0, target, home: start };
     playClip(p, 'walk', 0);
     this.list.push(p);
-    g.audio.play(wolf ? 'howl' : 'caw', wolf ? 1 : 0.5);
+    this._say(start, wolf ? 'howl' : 'yip', wolf ? 1 : 0.8, 0.35); // 숲 가장자리에서 (경고라 멀어도 들림)
     this._warn(p, wolf ? '🐺 늑대가 목장 쪽으로 다가와요! 쫓아내세요' : '🦊 산여우가 닭장을 노리고 있어요! 쫓아내세요');
   }
 
@@ -121,7 +121,7 @@ export class Pests {
       if (pl.state === 'growing') pl.progress = Math.max(0, pl.progress - dt * 0.012);
       else if (pl.state === 'ready' && p.t > 6) { pl.state = 'growing'; pl.progress = 0.8; F.refresh(p.plot); this.game.ui.toast('🐦‍⬛ 까마귀가 다 익은 작물을 쪼아 버렸어요…'); }
       else if (pl.state !== 'ready') this._flee(p, false); // 밭이 비면 떠남
-      if (Math.random() < dt * 0.15) this.game.audio.play('caw', 0.4);
+      if (Math.random() < dt * 0.15) this._say(r.position, 'caw', 0.4);
     } else if (p.state === 'flee') { // 날갯짓하며 하늘로
       flap(30, 1.0);
       p.vel.y += dt * 6;
@@ -148,7 +148,7 @@ export class Pests {
       const R = LAYOUT.ranch;
       r.rotation.y += (Math.atan2((R.x0 + R.x1) / 2 - pos.x, (R.z0 + R.z1) / 2 - pos.z) - r.rotation.y) * (1 - Math.exp(-dt * 3));
       playClip(p, Math.sin(p.t * 0.8) > 0.6 ? 'attack' : 'look', 0.4);
-      if (p.t > 4 && Math.random() < dt * 0.05) this.game.audio.play(p.kind === 'wolf' ? 'howl' : 'caw', 0.4);
+      if (p.t > 4 && Math.random() < dt * 0.05) this._say(pos, p.kind === 'wolf' ? 'howl' : (Math.random() < 0.6 ? 'growl' : 'yip'), 0.5); // 여우는 으르렁·깽깽
     } else if (p.state === 'flee') {
       if (go(p.home, 6.2, 'run') < 1 || p.t > 7) p.state = 'gone';
     }
@@ -163,7 +163,7 @@ export class Pests {
       const away = new THREE.Vector3(p.root.position.x - this.game.player.position.x, 0, p.root.position.z - this.game.player.position.z).normalize();
       p.vel = new THREE.Vector3(away.x * 6, 3, away.z * 6);
       p.root.rotation.y = Math.atan2(away.x, away.z);
-      if (byPlayer) this.game.audio.play('caw', 0.8);
+      if (byPlayer) this._say(p.root.position, 'caw', 0.8);
     }
   }
 
@@ -184,5 +184,11 @@ export class Pests {
   }
 
   /** 미니맵용 위치 */
+  /** 그 자리에서 나는 울음 (멀면 작게·카메라 기준 좌우). minGain: 경고라 멀어도 이만큼은 들림 */
+  _say(pos, name, vol = 1, minGain = 0) {
+    const a = this.game.audio;
+    if (a.playAt) a.playAt(name, pos.x, pos.z, vol, { minGain }); else a.play(name, vol);
+  }
+
   markers() { return this.list.filter((p) => p.state !== 'flee').map((p) => p.root.position); }
 }

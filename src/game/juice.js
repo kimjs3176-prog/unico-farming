@@ -50,6 +50,13 @@ export const hapticPrefs = {
   set(on) { try { globalThis.localStorage?.setItem(HAPTIC_KEY, on ? '1' : '0'); } catch { /* 저장 못 해도 이번 판은 그대로 */ } },
 };
 
+// 화면 흔들림 설정 (기본 켜짐, 움직임 줄이기 설정이 켜져 있으면 저장값과 상관없이 끔)
+const SHAKE_KEY = 'unico.shake';
+export const shakePrefs = {
+  get() { try { return globalThis.localStorage?.getItem(SHAKE_KEY) !== '0'; } catch { return true; } },
+  set(on) { try { globalThis.localStorage?.setItem(SHAKE_KEY, on ? '1' : '0'); } catch { /* 저장 못 해도 이번 판은 그대로 */ } },
+};
+
 const _v = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
 
 export class Juice {
@@ -58,7 +65,7 @@ export class Juice {
     this.pops = [];
     this.t = 0;
     this.offset = new THREE.Vector3();
-    this.screenShake = true; // 설정에서 끌 수 있음 (흔들림·밀림·시야 펀치)
+    this.screenShake = shakePrefs.get(); // 설정에서 끌 수 있음 (흔들림·밀림·시야 펀치), 이 브라우저에 저장
     this._kick = null; // { dir|null, m, t }
     this._fov = null; // { d, t }
     this._applied = null; // 지난 프레임에 카메라에 더한 값 (카메라를 아무도 다시 놓지 않았으면 되돌림)

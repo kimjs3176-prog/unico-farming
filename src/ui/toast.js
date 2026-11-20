@@ -5,7 +5,7 @@
 //    key : 같은 열쇠가 떠 있으면 새 장 대신 그 장을 고침 (없으면 종류+글이 같을 때만 합침)
 //    amount·fmt: 합칠 때 amount 를 더하고 fmt({ count, amount, text }) 로 글을 다시 씀 (예: 판매 코인 합계)
 //    ms  : 보여 줄 시간을 직접 (없으면 글 길이로)
-//    sfx : 소리 이름 (지금은 toastSfx 고리만, 소리는 나중에)
+//    sfx : 소리 이름 (예: '코인이 부족해요' → 'deny'). 준 알림만 소리가 남 (기본 소리 없음)
 import { h } from './dom.js';
 import { TipUI, splitIcon } from './tip.js';
 
@@ -166,8 +166,14 @@ export const ToastUI = {
     setTimeout(done, TOAST_OUT_MS + 240);
   },
 
-  /** 알림 소리 고리 (종류·sfx 별 소리는 나중에 여기서) */
-  toastSfx() {},
+  /** 알림 소리: 부른 쪽이 sfx 를 준 알림만 (기본 소리 없음), 몰려와도 0.25초에 한 번 */
+  toastSfx(e) {
+    if (!e?.sfx) return;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now - (this._toastSfxAt ?? -1e9) < 250) return;
+    this._toastSfxAt = now;
+    this.game?.audio?.play?.(e.sfx, 0.8);
+  },
 
   ...TipUI,
 };

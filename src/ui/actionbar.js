@@ -48,12 +48,19 @@ export const ActionbarUI = {
     mk('🪑', '꾸미기', () => (game.decor?.mode ? game.decor.stop() : game.decor?.open()), 'decor');
     this.bar.append(h('div', 'sep'));
     mk('🏡', '농장 방', () => this.openRooms(), 'rooms');
-    this.soundBtn = mk('🔊', '소리', () => {
-      const st = game.audio.cycle();
-      if (st !== 'off') game.music.start();
-      this.soundBtn.firstChild.textContent = { all: '🔊', sfx: '🎵', off: '🔇' }[st];
-      this.toast({ all: '🔊 음악·효과음 켜짐', sfx: '🎵 음악 끔 (효과음만)', off: '🔇 소리 끔' }[st]);
-    });
+    this.soundBtn = mk('🔊', '소리', () => this.cycleSound());
+    this.soundBtn.title = '소리 켜기·끄기 (N)';
+    this.syncSoundBtn(); // 저장해 둔 소리 상태로 그림
+    // N 키: 소리 순환 (M 은 지도). 글자를 치는 중에는 무시
+    if (!this._sndKey && typeof addEventListener === 'function') {
+      this._sndKey = (e) => {
+        if (e.code !== 'KeyN' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+        const t = e.target;
+        if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ''))) return;
+        this.cycleSound();
+      };
+      addEventListener('keydown', this._sndKey);
+    }
     mk('📸', '찰칵', () => this.snapshot());
     this.autoBtn = mk('🤖', '자동', () => game.autoplay.toggle(), 'auto');
     this.autoBtn.title = '오토플레이 (P)';
@@ -212,6 +219,26 @@ export const ActionbarUI = {
       this.root.classList.toggle('net-off', !net); // 오프라인: 채팅·접속 줄 숨김
       this._syncDot();
     } catch { /* 공개 상태를 못 읽어도 게임은 계속 */ }
+  },
+
+  /** 소리 순환: 모두 켬 → 음악 끔 → 모두 끔 (저장됨) */
+  cycleSound() {
+    const g = this.game, st = g.audio.cycle();
+    this.afterSound(st);
+    this.toast({ all: '🔊 음악·효과음 켜짐', sfx: '🎵 음악 끔 (효과음만)', off: '🔇 소리 끔' }[st]);
+    return st;
+  },
+  /** 소리 상태가 바뀐 뒤: 켜졌으면 음악 시작, 버튼 그림 맞춤 */
+  afterSound(st) {
+    if (st !== 'off') this.game.music?.start?.();
+    this.syncSoundBtn();
+  },
+  /** 소리 버튼 그림 = 지금 소리 상태 */
+  syncSoundBtn() {
+    const a = this.game?.audio, b = this.soundBtn;
+    if (!a || !b?.firstChild) return;
+    const st = a.mode ?? (a.enabled ? (a.musicOn ? 'all' : 'sfx') : 'off');
+    b.firstChild.textContent = { all: '🔊', sfx: '🎵', off: '🔇' }[st];
   },
 
   /** 새 버튼 등장: NEW 표시 + 통 튀김 + 한 줄 안내 (접혀 있으면 ☰ 에 빨간 점) */

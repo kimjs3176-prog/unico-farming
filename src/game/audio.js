@@ -14,8 +14,12 @@ export const MIX_DB = {
   coin: -20, pop: -21, harvest: -20, catch: -21, combo: -20, pickup: -20, buy: -20, count: -20, star: -20, sale: -20,
   go: -17, quest: -17, warp: -20, ignite: -24, engine: -24, bell: -22,
   win: -16, levelup: -15,
-  caw: -32, howl: -32, bark: -30, buzz: -36, tune: -28,
+  caw: -32, howl: -32, bark: -30, buzz: -36, tune: -28, yip: -30, growl: -32,
+  // 목장 동물 목소리 (쓰다듬기·먹이) 와 빗질
+  moo: -24, baa: -24, cluck: -25, neigh: -24, heehaw: -24, hum: -26, bristle: -25,
   eat: -24, scatter: -26, sleep: -22, morning: -20,
+  // 축제 짧은 가락 (축제 날 연출)
+  fest: -18,
   thunder: -16,
 };
 
@@ -33,12 +37,13 @@ export const MIX = {
   harvest: 0.537, catch: 1.622, combo: 1.429, pickup: 1.162, buy: 1.288, count: 1.349, star: 1.123, sale: 1.097,
   go: 1.396, quest: 0.922, warp: 1.429, ignite: 1.189, engine: 1.289, bell: 0.631, win: 0.832, levelup: 0.631,
   caw: 2.985, howl: 0.776, bark: 2.818, buzz: 0.359, tune: 0.652, eat: 2.019, scatter: 1.884, sleep: 0.575,
-  morning: 0.725, thunder: 3.127,
+  morning: 0.725, thunder: 3.127, yip: 0.32, growl: 0.437, moo: 1.738, baa: 1.66, cluck: 0.741, neigh: 1.109,
+  heehaw: 1.023, hum: 0.363, bristle: 1.641, fest: 0.933,
 };
 
 /** 변주 종류: 음 있는 소리는 음 하나 ±1.2%, 두드리는·노이즈 소리는 높이·길이 ±10%, 팡파르는 그대로 */
-const VARY_NONE = new Set(['win', 'levelup', 'quest', 'go', 'tune', 'sale', 'count', 'star', 'thunder', 'sleep', 'morning']);
-const VARY_PERC = new Set(['dig', 'stroke', 'splash', 'shoo', 'bump', 'hammer', 'rustle', 'pull', 'swish', 'door', 'bite', 'land', 'buzz', 'caw', 'bark', 'startle', 'deny', 'eat', 'scatter']);
+const VARY_NONE = new Set(['win', 'levelup', 'quest', 'go', 'tune', 'sale', 'count', 'star', 'thunder', 'sleep', 'morning', 'fest']);
+const VARY_PERC = new Set(['dig', 'stroke', 'splash', 'shoo', 'bump', 'hammer', 'rustle', 'pull', 'swish', 'door', 'bite', 'land', 'buzz', 'caw', 'bark', 'startle', 'deny', 'eat', 'scatter', 'cluck', 'yip', 'growl', 'bristle']);
 /** 같은 이름이 45ms 안에 또 나도, 소리 수가 넘쳐도 꼭 내는 소리 */
 const KEEP = new Set(['click', 'levelup']);
 /** 이어서 하면 오음계로 한 칸씩 오르는 소리와 그 소리의 가장 높은 음 (2.4kHz 를 넘지 않게) */
@@ -63,7 +68,7 @@ export function snapPenta(f, cap = COMBO_CAP) {
   return best;
 }
 /** 이 소리가 나면 음악을 잠깐 낮춤 [dB, 유지 초] */
-const DUCK = { levelup: [-5, 1.2], win: [-3, 0.6], quest: [-3, 0.6] };
+const DUCK = { levelup: [-5, 1.2], win: [-3, 0.6], quest: [-3, 0.6], fest: [-4, 1.0] };
 
 /** 발소리: 바닥 종류 (footsteps.js surfaceAt 결과) */
 export const STEP_KINDS = ['grass', 'dirt', 'wood', 'floor', 'snow', 'stone'];
@@ -76,8 +81,38 @@ export const STEP_MIX = {
 
 export const dbToGain = (db) => Math.pow(10, db / 20);
 
+// ------------------------------------------------------------ 소리 설정 저장 (이 브라우저)
+export const AUDIO_PREF_KEY = 'unico.audio';
+export const DEFAULT_VOLUME = { master: 0.9, sfx: 0.8, music: 0.5, amb: 0.6 };
+const clamp01 = (v, d) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : d);
+
+/** 저장된 글 → { enabled, musicOn, volume } (깨졌거나 없으면 기본값, 크기는 0~1 로 묶음) */
+export function parseAudioPrefs(raw) {
+  let o = null;
+  try { o = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { o = null; }
+  if (!o || typeof o !== 'object') o = {};
+  const v = o.volume && typeof o.volume === 'object' ? o.volume : {};
+  const volume = {};
+  for (const k of Object.keys(DEFAULT_VOLUME)) volume[k] = clamp01(v[k], DEFAULT_VOLUME[k]);
+  const enabled = typeof o.enabled === 'boolean' ? o.enabled : true;
+  return { enabled, musicOn: typeof o.musicOn === 'boolean' ? o.musicOn : true, volume };
+}
+
+/** 듣는 사람(플레이어·카메라 방향) 기준 크기·좌우. 30m 밖은 null (minGain 이 있으면 그 크기로) */
+export function spatial(L, x, z, minGain = 0) {
+  if (!L) return { gain: 1, pan: 0 };
+  const dx = x - L.x, dz = z - L.z, d = Math.hypot(dx, dz);
+  if (d > 30 && !(minGain > 0)) return null;
+  const gain = Math.max(minGain, 1 / (1 + d / 8));
+  // 카메라 오른쪽 = (cos yaw, -sin yaw) (camera.js)
+  const yaw = L.yaw || 0;
+  const pan = d > 0.5 ? Math.max(-0.7, Math.min(0.7, (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d)) : 0;
+  return { gain, pan };
+}
+
 export class Audio {
-  constructor() {
+  /** opts.prefs: 소리 설정을 저장·복원 (3D 판 boot.js). 도트 판은 예전처럼 저장 없이 */
+  constructor(opts = {}) {
     this.ctx = null;
     this.enabled = true;
     this.musicOn = true;
@@ -91,6 +126,37 @@ export class Audio {
     this._ducks = new Map(); this._duckId = 0;
     this._stepAt = -1; this._stepPan = 0.1;
     this._eng = null; this._reel = null;
+    this._out = null; // playAt: 이번 소리의 출력 (좌우 패너)
+    this._ambK = 1; // 집 안: 주변 소리 -8dB
+    this.listener = null; // { x, z, yaw } — ambience.js 가 채움
+    this.prefs = !!opts.prefs;
+    if (this.prefs) this.load();
+  }
+
+  /** 저장된 소리 설정 불러오기 (없거나 깨졌으면 기본값) */
+  load(store = globalThis.localStorage) {
+    let raw = null;
+    try { raw = store?.getItem?.(AUDIO_PREF_KEY) ?? null; } catch { raw = null; }
+    const p = parseAudioPrefs(raw);
+    this.enabled = p.enabled; this.musicOn = p.musicOn; this.volume = p.volume;
+    return p;
+  }
+
+  /** 소리 설정 저장 (저장소가 막혀도 이번 판은 그대로) */
+  save(store = globalThis.localStorage) {
+    try { store?.setItem?.(AUDIO_PREF_KEY, JSON.stringify({ enabled: this.enabled, musicOn: this.musicOn, volume: this.volume })); return true; } catch { return false; }
+  }
+
+  /** 지금 소리 상태: 'all' | 'sfx'(음악 끔) | 'off' */
+  get mode() { return this.enabled ? (this.musicOn ? 'all' : 'sfx') : 'off'; }
+
+  /** 소리 상태 바꾸기 (설정 창의 세 단추) */
+  setMode(st) {
+    this.enabled = st !== 'off';
+    this.musicOn = st === 'all';
+    this.apply();
+    if (this.prefs) this.save();
+    return this.mode;
   }
 
   _ctx() {
@@ -98,7 +164,8 @@ export class Audio {
     if (!this.ctx) {
       try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch { this.enabled = false; return null; }
       const c = this.ctx;
-      this.master = c.createGain(); this.master.gain.value = this.volume.master;
+      // 저장된 '끔' 이면 처음부터 0 (비·바람 환경음도 조용히)
+      this.master = c.createGain(); this.master.gain.value = this.enabled ? this.volume.master : 0;
       // 묶음 압축(살짝) → 리미터(벽): 무릎 값을 꼭 적음 (기본값이 브라우저마다 다름)
       const comp = (o) => { const n = c.createDynamicsCompressor(); for (const k in o) if (n[k]) n[k].value = o[k]; return n; };
       const glue = comp({ threshold: -18, knee: 6, ratio: 3, attack: 0.003, release: 0.25 });
@@ -109,8 +176,11 @@ export class Audio {
       // 음악·환경음 → 낮춤 전용 게인 → 마스터 (음악 버튼이 쓰는 게인과 따로)
       this.duckGain = c.createGain(); this.duckGain.gain.value = 1; this.duckGain.connect(this.master);
       this.ambDuck = c.createGain(); this.ambDuck.gain.value = 1; this.ambDuck.connect(this.master);
-      this.music = c.createGain(); this.music.gain.value = this.volume.music; this.music.connect(this.duckGain);
-      this.amb = c.createGain(); this.amb.gain.value = this.volume.amb; this.amb.connect(this.ambDuck);
+      this.music = c.createGain(); this.music.gain.value = this.musicOn ? this.volume.music : 0; this.music.connect(this.duckGain);
+      // 주변 소리 → 저역통과(바깥 20kHz, 집 안 700Hz) → 낮춤 → 마스터
+      this.ambLP = c.createBiquadFilter(); this.ambLP.type = 'lowpass'; this.ambLP.frequency.value = 20000; this.ambLP.Q.value = 0;
+      this.ambLP.connect(this.ambDuck);
+      this.amb = c.createGain(); this.amb.gain.value = this.volume.amb * this._ambK; this.amb.connect(this.ambLP);
       // 잔향: 지수 감쇠 노이즈 임펄스
       this.reverb = c.createConvolver();
       const len = c.sampleRate * 2.4, ir = c.createBuffer(2, len, c.sampleRate);
@@ -173,14 +243,47 @@ export class Audio {
     else if (this.enabled) this.enabled = false;
     else { this.enabled = true; this.musicOn = true; }
     this.apply();
-    return this.enabled ? (this.musicOn ? 'all' : 'sfx') : 'off';
+    if (this.prefs) this.save();
+    return this.mode;
   }
+  /** 켜짐·크기를 게인에 반영 (효과음·목소리·주변 소리 크기도) */
   apply() {
     if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    this.master.gain.setTargetAtTime(this.enabled ? this.volume.master : 0, t, 0.1);
-    this.music.gain.setTargetAtTime(this.musicOn ? this.volume.music : 0, t, 0.3);
+    const t = this.ctx.currentTime, V = this.volume;
+    this.master.gain.setTargetAtTime(this.enabled ? V.master : 0, t, 0.1);
+    this.music.gain.setTargetAtTime(this.musicOn ? V.music : 0, t, 0.3);
+    this.sfx?.gain.setTargetAtTime(V.sfx, t, 0.05);
+    this.voiceBus?.gain.setTargetAtTime(V.sfx, t, 0.05);
+    this.amb?.gain.setTargetAtTime(V.amb * this._ambK, t, 0.3);
     if (!this.enabled) { this.engineStop(true); this.reelStop(true); }
+  }
+
+  /** 집 안: 바깥 소리를 700Hz 저역통과 + -8dB 로 (나오면 되돌림) */
+  setIndoor(on) {
+    on = !!on;
+    if (this._indoor === on) return;
+    this._indoor = on;
+    this._ambK = on ? dbToGain(-8) : 1;
+    const c = this.ctx;
+    if (!c || !this.ambLP) return;
+    const t = c.currentTime;
+    this.ambLP.frequency.setTargetAtTime(on ? 700 : 20000, t, 0.3);
+    this.amb.gain.setTargetAtTime(this.volume.amb * this._ambK, t, 0.3);
+  }
+
+  /**
+   * 자리가 있는 효과음: 플레이어에게서 멀수록 작게(1/(1+d/8)), 30m 밖은 내지 않음, 카메라 기준 좌우
+   * @param o.minGain 경고 소리(늑대 등장 등)는 멀어도 이 크기 아래로 줄지 않음
+   */
+  playAt(name, x, z, vol = 1, o = {}) {
+    const c = this._ctx();
+    if (!c || !this.enabled) return;
+    const { minGain = 0, ...opts } = o;
+    const s = spatial(this.listener, x, z, minGain);
+    if (!s) return;
+    let out;
+    if (s.pan && c.createStereoPanner) { out = c.createStereoPanner(); out.pan.value = s.pan; out.connect(this.sfx); }
+    this.play(name, vol * s.gain, out ? { ...opts, out } : opts);
   }
 
   // ------------------------------------------------------------ 음악 낮추기 (덕킹)
@@ -240,7 +343,7 @@ export class Audio {
   _room(key) { return this._live + (this._cost[key] ?? 3) <= this.maxVoices; }
 
   /** 부드러운 톤: 어택 5ms, 지수 릴리즈, 저역통과, 잔향 센드 */
-  tone(freq, dur = 0.12, type = 'sine', vol = 0.15, slide = 0, { at = 0, rev = 0.25, lp = 6000, out } = {}) {
+  tone(freq, dur = 0.12, type = 'sine', vol = 0.15, slide = 0, { at = 0, rev = 0.25, lp = 6000, out, atk = 0.005 } = {}) {
     const c = this._ctx();
     if (!c || !this.enabled) return;
     freq *= this._pm; slide *= this._pm; dur *= this._lm; vol *= this._vm;
@@ -250,10 +353,10 @@ export class Audio {
     if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
     f.type = 'lowpass'; f.frequency.value = lp;
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.005);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.gain.exponentialRampToValueAtTime(vol, t + atk);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, atk + 0.01));
     o.connect(f).connect(g);
-    g.connect(out || this.sfx);
+    g.connect(out || this._out || this.sfx);
     if (rev > 0) { const s = c.createGain(); s.gain.value = rev; g.connect(s).connect(this.reverb); }
     this._track(o);
     o.start(t); o.stop(t + dur + 0.05);
@@ -270,7 +373,7 @@ export class Audio {
     if (sweep) { f.frequency.setValueAtTime(freq, t); f.frequency.exponentialRampToValueAtTime(sweep, t + dur); }
     const g = c.createGain();
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, attack + 0.01));
-    s.connect(f).connect(g).connect(out || this.sfx);
+    s.connect(f).connect(g).connect(out || this._out || this.sfx);
     this._track(s);
     s.start(t, this.rng()); s.stop(t + dur + 0.05);
   }
@@ -287,7 +390,7 @@ export class Audio {
     g2.gain.setValueAtTime(vol * 0.25, t); g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); o2.connect(g2).connect(g);
-    g.connect(out || this.sfx);
+    g.connect(out || this._out || this.sfx);
     const s = c.createGain(); s.gain.value = 0.35; g.connect(s).connect(this.reverb);
     this._track(o);
     o.start(t); o2.start(t); o.stop(t + dur + 0.05); o2.stop(t + 0.2);
@@ -320,8 +423,9 @@ export class Audio {
     if (COMBO_TOP[name]) pm = this.combo(name, now);
     else if (VARY_PERC.has(name)) { pm = 1 + r() * 0.1; lm = 1 + r() * 0.1; }
     else if (!VARY_NONE.has(name)) pm = 1 + r() * 0.012;
-    this._pm = pm; this._vm = vm; this._lm = lm; this._inPlay = true; this._made = 0;
-    try { this._sound(name, 0.16 * vol * (MIX[name] ?? 1), opts); } finally { this._pm = this._vm = this._lm = 1; this._inPlay = false; this._cost[name] = this._made; }
+    if (opts.pitch > 0) pm *= opts.pitch; // 동물마다 고정된 목소리 높이 (±6%)
+    this._pm = pm; this._vm = vm; this._lm = lm; this._inPlay = true; this._made = 0; this._out = opts.out || null;
+    try { this._sound(name, 0.16 * vol * (MIX[name] ?? 1), opts); } finally { this._pm = this._vm = this._lm = 1; this._inPlay = false; this._out = null; this._cost[name] = this._made; }
     const d = DUCK[name];
     if (d) this.duck(d[0], d[1]);
   }
@@ -426,6 +530,29 @@ export class Audio {
       case 'howl': return this.tone(330, 1.6, 'sine', v * 0.18, 140, { lp: 1200, rev: 0.5 });
       case 'shoo': this.noise(0.25, v * 1.8, { type: 'bandpass', freq: 1800, q: 0.7 }); this.tone(180, 0.12, 'triangle', v * 0.4, -60, { rev: 0.05 }); return this.tone(170, 0.12, 'triangle', v * 0.4, -60, { at: 0.18, rev: 0.05 });
       case 'bark': this.tone(520, 0.09, 'square', v * 0.12, -200, { lp: 1500, rev: 0.1 }); return this.tone(480, 0.1, 'square', v * 0.1, -180, { lp: 1400, at: 0.16, rev: 0.1 });
+      // 산여우: 짧은 깽깽 2~3번 · 낮은 으르렁
+      case 'yip': { const n = opts.n || 2 + (this.rng() < 0.5 ? 1 : 0); for (let i = 0; i < n; i++) this._voc(900, 700, 0.07, { type: 'square', vol: v, forms: [[1250, 2, 1]], atk: 0.005, at: i * 0.13 }); return; }
+      case 'growl': return this._voc(95, 82, 0.8, { vol: v, forms: [[320, 2, 1], [720, 3, 0.5]], vib: 60, vibRate: 22, atk: 0.09, lp: 1200 });
+      // ---- 목장 동물 목소리 (opts.pitch: 동물마다 고정 높이)
+      // 소: 톱니파 118→96Hz, 두 포먼트(600·1050Hz), 천천히 올라옴
+      case 'moo': return this._voc(118, 96, 0.75, { vol: v, forms: [[600, 3, 1], [1050, 5, 0.5]], vib: 8, vibRate: 5, atk: 0.08 });
+      // 양: 300Hz 에 7Hz 떨림
+      case 'baa': return this._voc(310, 290, 0.5, { vol: v, forms: [[750, 4, 1], [1900, 6, 0.5]], vib: 45, vibRate: 7, atk: 0.03 });
+      // 닭: 900Hz 짧은 꼬꼬 세 번
+      case 'cluck': for (const [at, k] of [[0, 1], [0.09, 0.8], [0.22, 0.9]]) this._voc(900, 700, 0.045, { type: 'square', vol: v * k, forms: [[1100, 3, 1]], atk: 0.004, at }); return;
+      // 말: 500→340Hz 에 9Hz 떨림
+      case 'neigh': return this._voc(520, 340, 0.85, { vol: v, forms: [[900, 4, 1], [2100, 6, 0.4]], vib: 70, vibRate: 9, atk: 0.04 });
+      // 당나귀: 높낮이 번갈아 두 번 (이-아 이-아)
+      case 'heehaw': for (const [at, f] of [[0, 420], [0.28, 190], [0.56, 420], [0.84, 190]]) this._voc(f, f * 0.92, 0.26, { vol: v, forms: [[800, 3, 1], [1600, 5, 0.4]], atk: 0.03, at }); return;
+      // 알파카: 부드러운 콧노래
+      case 'hum': return this.tone(320, 0.45, 'sine', v, 18, { rev: 0.15, lp: 2000, atk: 0.06 });
+      // 빗질: 2.5→4kHz 쓸어 올리는 솔 소리 세 번 (0.38초 간격, 털 날림과 같은 박자)
+      case 'bristle': for (let k = 0; k < 3; k++) this.noise(0.24, v, { type: 'bandpass', freq: 2500, q: 1.2, sweep: 4000, attack: 0.05, at: k * 0.38 }); return;
+      // 축제: 실로폰 도·미·솔·도 + 손북 두 번
+      case 'fest':
+        [1047, 1319, 1568, 2093].forEach((f, i) => { this.tone(f, 0.5, 'sine', v * 0.7, 0, { at: i * 0.11, rev: 0.35 }); this.tone(f * 2.76, 0.15, 'sine', v * 0.12, 0, { at: i * 0.11, rev: 0.2 }); });
+        for (const at of [0, 0.33]) this.tone(170, 0.16, 'sine', v * 0.8, -60, { at, lp: 800, rev: 0.1 });
+        return;
       // 벌 윙윙
       case 'buzz': return this.tone(220 + this.rng() * 40, 0.25, 'sawtooth', v * 0.5, 10, { lp: 700, rev: 0.05 });
       // 콩이 춤 노래: 한 음씩 (opts.k 번째)
@@ -443,6 +570,40 @@ export class Audio {
         this.tone(3200, 0.08, 'sine', v * 0.12, 600, { at: 0.7, rev: 0.3 });
         return this.tone(3500, 0.07, 'sine', v * 0.1, 500, { at: 0.82, rev: 0.3 });
     }
+  }
+
+  /**
+   * 목소리 재료: 파형 → 포먼트(띠통과 여러 개) → 엔벨로프 (동물 울음)
+   * @param o.forms [[주파수, Q, 크기], …] · o.vib 떨림(센트) · o.vibRate 떨림 빠르기
+   */
+  _voc(f0, f1, dur, { type = 'sawtooth', vol = 0.1, at = 0, forms = [[800, 3, 1]], vib = 0, vibRate = 6, atk = 0.03, lp = 0 } = {}) {
+    const c = this.ctx;
+    if (!c) return;
+    f0 *= this._pm; f1 *= this._pm; dur *= this._lm; vol *= this._vm;
+    const t = c.currentTime + at;
+    const o = c.createOscillator(), env = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur);
+    if (vib) {
+      const lfo = c.createOscillator(), lg = c.createGain();
+      lfo.frequency.value = vibRate; lg.gain.value = vib;
+      lfo.connect(lg).connect(o.detune); lfo.start(t); lfo.stop(t + dur + 0.05);
+    }
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(vol, t + atk);
+    env.gain.setValueAtTime(vol, t + Math.max(atk, dur * 0.6));
+    env.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, atk + 0.02));
+    for (const [f, q, k] of forms) {
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * Math.sqrt(this._pm); bp.Q.value = q;
+      const fg = c.createGain(); fg.gain.value = k;
+      o.connect(bp).connect(fg).connect(env);
+    }
+    let tail = env;
+    if (lp) { const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; env.connect(f); tail = f; }
+    tail.connect(this._out || this.sfx);
+    const s = c.createGain(); s.gain.value = 0.12; tail.connect(s).connect(this.reverb);
+    this._track(o);
+    o.start(t); o.stop(t + dur + 0.05);
   }
 
   // ------------------------------------------------------------ 발소리

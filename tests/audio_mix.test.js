@@ -36,7 +36,11 @@ test('목표 크기: 작은 소리 < 클릭 < 도구 < 줍기 < 시작·퀘스�
   for (const n of ['dig', 'plant', 'water', 'stroke', 'splash', 'shoo', 'bump']) assert.ok(T.click < T[n] && T[n] < T.coin, `${n} ${T[n]}`);
   for (const n of ['coin', 'pop', 'harvest', 'catch', 'combo', 'count', 'star']) assert.ok(T[n] < T.go, `${n} ${T[n]} < 시작 ${T.go}`);
   assert.ok(T.go <= T.quest && T.quest < T.win && T.win < T.levelup);
-  for (const n of ['caw', 'howl', 'bark', 'buzz']) assert.ok(T[n] <= -30, `${n} ${T[n]}`);
+  for (const n of ['caw', 'howl', 'bark', 'buzz', 'yip', 'growl']) assert.ok(T[n] <= -30, `${n} ${T[n]}`);
+  // 목장 동물 목소리는 도구 소리 크기 (≈ -24), 빗질은 도구와 같은 층
+  for (const n of ['moo', 'baa', 'cluck', 'neigh', 'heehaw', 'hum', 'bristle']) assert.ok(T[n] >= -26 && T[n] <= -24, `${n} ${T[n]}`);
+  // 축제 가락: 줍기보다 크고 중간 보상보다 작게
+  assert.ok(T.coin < T.fest && T.fest < T.win, `축제 ${T.fest}`);
 });
 
 test('잰 값(fixtures/audio_levels.json): 압축기 앞에서 이름마다 목표+PRE_DB ±2dB, 발소리도 ±2dB', () => {
@@ -88,8 +92,8 @@ test('비 소리 크기: 0.02 + 강수×0.07, 최대 0.09, 맑으면 0', () => {
   assert.ok(Math.abs(m.rainLevel() - 0.055) < 1e-9);
 });
 
-test('효과음 이름 대신 날 소리(pluck/tone)를 화면 코드에서 직접 부르지 않음 (대사창은 W3-C 가 바꿀 때까지 예외)', () => {
-  const ALLOW = new Set(['src/ui/dialogue.js']);
+test('효과음 이름 대신 날 소리(pluck/tone)를 화면 코드에서 직접 부르지 않음 (예외 없음)', () => {
+  const ALLOW = new Set();
   const bad = [];
   const walk = (d) => {
     for (const f of readdirSync(d)) {

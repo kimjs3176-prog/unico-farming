@@ -1,0 +1,103 @@
+{
+ "note": "node tests/lib/music_levels.mjs 로 잰 값 (압축기 뒤 dBFS). level = 잴 때의 THEME_LEVEL (바꾸면 다시 재기)",
+ "level": {
+  "farm_day": {
+   "pad": 0.026,
+   "bass": 0.035,
+   "perc": 1.2,
+   "mel": 0.054
+  },
+  "night": {
+   "pad": 0.021,
+   "bass": 0.03,
+   "perc": 0,
+   "mel": 0.052
+  },
+  "home": {
+   "pad": 0.026,
+   "bass": 0.034,
+   "perc": 0,
+   "mel": 0.048
+  },
+  "minigame": {
+   "pad": 0.018,
+   "bass": 0.036,
+   "perc": 0.9,
+   "mel": 0.05
+  }
+ },
+ "themes": {
+  "farm_day": {
+   "st50": -25.6,
+   "rms": -34.8,
+   "peak": -6.3
+  },
+  "farm_spring": {
+   "st50": -25.6,
+   "rms": -34.8,
+   "peak": -6.3
+  },
+  "farm_summer": {
+   "st50": -25,
+   "rms": -35.9,
+   "peak": -6.1
+  },
+  "farm_autumn": {
+   "st50": -25,
+   "rms": -35.8,
+   "peak": -11.4
+  },
+  "farm_winter": {
+   "st50": -25.3,
+   "rms": -34.2,
+   "peak": -14.6
+  },
+  "farm_rain": {
+   "st50": -25.4,
+   "rms": -35.3,
+   "peak": -16.1
+  },
+  "farm_festival": {
+   "st50": -25,
+   "rms": -34.5,
+   "peak": -6.1
+  },
+  "night": {
+   "st50": -25,
+   "rms": -36.4,
+   "peak": -16.9
+  },
+  "home": {
+   "st50": -26.5,
+   "rms": -37.2,
+   "peak": -16.1
+  },
+  "minigame": {
+   "st50": -25.2,
+   "rms": -36.3,
+   "peak": -6.1
+  }
+ },
+ "amb": {
+  "water": {
+   "st50": -34.2,
+   "rms": -38.3,
+   "peak": -24.5
+  },
+  "roof": {
+   "st50": -37.2,
+   "rms": -38.2,
+   "peak": -25.8
+  },
+  "frog": {
+   "st50": -38.9,
+   "rms": -50.2,
+   "peak": -16.5
+  },
+  "cicada": {
+   "st50": -37.9,
+   "rms": -51.2,
+   "peak": -21.6
+  }
+ }
+}

@@ -73,6 +73,17 @@ const VISITORS = [
   { model: 'q_alpaca', name: '알파카', emoji: '🦙', speed: 0.9 },
 ];
 
+/** 동물 목소리 (audio.js 'moo' 등) */
+const VOICE = { cow: 'moo', sheep: 'baa', chicken: 'cluck', q_horse: 'neigh', q_donkey: 'heehaw', q_alpaca: 'hum' };
+/** 동물 개체 → 목소리 이름과 고정 높이(±6%, 같은 동물은 늘 같은 높이) */
+export function animalVoice(e, baby = false) {
+  const name = VOICE[e?.a?.type] || VOICE[e?.v?.model] || VOICE[e?.model];
+  if (!name) return null;
+  const id = e.a?.id ?? VISITORS.findIndex((v) => v === e.v) + 50;
+  const k = ((Math.abs(Math.round(id)) * 37) % 13) / 12; // 0..1
+  return { name, pitch: (1 + (k - 0.5) * 0.12) * (baby ? 1.25 : 1) }; // 새끼는 높게
+}
+
 /** 애니메이션 상태 전환(크로스페이드) */
 export function playClip(e, name, fade = 0.35) {
   const clip = e.clips[name] || e.clips.idle;
@@ -348,9 +359,30 @@ export class RanchView {
     e.petT = 2.2;
     e.wait = Math.max(e.wait, 2.2);
     e.m.rotation.y = Math.atan2(g.player.position.x - e.m.position.x, g.player.position.z - e.m.position.z);
-    g.audio.play('plant');
+    this._call(e, 0.9);
+    g.audio.play('pop', 0.5);
     g.player.unico.playAction('heart', 1.2);
     if (!e.a) g.fx.pop(e.m.position.x, e.m.position.z, '💕');
+  }
+
+  /** 동물 울음 한 번 (그 자리에서, 멀면 작게). delay 초 뒤 */
+  _call(e, vol = 0.8, delay = 0) {
+    const v = animalVoice(e, !!(e.a && this.sim.isBaby(e.a)));
+    if (!v) return;
+    const say = () => { const p = e.m.position; this.game.audio.playAt?.(v.name, p.x, p.z, vol, { pitch: v.pitch }); };
+    if (delay > 0 && typeof setTimeout === 'function') setTimeout(say, delay * 1000); else say();
+  }
+
+  /** 낮에 가까이(25m) 있으면 6~15초마다 아무 동물이나 한 번 울음 (자는 밤·여우가 노릴 때·집 안은 조용) */
+  _ambientCalls(dt, playerPos) {
+    const g = this.game, R = LAYOUT.ranch;
+    if ((this._callT = (this._callT ?? 4 + Math.random() * 6) - dt) > 0) return;
+    this._callT = 6 + Math.random() * 9;
+    if (this.sleeping || g.pests?.ranchThreat || g.home?.inside || g.cinema?.locked) return;
+    if (Math.hypot((R.x0 + R.x1) / 2 - playerPos.x, (R.z0 + R.z1) / 2 - playerPos.z) > 25) return;
+    const all = this._all || this.ents;
+    const e = all[Math.floor(Math.random() * all.length)];
+    if (e && !(e.petT > 0)) this._call(e, 0.7);
   }
 
   update(dt, playerPos) {
@@ -407,6 +439,7 @@ export class RanchView {
       if (dp < bd - 0.2) { bd = dp; best = e; }
     }
     this.near = best;
+    this._ambientCalls(dt, playerPos);
     // 시설: 닭장(달걀 받기), 축사 앞(우리 목장), 여물통, 목장 가공소
     const opts = [];
     const C = LAYOUT.coop, dc = Math.hypot(C.x - 1.6 - playerPos.x, C.z - playerPos.z);
@@ -452,7 +485,8 @@ export class RanchView {
     g.player.unico.playAction('brush', 1.4);
     e.petT = 1.8; e.wait = Math.max(e.wait, 1.8);
     e.m.rotation.y = Math.atan2(g.player.position.x - e.m.position.x, g.player.position.z - e.m.position.z) + Math.PI / 2; // 옆구리를 내줌
-    g.audio.play('shoo', 0.3);
+    g.audio.play('bristle'); // 솔질 세 번 (털 날림 380ms 간격과 같은 박자)
+    this._call(e, 0.6, 1.1);
     for (let k = 0; k < 3; k++) setTimeout(() => g.fx.burst(e.m.position.x, (e.top || 1) * 0.6, e.m.position.z, e.a.type === 'sheep' ? 0xffffff : 0xd8c8a8, 5), k * 380);
     this._careFx(e, r, '🪮');
     this._levelCheck();
@@ -473,12 +507,17 @@ export class RanchView {
   /** 여물통에 사료 채우기 */
   fillTrough() {
     const g = this.game, eco = g.economy;
-    if (eco.inventory.feed <= 0) return g.ui.toast('사료가 없어요. 장터에서 사 오세요 🛒');
+    if (eco.inventory.feed <= 0) return g.ui.toast('사료가 없어요. 장터에서 사 오세요 🛒', { sfx: 'deny' });
     const n = this.sim.fillTrough(eco.inventory.feed);
     if (!n) return g.ui.toast('여물통이 가득 찼어요');
     eco.useFeed(n);
     g.player.unico.playAction('scatter', 1.2);
-    g.audio.play('plant');
+    g.audio.play('scatter');
+    // 0.4초 뒤 여물통 가까운 깬 동물이 반가워 울음
+    const T = LAYOUT.trough;
+    let near = null, nd = 8;
+    for (const e of this.ents) { const d = Math.hypot(e.m.position.x - T.x, e.m.position.z - T.z); if (d < nd) { nd = d; near = e; } }
+    if (near && !this.sleeping) this._call(near, 0.7, 0.4);
     g.fx.burst(LAYOUT.trough.x, 0.5, LAYOUT.trough.z, 0xe8c66a, 12);
     g.ui.toast(`🌾 여물통에 사료 ${n}개를 채웠어요 (${this.sim.trough}/${TROUGH_MAX}) — 배고픈 동물이 알아서 먹어요`);
   }
@@ -560,10 +599,11 @@ export class RanchView {
 
   feed(e) {
     const g = this.game;
-    if (!g.economy.useFeed()) return g.ui.toast('사료가 없어요. 장터에서 구매하세요 🛒');
+    if (!g.economy.useFeed()) return g.ui.toast('사료가 없어요. 장터에서 구매하세요 🛒', { sfx: 'deny' });
     this.sim.feed(e.a, g.world.day);
     g.onEvent('feed');
-    g.audio.play('plant');
+    g.audio.play('scatter');
+    this._call(e, 0.8, 0.4); // 모이 소리 뒤에 반가운 울음
     g.player.unico.facing = Math.atan2(e.m.position.x - g.player.position.x, e.m.position.z - g.player.position.z);
     g.player.unico.playAction('scatter', 1.3);
     g.fx.burst(e.m.position.x, 0.4, e.m.position.z, 0xe8c66a, 10);
