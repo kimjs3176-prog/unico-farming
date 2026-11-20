@@ -24,6 +24,8 @@
   <link rel="stylesheet" href="/src/ui/theme.css" />
 </head>
 <body>
+  <!-- 제목 화면 아이콘 (vite.config.js 가 src/ui/icons.svg 에서 몇 개만 #t-이름 으로 넣음: 게임 코드가 뜨기 전에도 보이게) -->
+  <!--title-icons-->
   <canvas id="game"></canvas>
   <div id="ui"></div>
   <div id="loading">
@@ -39,18 +41,18 @@
         <p class="title-ribbon"><span>한국농업기술진흥원과 함께하는 농업 메타버스</span></p>
       </div>
       <div class="loading-card">
-        <div class="feature-row"><span>🌾 논농사</span><span>🎣 낚시</span><span>📡 스마트팜</span><span>🏢 KOAT 체험관</span></div>
+        <div class="feature-row"><span><svg class="ico" aria-hidden="true" focusable="false"><use href="#t-wheat"/></svg> 논농사</span><span><svg class="ico" aria-hidden="true" focusable="false"><use href="#t-rod"/></svg> 낚시</span><span><svg class="ico" aria-hidden="true" focusable="false"><use href="#t-flask"/></svg> 스마트팜</span><span><svg class="ico" aria-hidden="true" focusable="false"><use href="#t-koat"/></svg> KOAT 체험관</span></div>
         <p id="loading-text" aria-live="polite">농장 준비 중…</p>
         <div class="bar"><div id="loading-bar"></div></div>
         <div class="name-row">
           <label for="nickname">닉네임</label>
           <input id="nickname" maxlength="12" placeholder="유니코" autocomplete="nickname" enterkeyhint="go" />
-          <button type="button" id="nick-dice" class="nick-dice" title="이름 아무거나" aria-label="이름 아무거나 고르기">🎲</button>
+          <button type="button" id="nick-dice" class="nick-dice" title="이름 아무거나" aria-label="이름 아무거나 고르기"><svg class="ico" aria-hidden="true" focusable="false"><use href="#t-dice"/></svg></button>
         </div>
         <button id="start-btn" disabled>입장하기</button>
-        <p class="hint"><a href="./pixel.html" class="pixel-link">🎮 도트(2.5D) 버전으로 하기 →</a></p>
+        <p class="hint"><a href="./pixel.html" class="pixel-link"><svg class="ico" aria-hidden="true" focusable="false"><use href="#t-gamepad"/></svg> 도트(2.5D) 버전으로 하기 →</a></p>
         <details class="howto">
-          <summary>🕹️ 조작법</summary>
+          <summary><svg class="ico" aria-hidden="true" focusable="false"><use href="#t-help"/></svg> 조작법</summary>
           <p class="hint keys"><span class="k-kb">WASD/방향키 이동 · E 상호작용 · Space 점프 · 클릭으로 이동 · 드래그로 시점 · 휠 줌</span><span class="k-touch">탭해서 이동·상호작용 · 왼쪽 아래 조이스틱 · ⤴ 점프 · 드래그로 시점 · 두 손가락 줌</span></p>
         </details>
       </div>

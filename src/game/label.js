@@ -37,6 +37,12 @@ export function setHeroLabel(sprite) { HERO = sprite || null; }
 export function whenFontReady(font, text, cb) {
   const fonts = typeof document !== 'undefined' ? document.fonts : null;
   if (!fonts?.check || !fonts.load) return false;
+  // 구글 글꼴 CSS 가 아직 안 붙음(public/font-css.js): 글꼴이 등록 전이라 check 가 '있음'으로 답함 → 붙은 뒤 다시 봄
+  const gf = typeof window !== 'undefined' ? window : null;
+  if (gf?.__gfReady && !gf.__gfDone) {
+    Promise.resolve(gf.__gfReady).then(() => { if (!whenFontReady(font, text, cb)) cb(); }, () => {});
+    return true;
+  }
   try { if (fonts.check(font, text)) return false; } catch { return false; }
   Promise.resolve(fonts.load(font, text)).then(() => cb(), () => {});
   return true;

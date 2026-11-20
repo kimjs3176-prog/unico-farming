@@ -2,11 +2,16 @@
 //  - 배포 빌드에서만, 게임이 뜬 뒤 한가할 때 등록. 자동 시험 브라우저(navigator.webdriver)·?nosw 에서는 등록하지 않음
 //  - ?sw=off: 등록을 지우고 'unico-*' 캐시를 비움 (문제가 생겼을 때 끄는 스위치)
 //  - 새 버전이 기다리면 알림 한 번 → 설정의 '지금 새로 고침'(저장 → 새 워커 켜기 → 한 번만 새로 고침). 놀이 중에는 저절로 새로 고치지 않음
-//  - 설정 창은 game.pwa.renderSettings(el) 를 부름 (설치 단추·아이폰 안내·새로 고침 단추)
+//  - 설정 창은 game.pwa.renderSettings(el) 를 부름 (설치 단추·아이폰 안내·새로 고침 단추).
+//    설정 창 코드가 아직 부르지 않으면 열릴 때 제목 아래에 '.pwa-row' 칸을 끼워 넣음 (mountSettingsRow)
 
 /** 이 간격(ms)마다 새 버전 확인 (오래 켜 둔 전시용 화면도 알도록) */
 export const SW_CHECK_MS = 45 * 60 * 1000;
 export const UPDATE_TOAST = '새 버전이 준비됐어요 · 설정에서 적용할 수 있어요';
+/** 새로 고침을 눌렀는데 이 시간(ms) 안에 새 워커가 안 켜지면 단추를 다시 살림 */
+export const APPLY_WAIT_MS = 5000;
+/** 다른 탭이 답하기를 기다리는 시간(ms) */
+export const TAB_PING_MS = 300;
 
 /** 서비스 워커를 등록해도 되는가 */
 export function swAllowed({ prod, nav, search = '' }) {
@@ -73,8 +78,13 @@ export class Pwa {
     this._reloading = true;
     try { this.game?.save?.(); } catch { /* 저장 실패여도 새로 고침은 */ }
     const sw = this.win?.navigator?.serviceWorker;
-    sw?.addEventListener?.('controllerchange', () => this.win.location.reload(), { once: true });
+    let changed = false;
+    sw?.addEventListener?.('controllerchange', () => { changed = true; this.win.location.reload(); }, { once: true });
     w.postMessage('SKIP_WAITING');
+    this.refresh(); // 누른 단추는 바로 꺼짐
+    // 새 워커가 버려지거나 안 켜지면 단추가 계속 꺼져 있지 않게
+    const later = this.win?.setTimeout?.bind(this.win) || setTimeout;
+    later(() => { if (!changed) { this._reloading = false; this.refresh(); } }, APPLY_WAIT_MS)?.unref?.();
     return true;
   }
 
@@ -87,21 +97,21 @@ export class Pwa {
     if (this.canInstall) {
       const b = doc.createElement('button');
       b.className = 'pwa-install';
-      b.textContent = '📲 앱으로 설치';
+      this._label(b, 'install', '앱으로 설치');
       b.title = '홈 화면·바탕 화면에 유니코 팜을 앱처럼 두고, 인터넷이 끊겨도 열 수 있어요';
       b.onclick = () => this.install();
       el.append(b);
     } else if (this.iosTip) {
       const p = doc.createElement('p');
       p.className = 'pwa-tip';
-      p.textContent = '📲 아이폰·아이패드: 사파리 아래 공유 단추 → \'홈 화면에 추가\' 를 누르면 앱처럼 열 수 있어요';
+      this._label(p, 'install', '아이폰·아이패드: 사파리 아래 공유 단추 → \'홈 화면에 추가\' 를 누르면 앱처럼 열 수 있어요');
       el.append(p);
     }
     if (this.waiting) {
       const b = doc.createElement('button');
       b.className = 'pwa-update';
       const busy = playBusy(this.game, doc);
-      b.textContent = '🔄 지금 새로 고침';
+      this._label(b, 'auto', '지금 새로 고침');
       b.title = busy ? '미니게임·이야기가 끝난 뒤에 눌러 주세요' : '저장하고 새 버전으로 다시 열어요';
       b.disabled = busy || this._reloading;
       b.onclick = () => this.applyUpdate();
@@ -112,10 +122,76 @@ export class Pwa {
     el.hidden = !el.childElementCount;
   }
 
+  /** 글 + 자체 아이콘 (UI 믹스인 ico 가 있을 때만, 없으면 글만) */
+  _label(el, icon, text) {
+    const ic = this.game?.ui?.ico;
+    if (typeof ic === 'function') el.innerHTML = `${ic(icon)}<span>${text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])}</span>`;
+    else el.textContent = text;
+  }
+
   /** 상태가 바뀌면 화면에 붙어 있는 칸만 다시 그림 */
   refresh() {
     for (const el of this._els) { if (el.isConnected) this.renderSettings(el); else this._els.delete(el); }
   }
+}
+
+/**
+ * 설정 창(panel)에 설치·새 버전 칸을 넣음 (제목 바로 아래). 설정 창 코드가 직접 '.pwa-row' 를 그렸으면 그대로 둠
+ * @returns 넣었거나 이미 있는 칸 (설정 창이 아니면 null)
+ */
+export function mountSettingsRow(panel, pwa) {
+  if (!panel || panel.dataset?.kind !== 'settings') return null;
+  const had = panel.querySelector?.('.pwa-row');
+  if (had) return had;
+  const doc = panel.ownerDocument;
+  const row = doc.createElement('div');
+  row.className = 'pwa-row';
+  pwa.renderSettings(row);
+  const head = panel.querySelector?.('h2');
+  if (head?.after) head.after(row); else panel.append(row);
+  return row;
+}
+
+/** 설정 창이 열릴 때마다 칸을 넣도록 ui.openSettings 를 감쌈 (한 번만) */
+export function hookSettings(ui, pwa) {
+  const open = ui?.openSettings;
+  if (typeof open !== 'function' || open.__pwa) return false;
+  const wrapped = function (...a) {
+    const r = open.apply(this, a);
+    try { mountSettingsRow(this.panel, pwa); } catch { /* 설정 창은 그대로 */ }
+    return r;
+  };
+  wrapped.__pwa = true;
+  ui.openSettings = wrapped;
+  return true;
+}
+
+/**
+ * 같은 사이트를 연 다른 탭이 있나 (BroadcastChannel 로 물어보고 ms 안에 답이 오면 true).
+ * 알 수 없으면(BroadcastChannel 없음) 있다고 봄 → 제목 화면에서 저절로 새 버전을 켜지 않음
+ */
+export function otherTabs(win, ms = TAB_PING_MS) {
+  const BC = win?.BroadcastChannel;
+  if (typeof BC !== 'function') return Promise.resolve(true);
+  return new Promise((done) => {
+    let ch;
+    try { ch = new BC('unico-tabs'); } catch { done(true); return; }
+    const end = (v) => { try { ch.close(); } catch { /* 이미 닫힘 */ } done(v); };
+    ch.onmessage = (e) => { if (e?.data === 'here') end(true); };
+    try { ch.postMessage('ping'); } catch { end(true); return; }
+    (win.setTimeout?.bind(win) || setTimeout)(() => end(false), ms);
+  });
+}
+
+/** 다른 탭이 물으면 '여기 있어요' 로 답함 (탭마다 한 번) */
+export function answerTabs(win) {
+  const BC = win?.BroadcastChannel;
+  if (typeof BC !== 'function') return null;
+  try {
+    const ch = new BC('unico-tabs');
+    ch.onmessage = (e) => { if (e?.data === 'ping') ch.postMessage('here'); };
+    return ch;
+  } catch { return null; }
 }
 
 /** 'unico-*' 캐시와 등록을 모두 지움 (?sw=off) */
@@ -155,9 +231,13 @@ export function startPwa(win = typeof window !== 'undefined' ? window : null, pr
   if (new URLSearchParams(search).get('sw') === 'off' && 'serviceWorker' in win.navigator) { swOff(win); return pwa; }
   const ok = swAllowed({ prod, nav: win.navigator, search });
   // 제목 화면(게임 전)에 이미 새 버전이 기다리면 그 자리에서 적용 (놀이 중이 아님)
+  // 다른 탭이 열려 있으면 하지 않음: 그 탭의 워커가 새로 고침 없이 바뀌고 옛 캐시가 지워짐 → 설정의 단추로
   if (ok) {
-    win.navigator.serviceWorker.getRegistration?.().then((r) => {
-      if (r?.waiting && win.navigator.serviceWorker.controller && !win.game) { pwa.waiting = r.waiting; pwa.applyUpdate(); }
+    answerTabs(win);
+    win.navigator.serviceWorker.getRegistration?.().then(async (r) => {
+      if (!r?.waiting || !win.navigator.serviceWorker.controller || win.game) return;
+      pwa.waiting = r.waiting;
+      if (!(await otherTabs(win)) && !win.game) pwa.applyUpdate();
     }).catch(() => {});
   }
   // 게임이 생기기를 기다림 (제목 화면에 오래 머물 수 있어 1초마다)
@@ -166,6 +246,8 @@ export function startPwa(win = typeof window !== 'undefined' ? window : null, pr
     if (!g?.whenShown) { win.setTimeout(attach, 1000); return; }
     pwa.game = g;
     g.pwa = pwa;
+    hookSettings(g.ui, pwa); // 설정 창에 설치·새 버전 칸 (ui 가 늦게 생기면 화면이 뜬 뒤 한 번 더)
+    g.whenShown(() => hookSettings(g.ui, pwa));
     if (pwa.waiting) pwa.setWaiting(pwa.waiting);
     if (!ok) return;
     g.whenShown(() => {

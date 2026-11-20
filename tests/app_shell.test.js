@@ -46,7 +46,7 @@ test('홈 화면 아이콘: PNG 192·512(+maskable)·180 이 실제 크기로 �
   assert.deepEqual(size(`public/${apple[1]}`), [180, 180]);
 });
 
-test('첫 화면: 파비콘은 공식 아이콘 PNG, 🎲 이름 단추·접은 조작법·기능 칩 한 줄', () => {
+test('첫 화면: 파비콘은 공식 아이콘 PNG, 주사위 이름 단추·접은 조작법·기능 칩 한 줄', () => {
   const html = read('index.html');
   const fav = html.match(/rel="icon"[^>]*href="\/([^"]+)"/);
   assert.ok(fav, '파비콘');
@@ -54,7 +54,7 @@ test('첫 화면: 파비콘은 공식 아이콘 PNG, 🎲 이름 단추·접은 
   assert.ok(existsSync(new URL(`public/${fav[1]}`, root)));
   assert.doesNotMatch(html, /🦄<\/text>/, '이모지 파비콘은 없앰');
   assert.match(html, /id="nick-dice"/);
-  assert.match(html, /<details class="howto">\s*<summary>🕹️ 조작법<\/summary>/);
+  assert.match(html, /<details class="howto">\s*<summary><svg class="ico"[^>]*><use href="#t-help"\/><\/svg> 조작법<\/summary>/);
   assert.equal((html.match(/<div class="feature-row">(.*?)<\/div>/)[1].match(/<span>/g) || []).length, 4);
   // 사용자가 고른 첫 화면 꾸밈은 그대로
   for (const k of ['sky-deco', 'class="barn"', 'title-badge', 'title-friends', 'title-ribbon']) assert.ok(html.includes(k), k);

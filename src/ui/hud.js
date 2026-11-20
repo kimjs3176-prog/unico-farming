@@ -57,6 +57,8 @@ export function claimableCount(q) {
   return n;
 }
 /** 달력 첫 줄: '🌸 봄 1일' (주 안 날짜 '1/7' 은 넓은 화면만, 따로) */
+/** 날씨 창의 체험용 날씨 단추 (종류, 이름). 그림은 weatherIco 가 고름 */
+export const WX_PRESETS = [['clear', '맑음'], ['cloudy', '흐림'], ['rain', '비'], ['storm', '뇌우'], ['snow', '눈'], ['fog', '안개']];
 export const seasonLine = (icon, name, dayIn) => `${icon} ${name} ${dayIn}일`;
 
 /** 위쪽 HUD 메서드 (UI.prototype 에 합쳐짐) */
@@ -94,7 +96,7 @@ export const HudUI = {
     this.btnSettings = h('button', 'ghost hud-btn set-btn', ico('gear'));
     this.btnSettings.setAttribute('aria-label', '환경설정');
     this.btnSettings.title = '환경설정 (그래픽 품질·소리·글자 크기)';
-    this.btnHelp = h('button', 'ghost hud-btn help-btn', '<b class="help-q" aria-hidden="true">?</b>') // 이모지 ❔ 는 크림 단추 위에서 거의 안 보였음;
+    this.btnHelp = h('button', 'ghost hud-btn help-btn', '<b class="help-q" aria-hidden="true">?</b>'); // 이모지 ❔ 는 크림 단추 위에서 거의 안 보였음
     this.btnHelp.setAttribute('aria-label', '도움말');
     this.btnHelp.title = '도움말';
     this.btnSettings.onclick = () => this.openSettings();
@@ -139,29 +141,29 @@ export const HudUI = {
 
   openWeather() {
     const info = this.weatherInfo;
-    const p = this.openPanel('🌦️ 우리 동네 날씨');
+    const p = this.openPanel(`${ico('suncloud')} 우리 동네 날씨`);
     p.dataset.kind = 'weather';
     if (!info) { p.append(h('div', 'row', '날씨를 불러오는 중이에요…')); return; }
     const { w, svc } = info;
     const src = { live: '실시간 (Open-Meteo)', manual: '수동 설정', offline: '연결 실패 · 맑음으로 표시', default: '기본값' }[svc.source] || svc.source;
     const rows = [
       `${ico(weatherIco(w))} <b>${w.label}</b>${w.temperature != null ? ` · ${Math.round(w.temperature)}°C` : ''}`,
-      `📍 ${esc(svc.loc?.name || '-')}${svc.usingDefault ? ' (기본 위치)' : ''}  <small>${svc.usingDefault ? "아래 '📡 내 위치 날씨'를 누르면 지금 있는 동네 날씨로 바뀌어요 (위치는 약 1km 단위로만 써요)" : '(위치 권한을 거부하면 기본 위치를 사용해요)'}</small>`,
-      `💨 바람 ${Math.round(w.windKmh || 0)} km/h · ☁️ 구름 ${Math.round(w.cloud * 100)}%`,
-      `🔄 출처: ${src} · 15분마다 갱신`,
-      `🌱 게임 효과: ${w.autoWater ? '비가 와서 밭에 자동으로 물이 뿌려져요' : w.kind === 'snow' ? '눈 때문에 작물 성장이 40% 느려져요 (스마트팜은 영향 없음)' : w.kind === 'fog' ? '안개로 시야가 짧아져요' : '맑은 날엔 직접 물을 줘야 해요'}`,
+      `${ico('pin-view')} ${esc(svc.loc?.name || '-')}${svc.usingDefault ? ' (기본 위치)' : ''}  <small>${svc.usingDefault ? "아래 '내 위치 날씨'를 누르면 지금 있는 동네 날씨로 바뀌어요 (위치는 약 1km 단위로만 써요)" : '(위치 권한을 거부하면 기본 위치를 사용해요)'}</small>`,
+      `${ico('wind')} 바람 ${Math.round(w.windKmh || 0)} km/h · ${ico('cloud')} 구름 ${Math.round(w.cloud * 100)}%`,
+      `${ico('auto')} 출처: ${src} · 15분마다 갱신`,
+      `${ico('sprout')} 게임 효과: ${w.autoWater ? '비가 와서 밭에 자동으로 물이 뿌려져요' : w.kind === 'snow' ? '눈 때문에 작물 성장이 40% 느려져요 (스마트팜은 영향 없음)' : w.kind === 'fog' ? '안개로 시야가 짧아져요' : '맑은 날엔 직접 물을 줘야 해요'}`,
     ];
-    p.append(h('div', 'rows', rows.map((t) => `<div class="row">${t}</div>`).join('')));
+    p.append(h('div', 'rows wx-rows', rows.map((t) => `<div class="row">${t}</div>`).join('')));
     p.append(h('h3', '', '날씨 바꿔 보기 (체험용)'));
-    const grid = h('div', 'room-list');
-    const live = h('button', svc.source === 'live' && !svc.usingDefault ? 'cur' : '', svc.usingDefault ? '📡 내 위치 날씨<small>위치 권한을 물어요</small>' : '📡 실시간 날씨<small>현재 위치 기준</small>');
+    const grid = h('div', 'room-list wx-grid');
+    const live = h('button', svc.source === 'live' && !svc.usingDefault ? 'cur' : '', svc.usingDefault ? `${ico('pin-view')} 내 위치 날씨<small>위치 권한을 물어요</small>` : `${ico('pin-view')} 실시간 날씨<small>현재 위치 기준</small>`);
     live.onclick = async () => {
       this.toast('📡 현재 위치 날씨를 불러와요');
       if (!(await svc.useLive())) this.toast('📍 위치를 못 받아 기본 위치 날씨를 보여 줘요');
     };
     grid.append(live);
-    for (const [k, label] of [['clear', '☀️ 맑음'], ['cloudy', '☁️ 흐림'], ['rain', '🌧️ 비'], ['storm', '⛈️ 뇌우'], ['snow', '❄️ 눈'], ['fog', '🌫️ 안개']]) {
-      const b = h('button', svc.source === 'manual' && w.kind === k ? 'cur' : '', label);
+    for (const [k, label] of WX_PRESETS) {
+      const b = h('button', svc.source === 'manual' && w.kind === k ? 'cur' : '', `${ico(weatherIco({ kind: k }))} ${label}`);
       b.onclick = () => svc.setPreset(k);
       grid.append(b);
     }

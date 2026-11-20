@@ -3,22 +3,27 @@ import { LAYOUT } from '../game/world.js';
 import { HILLS } from '../game/terrain.js';
 import { touchUI } from '../game/input.js';
 import { BUSY_TRAVEL, BUSY_TOAST } from '../game/game_travel.js';
-import { icoBitmap } from './icons.js';
+import { icoBitmap, ico } from './icons.js';
 
-/** 빠른 이동 장소 (지도 아래 버튼) — x,z 는 도착 지점(길 위) */
+/** 빠른 이동 장소 (지도 아래 버튼) — x,z 는 도착 지점(길 위). name 은 알림용(이모지 포함), ico 는 버튼의 자체 아이콘 */
 export const PLACES = [
-  { id: 'farm', name: '🌱 농장', x: 0, z: 6.5 },
-  { id: 'market', name: '🛒 장터', x: 0, z: -7 },
-  { id: 'ranch', name: '🐄 목장', x: 14, z: 3 },
-  { id: 'paddy', name: '🌾 논', x: 0, z: -15.5 },
-  { id: 'smartfarm', name: '📱 스마트팜', x: -15.5, z: -6 },
-  { id: 'pond', name: '🌸 연못', x: -7.3, z: 13.4 },
-  { id: 'lake', name: '🎣 낚시터', x: -12.5, z: 22.4 },
-  { id: 'field', name: '🚜 밭갈이', x: 26, z: 15 },
-  { id: 'koat', name: '🏢 KOAT 체험관', x: 25, z: -24 },
-  { id: 'town', name: '🏗️ 새 마을', x: -21.5, z: 4.6 },
-  { id: 'home', name: '🏠 우리 집', x: 2.6, z: 15.2 },
+  { id: 'farm', name: '🌱 농장', ico: 'sprout', x: 0, z: 6.5 },
+  { id: 'market', name: '🛒 장터', ico: 'market', x: 0, z: -7 },
+  { id: 'ranch', name: '🐄 목장', ico: 'cow', x: 14, z: 3 },
+  { id: 'paddy', name: '🌾 논', ico: 'wheat', x: 0, z: -15.5 },
+  { id: 'smartfarm', name: '📱 스마트팜', ico: 'flask', x: -15.5, z: -6 },
+  { id: 'pond', name: '🌸 연못', ico: 'lotus', x: -7.3, z: 13.4 },
+  { id: 'lake', name: '🎣 낚시터', ico: 'rod', x: -12.5, z: 22.4 },
+  { id: 'field', name: '🚜 밭갈이', ico: 'tractor', x: 26, z: 15 },
+  { id: 'koat', name: '🏢 KOAT 체험관', ico: 'koat', x: 25, z: -24 },
+  { id: 'town', name: '🏗️ 새 마을', ico: 'hammer', x: -21.5, z: 4.6 },
+  { id: 'home', name: '🏠 우리 집', ico: 'home', x: 2.6, z: 15.2 },
 ];
+
+/** 버튼 글: 앞 이모지를 빼고 (이름은 알림에 그대로 씀) */
+export const placeLabel = (pl) => pl.name.replace(/^\S+\s+/u, '');
+/** 지도 아래 장소 버튼 HTML: 자체 아이콘 + 이름 */
+export const placeChipHtml = (pl) => `${ico(pl.ico)}<span>${placeLabel(pl)}</span>`;
 
 /** 지도 한 변의 세계 범위 (가장자리 여유 4m) */
 export const mapScale = (S) => { const B = LAYOUT.bounds + 4; return { B, k: S / (B * 2) }; };
@@ -323,7 +328,7 @@ export class Minimap {
     const g = this.game, ui = g.ui;
     if (ui.panel?.dataset.kind === 'map') return ui.closePanel();
     if (g.busy?.()) return ui.toast(BUSY_TRAVEL, BUSY_TOAST);
-    const p = ui.openPanel('🗺️ 지도 — 가고 싶은 곳을 누르세요');
+    const p = ui.openPanel(`${ico('map')} 지도 — 가고 싶은 곳을 누르세요`);
     p.dataset.kind = 'map';
     p.classList.add('map-panel');
     const cv = document.createElement('canvas');
@@ -334,7 +339,7 @@ export class Minimap {
     chips.className = 'map-places';
     for (const pl of PLACES) {
       const b = document.createElement('button');
-      b.textContent = pl.name;
+      b.innerHTML = placeChipHtml(pl);
       b.onclick = () => this.travel(pl.x, pl.z, pl.name);
       chips.append(b);
     }

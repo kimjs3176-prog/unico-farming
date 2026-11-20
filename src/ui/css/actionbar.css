@@ -126,3 +126,9 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
 /* 태블릿: E 버튼이 행동 막대 위(110px)라 그 옆으로 */
 @media (pointer: coarse) and (min-width: 601px) and (min-height: 501px) { .jump-btn { bottom: 116px; } }
 
+
+/* 자체 아이콘: 카메라 처음 거리 단추 · 행동 메뉴(감정·모자) */
+.cam-pad button .ico { width: 28px; height: 28px; vertical-align: 0; display: block; margin: auto; }
+.emote-menu button .ico { width: 26px; height: 26px; vertical-align: 0; display: block; margin: 0 auto 2px; }
+/* 나무 막대 위 아이콘: 테두리 갈색이 나무색과 섞여 모양이 묻히지 않게 밝은 테두리 한 겹 (DOM 몇 개라 3D 그리기와 무관) */
+.actionbar button span .ico, .bar-toggle .ico, .cam-pad button .ico { filter: drop-shadow(0 0 1px rgba(255, 248, 234, 0.85)); }

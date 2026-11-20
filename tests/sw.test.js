@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { swSource, swLists, PIXEL_RE } from '../vite.config.js';
 import { modelQuery } from '../src/game/fetch_gz.js';
-import { swAllowed, Pwa, playBusy, UPDATE_TOAST } from '../src/game/sw_register.js';
+import { swAllowed, Pwa, playBusy, UPDATE_TOAST, APPLY_WAIT_MS, mountSettingsRow, hookSettings, otherTabs } from '../src/game/sw_register.js';
 
 const VERS = { 'q_nature.glb': 'aaaaaaaaaa', 'unico_biped.bin': 'bbbbbbbbbb' };
 /** vite 번들 흉내: 3D 판 입구 + three + 낚시(동적) + 도트 판 */
@@ -160,4 +160,58 @@ test("앱으로 설치: 설치 이벤트가 있고 앱으로 열리지 않았을
   const e2 = fakeDoc().el; ios.renderSettings(e2);
   assert.equal(e2.children[0].className, 'pwa-tip');
   assert.match(e2.children[0].textContent, /홈 화면에 추가/);
+});
+
+test('새 버전 적용: 새 워커가 켜지지 않으면 APPLY_WAIT_MS 뒤 새로 고침 단추를 다시 살림', () => {
+  // 준비: 시계는 손으로 돌림
+  const timers = [];
+  const { doc, el } = fakeDoc(false);
+  const win = { document: doc, navigator: { userAgent: 'Android', serviceWorker: { addEventListener() {} } }, matchMedia: () => ({ matches: false }), setTimeout: (f, ms) => { timers.push({ f, ms }); return 0; }, location: { reload() {} } };
+  const pwa = new Pwa(win, { busy: () => false, save() {} });
+  pwa.waiting = { postMessage() {} };
+  pwa.renderSettings(el);
+  // 실행
+  assert.equal(pwa.applyUpdate(), true);
+  assert.equal(el.children.find((c) => c.className === 'pwa-update').disabled, true);
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].ms, APPLY_WAIT_MS);
+  timers[0].f();
+  // 확인: 단추가 다시 눌림
+  assert.equal(pwa._reloading, false);
+  assert.equal(el.children.find((c) => c.className === 'pwa-update').disabled, false);
+});
+
+/** 설정 창 흉내: 제목 h2 뒤에 끼워 넣기 확인용 */
+function fakePanel(kind = 'settings') {
+  const { doc } = fakeDoc();
+  const kids = [];
+  const head = { tag: 'h2', after: (n) => kids.splice(kids.indexOf(head) + 1, 0, n) };
+  kids.push(head, { tag: 'div', className: 'gfx-body' });
+  return { dataset: { kind }, ownerDocument: doc, kids, querySelector: (q) => (q === 'h2' ? head : q === '.pwa-row' ? kids.find((k) => k.className === 'pwa-row') || null : null), append: (n) => kids.push(n) };
+}
+
+test('설정 창: 열릴 때 제목 바로 아래에 설치·새 버전 칸을 한 번만 넣고, 다른 창에는 넣지 않음', () => {
+  // 준비
+  const win = { document: fakeDoc().doc, navigator: { userAgent: 'Android' }, matchMedia: () => ({ matches: false }) };
+  const pwa = new Pwa(win);
+  pwa.waiting = { postMessage() {} };
+  const panel = fakePanel();
+  const ui = { panel, n: 0, openSettings() { this.n++; } };
+  // 실행
+  assert.equal(hookSettings(ui, pwa), true);
+  assert.equal(hookSettings(ui, pwa), false, '두 번 감싸지 않음');
+  ui.openSettings(); ui.openSettings();
+  // 확인
+  assert.equal(ui.n, 2, '원래 설정 창은 그대로 열림');
+  assert.deepEqual(panel.kids.map((k) => k.className ?? k.tag), ['h2', 'pwa-row', 'gfx-body']);
+  assert.ok(panel.kids[1].children.some((c) => c.className === 'pwa-update'), '새로 고침 단추');
+  assert.equal(mountSettingsRow(fakePanel('bag'), pwa), null);
+});
+
+test('다른 탭 묻기: 답이 오면 true, 시간 안에 없으면 false, BroadcastChannel 이 없으면 있다고 봄', async () => {
+  const mk = (reply) => class { constructor() { this.onmessage = null; } postMessage(m) { if (reply && m === 'ping') this.onmessage?.({ data: 'here' }); } close() {} };
+  const run = (BC) => otherTabs({ BroadcastChannel: BC, setTimeout: (f) => f() });
+  assert.equal(await run(mk(true)), true);
+  assert.equal(await run(mk(false)), false);
+  assert.equal(await otherTabs({}), true);
 });

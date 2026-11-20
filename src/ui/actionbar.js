@@ -88,12 +88,12 @@ export const ActionbarUI = {
     this.barToggle.onclick = () => this.setBarOpen(!this.root.classList.contains('bar-open'));
     root.append(this.barToggle);
     this.bar.addEventListener('click', (e) => { if (e.target.closest('button')) this.setBarOpen(false); });
-    // 터치 기기: 카메라 버튼 (＋ 가까이 · － 멀리 · 🎥 기본 거리로 캐릭터 뒤에서). 시점 돌리기는 오른쪽 화면 밀기
+    // 터치 기기: 카메라 버튼 (＋ 가까이 · － 멀리 · 영화 카메라 그림: 기본 거리로 캐릭터 뒤에서). 시점 돌리기는 오른쪽 화면 밀기
     this.camPad = h('div', 'cam-pad');
     const cb = (txt, label, fn) => { const b = h('button', '', txt); b.setAttribute('aria-label', label); b.title = label; b.onclick = (e) => { e.stopPropagation(); fn(); game.audio.play('click', 0.4); }; this.camPad.append(b); return b; };
     cb('＋', '카메라 가까이', () => game.followCam.zoom(-1));
     cb('－', '카메라 멀리', () => game.followCam.zoom(+1));
-    cb('🎥', '카메라 처음 거리로 (캐릭터 뒤에서)', () => game.followCam.resetView(game.player.unico.facing));
+    cb(ico('cam-reset'), '카메라 처음 거리로 (캐릭터 뒤에서)', () => game.followCam.resetView(game.player.unico.facing));
     root.append(this.camPad);
     // 터치 기기: 점프 버튼 (E 왼쪽). 키보드는 Space
     this.jumpBtn = h('button', 'jump-btn', '⤴');
@@ -107,14 +107,15 @@ export const ActionbarUI = {
 
   toggleEmotes() {
     if (this.emoteMenu) { this.emoteMenu.remove(); this.emoteMenu = null; return; }
-    const EMOTES = [['cheer', '🙌', '깡총'], ['wave', '👋', '인사'], ['heart', '❤️', '하트'], ['think', '🤔', '생각'], ['present', '📊', '발표'], ['megaphone', '📣', '외치기']];
+    // [동작, 자체 아이콘, 이름]
+    const EMOTES = [['cheer', 'star', '깡총'], ['wave', 'wave', '인사'], ['heart', 'heart', '하트'], ['think', 'talk', '생각'], ['present', 'chart', '발표'], ['megaphone', 'megaphone', '외치기']];
     const m = h('div', 'emote-menu');
     for (const [pose, icon, name] of EMOTES) {
-      const b = h('button', '', `${icon}<small>${name}</small>`);
+      const b = h('button', '', `${ico(icon)}<small>${name}</small>`);
       b.onclick = () => { this.game.player.unico.playAction(pose, 2.5); this.game.audio.play('click'); m.remove(); this.emoteMenu = null; };
       m.append(b);
     }
-    const hat = h('button', '', `👒<small>모자</small>`);
+    const hat = h('button', '', `${ico('hat')}<small>모자</small>`);
     hat.onclick = () => { const u = this.game.player.unico; u.setOutfit({ hat: u.outfit.hat === 'straw' ? null : 'straw' }); m.remove(); this.emoteMenu = null; };
     m.append(hat);
     this.root.append(m);

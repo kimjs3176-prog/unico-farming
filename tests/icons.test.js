@@ -99,3 +99,62 @@ test('패널 ✕ 닫기는 CSS 마스크 그림, 도움말은 갈색 Jua "?" 글
   assert.match(read('src/ui/css/hud.css'), /\.hud-btn \.help-q \{[^}]*font-family: var\(--display\);[^}]*color: var\(--brown\)/);
   assert.match(read('src/ui/css/base.css'), /\.ico \{[^}]*width: 1\.25em; height: 1\.25em;/);
 });
+
+/** 화면 글에 남은 그림 이모지 (글자·숫자·기호 ✕·→ 등은 제외) */
+const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+
+test('큰 지도: 장소 버튼 11개가 모두 자체 아이콘 + 이모지 없는 이름, 알림용 이름은 그대로', async () => {
+  const { PLACES, placeLabel, placeChipHtml } = await import('../src/ui/minimap.js');
+  assert.equal(PLACES.length, 11);
+  for (const pl of PLACES) {
+    assert.ok(NAMES.has(pl.ico), `${pl.id}: ${pl.ico}`);
+    assert.doesNotMatch(placeLabel(pl), EMOJI_RE, pl.name);
+    assert.equal(placeChipHtml(pl), `${ico(pl.ico)}<span>${placeLabel(pl)}</span>`);
+  }
+  assert.equal(placeLabel(PLACES.find((p) => p.id === 'koat')), 'KOAT 체험관');
+  assert.match(read('src/ui/minimap.js'), /openPanel\(`\$\{ico\('map'\)\} 지도/);
+});
+
+test('날씨 창·행동 메뉴·카메라 단추: 이모지 대신 자체 아이콘 (같은 날씨 그림을 달력과 함께 씀)', async () => {
+  const { WX_PRESETS } = await import('../src/ui/hud.js');
+  assert.deepEqual(WX_PRESETS.map(([k]) => k), ['clear', 'cloudy', 'rain', 'storm', 'snow', 'fog']);
+  for (const [k, label] of WX_PRESETS) { assert.doesNotMatch(label, EMOJI_RE); assert.ok(NAMES.has(weatherIco({ kind: k })), k); }
+  const hud = read('src/ui/hud.js');
+  const wx = hud.slice(hud.indexOf('openWeather() {'), hud.indexOf('_screenOf('));
+  // 알림(toast) 글의 이모지는 알림 그림 칸에 쓰이므로 빼고 봄
+  assert.doesNotMatch(wx.replace(/this\.toast\([^)]*\)/g, ''), EMOJI_RE);
+  assert.match(hud, /'<b class="help-q" aria-hidden="true">\?<\/b>'\); \/\//, '세미콜론은 주석 앞');
+  const ab = read('src/ui/actionbar.js');
+  const em = ab.match(/const EMOTES = (\[.*\]);/)[1];
+  for (const [, icon] of JSON.parse(em.replace(/'/g, '"'))) assert.ok(NAMES.has(icon), icon);
+  assert.match(ab, /\$\{ico\('hat'\)\}<small>모자/);
+  assert.match(ab, /cb\(ico\('cam-reset'\)/);
+  assert.doesNotMatch(ab, /🎥|👒/);
+});
+
+test('제목 화면: 기능 칩·주사위·도트 판·조작법이 이모지 대신 #t- 아이콘, 빌드가 그 그림을 넣음', async () => {
+  const { titleIconsSvg, TITLE_ICONS } = await import('../vite.config.js');
+  const html = read('index.html');
+  const card = html.slice(html.indexOf('<div class="loading-card">'), html.indexOf('<div class="title-friends"'));
+  assert.doesNotMatch(card, EMOJI_RE);
+  const used = [...card.matchAll(/href="#t-([\w-]+)"/g)].map((m) => m[1]);
+  assert.equal(used.length, 7);
+  for (const n of used) assert.ok(TITLE_ICONS.includes(n), n);
+  assert.match(html, /<!--title-icons-->/);
+  // 넣는 그림: id 가 게임 묶음(#i-)과 겹치지 않고, 원본과 같은 그림
+  const svg = titleIconsSvg(SVG);
+  assert.equal((svg.match(/<symbol id="t-/g) || []).length, TITLE_ICONS.length);
+  assert.doesNotMatch(svg, /id="i-|id="unico-icons"/);
+  assert.ok(svg.includes(symbolSvg('dice', 24, SVG).match(/<g[\s\S]*<\/g>/)[0]), '주사위 그림이 원본과 같음');
+  assert.throws(() => titleIconsSvg(SVG, ['없는그림']), /없음/);
+});
+
+test('HUD 둥근 단추 아이콘은 단추 지름의 60% 넘게, 받을 보상 표시는 아이콘과 덜 겹치게', () => {
+  const css = read('src/ui/css/hud.css');
+  const px = (re) => +css.match(re)[1];
+  assert.ok(px(/\n\.hud-right \.hud-btn \.ico \{ width: (\d+)px/) / 44 >= 0.6, '데스크톱');
+  assert.ok(px(/\n {2}\.hud-right \.hud-btn \.ico \{ width: (\d+)px/) / 40 >= 0.6, '폰');
+  assert.match(css, /\.hud-btn \.qbadge \{ position: absolute; top: -4px; right: -6px;/);
+  // 나무 막대 위 아이콘은 밝은 테두리 한 겹
+  assert.match(read('src/ui/css/actionbar.css'), /\.actionbar button span \.ico, \.bar-toggle \.ico, \.cam-pad button \.ico \{ filter: drop-shadow\(0 0 1px/);
+});

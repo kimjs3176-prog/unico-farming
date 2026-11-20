@@ -49,7 +49,7 @@
 /* 오른쪽 버튼: 가방 · 퀘스트 · 설정 · 도움말 (달력 왼쪽, 44px 동그라미). 단축키 글자는 올리거나 키보드로 고를 때만 */
 .hud-right { position: absolute; top: 18px; right: calc(12px + 150px + 12px); display: flex; gap: 8px; }
 .hud-right .hud-btn { position: relative; width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 20px; display: grid; place-items: center; }
-.hud-right .hud-btn .ico { width: 26px; height: 26px; }
+.hud-right .hud-btn .ico { width: 28px; height: 28px; } /* 단추 지름의 약 64% (작으면 옛 이모지보다 가벼워 보였음) */
 /* 도움말: 이모지 ❔ 대신 굵은 '?' 글자 (크림 단추 위 갈색) */
 .hud-btn .help-q { font-family: var(--display); font-weight: 400; font-size: 25px; line-height: 1; color: var(--brown); }
 .hud-btn .qbadge .ico { width: 14px; height: 14px; vertical-align: -2px; }
@@ -60,7 +60,7 @@
 .hud-btn:hover .kc, .hud-btn:focus-visible .kc { opacity: 1; }
 @media (pointer: coarse) { .hud-btn .kc { display: none; } }
 /* 퀘스트 받을 보상 수: 빨간 동그라미 */
-.hud-btn .qbadge { position: absolute; top: -4px; right: -4px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: #d9443b; color: #fff; font-size: 12px; line-height: 19px; font-weight: 400; box-shadow: 0 0 0 2px #fff; display: none; font-variant-numeric: tabular-nums; }
+.hud-btn .qbadge { position: absolute; top: -4px; right: -6px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: #d9443b; color: #fff; font-size: 12px; line-height: 19px; font-weight: 400; box-shadow: 0 0 0 2px #fff; display: none; font-variant-numeric: tabular-nums; }
 .hud-btn.has .qbadge { display: block; }
 
 /* 성장 부스트: 미니맵 아래 가장자리에 걸친 작은 알약 */
@@ -110,7 +110,7 @@ body.cine .hud-right, body.cine .boost-chip, body.cine .p-badge, body.cine .cale
   .calendar .cal-temp { display: none; } /* 폰은 시각·날씨 그림만 (기온은 날씨 창·읽어 주기 글에) */
   .hud-right { top: calc(var(--map-b, 140px) + 14px); right: calc(4px + var(--sar)); width: 86px; justify-content: space-between; gap: 0; }
   .hud-right .hud-btn { width: 40px; height: 40px; font-size: 18px; }
-  .hud-right .hud-btn .ico { width: 23px; height: 23px; }
+  .hud-right .hud-btn .ico { width: 25px; height: 25px; }
   .hud-right .quest-btn, .hud-right .help-btn { display: none; } /* 설정(⚙)은 남김: 폰에서 그래픽 품질·소리·글자 크기로 가는 길 */
   .hud-right .hud-btn::after { content: ''; position: absolute; inset: -3px; }
   .fly.coin { font-size: 24px; }

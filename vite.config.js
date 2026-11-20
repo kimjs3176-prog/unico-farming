@@ -212,6 +212,33 @@ function buildMeta(id) {
   };
 }
 
+/** 제목 화면(index.html)이 쓰는 자체 아이콘 */
+export const TITLE_ICONS = ['wheat', 'rod', 'flask', 'koat', 'dice', 'gamepad', 'help'];
+
+/**
+ * 그림 묶음(icons.svg)에서 몇 개만 골라 '#t-이름' 으로 바꾼 작은 SVG (게임의 '#i-이름' 과 id 가 겹치지 않게)
+ * 없는 이름이 있으면 오류 (아이콘 이름을 바꾸면 빌드가 알려 줌)
+ */
+export function titleIconsSvg(sprite, names = TITLE_ICONS) {
+  const out = names.map((n) => {
+    const m = String(sprite).match(new RegExp(`<symbol id="i-${n}" (viewBox="[^"]+")>([\\s\\S]*?)</symbol>`));
+    if (!m) throw new Error(`제목 아이콘 '${n}' 이 src/ui/icons.svg 에 없음`);
+    return `<symbol id="t-${n}" ${m[1]}>${m[2]}</symbol>`;
+  });
+  return `<svg xmlns="http://www.w3.org/2000/svg" id="title-icons" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">${out.join('')}</svg>`;
+}
+
+/** index.html 의 <!--title-icons--> 자리에 제목 아이콘을 넣음 (개발 서버·빌드 모두) */
+function titleIcons() {
+  return {
+    name: 'unico-title-icons',
+    transformIndexHtml(html, ctx) {
+      if (path.basename(ctx.filename) !== 'index.html' || !html.includes('<!--title-icons-->')) return html;
+      return html.replace('<!--title-icons-->', titleIconsSvg(fs.readFileSync('src/ui/icons.svg', 'utf8')));
+    },
+  };
+}
+
 // 개발 중에는 멀티플레이 서버(server/index.js, 기본 8787 포트)로 WebSocket 을 프록시
 export default defineConfig(({ command }) => {
   const versions = command === 'build' ? modelVersions() : null; // 개발 서버는 버전 없이 (파일을 고쳐도 바로 반영)
@@ -219,7 +246,7 @@ export default defineConfig(({ command }) => {
   return {
     // __BUILD__: 같은 빌드 번호 (쓰는 청크는 커밋마다 해시가 바뀜 → 브라우저 코드는 meta 를 먼저). 개발 서버에는 없음 → typeof 로 확인
     define: versions ? { __MODEL_V__: JSON.stringify(versions), __BUILD__: JSON.stringify(build) } : {},
-    plugins: versions ? [modelPreload(versions), buildMeta(build), serviceWorker(versions)] : [],
+    plugins: [titleIcons(), ...(versions ? [modelPreload(versions), buildMeta(build), serviceWorker(versions)] : [])],
     server: {
       port: 5173,
       proxy: {

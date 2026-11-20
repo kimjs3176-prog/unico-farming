@@ -101,3 +101,16 @@ body.panel-see #ui > .scrim { display: none; }
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6l12 12M18 6L6 18' stroke='%23000' stroke-width='3.6' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6l12 12M18 6L6 18' stroke='%23000' stroke-width='3.6' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
   pointer-events: none; }
+
+/* 자체 아이콘: 창 제목(지도·날씨), 지도 아래 장소 버튼, 날씨 창 줄·버튼, 설치·새 버전 칸 */
+.panel h2 > .ico { width: 1.15em; height: 1.15em; vertical-align: 0; }
+.map-places button { display: inline-flex; align-items: center; gap: 5px; }
+.map-places button .ico { width: 20px; height: 20px; vertical-align: 0; }
+.wx-rows .row .ico { width: 1.25em; height: 1.25em; margin-right: 2px; }
+.wx-grid button .ico { width: 22px; height: 22px; vertical-align: -6px; margin-right: 3px; }
+.pwa-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; padding: 8px 10px; border-radius: 14px; background: var(--cream, #fff8e8); }
+.pwa-row[hidden] { display: none; }
+.pwa-row button { display: inline-flex; align-items: center; gap: 6px; }
+.pwa-row button .ico { width: 22px; height: 22px; vertical-align: 0; }
+.pwa-row .pwa-tip { margin: 0; font-size: 13px; line-height: 1.5; }
+.pwa-row small { font-size: 12px; opacity: 0.85; }
