@@ -21,20 +21,20 @@ export const KINDS = [
 ];
 
 /**
- * Lv.6~10 레벨 선물 (기존 표의 해금 레벨은 그대로 두고 여기에만): 꾸미기 소품은 보관함으로, 의상 새 색은 옷장으로, Lv.10 은 칭호
- * costume: 후보 id 중 표(COSTUME)에 있는 첫 것만 (없으면 줄도 없음)
+ * Lv.6~10 레벨 선물 (기존 표의 해금 레벨은 그대로 두고 여기에만): 꾸미기 소품은 보관함으로, 의상은 옷장으로, Lv.10 은 칭호
+ * costume: 후보 중 아직 없는 첫 의상 (한복은 원래 축제 날에만 파는 옷)
  */
 export const LEVEL_GIFTS = {
   6: { decor: { lamp: 2, planter: 2 } },
-  7: { decor: { maple: 1 }, costume: ['hanbok_mint', 'overalls_mint', 'raincoat_mint', 'overalls_pink'] },
+  7: { decor: { maple: 1 }, costume: ['hanbok', 'chef', 'beekeeper', 'raincoat'] },
   8: { decor: { birch: 2, bench: 1 } },
   9: { decor: { well: 1 } },
   10: { decor: { tree: 2, scarecrow: 1 }, title: '유니코 으뜸 농부' },
 };
 
-/** 레벨 선물 의상: 후보 중 표에 있는 첫 id (없으면 null) */
-export function giftCostume(lv) {
-  for (const id of LEVEL_GIFTS[lv]?.costume || []) if (COSTUME[id]) return id;
+/** 레벨 선물 의상: 후보 중 표에 있고 아직 없는 첫 id (has: 가진 옷인지, 없으면 null) */
+export function giftCostume(lv, has = null) {
+  for (const id of LEVEL_GIFTS[lv]?.costume || []) if (COSTUME[id] && !has?.(id)) return id;
   return null;
 }
 

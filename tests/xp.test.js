@@ -98,3 +98,36 @@ test('미니게임 경험치: 게임마다 하루 3판까지, 자동 진행은 �
   const x1 = g.quests.xp; g._actionXp('harvest', 2, 'carrot'); g._actionXp('giant', 1);
   assert.equal(g.quests.xp - x1, 8);
 });
+
+test('Lv.7 선물 의상: 표에 있는 옷 중 아직 없는 첫 것 (한복 → 요리사 …)', async () => {
+  const { giftCostume } = await import('../src/game/sim/unlocks.js');
+  const { COSTUME } = await import('../src/game/sim/costume.js');
+  for (const id of LEVEL_GIFTS[7].costume) assert.ok(COSTUME[id], `${id} 는 의상 표에 있음`);
+  assert.equal(giftCostume(7), 'hanbok');
+  assert.equal(giftCostume(7, (id) => id === 'hanbok'), 'chef');
+  assert.equal(giftCostume(7, () => true), null);
+  assert.ok(unlocksAt(7).some((u) => u.kind === 'gift' && u.name === COSTUME.hanbok.name), 'Lv.7 해금 카드에 의상 선물');
+  const g = mockGame();
+  g.levelGifts(6, 7, { quiet: true });
+  assert.ok(g.costume.has('hanbok'), '레벨 선물로 한복이 옷장에');
+});
+
+test('따라갈 목표 없을 때 목표: 바뀔 때만 새로 만듦 (매 프레임 같은 객체)', () => {
+  const g = mockGame();
+  g.world = { day: 3 };
+  const a = g.fallbackGoal(), b = g.fallbackGoal();
+  assert.ok(a, '계절 도전이 목표');
+  assert.equal(a, b, '변화 없으면 같은 객체');
+  g._fbDirty = true;
+  assert.notEqual(g.fallbackGoal(), a, '진행이 바뀌면 새로');
+  g.world.day = 4;
+  const c = g.fallbackGoal();
+  assert.equal(g.fallbackGoal(), c);
+  assert.match(c.desc, /^🗓️ 계절 도전 · /);
+});
+
+test('체험관 결과는 별 경험치 이벤트를 보냄 (koat_ui)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/ui/koat_ui.js', import.meta.url), 'utf8');
+  assert.match(src, /onEvent\?\.\('mgstars', stars, 'koat'\)/);
+});

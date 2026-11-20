@@ -6,7 +6,7 @@ import { PRESET_INFO } from '../game/quality.js';
 import { portraitSVG } from './portrait2d.js';
 import { showRibbon, showUnlockCard } from './levelup.js';
 import { reward } from '../game/reward.js';
-import { unreadLetters } from './letters.js';
+import { unreadCount } from './letters.js';
 
 /** '+N XP' 작은 표시: 이 간격(ms)에 한 번만 (모아서), 낮은 품질은 더 드물게 */
 export const XP_FLOAT_MS = 1500, XP_FLOAT_MS_LOW = 3000;
@@ -275,7 +275,7 @@ export const HudUI = {
   /** 받을 수 있는 퀘스트·계절 도전 보상이나 안 읽은 편지가 있나 (☰ 메뉴의 빨간 점에 씀) */
   hasClaimable() {
     const g = this.game;
-    return claimableCount(g.quests) > 0 || (g.weekly?.claimable || 0) > 0 || unreadLetters(g.flags).length > 0;
+    return claimableCount(g.quests) > 0 || (g.weekly?.claimable || 0) > 0 || unreadCount(g.flags) > 0;
   },
 
   /** '+N XP' 작은 표시 (배지 옆): 짧은 사이에 여러 번 오면 모아서 한 번 */
@@ -401,7 +401,16 @@ export const HudUI = {
     put('time', el.time, 'text', ct.slice(sp + 1));
     put('day', this.calendar, 'title', `${sp > 0 ? ct.slice(0, sp) + ' · ' : ''}날씨 자세히 보기 · 계절은 7일마다 바뀌어요`);
     const q = g.quests;
-    put('lv', el.lv, 'text', String(q.level));
+    if (!q.maxed) put('lv', el.lv, 'text', String(q.level));
+    // 최고 레벨: 금빛 고리 + 'Lv 10' 대신 '★MAX' 알약
+    const mx = !!q.maxed;
+    if (mx !== this._maxed) {
+      this._maxed = mx;
+      this.badge.classList.toggle('maxed', mx);
+      const pill = this.badge.querySelector('.pb-lv');
+      if (pill) { pill.innerHTML = mx ? '<span aria-hidden="true">👑</span><b class="lv">MAX</b>' : `Lv <b class="lv">${q.level}</b>`; el.lv = pill.querySelector('.lv'); if (this._hv) delete this._hv.lv; }
+      this.badge.setAttribute('aria-label', mx ? '최고 레벨' : '레벨');
+    }
     const pct0 = xpPct(q), pct = pct0 > 0 ? Math.max(3, pct0) : 0; // 조금이라도 있으면 고리에 보이게 3% 부터
     const hadXp = this._hv?.xpv;
     put('xpv', this.badge, '--xp', String(pct));
@@ -422,7 +431,7 @@ export const HudUI = {
     if (this._fest !== !!fest) { this._fest = !!fest; this.banner.classList.toggle('fest', !!fest); }
     // 받지 않은 완료 퀘스트 수: 매 프레임이라 목록을 복사·정렬하지 않고 세기만, 글자는 수가 바뀔 때만
     const n = claimableCount(q) + (g.weekly?.claimable || 0);
-    const mail = unreadLetters(g.flags).length;
+    const mail = unreadCount(g.flags);
     if (n !== this._qn || mail !== this._qmail) {
       this._qn = n; this._qmail = mail;
       el.qb.textContent = n ? String(n) : mail ? '📬' : '';

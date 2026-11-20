@@ -45,6 +45,16 @@ export function unreadLetters(flags) {
   return L.got.filter((id) => LETTERS[id] && !read.includes(id));
 }
 
+/** 안 읽은 편지 수 (매 프레임 HUD 용: 배열을 만들지 않음) */
+export function unreadCount(flags) {
+  const L = flags?.letters;
+  if (!L || !Array.isArray(L.got)) return 0;
+  const read = Array.isArray(L.read) ? L.read : null;
+  let n = 0;
+  for (const id of L.got) if (LETTERS[id] && !(read && read.includes(id))) n++;
+  return n;
+}
+
 /** 편지 UI 메서드 (objective.js 를 거쳐 UI.prototype 에 합쳐짐) */
 export const LettersUI = {
   /**
@@ -58,6 +68,7 @@ export const LettersUI = {
     if (!L.read.includes(id)) { L.read.push(id); g.saveTimer = Math.max(g.saveTimer || 0, 9); }
     const p = this.openPanel(o.celebrate && Lt.star ? `⭐ 마을 별 ${Lt.star}개!` : '📬 편지');
     p.classList.add('letter');
+    g.audio?.play?.('rustle', 0.55); // 편지지 펼치는 소리
     p.dataset.kind = o.celebrate ? 'result' : 'letter'; // 자동 진행 중엔 축하 카드를 잠시 보여 주고 닫음
     let head = '';
     if (Lt.star) {

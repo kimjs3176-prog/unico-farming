@@ -43,3 +43,14 @@ details.lt-box > summary { cursor: pointer; font-family: var(--display); font-si
 
 /* '+N XP' 작은 표시 (hud.js xpFloat, coin-plus 움직임을 같이 씀) */
 .coin-plus.xp-plus { color: #17736b; font-size: 15px; }
+/* 닫기는 '확인' 하나만 (Esc 도 됨) */
+.panel.letter h2 .close { display: none; }
+/* 편지를 여는 동안 아래 단추의 NEW 표시는 잠깐 숨겼다가 닫으면 보임 (편지와 다투지 않게) */
+#ui:has(> .panel.letter) .actionbar button.is-new::after { display: none; }
+#ui:has(> .panel.letter) .actionbar button.bounce { animation: none; }
+/* 봉투에서 펼쳐지는 종이 (0.25초) + 봉투 덮개 */
+.letter .lt-paper { transform-origin: 50% 0; animation: lt-unfold 0.25s cubic-bezier(.2,.9,.3,1.1) both; }
+.letter .lt-paper::before { content: ''; position: absolute; left: 10%; right: 10%; top: -2px; height: 26px; background: linear-gradient(160deg, #f1dfb8, #e4cb98); clip-path: polygon(0 0, 100% 0, 50% 100%); transform-origin: 50% 0; animation: lt-flap 0.25s ease-in both; pointer-events: none; }
+@keyframes lt-unfold { from { transform: scaleY(0.15); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@keyframes lt-flap { from { transform: scaleY(1); opacity: 1; } to { transform: scaleY(-0.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .letter .lt-paper, .letter .lt-paper::before { animation: none; } .letter .lt-paper::before { display: none; } }

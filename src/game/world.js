@@ -10,8 +10,8 @@ import { whenFontReady } from './label.js';
 import { shadowRadiusFor } from './shadow_soft.js';
 import { peekTownStar } from './save.js';
 
-/** 마을 별 4개 동상 자리 후보 (장터 옆 광장, 길·소품을 피한 첫 빈자리) */
-export const STATUE_SPOTS = [[-5.8, -9.2], [-5.4, -6.6], [-5.6, -13.4], [5.2, -13.6], [-6.2, -4.4], [4.2, -15.6], [-4.6, -16.4], [4.8, -7.4]];
+/** 마을 별 4개 동상 자리 후보 (장터 앞 광장 큰길 옆: 기본 카메라가 앞에서 봄, 길·소품을 피한 첫 빈자리) */
+export const STATUE_SPOTS = [[-4.6, -5.6], [-4.8, -7.2], [4.6, -12.6], [-5.8, -9.2], [-5.6, -13.4], [5.2, -13.6], [-6.2, -4.4], [4.2, -15.6], [-4.6, -16.4]];
 
 /** 월드 레이아웃 상수 (m). +X 동쪽, +Z 남쪽, 스폰 (0,0,9) */
 export const LAYOUT = {
@@ -250,9 +250,7 @@ export class World {
     this._paintGround();
     // 마을 별 4개 동상: 저장에 이미 있으면 정적 묶음에 함께 (그리기 호출 늘지 않음), 처음 생기면 addStatue 가 따로
     // 밟고 지나가는 소품·주민 자리·과일나무도 피함
-    const clear = (x, z) => !this.isBlocked(x, z, 1.4) && !(this.placed || []).some((o) => Math.abs(o.x - x) < o.hx + 1.3 && Math.abs(o.z - z) < o.hz + 1.3)
-      && !Object.values(LAYOUT.npcs).some((n) => Math.hypot(n.x - x, n.z - z) < 3) && !LAYOUT.orchard.some((t) => Math.hypot(t.x - x, t.z - z) < 3);
-    this.statueSpot = STATUE_SPOTS.find(([x, z]) => clear(x, z)) || STATUE_SPOTS[0];
+    this.statueSpot = this._statueSpot();
     if (peekTownStar() >= 4) this.addStatue({ batch: true });
     this._batchStatic();
     this.scenery = new Scenery(this);
@@ -868,21 +866,39 @@ export class World {
     const tex = (text, w, h, size, bg) => {
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       const g = c.getContext('2d');
-      const st = { text };
+      const st = { text, stars: '' };
       const fontOf = (px) => `900 ${px}px 'Unico Coin', Jua, "Noto Sans KR", sans-serif`;
       const paint = () => {
         g.fillStyle = bg; g.fillRect(0, 0, w, h);
         g.fillStyle = '#4a2f1b'; g.textAlign = 'center'; g.textBaseline = 'middle';
-        g.font = fontOf(size);
-        // 판보다 길면 글자를 줄여 맞춤 (별이 붙은 마을 이름 등)
-        const tw = g.measureText(st.text).width, fit = tw > w * 0.92 ? Math.floor(size * (w * 0.92) / tw) : size;
-        if (fit !== size) g.font = fontOf(fit);
-        g.fillText(st.text, w / 2, h / 2 + 2);
+        // 별 줄이 있으면: 이름은 위에 조금 작게, 아래에 큰 금빛 별 (기본 거리에서도 보이게)
+        const sz = st.stars ? Math.round(size * 0.72) : size, ty = st.stars ? h * 0.3 : h / 2 + 2;
+        g.font = fontOf(sz);
+        // 판보다 길면 글자를 줄여 맞춤
+        const tw = g.measureText(st.text).width, fit = tw > w * 0.92 ? Math.floor(sz * (w * 0.92) / tw) : sz;
+        if (fit !== sz) g.font = fontOf(fit);
+        g.fillText(st.text, w / 2, ty);
+        if (st.stars) {
+          g.font = `900 ${Math.round(h * 0.5)}px "Noto Sans KR", sans-serif`;
+          // 채운 별은 금빛, 빈 별은 옅은 나무색 (한 글자씩)
+          const cs = [...st.stars], cw = cs.map((ch) => g.measureText(ch).width), tot = cw.reduce((a, b) => a + b, 0);
+          const k = Math.min(1, (w * 0.94) / tot);
+          let x = w / 2 - (tot * k) / 2;
+          g.lineWidth = 6; g.lineJoin = 'round'; g.textAlign = 'left';
+          g.save(); g.translate(x, h * 0.72); g.scale(k, 1); x = 0;
+          cs.forEach((ch, i) => {
+            const on = ch === '★';
+            g.strokeStyle = on ? '#8f5b00' : '#b59a6a'; g.fillStyle = on ? '#ffc93c' : '#efe4cc';
+            g.strokeText(ch, x, 0); g.fillText(ch, x, 0);
+            x += cw[i];
+          });
+          g.restore(); g.textAlign = 'center';
+        }
       };
       paint();
       const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
       whenFontReady(fontOf(size), text, () => { paint(); t.needsUpdate = true; }); // 한글 조각이 늦게 오면 다시 칠함 (캔버스 크기는 그대로)
-      t.userData.set = (v) => { if (v === st.text) return; st.text = v; paint(); t.needsUpdate = true; whenFontReady(fontOf(size), v, () => { paint(); t.needsUpdate = true; }); };
+      t.userData.set = (v, stars = st.stars) => { if (v === st.text && stars === st.stars) return; st.text = v; st.stars = stars || ''; paint(); t.needsUpdate = true; whenFontReady(fontOf(size), v, () => { paint(); t.needsUpdate = true; }); };
       return t;
     };
     const maps = [];
@@ -897,83 +913,163 @@ export class World {
     mk(title, 1.16, 0.46, 1.2, 0, '#f5efe0', 92);
     if (sub) mk(sub, 0.86, 0.31, 0.75, -0.14, '#e8c872', 54);
     // 다시 칠하기 손잡이: 같은 캔버스에 새 글 (판 크기는 그대로)
-    return { repaint: (t, sb) => { if (t) maps[0].userData.set(t); if (sb && maps[1]) maps[1].userData.set(sb); } };
+    return { repaint: (t, sb, stars = '') => { if (t) maps[0].userData.set(t, stars); if (sb && maps[1]) maps[1].userData.set(sb); }, mesh: m };
   }
 
-  /** 마을 별 1개 깃발: 표지판 ↔ 가로등 사이 삼각 깃발 한 줄 (InstancedMesh 하나, 낮은 품질에선 숨김) */
+  /** 마을 별 1개 깃발: 표지판 꼭대기 ↔ 가로등 팔에 묶은 늘어진 줄 + 삼각 깃발 (깃발 InstancedMesh 하나 + 줄 Line 하나, 낮은 품질에선 숨김) */
   setBunting(on) {
     this._buntingOn = !!on;
     if (on && !this.bunting) {
       const head = this.lampHeads?.find((v) => Math.abs(v.x - 3.4) < 0.6 && Math.abs(v.z - 7.6) < 0.6);
-      const A = new THREE.Vector3(-1.75, 1.42, 5.82), B = head ? new THREE.Vector3(head.x - 0.15, head.y - 0.2, head.z) : new THREE.Vector3(3.3, 2.5, 7.6);
-      const N = 13, geo = new THREE.BufferGeometry();
+      // 줄 끝: 표지판 판의 가로등 쪽 윗모서리, 가로등 머리 아래 팔
+      let A = new THREE.Vector3(-1.3, 1.44, 5.9);
+      const sm = this.townSign?.mesh;
+      if (sm) { sm.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(sm); A = new THREE.Vector3(bb.max.x - 0.06, bb.max.y - 0.03, (bb.min.z + bb.max.z) / 2); }
+      const B = head ? new THREE.Vector3(head.x, head.y - 0.18, head.z) : new THREE.Vector3(3.3, 2.5, 7.6);
+      B.x -= Math.sign(B.x - A.x) * 0.12; // 가로등 기둥 바로 옆 (팔 끝)
+      const SAG = 0.42, N = 13;
+      const at = (t, out) => { out.lerpVectors(A, B, t); out.y -= Math.sin(t * Math.PI) * SAG; return out; };
+      // 줄: 늘어진 곡선
+      const pts = [];
+      for (let i = 0; i <= 24; i++) pts.push(at(i / 24, new THREE.Vector3()));
+      const rope = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x4a3424 }));
+      rope.matrixAutoUpdate = false;
+      // 깃발: 윗변이 줄에 붙은 삼각형
+      const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.13, 0, 0, 0.13, 0, 0, 0, -0.3, 0], 3));
       geo.computeVertexNormals();
-      const mat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
-      const im = new THREE.InstancedMesh(geo, mat, N);
+      const im = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), N);
       const cols = [0xf25c54, 0xfac03e, 0x5bc0eb, 0x6dbb4f, 0xff9fb3, 0xb38cff];
-      const o = new THREE.Object3D(), c = new THREE.Color(), yaw = Math.atan2(B.x - A.x, B.z - A.z);
+      const c = new THREE.Color();
+      this._bunt = { im, yaw: Math.atan2(B.x - A.x, B.z - A.z) + Math.PI / 2, pos: [], o: new THREE.Object3D(), t: 0 };
+      this._bunt.o.rotation.order = 'YXZ';
       for (let i = 0; i < N; i++) {
-        const t = (i + 0.5) / N;
-        o.position.lerpVectors(A, B, t);
-        o.position.y -= Math.sin(t * Math.PI) * 0.45; // 늘어진 줄
-        o.rotation.set(0, yaw + Math.PI / 2, (i % 2 ? 0.06 : -0.06));
-        o.updateMatrix();
-        im.setMatrixAt(i, o.matrix);
+        this._bunt.pos.push(at((i + 0.5) / N, new THREE.Vector3()));
         im.setColorAt(i, c.setHex(cols[i % cols.length]));
       }
+      this._swayBunting(0);
       im.castShadow = false; im.receiveShadow = false;
       im.matrixAutoUpdate = false;
       im.computeBoundingSphere();
-      this.bunting = im;
-      this.scene.add(im);
+      const grp = new THREE.Group();
+      grp.add(im, rope);
+      this.bunting = grp;
+      this.scene.add(grp);
     }
     if (this.bunting) this.bunting.visible = this._buntingOn && this.quality?.level !== 'low';
   }
 
+  /** 깃발 살랑임 (줄을 축으로 앞뒤로, 깃발마다 박자 다르게) */
+  _swayBunting(dt) {
+    const S = this._bunt;
+    if (!S) return;
+    S.t += dt;
+    for (let i = 0; i < S.pos.length; i++) {
+      S.o.position.copy(S.pos[i]);
+      S.o.rotation.set(Math.sin(S.t * 1.6 + i * 0.9) * 0.22, S.yaw, (i % 2 ? 0.05 : -0.05));
+      S.o.updateMatrix();
+      S.im.setMatrixAt(i, S.o.matrix);
+    }
+    S.im.instanceMatrix.needsUpdate = true;
+  }
+
+  /** 동상 자리 빈자리 찾기 (실행 중에는 그새 놓은 꾸미기 소품 장애물까지 봄) */
+  _statueSpot() {
+    const clear = (x, z) => !this.isBlocked(x, z, 1.5) && !this.isReserved(x, z, 0.2)
+      && !(this.placed || []).some((o) => Math.abs(o.x - x) < o.hx + 1.4 && Math.abs(o.z - z) < o.hz + 1.4)
+      && !Object.values(LAYOUT.npcs).some((n) => Math.hypot(n.x - x, n.z - z) < 3) && !LAYOUT.orchard.some((t) => Math.hypot(t.x - x, t.z - z) < 3)
+      && !LAYOUT.paths.some((p) => p.pts.some(([px, pz]) => Math.hypot(px - x, pz - z) < p.w / 2 + 1.3));
+    return STATUE_SPOTS.find(([x, z]) => clear(x, z)) || STATUE_SPOTS[0];
+  }
+
   /**
-   * 마을 별 4개: 장터 옆 광장 유니콘 동상 (받침 + 몸 + 금빛 뿔). batch: 월드를 만들 때 정적 묶음에 넣음
-   * 실행 중에 처음 생기면 재질별로 합친 메시 셋 (한 번만)
+   * 마을 별 4개: 광장 유니코 동상 (주인공 모습: 큰 머리·짧은 주둥이·귀·소용돌이 갈기·꼬리 술·앞발 하나 듦, 금빛 뿔·발굽)
+   * 세 단 받침 + 금빛 명판 + 꽃 고리. 모두 정점 색 한 메시 → 그리기 1번 (월드를 만들 때는 정적 묶음에 섞여 0번)
+   * 낮은 품질: 그림자 없음, 면 수 줄임, 명판 글씨 생략
    */
   addStatue({ batch = false } = {}) {
     if (this.statue) return this.statue;
+    const low = this.quality?.level === 'low';
+    if (!batch) this.statueSpot = this._statueSpot(); // 그새 놓인 소품을 피해 다시 고름
     const [x, z] = this.statueSpot || STATUE_SPOTS[0];
-    const stone = new THREE.MeshStandardMaterial({ color: 0xd9d1c2, roughness: 0.85, metalness: 0 });
-    const base = new THREE.MeshStandardMaterial({ color: 0x9c8f7c, roughness: 0.9, metalness: 0 });
-    const gold = new THREE.MeshStandardMaterial({ color: 0xe6b84a, roughness: 0.45, metalness: 0.2 });
-    const parts = [];
-    const add = (geo, mat, px, py, pz, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
-      geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(px, py, pz), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz)));
-      parts.push([geo, mat]);
+    const k = low ? 0.5 : 1, seg = (n) => Math.max(5, Math.round(n * k));
+    const C = { stone: 0xeee8dc, cream: 0xf6eedb, eye: 0x5a5148, base: 0x9c8f7c, base2: 0xb3a792, gold: 0xe6b84a, leaf: 0x6dbb4f, f1: 0xff9fb3, f2: 0xfac03e, f3: 0xffffff };
+    const geos = [], col = new THREE.Color(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+    const T = (px, py, pz, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => new THREE.Matrix4().compose(v.set(px, py, pz), q.setFromEuler(e.set(rx, ry, rz)), sc.set(sx, sy, sz));
+    const add = (geo, hex, mat) => {
+      geo.applyMatrix4(mat);
+      for (const key of Object.keys(geo.attributes)) if (key !== 'position' && key !== 'normal') geo.deleteAttribute(key);
+      col.setHex(hex);
+      const n = geo.attributes.position.count, a = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { a[i * 3] = col.r; a[i * 3 + 1] = col.g; a[i * 3 + 2] = col.b; }
+      geo.setAttribute('color', new THREE.BufferAttribute(a, 3));
+      geos.push(geo);
     };
-    // 받침 두 단 + 몸통·다리·목·머리·꼬리, 금빛 뿔·갈기 끝
-    add(new THREE.CylinderGeometry(1.05, 1.15, 0.35, 20), base, 0, 0.175, 0);
-    add(new THREE.CylinderGeometry(0.8, 0.9, 0.5, 20), base, 0, 0.6, 0);
-    add(new THREE.SphereGeometry(0.42, 16, 12), stone, 0, 1.55, 0, 0, 0, 0, 1.45, 0.85, 0.85);
-    for (const [lx, lz] of [[-0.38, -0.17], [-0.38, 0.17], [0.38, -0.17], [0.38, 0.17]]) add(new THREE.CylinderGeometry(0.08, 0.07, 0.62, 8), stone, lx, 1.12, lz);
-    add(new THREE.CylinderGeometry(0.15, 0.2, 0.55, 10), stone, 0.55, 1.95, 0, 0, 0, -0.55);
-    add(new THREE.SphereGeometry(0.22, 14, 10), stone, 0.78, 2.22, 0, 0, 0, 0, 1.25, 0.95, 0.9);
-    add(new THREE.ConeGeometry(0.06, 0.4, 10), gold, 0.86, 2.55, 0, 0, 0, -0.35);
-    add(new THREE.ConeGeometry(0.1, 0.5, 8), stone, -0.68, 1.48, 0, 0, 0, 2.4);
-    add(new THREE.BoxGeometry(0.42, 0.06, 0.08), gold, 0.48, 2.12, 0, 0, 0, -0.55);
-    const g = new THREE.Group();
-    const byMat = new Map();
-    for (const [geo, mat] of parts) {
-      if (batch) { g.add(new THREE.Mesh(geo, mat)); continue; }
-      (byMat.get(mat) || byMat.set(mat, []).get(mat)).push(geo.index ? geo.toNonIndexed() : geo);
+    const ball = (r, hex, mat) => add(new THREE.SphereGeometry(r, seg(14), seg(10)), hex, mat);
+    // 받침 세 단 + 금테
+    add(new THREE.CylinderGeometry(1.12, 1.2, 0.26, seg(24)), C.base, T(0, 0.13, 0));
+    add(new THREE.CylinderGeometry(0.94, 1.0, 0.3, seg(24)), C.base2, T(0, 0.41, 0));
+    add(new THREE.CylinderGeometry(0.74, 0.8, 0.34, seg(24)), C.base, T(0, 0.73, 0));
+    add(new THREE.TorusGeometry(0.75, 0.025, 5, seg(24)), C.gold, T(0, 0.9, 0, Math.PI / 2));
+    // 금빛 명판 (앞쪽 가운데 단)
+    add(new THREE.BoxGeometry(0.62, 0.2, 0.05), C.gold, T(0, 0.43, 0.98, -0.08));
+    // 꽃 고리 (받침 둘레)
+    const NF = low ? 10 : 18;
+    for (let i = 0; i < NF; i++) {
+      const a = (i / NF) * Math.PI * 2, r = 1.3;
+      if (!low) add(new THREE.SphereGeometry(0.11, 6, 4), C.leaf, T(Math.sin(a) * r, 0.06, Math.cos(a) * r, 0, 0, 0, 1.2, 0.5, 1.2)); // 잎 (낮은 품질 생략)
+      (low ? (r0, hx, m) => add(new THREE.SphereGeometry(r0, 5, 3), hx, m) : ball)(0.075, [C.f1, C.f2, C.f3][i % 3], T(Math.sin(a + 0.17) * (r + 0.02), 0.16, Math.cos(a + 0.17) * (r + 0.02)));
     }
-    for (const [mat, geos] of byMat) {
-      const merged = mergeGeometries(geos.map((q) => { for (const k of Object.keys(q.attributes)) if (k !== 'position' && k !== 'normal') q.deleteAttribute(k); return q; }), false);
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.castShadow = true; mesh.receiveShadow = true;
-      g.add(mesh);
+    // 유니코 (받침 위 0.9m, 앞 = +Z)
+    const Y = 0.9;
+    ball(0.33, C.stone, T(0, Y + 0.56, -0.02, 0, 0, 0, 0.92, 0.86, 1.18)); // 통통한 몸
+    for (const [lx, lz, up] of [[-0.15, 0.2, false], [0.15, 0.2, true], [-0.15, -0.24, false], [0.15, -0.24, false]]) {
+      // 다리 (오른 앞다리는 들어 올림) + 금빛 발굽
+      const leg = up ? T(lx, Y + 0.42, lz + 0.12, -1.05) : T(lx, Y + 0.2, lz);
+      add(new THREE.CylinderGeometry(0.085, 0.075, 0.4, seg(10)), C.stone, leg);
+      add(new THREE.CylinderGeometry(0.09, 0.095, 0.08, seg(10)), C.gold, leg.clone().multiply(T(0, -0.21, 0)));
+    }
+    add(new THREE.CylinderGeometry(0.15, 0.2, 0.36, seg(12)), C.stone, T(0, Y + 0.84, 0.2, 0.35)); // 목
+    ball(0.38, C.stone, T(0, Y + 1.14, 0.3, 0, 0, 0, 1, 0.95, 0.95)); // 큰 머리
+    ball(0.21, C.cream, T(0, Y + 1.04, 0.6, 0, 0, 0, 1.05, 0.82, 0.9)); // 짧은 주둥이
+    for (const sx of [-1, 1]) {
+      ball(0.045, C.eye, T(sx * 0.17, Y + 1.2, 0.62)); // 눈
+      ball(0.025, C.eye, T(sx * 0.07, Y + 1.06, 0.79)); // 콧구멍
+      add(new THREE.ConeGeometry(0.085, 0.24, seg(8)), C.stone, T(sx * 0.22, Y + 1.47, 0.18, -0.2, 0, -sx * 0.4)); // 귀
+    }
+    add(new THREE.ConeGeometry(0.07, 0.42, seg(10)), C.gold, T(0, Y + 1.58, 0.44, 0.45)); // 금빛 뿔
+    add(new THREE.TorusGeometry(0.06, 0.018, 4, seg(10)), C.gold, T(0, Y + 1.5, 0.4, 0.45 + Math.PI / 2)); // 뿔 고리
+    // 소용돌이 갈기 (머리 위에서 목 뒤로 쌓인 술) + 앞머리 고리
+    for (const [ty, tz, r] of [[1.46, 0.22, 0.17], [1.36, 0.02, 0.16], [1.16, -0.1, 0.15], [0.94, -0.08, 0.13]]) ball(r, C.cream, T(0, Y + ty, tz));
+    add(new THREE.TorusGeometry(0.1, 0.05, seg(6), seg(12)), C.cream, T(0, Y + 1.5, 0.08, 0, Math.PI / 2, 0));
+    // 꼬리 술
+    for (const [ty, tz, r] of [[0.66, -0.4, 0.13], [0.56, -0.54, 0.12], [0.42, -0.58, 0.1]]) ball(r, C.cream, T(0, Y + ty, tz));
+    const geo = mergeGeometries(geos, false);
+    geo.computeBoundingSphere();
+    // 재질: 정점 색 (정적 묶음에서는 돌 재질 묶음과 합쳐짐)
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.8, metalness: 0 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = !low; mesh.receiveShadow = !low;
+    const g = new THREE.Group();
+    g.add(mesh);
+    // 명판 글씨 (낮은 품질 생략, 그리기 1번)
+    if (!low && typeof document !== 'undefined') {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 80;
+      const x2 = c.getContext('2d'), font = `900 30px 'Unico Coin', Jua, "Noto Sans KR", sans-serif`, txt = '유니코 마을 ★★★★';
+      const paint = () => { x2.fillStyle = '#e6b84a'; x2.fillRect(0, 0, 256, 80); x2.fillStyle = '#5a3a10'; x2.font = font; x2.textAlign = 'center'; x2.textBaseline = 'middle'; x2.fillText(txt, 128, 42, 240); };
+      paint();
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+      whenFontReady(font, txt, () => { paint(); t.needsUpdate = true; });
+      const pl = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.18), new THREE.MeshStandardMaterial({ map: t, roughness: 0.6 }));
+      pl.applyMatrix4(T(0, 0.43, 1.006, -0.08));
+      g.add(pl);
     }
     g.position.set(x, heightAt(x, z), z);
-    g.rotation.y = -0.5;
+    g.rotation.y = Math.atan2(-x * 0.8, 6); // 남쪽(카메라 쪽)을 보며 큰길로 살짝 돌아섬
     this.scene.add(g);
     if (batch) this.staticObjs.push(g);
     else { g.updateMatrixWorld(true); g.traverse((o) => { o.matrixAutoUpdate = false; }); }
-    this.obstacles.push({ x, z, r: 1.15 });
+    this.obstacles.push({ x, z, r: 1.3 });
     this.statue = g;
     return g;
   }
@@ -1134,7 +1230,10 @@ export class World {
   // ------------------------------------------------------------ 시간
   update(dt, focus = null) {
     this.focusPos = focus;
-    if (this.bunting) this.bunting.visible = this._buntingOn && this.quality?.level !== 'low'; // 품질을 바꾸면 따라감
+    if (this.bunting) {
+      this.bunting.visible = this._buntingOn && this.quality?.level !== 'low'; // 품질을 바꾸면 따라감
+      if (this.bunting.visible && (this.frameNo & 1)) this._swayBunting(dt * 2); // 두 프레임에 한 번 (깃발 13장)
+    }
     this.frameNo = (this.frameNo || 0) + 1; // 프레임 번호 (연못 반사 갱신 주기 등)
     for (const a of this.animated) a.update(dt);
     if (this.groundTime) this.groundTime.value += dt;

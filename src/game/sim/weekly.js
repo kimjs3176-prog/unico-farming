@@ -22,7 +22,7 @@ export const TEMPLATES = [
   // 밭
   { id: 'harvest', cat: 'farm', event: 'harvest', base: 24, icon: '🧺', text: (n) => `작물 ${n}개 수확하기`, gate: () => true },
   { id: 'harvest_key', cat: 'farm', event: 'harvest', base: 12, icon: '🌱', keyed: true, text: (n, k) => `${CROPS[k].emoji} ${CROPS[k].name} ${n}개 수확하기`, gate: () => true },
-  { id: 'star3', cat: 'farm', event: 'star3', base: 3, icon: '⭐', text: (n) => `⭐⭐⭐ 특상품 ${n}번 수확하기`, gate: (c) => c.has('star3') },
+  { id: 'star3', cat: 'farm', event: 'star3', base: 3, icon: '⭐', text: (n) => `특상품(★3) ${n}번 수확하기`, gate: (c) => c.has('star3') },
   { id: 'fert', cat: 'farm', event: 'fert', base: 5, icon: '🟫', text: (n) => `밭에 퇴비 ${n}번 주기`, gate: (c) => c.has('fert3') },
   { id: 'weed', cat: 'farm', event: 'weed', base: 4, icon: '🌿', text: (n) => `잡초 ${n}번 매기`, gate: (c) => c.has('weed2') },
   { id: 'process', cat: 'farm', event: 'process', base: 3, icon: '🏺', text: (n) => `장독대 가공품 ${n}개 만들기`, gate: (c) => c.has('process2') },
@@ -179,9 +179,19 @@ export class SeasonChallenges {
   }
 
   /** 보여 줄 목록 */
-  view() { return this.list.map(describe).filter(Boolean); }
+  view() {
+    return this.list.map((c, i) => {
+      const d = describe(c);
+      if (d) d.reward = rewardFor(d.cat, this.level, this.season, i); // 받을 보상 미리 보기
+      return d;
+    }).filter(Boolean);
+  }
   /** 받을 수 있는 도전 수 */
-  get claimable() { return this.list.filter((c) => !c.claimed && c.n >= c.goal).length; }
+  get claimable() { // 매 프레임 HUD 가 읽음: 배열을 만들지 않고 세기만
+    let n = 0;
+    for (const c of this.list) if (!c.claimed && c.n >= c.goal) n++;
+    return n;
+  }
   /** 따라갈 도전: 받을 것 → 아직 하는 것 중 가장 많이 한 것 (번호 포함) */
   tracked() {
     const v = this.view().map((x, i) => ({ ...x, i }));

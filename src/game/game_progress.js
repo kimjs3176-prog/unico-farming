@@ -34,6 +34,9 @@ function giveCostume(g, id) {
   return true;
 }
 
+/** 별 다섯 축하 컷신: 이 거리 안의 주민만 나와 함께 담음 */
+export const FINALE_WITH_M = 6;
+
 export const GameProgress = {
   /** 도감 등록 후: 진행 퀘스트, 카테고리 완성 보상 */
   afterCollect() {
@@ -59,6 +62,7 @@ export const GameProgress = {
    * key: 수확 작물 id · 잡은 아이템 id · 미니게임 id (mgstars) 처럼 이벤트를 자세히
    */
   onEvent(event, amount = 1, key = null) {
+    this._fbDirty = true;
     const done = this.quests.report(event, amount);
     // 보유 금액 퀘스트도 같이 살핌 (완료 알림이 빠지지 않게)
     if (event !== 'money') done.push(...this.quests.report('money', this.economy.money));
@@ -121,7 +125,7 @@ export const GameProgress = {
       const G = LEVEL_GIFTS[lv];
       if (!G) continue;
       for (const [id, n] of Object.entries(G.decor || {})) if (giveDecor(this, id, n)) got.push(`${DECOR_BY_ID[id].icon} ${DECOR_BY_ID[id].name}`);
-      const cid = giftCostume(lv);
+      const cid = giftCostume(lv, (id) => !!this.costume?.has?.(id));
       if (cid && giveCostume(this, cid)) got.push(`${COSTUME[cid].icon} ${COSTUME[cid].name}`);
       if (G.title && this.npcs?.grantTitle) this.npcs.grantTitle(G.title);
     }
@@ -153,6 +157,7 @@ export const GameProgress = {
 
   /** 계절 도전 보상 받기 (i: 0~2) → 보상 또는 null */
   claimChallenge(i, { quiet = false } = {}) {
+    this._fbDirty = true;
     const r = this.seasonChallenges().claim(i);
     if (!r) return null;
     this._grantChallenge(r, { quiet });
@@ -187,6 +192,7 @@ export const GameProgress = {
 
   /** 계절 도전 기간 맞추기: 바뀌면 지난 기간의 안 받은 보상을 자동으로 */
   _syncChallenges(day, { quiet = false } = {}) {
+    this._fbDirty = true;
     const W = this.seasonChallenges();
     const left = W.sync(day, this._challengeCtx());
     if (!left) return;
@@ -198,6 +204,7 @@ export const GameProgress = {
 
   /** 마을 별점 셈 → 새 별이면 보상·편지·카드 (불러온 직후 처음엔 조용히 맞춤) */
   checkTown({ silent = false } = {}) {
+    this._fbDirty = true;
     if (!this.flags) return null;
     const R = rating(snapshot(this));
     this.townRating = R;
@@ -230,7 +237,7 @@ export const GameProgress = {
     const s = this.flags?.townStar || 0, W = this.world;
     if (!W || this._paintedStar === s) return;
     this._paintedStar = s;
-    if (s >= 1) W.townSign?.repaint?.(`🦄 유니코 마을 ${starLine(s)}`, '← 스마트팜 · 목장 →');
+    if (s >= 1) W.townSign?.repaint?.('🦄 유니코 마을', '← 스마트팜 · 목장 →', starLine(s)); // 별은 이름 아래 큰 금빛 줄
     W.setBunting?.(s >= 1);
     if (s >= 4) W.addStatue?.();
   },
@@ -243,7 +250,10 @@ export const GameProgress = {
     for (const e of list) {
       const t = lines[e.id];
       if (!t || !e.u) continue;
-      steps.push({ face: e.u, with: this.player.unico, emote: 'cheer' }, { say: [{ speaker: e.u, name: e.name, color: '#6dbb4f', emote: 'cheer', text: t }] });
+      // 멀리 있는 주민(6m 넘게)은 혼자 얼굴 구도 (둘을 담으면 화면이 너무 넓어짐)
+      const a = e.u.group?.position || e.u.position, b = this.player.position;
+      const near = a && b && Math.hypot(a.x - b.x, a.z - b.z) <= FINALE_WITH_M;
+      steps.push(near ? { face: e.u, with: this.player.unico, emote: 'cheer' } : { face: e.u, emote: 'cheer' }, { say: [{ speaker: e.u, name: e.name, color: '#6dbb4f', emote: 'cheer', text: t }] });
     }
     steps.push({ run: () => { this.player.unico?.playAction?.('cheer', 2); } });
     return this.cinema?.play ? this.cinema.play(steps) : Promise.resolve();
@@ -267,12 +277,20 @@ export const GameProgress = {
 
   /** 따라갈 목표가 없을 때 목표 칩: 계절 도전 → 다음 별 (없으면 null) */
   fallbackGoal() {
-    const W = this.seasonChallenges();
+    const W = this.seasonChallenges(), day = this.world?.day ?? 0;
+    // 매 프레임 불리므로: 진행·날짜·별점이 바뀔 때만 새로 만듦
+    if (!this._fbDirty && this._fbW === W && this._fbDay === day && this._fbR === this.townRating) return this._fb;
+    this._fb = this._fallbackGoal(W);
+    this._fbDirty = false; this._fbW = W; this._fbDay = day; this._fbR = this.townRating;
+    return this._fb;
+  },
+
+  _fallbackGoal(W) {
     if (!W.key && this.world) W.sync(this.world.day, this._challengeCtx());
     const t = W.tracked();
     const d = this.world ? daysLeft(this.world.day) : 0;
     if (t) {
-      return { id: `wk:${t.i}`, kind: 'weekly', tid: t.id, i: t.i, title: t.title, desc: `🗓️ 이번 계절 도전 · ${d ? `D-${d}` : '오늘 마감'}`, goal: t.goal, count: t.count, complete: t.complete, reward: null };
+      return { id: `wk:${t.i}`, kind: 'weekly', tid: t.id, i: t.i, title: t.title, desc: `🗓️ 계절 도전 · ${d ? `D-${d}` : '오늘 마감'}`, goal: t.goal, count: t.count, complete: t.complete, reward: null };
     }
     const R = this.townRating || this.checkTown();
     const n = R?.next?.[0];

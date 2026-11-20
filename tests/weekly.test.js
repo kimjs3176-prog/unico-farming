@@ -109,3 +109,51 @@ test('저장·불러오기 왕복, 깨진 기록은 새로', () => {
   assert.equal(W3.key, null);
   assert.deepEqual(W3.list, []);
 });
+
+test('도전 목록 보기에는 받을 보상이 미리 들어 있고, 받으면 같은 보상', () => {
+  // 준비
+  const W = new SeasonChallenges();
+  W.sync(1, all);
+  // 실행
+  const v = W.view();
+  // 확인
+  for (const c of v) assert.ok(c.reward && c.reward.money > 0 && c.reward.xp > 0, `${c.id} 보상 ${JSON.stringify(c.reward)}`);
+  W.list[0].n = W.list[0].goal;
+  assert.equal(W.claimable, 1);
+  const r = W.claim(0);
+  assert.equal(r.money, v[0].reward.money);
+  assert.equal(r.xp, v[0].reward.xp);
+  assert.equal(W.claimable, 0);
+});
+
+test('퀘스트 창: 모든 장을 마친 이야기 탭은 위 마을 줄을 숨겨 마을 할 일 목록이 한 번만', async () => {
+  const { townStrip, townHtml, rewardChip } = await import('../src/ui/panels/quests.js');
+  // 모든 장을 마침: 이야기 탭('town' 으로 열어도) → 줄 없음, 카드만
+  assert.deepEqual(townStrip('story', false, true), { strip: false, open: false });
+  // 계절 도전 탭·아직 장이 남은 이야기 탭 → 줄 보임
+  assert.deepEqual(townStrip('season', false, false), { strip: true, open: false });
+  assert.deepEqual(townStrip('story', true, true), { strip: true, open: true });
+  const R = { stars: 1, frac: 0.2, next: [{ icon: '🪑', label: '꾸미기 소품 12개 더 놓기', short: '꾸미기', have: 0, need: 12 }] };
+  const m = townStrip('story', false, true);
+  const html = (m.strip ? townHtml(R, { full: m.open }) : '') + townHtml(R, { full: true });
+  assert.equal(html.split('tw-list').length - 1, 1, 'tw-list 하나');
+  assert.equal(rewardChip({ money: 120, xp: 48, item: { icon: '🥕' } }), '🪙120 · ✨48 XP · 🥕');
+  assert.equal(rewardChip({ money: 120, xp: 48 }), '🪙120 · ✨48 XP');
+});
+
+test('목표 칩 제목: 앞 별 이모지는 (★n) 으로, 끝 하기는 빼고', async () => {
+  const { chipTitle } = await import('../src/ui/objective.js');
+  assert.equal(chipTitle('★★★ 특상품 5번 수확하기'), '특상품(★3) 5번 수확');
+  assert.equal(chipTitle('⭐ 다음 별: 꾸미기'), '다음 별: 꾸미기');
+  assert.equal(chipTitle('물고기 3마리 낚기'), '물고기 3마리 낚기');
+  assert.equal(chipTitle('⭐⭐⭐ 특상품 5번 수확하기'), '특상품(★3) 5번 수확');
+  assert.equal(chipTitle(TEMPLATES.find((t) => t.id === 'star3').text(5)), '특상품(★3) 5번 수확', '도전 글 자체도 별 이모지 줄 없이');
+});
+
+test('안 읽은 편지 수: 목록과 같은 수 (HUD 는 배열 없이 셈)', async () => {
+  const { unreadCount, unreadLetters } = await import('../src/ui/letters.js');
+  const flags = { letters: { got: ['star1', 'star2', 'harvest1', 'nope'], read: ['star1'] } };
+  assert.equal(unreadCount(flags), unreadLetters(flags).length);
+  assert.ok(unreadCount(flags) >= 1);
+  assert.equal(unreadCount({}), 0);
+});

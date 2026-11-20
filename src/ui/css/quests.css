@@ -86,3 +86,13 @@ details.qdone > .rows { margin-top: 2px; }
 .wk-bonus.got { background: #eef9e6; border-color: #8cc46e; }
 .wk-bonus .ic { font-size: 24px; }
 .wk-bonus small { display: block; font-size: 12px; color: #6f604f; }
+/* 계절 도전 줄: 위(아이콘·제목·보상 칩·수) + 아래 줄 전체 막대, 다 하면 금빛 */
+.row.quest.wk-row { flex-direction: column; align-items: stretch; gap: 4px; }
+.wk-row .wk-top { display: flex; align-items: center; gap: 8px; }
+.wk-row .wk-top .qmain { flex: 1; min-width: 0; }
+.wk-row .wk-rw { display: inline-block; margin-top: 3px; padding: 1px 8px; border-radius: 10px; background: #fff3cf; border: 1px solid #ecd28e; font-size: 12.5px; color: #6b4a12; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.wk-row .wk-bar { margin-top: 0; }
+.wk-row .wk-ok { color: #3c7a2c; font-size: 15px; }
+.row.quest.wk-row.done { background: linear-gradient(180deg, #fff9e4, #fdf0c8) !important; border-left-color: #e8a317; box-shadow: 0 0 0 2px #f3d27a, 0 0 12px rgba(246, 196, 69, 0.45); }
+.row.quest.wk-row.done .wk-bar i { background: linear-gradient(90deg, #f6c445, #e8a317); }
+.panel .wk-row button.wk-get { flex: none; min-height: 40px; }

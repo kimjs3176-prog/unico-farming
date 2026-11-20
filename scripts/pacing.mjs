@@ -25,6 +25,7 @@ const order = [];
 for (const c of CHAPTERS) for (const id of c.ids) { const q = QUESTS.find((x) => x.id === id); if (q && !QMETA[id].wait) order.push(q); }
 for (const q of QUESTS) if (QMETA[q.id].wait) order.push(q);
 
+// 물고기·곤충은 지금 아이템 id 없이 오므로 희귀도 없이 3 XP (null), 미니게임 별 경험치는 지금 체험관(KOAT) 결과만 보냄 → 하루 두 판 별 2개로 봄
 /** 잘하는 사람의 1분 행동 경험치 (레벨에 따라 가장 좋은 작물) — 시간의 40% 밭, 나머지는 목장·낚시·곤충·주문·미니게임 */
 function actionPerMin(level) {
   const crop = Object.entries(CROPS).filter(([, c]) => c.unlockLevel <= level).sort((a, b) => b[1].growTime - a[1].growTime)[0][0];

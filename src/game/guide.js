@@ -77,6 +77,9 @@ function targetOf(id, g) {
   }
 }
 
+/** 별 하나: 표지판·깃발 비추는 짧은 컷 (표지판 -1.9,5.8 ↔ 가로등 3.4,7.6) */
+export const SIGN_PAN = [{ cam: [[0.4, 2.3, 11.6], [0.5, 1.5, 6.6], 1.4] }, { wait: 1.6 }];
+
 /** 계절 도전 → 길 안내에 빌려 쓸 퀘스트 id (밭 일은 밭 칸 안내) */
 const CHALLENGE_TARGET = {
   harvest: 'star3', harvest_key: 'star3', star3: 'star3', weed: 'weed2', fert: 'fert3', process: 'process2', order: 'order3', thresh: 'riceharv',
@@ -360,7 +363,11 @@ export class Guide {
     // 휴대폰 첫 조작 안내 (한 번)
     if (free && g.flags.intro && !g.flags.touchCoach && !g.ui.panel && !g.autoplay?.on && touchUI()) { g.flags.touchCoach = true; showTouchCoach(g); }
     // 장 완료 카드: 창·대화가 없을 때 (보여 준 뒤 저장 목록에서 뺌)
-    if (this._card && g.ui.panel !== this._card) this._card = null;
+    if (this._card && g.ui.panel !== this._card) {
+      this._card = null;
+      // 별 하나 편지를 닫으면: 깃발 단 마을 표지판을 잠깐 비춤 (한 번만)
+      if (this._panSign) { this._panSign = false; if (g.cinema?.play && !g.cinema.locked && !this._auto && !g.autoplay?.on) g.cinema.play(SIGN_PAN); }
+    }
     const cards = g.flags.chapterCard;
     if (cards?.length && !this._card && free && !g.ui.panel && !this._auto) {
       const c = CHAPTERS.find((x) => x.n === cards[0]);
@@ -383,6 +390,7 @@ export class Guide {
         if (g.reward) g.reward(3, { label: '⭐' }); else g.audio?.play('win');
         const giftText = n === 3 && g.flags.starGift3 ? `마을 선물 의상: ${g.flags.starGift3}` : undefined;
         this._card = g.ui.openLetter(`star${n}`, { celebrate: true, giftText });
+        if (n === 1) this._panSign = true;
       };
       if (n >= 5 && g.townFinale) g.townFinale().then(show, show); else show();
     }

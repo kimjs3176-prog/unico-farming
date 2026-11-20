@@ -11,6 +11,14 @@ const PEEK_MS = 7000;
 let compactMq = null;
 const compact = () => typeof matchMedia !== 'undefined' && (compactMq ||= matchMedia('(max-width: 600px), (max-height: 500px) and (pointer: coarse)')).matches;
 
+/**
+ * 이야기 뒤 목표(계절 도전·다음 별) 칩 제목 짧게: 앞 별 이모지는 등급 표시로 바꾸고 끝 '하기'는 뺌
+ * '★★★ 특상품 5번 수확하기' → '특상품(★3) 5번 수확', '⭐ 다음 별: …' → '다음 별: …'
+ */
+export function chipTitle(t) {
+  return String(t).replace(/^(?:★|⭐){2,}\s*(\S+)/u, (m, w) => `${w}(★${[...m.trim().split(/\s/)[0]].length})`).replace(/^⭐\s*/u, '').replace(/하기$/, '');
+}
+
 /** 목표 칩 메서드 (UI.prototype 에 합쳐짐) */
 export const ObjectiveUI = {
   ...LettersUI, // 편지 카드·편지함 (letters.js)
@@ -42,7 +50,7 @@ export const ObjectiveUI = {
       const side = q.complete ? '<span class="claim">🎁 받기</span>' : hasDist ? '<span class="dir">▲</span>' : '';
       const ic = q.complete ? '🎁' : q.kind === 'weekly' ? '🗓️' : q.kind === 'star' ? '⭐' : '🎯';
       this.objective.classList.toggle('fb', !!q.kind); // 이야기가 끝난 뒤의 목표 (계절 도전·다음 별)
-      this.objective.innerHTML = `<span class="ic">${ic}</span><div class="tt"><span class="nm">${q.complete ? '보상 받기: ' : ''}${q.kind === 'star' ? q.title.replace(/^⭐ /, '') : q.title}</span>${!q.complete && q.goal > 1 ? `<span class="cnt">${q.count}/${q.goal}</span>` : ''}<span class="eta"></span><small>${sub}<span class="dist"></span><span class="wait"></span></small><div class="bar"><i style="width:${Math.round((q.count / q.goal) * 100)}%"></i></div></div>${side}`;
+      this.objective.innerHTML = `<span class="ic">${ic}</span><div class="tt"><span class="nm">${q.complete ? '보상 받기: ' : ''}${q.kind ? chipTitle(q.title) : q.title}</span>${!q.complete && q.goal > 1 ? `<span class="cnt">${q.count}/${q.goal}</span>` : ''}<span class="eta"></span><small>${sub}<span class="dist"></span><span class="wait"></span></small><div class="bar"><i style="width:${Math.round((q.count / q.goal) * 100)}%"></i></div></div>${side}`;
       this._objDist = this.objective.querySelector('.dist');
       this._objDir = this.objective.querySelector('.dir');
       this._objEtaEl = this.objective.querySelector('.eta');
@@ -60,8 +68,8 @@ export const ObjectiveUI = {
       }
     }
     // 기다리는 동안은 거리를 숨김 (남은 시간이 더 중요)
-    const m = hasDist && !(et && !cls) ? Math.round(dist) : null;
-    if (m !== this._objM) { this._objM = m; this._objDist.textContent = m === null ? '' : ` · ${m}m`; }
+    const m = hasDist && !(et && !cls) && dist >= 1 ? Math.round(dist) : null; // 1m 안이면 거리 없이
+    if (m !== this._objM) { this._objM = m; this._objDist.textContent = m === null ? '' : ` · 📍 ${m}m`; }
     const deg = Math.round(ang / 3) * 3; // 3도 단위로만 갱신
     if (this._objDir && !q.complete && deg !== this._objDeg) { this._objDeg = deg; this._objDir.style.transform = `rotate(${deg}deg)`; }
     const ek = `${cls}|${et}`;

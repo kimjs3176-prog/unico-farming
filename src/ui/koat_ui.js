@@ -70,6 +70,7 @@ export function installKoatUI(UI) {
     const sc = h('div', `koat-score ${r.passed ? 'pass' : 'fail'}`, `<b>0</b><small>점</small>`);
     p.append(sc);
     const stars = starsFor(score, [PASS_SCORE, 85, 100]);
+    if (stars > 0) g.onEvent?.('mgstars', stars, 'koat'); // 별 경험치 (체험관은 한 게임으로 하루 3판)
     const st = h('div', 'mg-starrow koat-stars', starsHtml(stars, false));
     p.append(st);
     const meta = h('div', 'koat-meta', r.passed ? (r.newStamp ? `🎉 ${d.name} 스탬프 획득! (${g.koat.book.count}/${DIVISIONS.length})` : '👍 통과!') : `조금만 더! ${PASS_SCORE}점 이상이면 스탬프를 받아요`);

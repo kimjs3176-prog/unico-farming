@@ -24,6 +24,21 @@ export function townHtml(R, { full = false } = {}) {
     + `<div class="tw-bar" role="progressbar" aria-label="다음 별까지" aria-valuenow="${Math.round(R.frac * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.round(R.frac * 100)}%"></i></div>${next}`;
 }
 
+/**
+ * 위 마을 별 줄을 보일까: 모든 장을 마친 이야기 탭은 아래 마을 카드가 같은 내용 → 줄 숨김
+ * → { strip, open } (open: 줄을 펼칠지)
+ */
+export function townStrip(tab, hasChapter, wantOpen) {
+  if (tab === 'story' && !hasChapter) return { strip: false, open: false };
+  return { strip: true, open: !!wantOpen };
+}
+
+/** 계절 도전 보상 칩 글: '🪙120 · ✨56 XP · 🥕' */
+export function rewardChip(r) {
+  if (!r) return '';
+  return [`🪙${r.money}`, `✨${r.xp} XP`, r.item?.icon].filter(Boolean).join(' · ');
+}
+
 export const QuestsPanel = {
   /** tab: 'story' | 'season' | 'town' (마을 카드를 펼친 이야기 탭). 없으면 이야기, 이야기가 비면 계절 도전 */
   openQuests(tab) {
@@ -45,10 +60,13 @@ export const QuestsPanel = {
     town.setAttribute('aria-expanded', 'false');
     const paintTown = () => {
       const R = g.checkTown?.() || g.townRating;
-      if (!R) { town.style.display = 'none'; return; }
-      town.innerHTML = townHtml(R, { full: townOpen });
-      town.classList.toggle('open', townOpen);
-      town.setAttribute('aria-expanded', String(townOpen));
+      const m = townStrip(tabNow, !!currentChapter(g.quests), townOpen);
+      town.hidden = !R || !m.strip;
+      town.style.display = town.hidden ? 'none' : '';
+      if (town.hidden) return;
+      town.innerHTML = townHtml(R, { full: m.open });
+      town.classList.toggle('open', m.open);
+      town.setAttribute('aria-expanded', String(m.open));
     };
     town.onclick = () => { townOpen = !townOpen; paintTown(); };
     // 편지함
@@ -109,14 +127,16 @@ export const QuestsPanel = {
       wrap.append(h('div', 'wk-note', `계절 축제 날(7일째)까지 · 다 하고 못 받은 보상은 다음 계절에 자동으로 받아요`));
       const rows = h('div', 'rows');
       (W?.view() || []).forEach((c, i) => {
+        // 보상 칩은 늘 보이고, 금빛 '받기' 단추는 다 했을 때만. 막대는 줄 전체 너비
+        const chip = c.reward ? `<span class="wk-rw" aria-label="보상 ${c.reward.money}코인, 경험치 ${c.reward.xp}${c.reward.item ? `, ${esc(c.reward.item.name)}` : ''}">${esc(rewardChip(c.reward))}</span>` : '';
         const r = h('div', `row quest wk-row${c.claimed ? ' claimed' : c.complete ? ' done' : ''}`,
-          `<span class="wk-ic">${c.icon}</span><div class="qmain"><div class="nm">${c.claimed ? '✅ ' : ''}${esc(c.title)}</div>${c.claimed ? '' : `<div class="bar"><i style="width:${Math.round((c.count / c.goal) * 100)}%"></i></div>`}</div><span class="qty">${c.count}/${c.goal}</span>`);
-        if (!c.claimed) {
-          const b = h('button', c.complete ? 'gold' : 'ghost', c.complete ? '받기' : '보상');
-          b.disabled = !c.complete;
-          b.setAttribute('aria-label', c.complete ? `${c.title} 보상 받기` : '아직 진행 중');
+          `<div class="wk-top"><span class="wk-ic">${c.icon}</span><div class="qmain"><div class="nm">${c.claimed ? '✅ ' : ''}${esc(c.title)}</div>${c.claimed ? '' : chip}</div><span class="qty">${c.complete && !c.claimed ? '<b class="wk-ok" aria-hidden="true">✓</b> ' : ''}${c.count}/${c.goal}</span></div>`
+          + (c.claimed ? '' : `<div class="bar wk-bar"><i style="width:${Math.round((c.count / c.goal) * 100)}%"></i></div>`));
+        if (c.complete && !c.claimed) {
+          const b = h('button', 'gold wk-get', '받기');
+          b.setAttribute('aria-label', `${c.title} 보상 받기`);
           b.onclick = () => { g.claimChallenge?.(i); render(); };
-          r.append(b);
+          r.querySelector('.wk-top').append(b);
         }
         rows.append(r);
       });
@@ -128,10 +148,7 @@ export const QuestsPanel = {
     };
     const render = () => {
       p.querySelectorAll('.qrows').forEach((e) => e.remove());
-      paintTown(); paintMail();
-      // 모든 장을 마친 이야기 탭은 아래 마을 카드가 같은 내용 → 위 줄은 숨김
-      if (tabNow === 'story' && !currentChapter(g.quests)) town.style.display = 'none';
-      else if (g.townRating) town.style.display = '';
+      paintTown(); paintMail(); // 모든 장을 마친 이야기 탭이면 위 줄은 숨김 (아래 마을 카드와 같은 내용)
       const wkn = W?.claimable || 0;
       for (const b of tabs.children) {
         const on = b.dataset.tab === tabNow;
@@ -190,6 +207,9 @@ export const QuestsPanel = {
       p.insertBefore(wrap, rec);
     };
     p.append(rec);
+    // 'town' 으로 열었는데 모든 장을 마쳤으면: 줄 대신 이야기 탭의 마을 카드로 스크롤
+    if (tab === 'town' && !currentChapter(g.quests)) townOpen = false;
     render();
+    if (tab === 'town' && !currentChapter(g.quests)) p.querySelector('.tw-card')?.scrollIntoView?.({ block: 'center' });
   },
 };
