@@ -164,3 +164,141 @@ export function clearSave() {
   blocked = true;
   try { localStorage.removeItem(KEY); localStorage.removeItem(BAK_KEY); localStorage.removeItem(CRASH_MARK); } catch {}
 }
+
+/* ── 농장 옮기기: 농장 코드(UF1.)·파일 내보내기/불러오기 (tests/save_transfer.test.js) ── */
+/** 가져온 직후 표시: 첫 부팅 한 번은 .bak 을 새로 쓰지 않음 (옮기기 전 농장을 남겨 둠) */
+export const IMPORT_MARK = `${KEY}.imported`;
+/** 가져온 직후인가 (읽으면 지움) */
+export function takeImportMark() {
+  try { const on = localStorage.getItem(IMPORT_MARK) === '1'; if (on) localStorage.removeItem(IMPORT_MARK); return on; } catch { return false; }
+}
+export const CODE_PREFIX = 'UF1.';
+export const CODE_MAX = 256 * 1024; // 받는 글 최대 길이
+export const QR_MAX = 2300;         // QR 에 담는 농장 코드 최대 길이
+
+/** FNV-1a 32비트 → 8자리 16진수 (코드가 잘리거나 바뀌었는지) */
+export function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+function toB64url(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function fromB64url(s) {
+  const b = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(b.length);
+  for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
+  return out;
+}
+async function pipe(bytes, Stream, kind) {
+  const res = new Response(new Blob([bytes]).stream().pipeThrough(new Stream(kind)));
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+/** 지금 저장된 농장 기록 (원문 JSON, 없으면 null) */
+export function currentSaveRaw() {
+  try { return localStorage.getItem(KEY) || null; } catch { return null; }
+}
+
+/**
+ * 농장 코드 만들기: JSON → gzip → base64url, 'UF1.g.<체크섬>.<본문>' (압축을 못 하면 'UF1.j.' 로 그대로)
+ * @param raw 저장 원문 (기본: 지금 저장된 기록)
+ */
+export async function exportCode(raw = currentSaveRaw()) {
+  if (!raw) return null;
+  const json = typeof raw === 'string' ? raw : JSON.stringify(raw);
+  const sum = fnv1a(json), bytes = new TextEncoder().encode(json);
+  if (typeof CompressionStream === 'function') {
+    try { return `${CODE_PREFIX}g.${sum}.${toB64url(await pipe(bytes, CompressionStream, 'gzip'))}`; } catch { /* 압축 없이 */ }
+  }
+  return `${CODE_PREFIX}j.${sum}.${toB64url(bytes)}`;
+}
+
+/** 기록 요약 (비교 창): 이름·며칠째·코인·저장 시각 */
+export function saveSummary(d) {
+  if (!isObj(d)) return null;
+  const day = Number(d.world?.day), coins = Number(d.economy?.money), at = Number(d.at);
+  return { name: String(d.name || '').slice(0, 12) || '이름 없음', day: Number.isFinite(day) ? Math.max(1, Math.floor(day)) : 1, coins: Number.isFinite(coins) ? Math.floor(coins) : 0, at: Number.isFinite(at) ? at : 0 };
+}
+
+/** 이 기기의 지금 농장 요약 (없거나 못 읽으면 null) */
+export function localSummary() {
+  const i = loadSaveInfo();
+  return i.status === 'ok' || i.status === 'newer' ? saveSummary(i.data) : null;
+}
+
+/** 읽은 기록 검사: 버전·핵심 칸 → { ok, data, summary } | { ok:false, reason } */
+function checkData(d) {
+  if (!isObj(d)) return { ok: false, reason: 'format' };
+  if ((Number(d.v) || 1) > SAVE_VERSION) return { ok: false, reason: 'newer' };
+  if (!isObj(d.farm) || !isObj(d.economy) || !isObj(d.world)) return { ok: false, reason: 'missing' };
+  let m;
+  try { m = migrate(d); } catch { return { ok: false, reason: 'format' }; }
+  if (!sane({ player: m.player || { x: 0, z: 9 }, economy: m.economy })) return { ok: false, reason: 'format' };
+  return { ok: true, data: m, summary: saveSummary(m) };
+}
+
+/** 까닭 → 안내 문구 */
+export const CODE_ERR = {
+  empty: '농장 코드나 파일을 넣어 주세요',
+  toolong: '너무 커서 농장 기록이 아니에요',
+  format: '유니코 팜 농장 코드가 아니에요',
+  checksum: '코드가 잘렸거나 바뀌었어요. 처음부터 끝까지 다시 복사해 주세요',
+  corrupt: '코드를 풀지 못했어요. 다시 복사해 주세요',
+  newer: '더 새 버전에서 만든 농장이에요. 새로고침한 뒤 다시 해 주세요',
+  missing: '농장 기록에 꼭 있어야 할 칸(밭·지갑·날짜)이 없어요',
+};
+
+/**
+ * 농장 코드·파일 글 읽기 → { ok, data, summary } | { ok:false, reason }
+ * 받는 것: 'UF1.' 코드, '#farm=' 이 붙은 주소, 파일로 저장한 JSON
+ */
+export async function parseCode(input) {
+  let s = String(input ?? '').trim();
+  if (!s) return { ok: false, reason: 'empty' };
+  if (s.length > CODE_MAX) return { ok: false, reason: 'toolong' };
+  const hash = s.indexOf('#farm=');
+  if (hash >= 0) { s = s.slice(hash + 6); try { s = decodeURIComponent(s); } catch { /* 그대로 */ } }
+  if (s.startsWith('{')) {
+    let d;
+    try { d = JSON.parse(s); } catch { return { ok: false, reason: 'format' }; }
+    return checkData(d?.unicoFarm && isObj(d.save) ? d.save : d); // 파일: 기록 그대로 (또는 { unicoFarm, save })
+  }
+  s = s.replace(/\s+/g, '');
+  const m = /^UF1\.([gj])\.([0-9a-f]{8})\.([A-Za-z0-9_-]+)$/.exec(s);
+  if (!m) return { ok: false, reason: s.startsWith(CODE_PREFIX) ? 'checksum' : 'format' };
+  let json;
+  try {
+    const bytes = fromB64url(m[3]);
+    if (m[1] === 'g') {
+      if (typeof DecompressionStream !== 'function') return { ok: false, reason: 'corrupt' };
+      json = new TextDecoder().decode(await pipe(bytes, DecompressionStream, 'gzip'));
+    } else json = new TextDecoder().decode(bytes);
+  } catch { return { ok: false, reason: 'checksum' }; } // 잘린 gzip 은 풀다가 실패
+  if (fnv1a(json) !== m[2]) return { ok: false, reason: 'checksum' };
+  let d;
+  try { d = JSON.parse(json); } catch { return { ok: false, reason: 'corrupt' }; }
+  return checkData(d);
+}
+
+/**
+ * 가져온 농장으로 바꾸기: 저장을 먼저 막고(떠날 때 저장이 덮지 않게) 지금 기록을 .bak 으로, 새 기록을 쓰고 새로고침
+ * 게임이 돌고 있으면 그 자리에서 바꾸지 않음 (불러오기는 한 번만 하도록 짜여 있음)
+ * @param opt.reload false 면 새로고침·저장 막기 없이 쓰기만 (부팅 중, 게임을 만들기 전)
+ */
+export function importSave(data, { reload = true } = {}) {
+  if (!isObj(data)) return false;
+  if (reload) blocked = true;
+  try {
+    const cur = localStorage.getItem(KEY);
+    if (cur) { try { if (isObj(JSON.parse(cur))) localStorage.setItem(BAK_KEY, cur); } catch { /* 못 읽는 기록은 백업하지 않음 */ } }
+    localStorage.setItem(KEY, JSON.stringify(data));
+    localStorage.removeItem(CRASH_MARK);
+    if (cur) localStorage.setItem(IMPORT_MARK, '1'); // 다음 부팅이 .bak(옮기기 전 농장)을 덮지 않게
+  } catch { if (reload) blocked = false; return false; }
+  if (reload && typeof location !== 'undefined' && typeof location.reload === 'function') location.reload();
+  return true;
+}

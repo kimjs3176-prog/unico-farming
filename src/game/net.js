@@ -5,6 +5,15 @@ import { jumpStep, JUMP_V } from './player.js';
 const SEND_HZ = 5;
 const PROBE_AFTER = 15000; // 이보다 오래 숨겨졌다 돌아오면 소켓이 살아 있는지 확인
 const PROBE_WAIT = 4000;   // 확인(ping) 뒤 이 안에 pong 이 안 오면 끊긴 것으로 봄
+/** 함께 수확: 이 행동이 목표에 보태는 수 (수확 1개 = 1, 주문 납품 1건 = 3) */
+export const CONTRIB_EVENTS = { harvest: 1, order: 3 };
+export const CONTRIB_EVERY = 3000; // 이 간격(ms)보다 자주 보내지 않음 (서버는 10초에 6번까지)
+export const CONTRIB_MAX = 10;     // 한 번에 보내는 최대 수 (남은 것은 다음에)
+
+/** 다른 접속자 이름표 글: 친구 ⭐ · 칭호 🏅 */
+export function nameTag(r, friend = false) {
+  return `${friend ? '⭐' : '👤'} ${r.name}${r.title ? ` · 🏅${r.title}` : ''}`;
+}
 
 /** 멀티플레이 클라이언트: 위치/포즈/채팅 릴레이 (서버 없으면 오프라인) */
 export class Net {
@@ -23,6 +32,43 @@ export class Net {
     this.probeTimer = 0;
     this.hiddenAt = 0;
     this.lastRecv = 0; // 마지막으로 무엇이든 받은 시각
+    this.goal = null;      // 방 공동 목표 (서버가 알려 줌)
+    this.contribQ = 0;     // 아직 보내지 않은 기여
+    this.contribAt = 0;    // 마지막으로 보낸 시각
+    this.shares = {};      // 목표 열쇠 → 내가 보낸 수 (표시용)
+  }
+
+  /**
+   * 함께 수확에 보탤 행동 (onEvent 에서 부름): 수확·주문 납품만 세어 두었다가 3초에 한 번 묶어 보냄
+   * 접속해 있고 목표를 받았을 때만 (오프라인 플레이는 세지 않음)
+   */
+  noteContrib(event, n = 1) {
+    const w = CONTRIB_EVENTS[event];
+    if (!w || !this.connected || !this.goal || this.goal.done) return;
+    const v = Math.floor(Number(n) || 0) * w;
+    if (v > 0) this.contribQ = Math.min(200, this.contribQ + v);
+  }
+
+  /** 이 목표에 내가 보낸 수 */
+  myShare(key) { return this.shares[key] || 0; }
+
+  /** 모아 둔 기여 보내기 (update 에서, 접속 중일 때만) */
+  flushContrib(now = Date.now()) {
+    if (this.contribQ <= 0 || now - this.contribAt < CONTRIB_EVERY || !this.goal || this.goal.done) return;
+    const n = Math.min(CONTRIB_MAX, this.contribQ);
+    if (!this.send({ t: 'contrib', n })) return;
+    this.contribAt = now;
+    this.contribQ -= n;
+    this.shares = { [this.goal.key]: (this.shares[this.goal.key] || 0) + n };
+  }
+
+  /** 서버가 알려 준 목표 (모양 검사 후) */
+  setGoal(m) {
+    const ok = m && typeof m.key === 'string' && Number.isFinite(m.target) && Number.isFinite(m.progress);
+    const prev = this.goal?.key;
+    this.goal = ok ? { key: m.key, seq: +m.seq || 1, of: +m.of || 3, target: m.target, progress: Math.min(m.target, m.progress), done: !!m.done, share: +m.share || 0 } : null;
+    if (prev && this.goal && prev !== this.goal.key) this.contribQ = 0; // 새 목표: 지난 목표 몫은 버림
+    this.game.coopGoal?.set(this.goal);
   }
 
   connect(room = '') {
@@ -59,6 +105,7 @@ export class Net {
     clearTimeout(this.probeTimer); this.probeTimer = 0;
     if (ws) { ws.onopen = ws.onmessage = ws.onclose = null; try { ws.close(); } catch {} }
     if (ws || this.connected || this.remote.size) { this.connected = false; this.clearRemote(); this.game.ui.setOnline(0, ''); } // 한 번도 못 붙었어도 오프라인 표시
+    if (this.goal) { this.goal = null; this.contribQ = 0; this.game.coopGoal?.set(null); } // 오프라인: 함께 수확 줄 숨김
   }
 
   /** 끊김 → 다시 접속 예약. 잘 붙어 있다가 끊겼으면(앱 전환·망 바뀜) 바로, 숨김 중이면 화면으로 돌아올 때(wake) */
@@ -128,10 +175,10 @@ export class Net {
     return { d: bd, label: `${this.game.social?.isFriend(r.name) ? '⭐' : '👤'} ${r.name} · 인사·하이파이브·선물`, key: 'player', onInteract: () => this.game.socialView.open(id) };
   }
 
-  /** 이름표 (친구면 ⭐, 금색) */
+  /** 이름표 (친구면 ⭐, 금색 · 칭호가 실려 오면 이름 뒤에 — decodeLook 이 정해진 칭호만 돌려줌) */
   labelOf(r) {
     const fr = this.game.social?.isFriend(r.name);
-    r.unico.setName(`${fr ? '⭐' : '👤'} ${r.name}`, '#ffffff', fr ? 'rgba(214,150,20,0.92)' : 'rgba(74,144,217,0.9)');
+    r.unico.setName(nameTag(r, fr), '#ffffff', fr ? 'rgba(214,150,20,0.92)' : 'rgba(74,144,217,0.9)');
   }
 
   switchRoom(name) {
@@ -171,7 +218,9 @@ export class Net {
       case 'welcome':
         this.fails = 0; this.welcomeAt = Date.now();
         if (!this.pongOk) this.send({ t: 'ping' }); // 이 서버가 ping 에 답하는지 한 번 확인 (옛 서버면 probe 를 쓰지 않음)
-        this.id = m.id; this.room = m.room; this.count = m.count; g.ui.setOnline(m.count, m.room); for (const p of m.players) this.upsert(p); break;
+        this.id = m.id; this.room = m.room; this.count = m.count; g.ui.setOnline(m.count, m.room); for (const p of m.players) this.upsert(p);
+        if (m.goal) this.setGoal(m.goal); // Cloudflare 릴레이는 welcome 에, Node 서버는 바로 뒤 'goal' 로
+        break;
       case 'joined': this.upsert(m.p); this.count = m.count; g.ui.setOnline(m.count, this.room); g.ui.toast(g.social?.isFriend(m.p.name) ? `⭐ 친구 ${m.p.name} 님이 들어왔어요!` : `🦄 ${m.p.name} 님이 입장했어요`); break;
       case 'left': this.removeRemote(m.id); this.count = m.count; g.ui.setOnline(m.count, this.room); break;
       case 'state': for (const p of m.players) this.upsert(p); break;
@@ -186,6 +235,8 @@ export class Net {
       case 'gift_ack': g.socialView?.onGiftAck(m); break;
       case 'act': g.socialView?.onAct(m); break;
       case 'act_fail': g.socialView?.onActFail?.(m); break; // 선물을 전하지 못함 → 돌려받기
+      case 'goal': this.setGoal(m); break; // 함께 수확 진행 (모르는 옛 클라이언트는 그냥 넘김)
+      case 'goal_done': if (typeof m.key === 'string') { this.contribQ = 0; g.coopGoal?.done({ key: m.key, target: +m.target || 0, mine: Math.max(0, Math.floor(+m.mine || 0)) }); } break;
       case 'pong': this.pongOk = true; clearTimeout(this.probeTimer); this.probeTimer = 0; break; // 살아 있음
     }
   }
@@ -202,7 +253,13 @@ export class Net {
       this.remote.set(p.id, r);
     }
     if (p.clientId) { r.clientId = p.clientId; r.giftV = p.giftV; }
-    if (p.l && p.l !== r.l) { r.l = p.l; r.unico.setOutfit(decodeLook(p.l)); } // 정해진 옷 이름만 (decodeLook)
+    if (p.l && p.l !== r.l) { // 정해진 옷 이름·칭호만 (decodeLook)
+      r.l = p.l;
+      const look = decodeLook(p.l);
+      r.unico.setOutfit(look);
+      const t = typeof look.title === 'string' ? look.title.slice(0, 16) : '';
+      if (t !== (r.title || '')) { r.title = t; this.labelOf(r); }
+    }
     if (p.x !== undefined) { r.target.x = p.x; r.target.z = p.z; }
     if (p.f !== undefined) r.unico.facing = p.f;
     if (p.a !== undefined) {
@@ -237,6 +294,7 @@ export class Net {
     }
     if (!this.connected) return;
     g.socialView?.flushGift?.();
+    this.flushContrib();
     this.acc += dt;
     if (this.acc < 1 / SEND_HZ) return;
     this.acc = 0;

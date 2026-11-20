@@ -9,6 +9,9 @@ const FAR = 40;
 const KEEP = 96;
 /** 동시에 떠 있는 입자(별·먼지·물방울) 상한: 낮음 품질은 적게 (넘치면 더 만들지 않음) */
 export const fxCap = (q) => (q?.level === 'low' ? 48 : 128);
+/** 불꽃놀이 단계별 발 수·한 발의 별 수 (낮음은 작은 한 발) */
+export const FIREWORKS = { low: { shots: 1, n: 18 }, medium: { shots: 3, n: 28 }, high: { shots: 5, n: 32 } };
+const SHELL_COLORS = [0xffb000, 0xff4f8b, 0x2fa8ff, 0x63d14a, 0xff7a1a]; // 낮 하늘에서도 보이게 진한 색
 
 /**
  * 덮어쓰기 재질로 그리는 패스(주변광 차폐 GTAO 의 법선·깊이)에서는 글자 스프라이트를 그리지 않음:
@@ -35,6 +38,7 @@ export class FX {
     this.scene = scene;
     this.items = [];
     this.live = 0; // 지금 떠 있는 입자 수
+    this.shells = []; // 기다리는 불꽃 (fireworks)
     this.setQuality(quality);
     // 입자는 이 묶음 안에서 보이기만 껐다 켬 (장면에 넣고 빼기를 반복하지 않음)
     this.group = new THREE.Group();
@@ -245,7 +249,38 @@ export class FX {
     if (it.kind !== 'drop') o.material.dispose(); // 물방울 재질은 함께 쓰는 것
   }
 
+  /**
+   * 불꽃놀이 (함께 수확 목표 달성): 머리 위 하늘에 둥근 불꽃 몇 발. 품질에 맞춰 — 낮음은 작은 한 발, 보통 3발, 높음 5발
+   * 입자 상한(cap) 안에서만 (넘치면 개수를 줄임)
+   */
+  fireworks(x, z, level = 'medium') {
+    const plan = FIREWORKS[level] || FIREWORKS.medium;
+    const y0 = heightAt(x, z) + 6;
+    for (let i = 0; i < plan.shots; i++) {
+      const a = (i / plan.shots) * Math.PI * 2 + 0.6;
+      this.shells.push({ t: i * 0.32, x: x + Math.cos(a) * (i ? 2.2 : 0), y: y0 + (i % 2) * 1.2, z: z + Math.sin(a) * (i ? 2.2 : 0), color: SHELL_COLORS[i % SHELL_COLORS.length], n: plan.n });
+    }
+  }
+
+  /** 불꽃 한 발: 고르게 퍼지는 구 모양 (burst 와 같은 별 입자를 씀) */
+  _shell(s) {
+    const before = this.items.length;
+    this.burst(s.x, s.y, s.z, s.color, s.n);
+    for (let i = before; i < this.items.length; i++) {
+      const it = this.items[i], k = i - before, n = this.items.length - before;
+      const yv = 1 - (2 * (k + 0.5)) / n, r = Math.sqrt(1 - yv * yv), th = k * 2.39996; // 피보나치 구
+      const sp = 3.6 + Math.random() * 0.6;
+      it.obj.userData.v.set(Math.cos(th) * r * sp, yv * sp + 2.2, Math.sin(th) * r * sp);
+      it.life = 1.1 + Math.random() * 0.3;
+      it.big = 1.7; // 하늘에서도 보이게 조금 크게
+    }
+  }
+
   update(dt) {
+    if (this.shells.length) {
+      for (const s of this.shells) s.t -= dt;
+      while (this.shells.length && this.shells[0].t <= 0) this._shell(this.shells.shift());
+    }
     this._stepItem(dt);
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
@@ -257,7 +292,7 @@ export class FX {
         it.obj.position.addScaledVector(v, dt);
         it.obj.rotation.x += dt * 8; it.obj.rotation.y += dt * 6;
         it.obj.material.opacity = Math.min(1, it.life * 2);
-        it.obj.scale.setScalar(0.6 + it.life);
+        it.obj.scale.setScalar((0.6 + it.life) * (it.big || 1));
       }
       if (it.grow) it.obj.scale.multiplyScalar(1 + it.grow * dt);
       if (it.fade) it.obj.material.opacity = Math.max(0, it.life * 1.5);

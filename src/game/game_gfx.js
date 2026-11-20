@@ -5,7 +5,7 @@ import { DEFERRED_MODELS } from './assets.js';
 import { fovFor } from './camera.js';
 import { Unico } from './unico.js';
 import { PostFX } from './postfx.js';
-import { saveSettings, resolveQuality, uiScaleOf } from './quality.js';
+import { saveSettings, resolveQuality, uiScaleOf, LEVELS, autoNow, noteAutoDrop } from './quality.js';
 import { shadowRadiusFor } from './shadow_soft.js';
 
 export const GameGfx = {
@@ -13,11 +13,33 @@ export const GameGfx = {
   setGraphics(settings) {
     this.saver = 0; // 설정을 바꾸면 절전 단계 풀림
     this.gfx = settings;
-    saveSettings(settings);
-    const prev = this.quality;
+    saveSettings(settings); // 이번 접속에서만 낮춘 단계(sessionLevel)는 저장하지 않음
     const q = resolveQuality(settings);
-    const rebuildPost = prev.post !== q.post || prev.ao !== q.ao || prev.tiltShift !== q.tiltShift || prev.env !== q.env; // env: 환경맵(IBL) 켜고 끄기
-    this.applyQuality(q, { rebuildPost });
+    this.applyQuality(q, { rebuildPost: this.needRebuild(q) });
+  },
+
+  /** 화면 효과를 다시 만들어야 하는가 (env: 환경맵(IBL) 켜고 끄기) */
+  needRebuild(q) {
+    const prev = this.quality;
+    return prev.post !== q.post || prev.ao !== q.ao || prev.tiltShift !== q.tiltShift || prev.env !== q.env;
+  },
+
+  /**
+   * 자동 품질이 끊김을 보고 한 단계 내림: 이번 접속에만 (sessionLevel). 다른 접속에서도 같이 내려야 했으면 시작 단계로 저장(14일)
+   * 이미 가장 낮으면 저장하지 않는 절전 단계. 내린 단계(없으면 null)
+   */
+  autoStepDown() {
+    const i = LEVELS.indexOf(autoNow(this.gfx));
+    if (i <= 0) { this.lighten(); return null; }
+    const level = LEVELS[i - 1];
+    const { settings } = noteAutoDrop(this.gfx, level, Date.now(), (this._dropSess ||= {}));
+    const next = { ...settings, sessionLevel: level };
+    this.saver = 0;
+    this.gfx = next;
+    saveSettings(next); // 내린 기록(autoDrop)과, 두 번째 접속이면 시작 단계(autoLevel)
+    const q = resolveQuality(next);
+    this.applyQuality(q, { rebuildPost: this.needRebuild(q) });
+    return level;
   },
 
   applyQuality(q, { rebuildPost = false } = {}) {

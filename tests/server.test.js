@@ -122,3 +122,50 @@ test('rooms: 선물을 전하지 못하면(한도 초과·상대 없음) 번호(
   assert.equal(sanitizeGid('7'), 7);
   for (const bad of [0, -1, 1.5, 'x', null, undefined, 2e9]) assert.equal(sanitizeGid(bad), 0, String(bad));
 });
+
+test('함께 수확: 입장 뒤 tick 에 목표를 받고, 기여는 1초에 한 번 묶어 알림', () => {
+  // 준비
+  let now = Date.UTC(2026, 10, 20, 3);
+  const rooms = new Rooms({ maxPlayers: 10, now: () => now });
+  const a = rooms.join(fakeWs(), 'a', null, '', 'aaaaaaaaaaaaaaaa'), b = rooms.join(fakeWs(), 'b');
+  rooms.tick();
+  const goals = (p) => p.ws.sent.filter((m) => m.t === 'goal');
+  assert.equal(goals(a).length, 1, '새로 온 사람에게 지금 목표');
+  assert.equal(goals(a)[0].key, '2026-11-20#1');
+  // 실행: 세 번 기여 → 한 번만 알림
+  rooms.handle(a, { t: 'contrib', n: 4 });
+  rooms.handle(a, { t: 'contrib', n: 3 });
+  rooms.handle(b, { t: 'contrib', n: 2 });
+  rooms.tick();
+  now += 200; rooms.tick();
+  // 확인
+  assert.equal(goals(b).length, 2);
+  assert.equal(goals(b).at(-1).progress, 9);
+});
+
+test('함께 수확: 소수·문자·음수·도배 기여는 무시', () => {
+  const now = Date.UTC(2026, 10, 20, 3);
+  const rooms = new Rooms({ maxPlayers: 10, now: () => now });
+  const a = rooms.join(fakeWs(), 'a');
+  for (const n of [1.5, '5', -3, 0, null]) rooms.handle(a, { t: 'contrib', n });
+  assert.equal(a.room.goalState?.goal.progress ?? 0, 0);
+  for (let i = 0; i < 10; i++) rooms.handle(a, { t: 'contrib', n: 10 });
+  assert.equal(a.room.goalState.goal.progress, 38, '한 사람 몫(1/4)에서 멈춤');
+  const c = rooms.join(fakeWs(), 'c');
+  for (let i = 0; i < 10; i++) rooms.handle(c, { t: 'contrib', n: 1 });
+  assert.equal(a.room.goalState.goal.progress, 44, '10초에 6번만 (도배 방지)');
+});
+
+test('함께 수확: 다 채우면 사람마다 기여한 수와 함께 goal_done, 다음 목표로', () => {
+  const now = Date.UTC(2026, 10, 20, 3);
+  const rooms = new Rooms({ maxPlayers: 10, now: () => now });
+  const ps = ['a', 'b', 'c', 'd'].map((n) => rooms.join(fakeWs(), n, null, '', `client-${n}-0000000000`));
+  const idle = rooms.join(fakeWs(), 'e');
+  for (const p of ps) for (let i = 0; i < 4; i++) rooms.handle(p, { t: 'contrib', n: 10 });
+  rooms.tick();
+  const done = (p) => p.ws.sent.filter((m) => m.t === 'goal_done');
+  assert.equal(done(ps[0]).length, 1);
+  assert.equal(done(ps[0])[0].mine, 38, '기여한 수');
+  assert.equal(done(idle)[0].mine, 0, '기여 안 한 사람은 0');
+  assert.equal(idle.ws.sent.filter((m) => m.t === 'goal').at(-1).key, '2026-11-20#2', '다음 목표');
+});

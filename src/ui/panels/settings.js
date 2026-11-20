@@ -1,9 +1,44 @@
 // 환경설정(그래픽 품질·글자 크기)·도움말 창
-import { h } from '../dom.js';
-import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf } from '../../game/quality.js';
+import { h, esc } from '../dom.js';
+import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf, autoNow } from '../../game/quality.js';
 import { canVibrate, hapticPrefs, shakePrefs, reducedMotion } from '../../game/juice.js';
 import { copyDiag } from '../../game/crash.js';
 import { touchUI } from '../../game/input.js';
+import { parseCode, importSave, localSummary, CODE_ERR, QR_MAX } from '../../game/save.js';
+import { farmQrCanvas } from '../join_qr.js';
+
+/** 농장 요약 한 줄: '별님 · 12일차 · 3,450코인' */
+export function summaryText(s) {
+  if (!s) return '저장된 농장 없음';
+  const at = s.at ? new Date(s.at) : null;
+  return `${s.name} · ${s.day}일차 · ${s.coins.toLocaleString()}코인${at && !Number.isNaN(+at) ? ` · ${at.getMonth() + 1}월 ${at.getDate()}일 저장` : ''}`;
+}
+/** 파일 이름: unico-farm-YYYYMMDD.json */
+export function farmFileName(d = new Date()) {
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `unico-farm-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}.json`;
+}
+const isLocal = () => typeof location !== 'undefined' && /^(localhost|127\.|\[?::1\]?$)/.test(location.hostname);
+
+/**
+ * 가져올 농장 비교 카드: '이 기기 → 가져올 농장' + [바꾸기]·[취소] (확인 없이는 덮어쓰지 않음)
+ * @returns 카드 요소
+ */
+export function compareCard(incoming, { local = localSummary(), okLabel = '가져온 농장으로 바꾸기', noLabel = '취소', onOk, onNo } = {}) {
+  const card = h('div', 'farm-compare', `
+    <div class="fc-row"><span class="fc-k">이 기기</span><b>${esc(summaryText(local))}</b></div>
+    <div class="fc-arrow" aria-hidden="true">↓</div>
+    <div class="fc-row in"><span class="fc-k">가져올 농장</span><b>${esc(summaryText(incoming))}</b></div>
+    <p class="fc-note">${local ? '지금 농장은 백업으로 한 번 남겨 두고 바뀌어요.' : '이 기기에는 아직 농장이 없어요.'} 옮긴 뒤에는 두 기기의 농장이 따로 자라요.</p>
+    <div class="fc-btns"><button class="gold fc-ok"></button><button class="ghost fc-no"></button></div>`);
+  card.setAttribute('role', 'group');
+  card.setAttribute('aria-label', '농장 비교');
+  card.querySelector('.fc-ok').textContent = okLabel;
+  card.querySelector('.fc-no').textContent = noLabel;
+  card.querySelector('.fc-ok').onclick = () => onOk?.();
+  card.querySelector('.fc-no').onclick = () => onNo?.();
+  return card;
+}
 
 /** 소리 크기 칸: 전체·음악·효과음·주변 소리 */
 const VOL_ROWS = [['master', '전체'], ['music', '음악'], ['sfx', '효과음'], ['amb', '주변 소리']];
@@ -49,15 +84,16 @@ export const SettingsPanel = {
     const render = () => {
       const s = g.gfx;
       const cur = s.preset;
-      const lvl = cur === 'auto' ? s.autoLevel : cur;
+      const lvl = cur === 'auto' ? autoNow(s) : cur;
       const mode = g.audio.mode ?? 'all';
       const rm = reducedMotion();
-      const presetBtns = ['auto', 'low', 'medium', 'high'].map((k) => `<button class="gfx-preset ${cur === k ? 'on' : ''}" data-p="${k}"><b>${PRESET_INFO[k].name}</b>${k === 'auto' && cur === 'auto' ? `<small>지금: ${PRESET_INFO[s.autoLevel].name}</small>` : ''}</button>`).join('');
+      const presetBtns = ['auto', 'low', 'medium', 'high'].map((k) => `<button class="gfx-preset ${cur === k ? 'on' : ''}" data-p="${k}"><b>${PRESET_INFO[k].name}</b>${k === 'auto' && cur === 'auto' ? `<small>지금: ${PRESET_INFO[autoNow(s)]?.name || ''}</small>` : ''}</button>`).join('');
       p.querySelector('.gfx-body')?.remove();
       const body = h('div', 'gfx-body', `
         <h3>🖥️ 그래픽 품질 <span class="gfx-fps">측정 중…</span></h3>
         <div class="gfx-presets">${presetBtns}</div>
         <p class="gfx-desc">${PRESET_INFO[cur]?.desc || ''}${cur === 'custom' ? '' : lvl === 'low' ? ' · 저사양 PC 는 이 단계를 권장해요' : ''}</p>
+        ${cur === 'auto' ? `<p class="gfx-tip">🧭 이 기기 그래픽에 맞춰 '${PRESET_INFO[s.autoLevel]?.name || ''}'으로 시작해요${s.sessionLevel && s.sessionLevel !== s.autoLevel ? ` · 이번에는 화면이 끊겨 '${PRESET_INFO[s.sessionLevel].name}'으로 낮췄어요 (다음 접속은 다시 '${PRESET_INFO[s.autoLevel]?.name || ''}'부터)` : ''}</p>` : ''}
         <h3>세부 설정</h3>
         <label class="gfx-row">해상도 <input type="range" min="50" max="100" step="5" data-k="scale" value="${Math.round(s.scale * 100)}"><span>${Math.round(s.scale * 100)}%</span></label>
         <label class="gfx-row">그림자 <select data-k="shadows">${Object.entries(SHADOWS).map(([k, v]) => `<option value="${k}" ${s.shadows === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></label>
@@ -81,7 +117,8 @@ export const SettingsPanel = {
         <button class="ghost gfx-help" style="margin-top:6px">❓ 도움말 · 조작법 보기</button>
         <button class="ghost gfx-diag" style="margin-top:6px">📋 진단 정보 복사</button>
         <p class="gfx-tip gfx-diag-note" aria-live="polite"></p>`);
-      p.append(body);
+      const fm = p.querySelector('.farm-move');
+      if (fm) fm.before(body); else p.append(body);
       body.querySelectorAll('.gfx-preset[data-p]').forEach((b) => (b.onclick = () => { g.setGraphics(applyPreset(g.gfx, b.dataset.p)); render(); }));
       body.querySelectorAll('[data-ui]').forEach((b) => (b.onclick = () => { g.setGraphics({ ...g.gfx, uiScale: +b.dataset.ui }); g.audio.play('click'); render(); }));
       // 진동: 그래픽 설정과 따로 저장 (프리셋 비교에 섞이지 않게)
@@ -129,6 +166,130 @@ export const SettingsPanel = {
     };
     this._settingsRender = render;
     render();
+    p.append(this.farmMoveSection());
+  },
+
+  /** '내 농장 옮기기·보관': 코드 복사·파일 저장·불러오기(비교 후)·휴대폰으로 이어하기(QR)·오래 보관 (+ 앱 설치·업데이트 자리) */
+  farmMoveSection() {
+    const g = this.game;
+    const sec = h('div', 'farm-move', `
+      <h3>💾 내 농장 옮기기·보관</h3>
+      <p class="gfx-tip">농장은 이 브라우저에만 저장돼요. 다른 기기로 옮기거나 지켜 두려면 농장 코드나 파일로 보관하세요.</p>
+      <div class="fm-btns">
+        <button class="ghost" data-fm="copy">📋 농장 코드 복사</button>
+        <button class="ghost" data-fm="file">💾 파일로 저장</button>
+        <button class="ghost" data-fm="load">📥 코드·파일로 불러오기</button>
+        <button class="ghost" data-fm="qr">📱 휴대폰으로 이어하기</button>
+        <button class="ghost" data-fm="keep" hidden>🛡️ 이 브라우저에 오래 보관</button>
+      </div>
+      <div class="fm-out" aria-live="polite"></div>
+      <div class="pwa-slot"></div>`);
+    const out = sec.querySelector('.fm-out');
+    const say = (text, cls = '') => { out.replaceChildren(h('p', `gfx-tip fm-note ${cls}`.trim(), esc(text))); };
+    const code = async () => {
+      const c = await g.farmCode?.();
+      if (!c) say('아직 저장된 농장이 없어요. 조금 놀고 나서 다시 해 주세요', 'warn');
+      return c;
+    };
+    sec.querySelector('[data-fm="copy"]').onclick = async () => {
+      const c = await code();
+      if (!c) return;
+      try { await navigator.clipboard.writeText(c); say(`✅ 농장 코드를 복사했어요 (${c.length.toLocaleString()}자). 다른 기기의 ⚙️ 환경설정 → '코드·파일로 불러오기'에 붙여 넣으세요`); }
+      catch { // 복사가 막힌 브라우저: 직접 고를 수 있게 보여 줌
+        const ta = h('textarea', 'fm-code');
+        ta.readOnly = true; ta.value = c; ta.setAttribute('aria-label', '농장 코드');
+        out.replaceChildren(h('p', 'gfx-tip fm-note', '아래 코드를 모두 골라 복사해 주세요'), ta);
+        ta.focus(); ta.select();
+      }
+    };
+    sec.querySelector('[data-fm="file"]').onclick = async () => {
+      if (!(await code())) return;
+      const raw = g.farmRaw?.();
+      if (!raw) return;
+      const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = farmFileName(); a.rel = 'noopener';
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      say(`✅ '${a.download}' 파일로 저장했어요. 다른 기기에서 '코드·파일로 불러오기'로 열면 돼요`);
+    };
+    sec.querySelector('[data-fm="load"]').onclick = () => {
+      const form = h('div', 'fm-load', `
+        <textarea class="fm-code" placeholder="농장 코드(UF1.…)를 붙여 넣으세요" aria-label="농장 코드 붙여 넣기"></textarea>
+        <div class="fm-load-row"><button class="ghost fm-pick">📄 파일 고르기</button><input type="file" accept=".json,application/json,text/plain" hidden aria-hidden="true"><button class="gold fm-go">코드 확인</button></div>
+        <p class="gfx-tip fm-note" aria-live="polite"></p>`);
+      const ta = form.querySelector('textarea'), note = form.querySelector('.fm-note');
+      const check = async (text) => {
+        note.textContent = '확인하는 중…';
+        const r = await parseCode(text);
+        if (!r.ok) { note.textContent = `⚠️ ${CODE_ERR[r.reason] || CODE_ERR.format}`; note.classList.add('warn'); return; }
+        out.replaceChildren(compareCard(r.summary, {
+          onOk: () => { g.save?.(); say('🔄 가져온 농장으로 바꾸는 중…'); importSave(r.data); },
+          onNo: () => say('취소했어요. 이 기기 농장은 그대로예요'),
+        }));
+      };
+      form.querySelector('.fm-go').onclick = () => check(ta.value);
+      form.querySelector('.fm-pick').onclick = () => form.querySelector('input[type=file]').click();
+      form.querySelector('input[type=file]').onchange = async (e) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        if (f.size > 256 * 1024) { note.textContent = `⚠️ ${CODE_ERR.toolong}`; return; }
+        check(await f.text());
+      };
+      out.replaceChildren(form);
+      ta.focus();
+    };
+    sec.querySelector('[data-fm="qr"]').onclick = async () => {
+      if (isLocal()) { say('지금 주소(내 컴퓨터)는 휴대폰에서 열 수 없어요. 농장 코드를 복사해 옮겨 주세요', 'warn'); return; }
+      const c = await code();
+      if (!c) return;
+      if (c.length > QR_MAX) { say('농장이 커서 QR 에 다 담기지 않아요. 농장 코드 복사나 파일로 옮겨 주세요', 'warn'); return; }
+      const box = h('div', 'fm-qr');
+      box.append(farmQrCanvas(c, 300), h('p', 'gfx-tip fm-note', '📷 휴대폰 카메라로 찍으면 이 농장을 휴대폰에서 이어서 해요. 농장 코드는 주소 # 뒤에 실려 서버로 보내지 않아요.'));
+      out.replaceChildren(box);
+    };
+    // 오래 보관 (Firefox 등 묻는 브라우저는 여기서 직접 누를 때만)
+    const keep = sec.querySelector('[data-fm="keep"]'), st = globalThis.navigator?.storage;
+    if (st?.persist && st.persisted) {
+      st.persisted().then((on) => {
+        keep.hidden = false;
+        if (on) { keep.disabled = true; keep.textContent = '✅ 이 브라우저에 오래 보관 중'; }
+      }).catch(() => {});
+      keep.onclick = async () => {
+        let on = false;
+        try { on = await st.persist(); } catch { /* 거절 */ }
+        if (on) { keep.disabled = true; keep.textContent = '✅ 이 브라우저에 오래 보관 중'; say('✅ 저장 공간이 모자라도 브라우저가 농장을 지우지 않게 했어요'); }
+        else say('이 브라우저가 오래 보관을 허락하지 않았어요. 가끔 농장 코드를 저장해 두세요', 'warn');
+      };
+    }
+    if (globalThis.navigator?.standalone === false) sec.querySelector('.gfx-tip').textContent += ' 아이폰 사파리는 오래 접속하지 않으면 기록을 지울 수 있어요.';
+    try { g.pwa?.renderSettings?.(sec.querySelector('.pwa-slot')); } catch { /* 앱 설치·업데이트 단추 없이 */ }
+    return sec;
+  },
+
+  /** 아이폰 사파리 안내: 홈 화면에 추가하면 오래 보관 — 홈 화면 앱은 새 농장으로 시작하므로 코드를 먼저 복사 */
+  openKeepTip() {
+    const g = this.game;
+    const p = this.openPanel('📲 농장을 오래 지키려면');
+    p.dataset.kind = 'keeptip';
+    p.append(h('div', 'rows', [
+      '<div class="row">아이폰 사파리는 한동안 들어오지 않으면 농장 기록을 지울 수 있어요. 홈 화면에 추가한 앱은 오래 보관돼요.</div>',
+      '<div class="row"><b>1.</b>&nbsp;아래 <b>농장 코드 복사</b>를 눌러요 (홈 화면 앱은 새 농장으로 시작해요)</div>',
+      '<div class="row"><b>2.</b>&nbsp;사파리 아래 <b>공유</b> 단추(네모에 위쪽 화살표) → <b>홈 화면에 추가</b></div>',
+      '<div class="row"><b>3.</b>&nbsp;홈 화면의 유니코 팜을 열고 ⚙️ 환경설정 → <b>코드·파일로 불러오기</b>에 붙여 넣어요</div>',
+    ].join('')));
+    const note = h('p', 'gfx-tip fm-note', '');
+    note.setAttribute('aria-live', 'polite');
+    const copy = h('button', 'gold', '📋 농장 코드 복사');
+    copy.onclick = async () => {
+      const c = await g.farmCode?.();
+      if (!c) { note.textContent = '아직 저장된 농장이 없어요'; return; }
+      try { await navigator.clipboard.writeText(c); note.textContent = '✅ 복사했어요. 이제 공유 → 홈 화면에 추가를 눌러 주세요'; }
+      catch { note.textContent = '복사가 막혔어요. ⚙️ 환경설정 → 내 농장 옮기기에서 코드를 직접 골라 복사해 주세요'; }
+    };
+    const later = h('button', 'ghost', '나중에');
+    later.onclick = () => this.closePanel();
+    p.append(copy, later, note);
   },
 
   openHelp() {
@@ -150,7 +311,7 @@ export const SettingsPanel = {
       '🏢 <b>KOAT 체험관</b> 북동쪽 광장 (첫 수확을 하면 하단 🏢 버튼이 열려요). 6개 본부(기술사업·벤처창업·종자사업·스마트농업·농기계검정·농업환경분석) 부스에서 미니게임으로 하는 일을 체험하고 스탬프를 모아요',
       '✨ <b>새 버튼</b> 해 보면 하나씩 열려요: 🛒 장터(여우에게 처음 팔면) · 📖 도감(물고기·곤충을 처음 잡으면) · 🏢 체험관(첫 수확) · 🪑 꾸미기(레벨 3) · 🤖 자동(첫 수확·첫 판매 보상을 받으면, P 키)',
       '🌐 <b>메타버스</b> 서버에 접속하면 다른 유니코가 보이고 💬 말하기·🦄 행동·🏡 농장 방 버튼과 채팅이 나타나요 (좌하단)',
-      '💾 자동 저장(10초) · 로컬 브라우저 저장',
+      '💾 <b>저장</b> 10초마다 이 브라우저에 자동 저장 · 다른 기기로 옮기거나 지켜 두려면 ⚙️ 환경설정 → 내 농장 옮기기·보관',
     ].map((t) => {
       const m = t.match(/^(\S+)\s+<b>(.*?)<\/b>\s*(.*)$/);
       return m ? `<div class="row help-row"><span class="ic">${m[1]}</span><b>${m[2]}</b><span class="ds">${m[3]}</span></div>` : `<div class="row">${t}</div>`;

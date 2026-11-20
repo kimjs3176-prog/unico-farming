@@ -253,3 +253,58 @@ test('Cloudflare 선물: 식별자·번호를 유지해 전달하고 상대의 �
   await room.webSocketMessage(b, JSON.stringify({ t: 'gift_ack', to: pa.id, targetId: pa.clientId, tx }));
   assert.equal(a.sent.at(-1).fromClientId, pb.clientId);
 });
+
+/** 저장소까지 흉내 낸 방 (목표 저장 확인) */
+function goalRoom(store = new Map()) {
+  const st = fakeState();
+  st.storage = { get: async (k) => structuredClone(store.get(k)), put: async (k, v) => { store.set(k, structuredClone(v)); } };
+  const room = makeRoom(st);
+  const timers = [];
+  room.later = (fn, ms) => { const tm = { fn, ms }; timers.push(tm); return tm; };
+  return { st, room, timers, store };
+}
+
+test('Cloudflare 함께 수확: welcome 에 목표, 기여는 타이머 하나로 묶어 저장·알림, 잘못된 값·입장 전·도배는 무시', async (t) => {
+  // 준비
+  const realNow = Date.now;
+  t.after(() => { Date.now = realNow; });
+  Date.now = () => Date.UTC(2026, 10, 20, 3);
+  const { st, room, timers, store } = goalRoom();
+  await room.fetch(upgrade('10.3.0.1'));
+  await room.fetch(upgrade('10.3.0.2'));
+  const [a, b] = st.getWebSockets();
+  await room.webSocketMessage(a, JSON.stringify({ t: 'contrib', n: 5 })); // 입장 전
+  await room.webSocketMessage(a, JSON.stringify({ t: 'join', name: 'a' }));
+  await room.webSocketMessage(b, JSON.stringify({ t: 'join', name: 'b' }));
+  assert.equal(a.sent[0].t, 'welcome');
+  assert.equal(a.sent[0].goal.key, '2026-11-20#1');
+  assert.equal(a.sent[0].goal.progress, 0, '입장 전 기여는 무시');
+  // 실행
+  for (const n of [1.5, '3', -1]) await room.webSocketMessage(a, JSON.stringify({ t: 'contrib', n }));
+  for (let i = 0; i < 9; i++) await room.webSocketMessage(b, JSON.stringify({ t: 'contrib', n: 2 }));
+  // 확인
+  assert.equal(timers.length, 1, '타이머는 하나만 (setInterval 없음)');
+  assert.ok(timers[0].ms >= 1000, `간격 ${timers[0].ms}`);
+  assert.equal(store.size, 0, '타이머 전에는 저장하지 않음');
+  await timers[0].fn();
+  assert.equal(store.get('goal').goal.progress, 12, '10초에 6번까지만');
+  assert.equal(a.sent.filter((m) => m.t === 'goal').at(-1).progress, 12);
+});
+
+test('Cloudflare 함께 수확: 잠들었다 깨어나도(새 객체) 저장소에서 목표를 이어 가고, 다 채우면 기여한 사람만 mine > 0', async (t) => {
+  const realNow = Date.now;
+  t.after(() => { Date.now = realNow; });
+  Date.now = () => Date.UTC(2026, 10, 20, 3);
+  const store = new Map([['goal', { goal: { key: '2026-11-20#1', date: '2026-11-20', seq: 1, target: 150, progress: 140, done: false }, tally: {} }]]);
+  const { st, room, timers } = goalRoom(store);
+  for (const ip of ['10.4.0.1', '10.4.0.2', '10.4.0.3']) await room.fetch(upgrade(ip));
+  const socks = st.getWebSockets();
+  for (const [i, ws] of socks.entries()) await room.webSocketMessage(ws, JSON.stringify({ t: 'join', name: `p${i}` }));
+  assert.equal(socks[0].sent[0].goal.progress, 140);
+  await room.webSocketMessage(socks[0], JSON.stringify({ t: 'contrib', n: 10 }));
+  await timers.shift().fn();
+  const done = socks.map((w) => w.sent.find((m) => m.t === 'goal_done'));
+  assert.equal(done[0].mine, 10, '기여한 사람');
+  assert.equal(done[1].mine, 0, '기여하지 않은 사람');
+  assert.equal(store.get('goal').goal.key, '2026-11-20#2', '다음 목표를 저장');
+});

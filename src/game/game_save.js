@@ -1,6 +1,6 @@
 // Game 믹스인: 저장·불러오기·초기화·다른 창 감지
 // main.js 에서 Object.assign(Game.prototype, …) 으로 붙임 (축약 메서드라 this 는 Game)
-import { saveGame, loadSaveInfo, loadBackup, backupSave, keepBroken, clearSave, setReadOnly, saveBlocked, lastSaveError, crashMarked, clearCrashMark, claimOwner, SAVE_KEY, OWNER_KEY } from './save.js';
+import { exportCode, currentSaveRaw, takeImportMark, saveGame, loadSaveInfo, loadBackup, backupSave, keepBroken, clearSave, setReadOnly, saveBlocked, lastSaveError, crashMarked, clearCrashMark, claimOwner, SAVE_KEY, OWNER_KEY } from './save.js';
 import { record, showOverlay, OVERLAY_ICON } from './crash.js';
 import { TOUR_REWARD } from './sim/koat.js';
 
@@ -85,7 +85,7 @@ export const GameSave = {
     } else if (info.status === 'ok') {
       // 마지막으로 깨끗하게 불러온 기록 (부팅마다 한 번) — 지난 접속이 치명 오류로 멈췄으면 오류 직전 백업을 지킴
       if (crashMarked()) this._crashMark = Date.now();
-      else backupSave(info.raw);
+      else if (!takeImportMark()) backupSave(info.raw); // 막 가져온 농장이면 .bak 에 옮기기 전 농장을 남겨 둠
     }
     if (!note) { this.ui.toast('💾 저장된 농장을 불러왔어요'); return; }
     this.whenShown(() => setTimeout(() => this.notice(note), 900)); // 로딩 화면이 걷힌 뒤에 보이게
@@ -232,4 +232,54 @@ export const GameSave = {
   },
 
   resetSave() { clearSave(); location.reload(); }, // clearSave 뒤에는 떠날 때 저장이 막힘 (지운 농장이 되살아나지 않게)
+
+  /** 옮기기용 지금 기록 원문 (먼저 저장, 저장된 농장이 없으면 null) */
+  farmRaw() {
+    if (this.flags) this.flags.lastExport = Date.now(); // 코드·파일로 보관한 적 있음 (오래된 농장 권유를 다시 안 띄움)
+    this.save();
+    return currentSaveRaw();
+  },
+
+  /** 농장 코드 (UF1.…) */
+  async farmCode() {
+    const raw = this.farmRaw();
+    return raw ? exportCode(raw) : null;
+  },
+
+  /**
+   * 농장 기록 지키기 (화면이 보인 뒤 한 번): 조용할 때만, 플레이를 막지 않게
+   *  - 크롬 계열(묻지 않고 정함): 2일차부터 오래 보관(persist) 요청 — 묻는 브라우저(Firefox)는 환경설정 단추로만
+   *  - 아이폰 사파리 탭: 처음 5분 안에 한 번 '홈 화면에 추가' 안내 (홈 화면 앱은 새 농장 → 코드 복사부터)
+   *  - 5일 넘게 키운 농장: 코드를 보관한 적 없으면 한 번 '가끔 농장 코드를 저장해 두세요'
+   */
+  careStorage() {
+    if (this._careArmed || typeof setTimeout !== 'function') return;
+    this._careArmed = true;
+    const nav = globalThis.navigator, f = () => (this.flags ||= {});
+    const idle = (fn, ms) => setTimeout(() => (typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 4000 }) : fn()), ms);
+    const calm = () => !this._introPending && !!f().intro && !this.busy?.() && !this.ui?.panel && !this._stale;
+    if (nav?.userAgentData && nav.storage?.persist) idle(async () => {
+      if ((this.world?.day || 0) < 2 || this._introPending) return;
+      try { if (!(await nav.storage.persisted())) await nav.storage.persist(); } catch { /* 안내 없이 */ }
+    }, 30000);
+    if (nav?.standalone === false && !f().keepTip) {
+      const t0 = Date.now();
+      const tip = () => {
+        if (f().keepTip || Date.now() - t0 > 300000) return; // 처음 5분 안에만
+        if (!calm()) return idle(tip, 20000);
+        f().keepTip = 1;
+        this.ui?.openKeepTip?.();
+      };
+      idle(tip, 90000);
+    }
+    const since = f().since ||= Date.now();
+    if (!f().codeNudge && !f().lastExport && Date.now() - since > 5 * 86400000) {
+      const nudge = () => {
+        if (!calm()) return idle(nudge, 30000);
+        f().codeNudge = 1;
+        this.ui?.toast?.('💾 가끔 농장 코드를 저장해 두세요 — ⚙️ 환경설정 → 내 농장 옮기기·보관', { type: 'info', key: 'keep' });
+      };
+      idle(nudge, 120000);
+    }
+  }, // clearSave 뒤에는 떠날 때 저장이 막힘 (지운 농장이 되살아나지 않게)
 };

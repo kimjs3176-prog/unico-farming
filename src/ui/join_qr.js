@@ -9,8 +9,12 @@ export function joinUrl() {
   return `${location.origin}${location.pathname.replace(/index\.html$/, '')}`;
 }
 
-export function joinQrCanvas(url = joinUrl(), size = 132) {
-  const qr = qrcode(0, 'M');
+/**
+ * @param ecc 오류 정정 단계 ('M' 기본, 긴 농장 옮기기 주소는 'L' 로 칸을 줄임)
+ * @param label 읽어 주기 글 (긴 주소를 그대로 읽지 않게)
+ */
+export function joinQrCanvas(url = joinUrl(), size = 132, ecc = 'M', label = `접속 QR 코드: ${url}`) {
+  const qr = qrcode(0, ecc);
   qr.addData(url);
   qr.make();
   const n = qr.getModuleCount(), margin = 2, cell = Math.max(2, Math.floor(size / (n + margin * 2)));
@@ -24,7 +28,7 @@ export function joinQrCanvas(url = joinUrl(), size = 132) {
   g.fillStyle = '#231916';
   for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (qr.isDark(r, k)) g.fillRect((k + margin) * cell, (r + margin) * cell, cell, cell);
   c.setAttribute('role', 'img');
-  c.setAttribute('aria-label', `접속 QR 코드: ${url}`);
+  c.setAttribute('aria-label', label);
   return c;
 }
 
@@ -41,4 +45,12 @@ export function joinQrBox(caption = '📱 휴대폰으로 찍으면 바로 접�
   t.append(b, s);
   box.append(t);
   return box;
+}
+
+/**
+ * 휴대폰으로 이어하기 QR: 주소 뒤 '#farm=<농장 코드>' (# 뒤는 서버·기록·Referer 로 가지 않음)
+ * 칸이 작아도 찍히게 오류 정정 L, 260~320px
+ */
+export function farmQrCanvas(code, size = 300) {
+  return joinQrCanvas(`${joinUrl()}#farm=${code}`, Math.max(260, Math.min(320, size)), 'L', '휴대폰으로 이어하기 QR 코드');
 }

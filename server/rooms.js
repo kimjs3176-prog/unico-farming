@@ -1,4 +1,5 @@
 /** 방/플레이어 관리 (전송 계층 독립 - 테스트 가능) */
+import { sanitizeContrib, rollGoal, addContrib, nextGoal, goalMsg, rateOk, contribKey, GOAL_FLUSH_MS } from './goal.js';
 const ADJ = ['부지런한', '느긋한', '씩씩한', '상냥한', '엉뚱한', '졸린', '반짝이는', '호기심많은', '용감한', '수줍은'];
 const NOUN = ['당근', '토마토', '옥수수', '딸기', '양배추', '새싹', '트랙터', '밀짚모자', '우유', '달걀'];
 
@@ -75,6 +76,17 @@ export class Room {
     this.name = name;
     this.maxPlayers = maxPlayers;
     this.players = new Map();
+    this.goalState = null; // 함께 수확 목표 { goal, tally } (메모리에만, 날짜가 바뀌면 새로)
+    this.goalDirty = false;
+    this.goalSentAt = -1e9;
+    this.goalDone = []; // 다 채운 목표: 다음 tick 에 사람마다 (기여했는지 함께) 알림
+  }
+  /** 오늘 목표 (날짜가 바뀌었으면 새로) */
+  goalNow(now) {
+    const prev = this.goalState?.goal?.key;
+    this.goalState = rollGoal(this.goalState, now);
+    if (prev && prev !== this.goalState.goal.key) this.goalDirty = true;
+    return this.goalState;
   }
   get size() { return this.players.size; }
   get full() { return this.players.size >= this.maxPlayers; }
@@ -114,6 +126,7 @@ export class Rooms {
     const p = new Player(ws, sanitizeName(name), room);
     p.l = sanitizeLook(look);
     p.clientId = validClientId(clientId) ? clientId : '';
+    p.needGoal = true; // 다음 tick 에 지금 목표를 알려 줌 (welcome 은 index.js 가 만듦)
     room.players.set(p.id, p);
     return p;
   }
@@ -179,8 +192,43 @@ export class Rooms {
         target.send({ t: 'act', from: p.id, name: p.name, ...a, to: undefined });
         return;
       }
+      case 'contrib': { // 함께 수확: 정수 1~10, 10초에 6번까지, 한 사람 몫은 목표의 1/4 까지
+        if (!sanitizeContrib(m.n)) return; // 잘못된 값은 횟수에도 넣지 않음
+        const t = this.now();
+        const r = rateOk(p.contribTimes, t);
+        p.contribTimes = r.times;
+        if (!r.ok) return;
+        const st = p.room.goalNow(t);
+        const done = st.goal;
+        const res = addContrib(st.goal, st.tally, contribKey(p), m.n);
+        if (!res.changed) return;
+        p.room.goalDirty = true;
+        if (res.done) {
+          p.room.goalDone.push({ goal: { ...done }, tally: { ...st.tally } });
+          const next = nextGoal(done);
+          if (next) p.room.goalState = { goal: next, tally: {} };
+        }
+        return;
+      }
       case 'ping': return p.send({ t: 'pong' });
     }
+  }
+
+  /** 목표 알림: 다 채운 목표는 사람마다(기여한 수와 함께), 진행은 1초에 한 번까지 방 전체로, 새로 온 사람에게는 지금 목표 */
+  goalTick(r, t) {
+    if (!r.size) return;
+    const st = r.goalNow(t);
+    for (const d of r.goalDone.splice(0)) {
+      for (const p of r.players.values()) p.send({ t: 'goal_done', key: d.goal.key, seq: d.goal.seq, target: d.goal.target, mine: d.tally[contribKey(p)] || 0 });
+    }
+    const msg = goalMsg(st.goal);
+    if (r.goalDirty && t - r.goalSentAt >= GOAL_FLUSH_MS) {
+      r.goalDirty = false; r.goalSentAt = t;
+      r.broadcast(msg);
+      for (const p of r.players.values()) p.needGoal = false;
+      return;
+    }
+    for (const p of r.players.values()) if (p.needGoal) { p.needGoal = false; p.send(msg); }
   }
 
   /** 변경된 플레이어만 묶어 방마다 전송 */
@@ -188,6 +236,7 @@ export class Rooms {
     const t = this.now();
     for (const r of this.rooms.values()) {
       for (const p of r.players.values()) if (p.lookNext !== null && t - p.lookAt >= LOOK_MS) wear(p, p.lookNext, t); // 미뤄 둔 옷: 1초가 지나면 전함
+      this.goalTick(r, t);
       const changed = [...r.players.values()].filter((p) => p.dirty);
       if (!changed.length) continue;
       const msg = { t: 'state', players: changed.map((p) => p.public()) };

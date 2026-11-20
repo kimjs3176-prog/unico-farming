@@ -32,9 +32,84 @@ export function isMobileDevice() {
   return matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
 }
 
-/** 자동 모드의 시작 단계 */
-export function autoStartLevel(mobile = isMobileDevice()) {
-  return mobile ? 'low' : 'high';
+/**
+ * GPU 이름 → 시작 단계 (모르는 이름은 보통)
+ *  낮음: 소프트웨어 렌더러 / 높음: 외장 GeForce RTX·GTX 상급·Quadro·Radeon RX(Vega 내장 제외)·Radeon Pro·Arc A5/A7·Apple M Pro/Max/Ultra
+ *  보통: Intel UHD/Iris, Radeon Vega 내장, GeForce MX, 'Apple GPU', 그 밖
+ */
+export const GPU_LOW = /SwiftShader|llvmpipe|softpipe|Basic Render/i;
+export const GPU_HIGH = /RTX|GTX (9[6-8]0|10[5-8]0|16[5-6]0)|Quadro|Radeon RX (?!Vega)\d|Radeon Pro|Arc\(TM\) A[57]|Apple M\d (Pro|Max|Ultra)/i;
+export function gpuTier(name = '') {
+  const s = String(name || '');
+  if (GPU_LOW.test(s)) return 'low';
+  if (GPU_HIGH.test(s)) return 'high';
+  return 'medium';
+}
+
+let gpuMemo = null;
+/**
+ * 이 기기 GPU (한 번만 잼): 모바일은 WebGL 없이 낮음. 그 밖은 버리는 webgl2 캔버스 하나로 이름을 읽고 바로 놓음
+ * → { tier, name, key } (key: 설정에 적어 두는 GPU 표시, 바뀌면 시작 단계를 다시 고름)
+ */
+export function gpuInfo(mobile = isMobileDevice()) {
+  if (mobile) return { tier: 'low', name: '', key: 'mobile' };
+  if (gpuMemo) return gpuMemo;
+  let name = '';
+  try {
+    if (typeof document !== 'undefined') {
+      const gl = document.createElement('canvas').getContext('webgl2');
+      if (gl) {
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        name = String((ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) || gl.getParameter(gl.RENDERER) || '');
+        gl.getExtension('WEBGL_lose_context')?.loseContext();
+      }
+    }
+  } catch { /* 모르면 보통 */ }
+  gpuMemo = { tier: gpuTier(name), name, key: name.slice(0, 96) || '?' };
+  return gpuMemo;
+}
+
+/** 자동 모드의 시작 단계: 모바일 낮음, PC 는 GPU 등급 (모르면 보통) */
+export function autoStartLevel(mobile = isMobileDevice(), gpu = null) {
+  return mobile ? 'low' : (gpu || gpuInfo(false)).tier;
+}
+
+/** 자동 내림을 기억하는 기간: 두 번째 접속에서도 같은 단계로 내려야 저장, 이 기간이 지나면 GPU 단계로 다시 시작 */
+export const AUTO_DROP_DAYS = 14;
+const DAY_MS = 86400000;
+const minLevel = (a, b) => (LEVELS.indexOf(a) <= LEVELS.indexOf(b) ? a : b);
+
+/**
+ * 자동 단계 맞추기 (불러올 때): GPU 가 바뀌었거나 적어 둔 적이 없으면(예전 저장: 높음에 굳은 기기) GPU 단계로 새로,
+ * 두 접속에서 내린 기록(keep)은 마지막으로 내린 뒤 14일 동안 시작 단계로, 지나면 지우고 GPU 단계로 다시
+ */
+export function resolveAuto(s, gpu, mobile = false, now = Date.now()) {
+  const tier = mobile ? 'low' : gpu.tier;
+  const out = { ...s };
+  const drop = out.autoDrop && LEVELS.includes(out.autoDrop.level) && Number.isFinite(out.autoDrop.at) ? out.autoDrop : null;
+  if (out.autoGpu !== gpu.key) { out.autoGpu = gpu.key; delete out.autoDrop; out.autoLevel = tier; return out; }
+  if (drop && now - drop.at > AUTO_DROP_DAYS * DAY_MS) { delete out.autoDrop; out.autoLevel = tier; return out; }
+  out.autoLevel = drop && drop.n >= 2 && LEVELS.includes(drop.keep) ? minLevel(tier, drop.keep) : tier;
+  return out;
+}
+
+/**
+ * 자동 조절기가 이번 접속에서 level 로 내림 → { settings, persist }
+ *  - autoDrop: { level: 이번 접속에서 내려간 가장 낮은 단계, n: 내린 접속 수, at, keep: 저장한 시작 단계 }
+ *  - 앞선 접속(14일 안)에서도 내렸으면 두 접속 모두 필요했던 단계(둘 중 높은 쪽)를 시작 단계로 저장(keep), 처음이면 기록만
+ * sess: 이번 접속 상태 (같은 접속에서 두 번 세지 않음)
+ */
+export function noteAutoDrop(s, level, now = Date.now(), sess = {}) {
+  if (!sess.started) {
+    sess.started = true;
+    const p = s.autoDrop;
+    sess.prev = p && LEVELS.includes(p.level) && Number.isFinite(p.at) && now - p.at <= AUTO_DROP_DAYS * DAY_MS ? p : null;
+  }
+  const prev = sess.prev;
+  const drop = { level, n: prev ? Math.min(9, (prev.n || 1) + 1) : 1, at: now };
+  if (!prev) return { settings: { ...s, autoDrop: drop }, persist: false };
+  drop.keep = LEVELS.indexOf(level) >= LEVELS.indexOf(prev.level) ? level : prev.level;
+  return { settings: { ...s, autoDrop: drop, autoLevel: minLevel(s.autoLevel || drop.keep, drop.keep) }, persist: true };
 }
 
 /** 화면 글자·버튼 크기 (접근성): 3단계 */
@@ -46,23 +121,34 @@ export function uiScaleOf(s) {
   return UI_SCALES.reduce((a, b) => (Math.abs(b.v - v) < Math.abs(a.v - v) ? b : a)).v;
 }
 
-export function loadSettings() {
+export function loadSettings({ now = Date.now() } = {}) {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { /* 저장소 사용 불가 */ }
-  const base = { preset: 'auto', autoLevel: autoStartLevel(), showFps: false, uiScale: 1, ...PRESETS.high };
-  const out = { ...base, ...(s || {}) };
+  const mobile = isMobileDevice(), gpu = gpuInfo(mobile);
+  const base = { preset: 'auto', autoLevel: autoStartLevel(mobile, gpu), showFps: false, uiScale: 1, ...PRESETS.high };
+  let out = { ...base, ...(s || {}) };
+  delete out.sessionLevel;
+  if (out.preset === 'auto') { // 사용자가 고른 단계는 건드리지 않음
+    out = resolveAuto(out, gpu, mobile, now);
+    Object.assign(out, PRESETS[out.autoLevel]); // 세부 항목도 그 단계 값으로 (환경설정 창 표시)
+  }
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('quality') : null;
   if (q && PRESETS[q]) Object.assign(out, PRESETS[q], { preset: q });
   return out;
 }
 
+/** 저장 (이번 접속에서만 낮춘 단계 sessionLevel 은 빼고) */
 export function saveSettings(s) {
-  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* 무시 */ }
+  const { sessionLevel, ...keep } = s || {};
+  try { localStorage.setItem(KEY, JSON.stringify(keep)); } catch { /* 무시 */ }
 }
+
+/** 자동 모드에서 지금 쓰는 단계 (이번 접속에서 낮췄으면 그 단계) */
+export const autoNow = (s) => (LEVELS.includes(s?.sessionLevel) ? s.sessionLevel : s?.autoLevel);
 
 /** 프리셋 선택: 세부 항목을 그 프리셋 값으로 */
 export function applyPreset(s, preset) {
-  const level = preset === 'auto' ? s.autoLevel || autoStartLevel() : preset;
+  const level = preset === 'auto' ? autoNow(s) || autoStartLevel() : preset;
   return { ...s, ...PRESETS[level], preset };
 }
 
@@ -80,10 +166,10 @@ const viewArea = () => (typeof innerWidth === 'number' && innerWidth > 0 ? inner
 
 /** 설정 → 렌더러가 쓰는 품질 값 (area: 화면 CSS 픽셀 넓이, 낮음 단계의 해상도를 정할 때만 씀) */
 export function resolveQuality(s, dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, area = viewArea()) {
-  const d = s.preset === 'auto' || PRESETS[s.preset] ? { ...s, ...PRESETS[s.preset === 'auto' ? s.autoLevel : s.preset] } : s;
+  const d = s.preset === 'auto' || PRESETS[s.preset] ? { ...s, ...PRESETS[s.preset === 'auto' ? autoNow(s) : s.preset] } : s;
   const sh = SHADOWS[d.shadows] || SHADOWS.medium;
   const maxDpr = d.ao ? 2 : d.post ? 1.5 : lowPixelRatio(dpr, area);
-  const level = s.preset === 'auto' ? s.autoLevel : PRESETS[s.preset] ? s.preset : d.post ? (d.ao ? 'high' : 'medium') : 'low';
+  const level = s.preset === 'auto' ? autoNow(s) : PRESETS[s.preset] ? s.preset : d.post ? (d.ao ? 'high' : 'medium') : 'low';
   return {
     level,
     pixelRatio: Math.max(0.5, Math.min(dpr, maxDpr) * d.scale),
@@ -108,27 +194,36 @@ export function levelExtras(level) {
 }
 
 /**
- * 자동 품질 조절기: 프레임 시간을 모아 평균 FPS 가 기준보다 낮으면 한 단계 내림을 제안.
- * 올리는 건 하지 않음(오르내림 반복 방지). 순수 로직 → tests/quality.test.js
+ * 자동 품질 조절기: 창(4초)마다 프레임 시간의 가운데 값(중앙값)을 보고, 두 창 잇달아 36ms(약 28fps)보다 길면 한 단계 내림을 제안.
+ *  - 30fps 로 꾸준히 도는 화면(33ms)은 내리지 않음, 한 번 끊김(중앙값에 안 걸림)으로도 내리지 않음
+ *  - 올리는 건 하지 않음(오르내림 반복 방지). 순수 로직 → tests/quality.test.js
  */
+export const SLOW_MS = 36;
 export class FpsGovernor {
-  constructor({ window = 4, minFps = 32, grace = 6 } = {}) {
-    this.window = window; this.minFps = minFps; this.grace = grace;
-    this.t = 0; this.frames = 0; this.fps = 60; this.cool = grace;
+  constructor({ window = 4, slowMs = SLOW_MS, strikes = 2, grace = 6 } = {}) {
+    this.window = window; this.slowMs = slowMs; this.strikes = strikes; this.grace = grace;
+    this.buf = new Float32Array(1024); // 한 창의 프레임 시간 (넘치면 마지막 칸만 덮어씀)
+    this.t = 0; this.frames = 0; this.maxDt = 0; this.fps = 60; this.p50 = 0; this.cool = grace; this.slow = 0;
   }
 
   /** 탭 전환 등으로 측정을 처음부터 (유예 시간 포함) */
-  reset() { this.t = 0; this.frames = 0; this.cool = this.grace; }
+  reset() { this.t = 0; this.frames = 0; this.maxDt = 0; this.cool = this.grace; this.slow = 0; }
 
   /** 매 프레임 호출. 내려야 하면 true */
   tick(dt) {
+    this.buf[Math.min(this.frames, this.buf.length - 1)] = dt;
     this.t += dt; this.frames++;
+    if (dt > this.maxDt) this.maxDt = dt;
     if (this.cool > 0) this.cool -= dt;
     if (this.t < this.window) return false;
+    const n = Math.min(this.frames, this.buf.length), stall = this.maxDt > this.t * 0.5;
     this.fps = this.frames / this.t;
-    this.t = 0; this.frames = 0;
-    if (this.cool > 0) return false;
-    if (this.fps < this.minFps) { this.cool = this.grace; return true; }
+    this.p50 = this.buf.subarray(0, n).slice().sort()[n >> 1] * 1000;
+    this.t = 0; this.frames = 0; this.maxDt = 0;
+    if (this.cool > 0) { this.slow = 0; return false; }
+    if (stall) return false; // 한 프레임이 창의 절반을 넘게 차지(한 번 멈춤): 판단하지 않음
+    this.slow = this.p50 > this.slowMs ? this.slow + 1 : 0;
+    if (this.slow >= this.strikes) { this.slow = 0; this.cool = this.grace; return true; }
     return false;
   }
 }

@@ -5,7 +5,8 @@ import { LAYOUT } from './game/world.js';
 import { isSubmitEnter } from './game/input.js';
 import { Audio } from './game/audio.js';
 import { Ambience } from './game/ambience.js';
-import { loadSaveInfo, loadBackup } from './game/save.js';
+import { loadSaveInfo, loadBackup, parseCode, importSave, localSummary, CODE_ERR } from './game/save.js';
+import { compareCard } from './ui/panels/settings.js';
 import { record, copyDiag } from './game/crash.js';
 import { onFetchRetry } from './game/fetch_gz.js';
 import { randomName } from './game/names.js';
@@ -81,6 +82,64 @@ export function probeWebGL2(doc = document) {
     gl.getExtension?.('WEBGL_lose_context')?.loseContext();
     return { ok: true, why: '' };
   } catch (e) { return { ok: false, why: e?.message || String(e) }; }
+}
+
+/**
+ * 휴대폰으로 이어하기 주소의 '#farm=<농장 코드>': 읽자마자 주소에서 지움 (새로고침·공유·방문 기록에 남지 않게) → 코드 (없으면 '')
+ */
+export function takeFarmHash(loc = globalThis.location, hist = globalThis.history) {
+  const hash = String(loc?.hash || '');
+  if (!hash.startsWith('#farm=')) return '';
+  try { hist?.replaceState?.(hist.state, '', `${loc.pathname}${loc.search}`); } catch { /* 지우지 못해도 계속 */ }
+  let code = hash.slice(6);
+  try { code = decodeURIComponent(code); } catch { /* 그대로 */ }
+  return code;
+}
+
+/**
+ * 가져온 농장 확인 카드 (로딩 화면 위): 비교해 보고 고르기 전에는 덮어쓰지 않음 → 가져왔으면 true
+ */
+export async function askFarmImport(code) {
+  const r = await parseCode(code);
+  const ld = document.getElementById('loading') || document.body;
+  const wrap = document.createElement('div');
+  wrap.className = 'farm-in';
+  const card = document.createElement('div');
+  card.className = 'fi-card';
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-modal', 'true');
+  card.setAttribute('aria-labelledby', 'fi-title');
+  const title = document.createElement('h2');
+  title.id = 'fi-title';
+  card.append(title);
+  wrap.append(card);
+  ld.append(wrap);
+  return new Promise((resolve) => {
+    const done = (v) => { wrap.remove(); resolve(v); };
+    if (!r.ok) {
+      title.textContent = '📱 농장을 가져오지 못했어요';
+      const p = document.createElement('p');
+      p.className = 'fi-note';
+      p.textContent = `${CODE_ERR[r.reason] || CODE_ERR.format}. 이 기기 농장은 그대로예요.`;
+      const ok = document.createElement('button');
+      ok.className = 'gold';
+      ok.textContent = '확인';
+      ok.onclick = () => done(false);
+      card.append(p, ok);
+      ok.focus();
+      return;
+    }
+    title.textContent = '📱 다른 기기의 농장을 가져왔어요';
+    const local = localSummary();
+    card.append(compareCard(r.summary, {
+      local,
+      okLabel: '가져온 농장으로 시작',
+      noLabel: local ? '이 기기 농장 그대로' : '새 농장',
+      onOk: () => done(importSave(r.data, { reload: false })), // 아직 게임을 만들기 전: 쓰기만 하고 이어서 부팅
+      onNo: () => done(false),
+    }));
+    card.querySelector('.fc-ok')?.focus();
+  });
 }
 
 /** 부팅 오류 코드 → 로딩 카드 문구 */
@@ -254,6 +313,9 @@ export async function boot(Game) {
       await new Promise((resolve) => fail('E-GL', new Error(`WebGL2 를 만들 수 없음${gl.why ? `: ${gl.why}` : ''}`), { onTry3d: resolve }));
       unfail();
     }
+    // 휴대폰으로 이어하기(#farm=): 주소에서 바로 지우고, 받는 동안 비교 카드를 띄워 고르게 함
+    const farmCode = takeFarmHash();
+    const decide = farmCode ? askFarmImport(farmCode).catch(() => false) : null;
     const info = loadSaveInfo();
     saved = info.data ?? (info.status === 'broken' ? loadBackup()?.data : null); // 못 읽은 기록이면 백업의 이름·위치
     nick.value = saved?.name || randomName();
@@ -265,8 +327,14 @@ export async function boot(Game) {
     };
     assets = new Assets();
     // 글자를 넘겨야 그 글자가 든 한글 조각을 받음 (글자 없이 부르면 라틴 조각만 받아 이름표가 대체 글꼴로 구워짐)
-    const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua', `${LABEL_TEXT} ${nick.value}`), document.fonts?.load?.("20px 'Unico Coin'", '🪙')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
+    // 글꼴 준비 (최대 2.5초): Jua 한글 조각·코인 글꼴 + 화면 글꼴이 준비됐다는 약속(window.__gfReady, 있으면)
+    const fontReady = Promise.race([Promise.all([document.fonts?.load?.('40px Jua', `${LABEL_TEXT} ${nick.value}`), document.fonts?.load?.("20px 'Unico Coin'", '🪙'), window.__gfReady]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
     await Promise.all([assets.loadAll((p) => { bump(); bar.style.width = Math.round(p * 100) + '%'; }), fontReady]);
+    if (decide && await decide) { // 가져온 농장으로: 이름·위치를 새 기록에서
+      const i2 = loadSaveInfo();
+      saved = i2.data;
+      if (saved?.name) nick.value = saved.name;
+    }
   } catch (e) {
     fail(bootCode(e, 'load'), e);
     return;

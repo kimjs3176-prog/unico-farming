@@ -31,10 +31,11 @@ import { UI } from './ui/ui.js';
 import { FX } from './game/fx.js';
 import { Audio } from './game/audio.js';
 import { Net } from './game/net.js';
+import { CoopGoal } from './ui/coop_goal.js';
 import { Minimap } from './ui/minimap.js';
 import { Juice } from './game/juice.js';
 import { PostFX, FrameCap } from './game/postfx.js';
-import { loadSettings, resolveQuality, applyPreset, FpsGovernor, LEVELS, PRESET_INFO, isMobileDevice } from './game/quality.js';
+import { loadSettings, resolveQuality, FpsGovernor, PRESET_INFO, isMobileDevice } from './game/quality.js';
 import { SURF } from './game/surface.js';
 import { Music } from './game/music.js';
 import { Guide } from './game/guide.js';
@@ -148,6 +149,7 @@ class Game {
     this.town = new TownView(this);
     this.home = new HomeView(this);
     this.net = new Net(this);
+    this.coopGoal = new CoopGoal(this); // 방 공동 목표 '함께 수확' (접속 중일 때만 보임)
     this.socialView = new SocialView(this);
     this.season = new SeasonView(this); // 계절 (7일마다 봄·여름·가을·겨울)
     this.festival = new FestivalView(this); // 계절 축제 마당 (꾸미기 모델 등록 → decor 보다 먼저)
@@ -306,6 +308,7 @@ class Game {
     // 목장 손님 동물은 ranch.update 가 1초마다 플레이어 위치를 보고 화면 밖 먼 자리에 풀어 놓음 (여기서 바로 넣으면 눈앞에 나타날 수 있음)
     this.assets.loadDeferred?.().then(() => this.warmDeferred()).catch(() => {});
     this.camHintOnce();
+    this.careStorage?.(); // 농장 기록 지키기: 오래 보관 요청·홈 화면 안내·코드 저장 권유 (조용할 때)
   }
 
   /** 점프: 창·대화·컷신·탈것·탈곡·낚시·미니게임 중에는 안 함 (그때 Space 는 다른 일) */
@@ -339,8 +342,8 @@ class Game {
     const o = this.home.sim.outfit || {};
     return { hat: o.hat ?? null, scarf: o.scarf ?? null, goggles: !!o.goggles, sprout: o.sprout === undefined ? true : !!o.sprout, costume: this.costume.wearing };
   }
-  /** 다른 접속자에게 보내는 모습 문자열 */
-  look() { return encodeLook(this.outfitNow()); }
+  /** 다른 접속자에게 보내는 모습 문자열 (칭호는 정해진 것만 실림 — encodeLook 이 고름) */
+  look() { return encodeLook({ ...this.outfitNow(), title: this.flags?.title ?? null }); }
   /** 옷차림을 내 유니코에 입히고 (send 면) 접속자에게 알림 */
   applyLook(send = true) {
     const o = this.outfitNow();
@@ -393,16 +396,14 @@ class Game {
 
   /** 로직: 품질 자동 조절·단축키·월드·시스템 갱신·카메라·HUD */
   stepLogic(dt, rawDt) {
-    // 자동 품질: 화면이 계속 끊기면 한 단계 낮춤 (탭을 숨겼다 돌아온 공백은 visibilitychange 에서 측정 초기화)
+    // 자동 품질: 프레임 중앙값이 두 창 잇달아 느리면 한 단계 낮춤 (탭을 숨겼다 돌아온 공백은 visibilitychange 에서 측정 초기화)
     // 컷신 중에는 측정하지 않음: 전경 샷은 평소보다 1.5배 무거워 화질이 중간에 바뀌며(화면 재구성) 더 끊김
     if (rawDt < 3 && !this.cinema.locked && this.governor.tick(rawDt)) {
       this.ui.updateFps?.(this.governor.fps);
       if (this.gfx.preset === 'auto') {
-        const i = LEVELS.indexOf(this.gfx.autoLevel);
-        if (i > 0) {
-          this.setGraphics(applyPreset({ ...this.gfx, autoLevel: LEVELS[i - 1] }, 'auto'));
-          this.ui.toast(`⚙️ 화면이 끊겨서 그래픽 품질을 '${PRESET_INFO[LEVELS[i - 1]].name}'${josa(PRESET_INFO[LEVELS[i - 1]].name, '으로/로')} 낮췄어요 (환경설정에서 바꿀 수 있어요)`);
-        } else if (i === 0) this.lighten(); // 이미 '낮음' (모바일 시작 단계): 저장하지 않는 절전 단계
+        // 이번 접속에서만 낮춤 (한 번 끊긴 일로 좋은 PC 의 화질이 굳지 않게). 다음 접속에서도 끊기면 그때 시작 단계로 저장
+        const lv = this.autoStepDown();
+        if (lv) this.ui.toast(`⚙️ 화면이 끊겨서 그래픽 품질을 '${PRESET_INFO[lv].name}'${josa(PRESET_INFO[lv].name, '으로/로')} 낮췄어요 (환경설정에서 바꿀 수 있어요)`);
       }
     } else if (this.governor.frames === 0) this.ui.updateFps?.(this.governor.fps);
     const input = this.input;

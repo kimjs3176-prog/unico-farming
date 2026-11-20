@@ -4,6 +4,8 @@
  * - 클라이언트 빌드: VITE_WS_URL=wss://<worker>.workers.dev/ws
  * - 프로토콜은 Node 서버(server/index.js)와 같음: join → welcome / joined / state / chat / left / full / ping → pong / 선물 못 전함 → act_fail
  * 배포: cd deploy/cloudflare && npx wrangler deploy  (docs/DEPLOY.md 참고)
+ * 함께 수확 목표 (server/goal.js): {goal, tally} 를 this.state.storage 'goal' 에 보관 — 깨어난 뒤 첫 입장·기여 때 한 번 읽고,
+ *   진행 알림과 저장은 2초짜리 setTimeout 하나로 묶음 (setInterval·알람 없음 → 조용하면 그대로 잠듦)
  * 무료 플랜 안전선 (budget.js): 처리 전에 작은 사용량 몫을 영속 장부(__ledger__)에 예약하고,
  *   하루 안전선(무료 한도의 85%)을 넘으면 그날은 새 접속을 받지 않고 접속 중인 사람도 오프라인으로 (UTC 0시 = 한국 오전 9시에 다시 열림)
  *   사용량 보기: GET /usage
@@ -11,6 +13,7 @@
 import { addToLedger, reserveBudget, limits, nextReset } from './budget.js';
 import { MAX_PLAYERS, MAX_ROOMS } from './limits.js';
 import { sanitizeAct, sanitizeGid, ACT_LIMIT, LOOK_MS, validClientId, giftEnvelope } from '../../server/rooms.js';
+import { sanitizeContrib, rollGoal, addContrib, nextGoal, goalMsg, rateOk, contribKey, GOAL_FLUSH_MS } from '../../server/goal.js';
 
 const LEDGER = '__ledger__';
 const MAX_MSG = 4096;           // 메시지 최대 길이(바이트)
@@ -116,6 +119,45 @@ export class FarmRoom {
     // 자동 pong 은 집계를 우회하므로 사용하지 않음. ping 도 아래 예산 검사 후 답함.
     this.later = (fn, ms) => setTimeout(fn, ms); // 미뤄 둔 옷 전하기 타이머 (테스트에서 바꿔 끼움)
     this.lookTimer = 0;
+    this.goalLoad = null;  // 저장소에서 목표 읽기 (깨어난 뒤 한 번)
+    this.goalState = null;
+    this.goalTimer = 0;
+    this.goalDone = [];
+  }
+
+  /** 오늘 목표: 깨어난 뒤 처음이면 저장소에서 읽고, 날짜가 바뀌었으면 새 목표 */
+  async goalNow() {
+    this.goalLoad ||= (async () => {
+      let saved = null;
+      try { saved = await this.state.storage?.get?.('goal'); } catch { /* 없으면 새로 */ }
+      this.goalState = rollGoal(saved, Date.now());
+    })();
+    await this.goalLoad;
+    const prev = this.goalState.goal.key;
+    this.goalState = rollGoal(this.goalState, Date.now());
+    if (prev !== this.goalState.goal.key) this.goalLater();
+    return this.goalState;
+  }
+
+  /** 진행 알림·저장 예약 (이미 예약돼 있으면 그대로 → 2초에 한 번까지) */
+  goalLater() {
+    if (this.goalTimer) return;
+    this.goalTimer = this.later(() => this.flushGoal(), GOAL_FLUSH_MS * 2);
+  }
+
+  /** 묶어 둔 목표 변화: 저장 한 번 + 다 채운 목표는 사람마다(기여한 수와 함께) + 진행은 방 전체로 */
+  async flushGoal() {
+    this.goalTimer = 0;
+    const st = this.goalState;
+    if (!st) return;
+    try { await this.state.storage?.put?.('goal', st); } catch { /* 다음 묶음에 다시 */ }
+    const done = this.goalDone.splice(0);
+    for (const ws of this.state.getWebSockets()) {
+      const p = ws.deserializeAttachment();
+      if (!p?.name) continue;
+      for (const d of done) { try { ws.send(JSON.stringify({ t: 'goal_done', key: d.goal.key, seq: d.goal.seq, target: d.goal.target, mine: d.tally[contribKey(p)] || 0 })); } catch { /* 끊김 */ } }
+    }
+    this.broadcast(goalMsg(st.goal));
   }
 
   players() {
@@ -229,6 +271,7 @@ export class FarmRoom {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
     if (!m || typeof m !== 'object') return; // null·숫자·문자열 JSON 무시
+    if (m.t === 'join' || (m.t === 'contrib' && ws.deserializeAttachment()?.name)) await this.goalNow(); // 목표는 읽은 뒤에 (아래 처리는 기다림 없이 한 번에)
     const p = ws.deserializeAttachment();
     if (!p) return;
     if (m.t === 'join') {
@@ -240,7 +283,7 @@ export class FarmRoom {
       p.l = String(m.l || '').replace(/[^a-z0-9.-]/g, '').slice(0, 48); // 옷차림
       ws.serializeAttachment(p);
       const n = this.players().length;
-      ws.send(JSON.stringify({ t: 'welcome', id: p.id, room: p.room, count: n, players: this.players().filter((x) => x.id !== p.id).map((x) => this.pub(x)) }));
+      ws.send(JSON.stringify({ t: 'welcome', id: p.id, room: p.room, count: n, players: this.players().filter((x) => x.id !== p.id).map((x) => this.pub(x)), goal: goalMsg(this.goalState?.goal) }));
       this.broadcast({ t: 'joined', p: this.pub(p), count: n }, p.id);
       return;
     }
@@ -257,6 +300,20 @@ export class FarmRoom {
         return q?.name && q.id === m.to && q.id !== p.id && q.clientId === m.targetId && q.clientId !== p.clientId;
       });
       try { target?.send(JSON.stringify(gift)); } catch { /* 수신 확인 전까지 보낸 쪽 저장에 남음 */ }
+    } else if (m.t === 'contrib') {
+      // 함께 수확: 정수 1~10, 10초에 6번까지, 한 사람 몫은 목표의 1/4 까지 (server/goal.js)
+      if (!sanitizeContrib(m.n)) return; // 잘못된 값은 횟수에도 넣지 않음
+      const r = rateOk(p.ct, Date.now());
+      p.ct = r.times; ws.serializeAttachment(p);
+      if (!r.ok) return;
+      const st = this.goalState, goal = st.goal;
+      if (!addContrib(goal, st.tally, contribKey(p), m.n).changed) return;
+      if (goal.done) {
+        this.goalDone.push({ goal: { ...goal }, tally: { ...st.tally } });
+        const next = nextGoal(goal);
+        if (next) this.goalState = { goal: next, tally: {} };
+      }
+      this.goalLater();
     } else if (m.t === 'ping') {
       try { ws.send('{"t":"pong"}'); } catch { /* 끊김 */ }
     } else if (m.t === 'pos') {
