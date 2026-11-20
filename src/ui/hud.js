@@ -416,7 +416,7 @@ export const HudUI = {
     put('xpv', this.badge, '--xp', String(pct));
     if (hadXp !== undefined && hadXp !== String(pct)) this.pulseXp();
     put('xp', el.xp, 'text', xpText(q));
-    put('lvTitle', this.badge, 'title', q.maxed ? `최고 레벨 ${q.level} · 경험치 ${q.xp}` : `레벨 ${q.level} · 경험치 ${q.xp}/${q.nextXp}`);
+    put('lvTitle', this.badge, 'title', (q.maxed ? `최고 레벨 ${q.level} · 경험치 ${q.xp}` : `레벨 ${q.level} · 경험치 ${q.xp}/${q.nextXp}`) + (this.game.player?.title ? ` · 🏅 ${this.game.player.title}` : ''));
     // 레벨이 오르면 축하 (불러온 기록·되돌리기처럼 한꺼번에 크게 바뀌면 조용히 맞춤)
     const lv = q.level;
     if (this._lvSeen === undefined || lv < this._lvSeen || lv - this._lvSeen > 3) this._lvSeen = lv;

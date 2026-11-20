@@ -668,6 +668,7 @@ export class NPCs {
         if (have < req.n) { line = `${g.villagers.describeRequest(req)} 지금 ${have}/${req.n}개 있어!`; continue; }
         if (g.economy.take(req.item, req.n)) {
           const rr = g.villagers.fulfill(id);
+          g.onEvent('vreq'); // 부탁 들어주기 경험치
           g.economy.earn(rr.reward);
           const ep = e.u.group.position;
           if (g.reward) g.reward(2, { x: ep.x, z: ep.z, label: '🙏' }); else g.audio.play('coin');

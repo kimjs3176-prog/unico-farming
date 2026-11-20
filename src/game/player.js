@@ -82,7 +82,7 @@ export class Player {
   /** 칭호 (KOAT 스탬프 투어 완주 등) */
   setTitle(title) {
     this.title = title;
-    this.unico.setName(`⭐ ${this.name} (나) · 🏅${title}`, '#ffffff', 'rgba(36,157,146,0.95)');
+    this.unico.setName(`⭐ ${this.name} (나) 🏅`, '#ffffff', 'rgba(36,157,146,0.95)'); // 칭호 글은 길어서 이름표엔 🏅 만 (칭호는 HUD 배지·프로필에)
   }
 
   /**

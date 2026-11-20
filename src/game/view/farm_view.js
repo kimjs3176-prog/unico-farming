@@ -386,7 +386,7 @@ export class FarmView {
   /** 고른 씨앗 바로 심기 (처음 한 번만 고르기 창, 떨어지면 다음 씨앗으로 바꾸고 알림) */
   plantSelected(i) {
     const g = this.game, c = this.seedChoice();
-    if (!c) { g.ui.toast('씨앗이 없어요. 장터에서 씨앗을 구매하세요 🛒'); return false; }
+    if (!c) { g.ui.toast('씨앗이 없어요. 장터에서 씨앗을 구매하세요 🛒', { sfx: 'deny' }); return false; }
     if (c.ask) { this.pickSeed((crop, fert) => this.plantCrop(i, crop, fert)); return false; }
     if (c.from) {
       const A = CROPS[c.from], B = CROPS[c.crop];
@@ -609,7 +609,7 @@ export class FarmView {
         g.onEvent('fert');
       }
     }
-    else if (type === 'need_seed') g.ui.toast('씨앗이 없어요. 장터에서 씨앗을 구매하세요 🛒');
+    else if (type === 'need_seed') g.ui.toast('씨앗이 없어요. 장터에서 씨앗을 구매하세요 🛒', { sfx: 'deny' });
     else if (type === 'water') { this.sim.water(i); g.onEvent('water'); g.audio.play('water'); this.face(i); g.player.unico.playAction('water', 1.4); g.fx.sprinkle(this.tiles[i].x, this.tiles[i].z); }
     else if (type === 'harvest') this.harvest(i);
   }

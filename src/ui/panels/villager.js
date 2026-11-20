@@ -2,7 +2,8 @@
 import { h, esc } from '../dom.js';
 import { joinQrBox } from '../join_qr.js';
 import { CROPS, PRODUCTS } from '../../game/sim/crops.js';
-import { ITEMS } from '../../game/sim/items.js';
+import { ITEMS, inSeason } from '../../game/sim/items.js';
+import { seasonOf } from '../../game/sim/season.js';
 import { VILLAGERS } from '../../game/sim/villagers.js';
 import { REACT } from '../../game/sim/villager_lines.js';
 
@@ -57,6 +58,7 @@ export const VillagerPanel = {
         b.onclick = () => {
           if (!g.economy.take(req.item, req.n)) return;
           const r = v.fulfill(id);
+          g.onEvent('vreq'); // 부탁 들어주기 경험치
           g.economy.earn(r.reward);
           g.audio.play('coin');
           this.toast(`🙏 ${e.name ?? e.n.name}: ${REACT[id]?.thanks ?? '고마워!'} +${r.reward}🪙, 우정 +${r.gained}`);
@@ -65,7 +67,7 @@ export const VillagerPanel = {
         };
         acts.append(b);
       } else acts.append(h('button', '', `✅ 오늘 부탁 완료<small>내일 또 놀러 와!</small>`));
-      const gift = h('button', '', `🎁 선물하기<small>좋아하는 것: ${info.likes.map((k) => anyItem(k)?.emoji || '').join(' ')}</small>`);
+      const gift = h('button', '', `🎁 선물하기<small>좋아하는 것: ${((s) => { const now = info.likes.filter((k) => inSeason(k, s)); return now.length ? now : info.likes; })(seasonOf(this.game.world.day ?? 1).id).map((k) => anyItem(k)?.emoji || '').join(' ')}</small>`);
       gift.disabled = v.state[id].lastGift === g.world.day;
       gift.onclick = () => this.openGiftPicker(e);
       acts.append(gift);

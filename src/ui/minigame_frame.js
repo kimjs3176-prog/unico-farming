@@ -100,6 +100,7 @@ export function mgResult(g, o) {
   const isNew = o.score > prev;
   if (isNew) saveBest(o.id, o.score);
   const stars = starsFor(o.score, o.th);
+  if (stars > 0) g.onEvent?.('mgstars', stars, o.id); // 하루 첫 3판까지 별당 경험치
   const p = ui.openPanel(`${o.icon} ${o.title}`);
   p.classList.add('mg-result');
   if (isNew && prev > 0) p.append(h('div', 'mg-ribbon', '🏆 새 최고 기록!'));

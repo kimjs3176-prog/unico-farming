@@ -100,7 +100,7 @@ export class FestivalView {
       if (fl.festOpen !== f.key) { // 같은 축제는 한 번만 알림 (다시 불러와도)
         fl.festOpen = f.key;
         g.ui?.toast?.(`🎪 ${f.name}가 열렸어요! 장터 앞 축제 마당에서 놀이하고 엽전을 모아 보세요`, { type: 'info' });
-        g.audio?.play?.('levelup'); // 축제 전용 소리가 생기면 'fest' 로
+        g.audio?.play?.('fest'); // 축제 전용 소리 (음악을 4dB 낮춤)
         g.onEvent?.(`festival_${f.id}`);
       }
     }

@@ -171,7 +171,7 @@ class Game {
       const eve = !this.economy.festival && festivalTomorrow(day);
       if (eve) morning.push(`🎪 내일은 ${eve.name}! 수확물을 모아 두면 더 비싸게 팔고, 장터 앞 축제 마당에서 놀 수 있어요`);
       this.ui.toast(morning.join(' · '), { type: 'info', key: 'day' });
-      if (this.economy.festival) { this.ui.toast(this.economy.festival.name + ' (장터에서 팔면 이득!)'); this.audio.play('levelup'); this.onEvent('festival'); }
+      if (this.economy.festival) { this.ui.toast(this.economy.festival.name + ' (장터에서 팔면 이득!)'); this.audio.play('fest'); this.onEvent('festival'); }
     };
     this.saveTimer = 0;
     this.resize();

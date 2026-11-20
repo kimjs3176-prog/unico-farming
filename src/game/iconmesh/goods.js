@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mat, shiny, gold, mesh, sphere, tube, flat, lathe, paint, C, mixC, smooth, rng, group, cyl, rbox, torus, sparkle } from './kit.js';
+import { mat, shiny, gold, mesh, sphere, tube, flat, lathe, paint, C, mixC, smooth, rng, group, cyl, cone, box, rbox, torus, sparkle } from './kit.js';
 import { eggBody, milkBottle, fleece, leaf } from './fruit.js';
 
 /**
@@ -343,7 +343,68 @@ function weed() {
 }
 const leafTag = (c = 0x4a9a32) => { const l = leaf(0.18, 0.1, c); l.position.set(-0.08, 0.24, 0.4); l.rotation.set(-0.1, 0, 0.7); return l; };
 
+
+// ---- 계절 축제 먹거리·엽전 (W4-C 축제 아이템)
+/** 접시 위에 둥근 떡을 겹쳐 쌓음: top(i) 로 맨 위 떡에 장식 */
+function cakeStack(c, n, { r = 0.24, h = 0.07, plate = 0xf6f0e4, top } = {}) {
+  const g = bowl(plate, 0x4a8ac0, { w: 0.46, h: 0.06 });
+  for (let i = 0; i < n; i++) {
+    const m = mesh(cyl(r, r * 1.02, h, 32), mat(c, { rough: 0.6 }), { p: [(i % 2 ? 0.05 : -0.04), 0.09 + i * h * 0.9, (i % 2 ? -0.03 : 0.03)], r: [0, i * 0.7, 0] });
+    m.geometry = smoothEdge(m.geometry);
+    g.add(m);
+  }
+  if (top) g.add(top(0.09 + (n - 1) * h * 0.9 + h / 2));
+  return g;
+}
+const smoothEdge = (geo) => { geo.computeVertexNormals(); return geo; };
+function hwajeon() { // 진달래 화전: 하얀 찹쌀전 위에 분홍 진달래 꽃잎 + 잎
+  return cakeStack(0xfaf3e6, 3, { top: (y) => {
+    const f = new THREE.Group();
+    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; f.add(mesh(sphere(0.07, 12, 8), mat(0xe8509a, { rough: 0.5 }), { p: [Math.cos(a) * 0.07, y + 0.012, Math.sin(a) * 0.07], s: [1, 0.25, 0.7], r: [0, -a, 0] })); }
+    f.add(mesh(sphere(0.03, 10, 8), mat(0xf6d24a), { p: [0, y + 0.03, 0] }));
+    const l = leaf(0.12, 0.06, 0x4a9a32); l.position.set(0.12, y + 0.01, 0.08); l.rotation.set(-Math.PI / 2, 0, 0.6); f.add(l);
+    return f; } });
+}
+function surichwi() { // 수리취떡: 쑥색 둥근 떡에 수레바퀴 무늬
+  return cakeStack(0x6a9a4a, 3, { top: (y) => {
+    const w = new THREE.Group();
+    w.add(mesh(torus(0.14, 0.012, 32, 6), mat(0x4a7a32), { p: [0, y + 0.004, 0], r: [Math.PI / 2, 0, 0] }));
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI; w.add(mesh(box(0.27, 0.012, 0.018), mat(0x4a7a32), { p: [0, y + 0.004, 0], r: [0, a, 0] })); }
+    return w; } });
+}
+function songpyeon() { // 송편: 반달 모양 세 빛깔 + 솔잎
+  const g = bowl(0xf6f0e4, 0x4a8ac0, { w: 0.46, h: 0.06 });
+  [[0xfaf6ee, -0.14, 0.04, 0.5], [0xf2a8c0, 0.12, 0.06, -0.4], [0x9ac86a, 0, -0.12, 0.1]].forEach(([c, x, z, r]) => {
+    const half = new THREE.SphereGeometry(0.15, 28, 14, 0, Math.PI);
+    g.add(mesh(half, mat(c, { rough: 0.5 }), { p: [x, 0.08, z], s: [1, 0.9, 0.62], r: [0, r, 0] }));
+    g.add(mesh(box(0.3, 0.02, 0.02), mat(mixC(c, 0x8a7a6a, 0.25)), { p: [x, 0.08, z], s: [1, 1, 1], r: [0, r, 0] })); // 아문 자리
+  });
+  for (let i = 0; i < 6; i++) g.add(mesh(cyl(0.006, 0.006, 0.3, 5), mat(0x2e6a2a), { p: [-0.05 + i * 0.03, 0.07, 0.2], r: [Math.PI / 2, 0, 0.8 + i * 0.12] })); // 솔잎
+  return g;
+}
+function patjuk() { // 동지 팥죽: 검붉은 팥죽 + 하얀 새알심
+  const g = bowl(0xf6f4f0, 0x2a5ab8, { w: 0.42, h: 0.26 });
+  g.add(mesh(cyl(0.38, 0.38, 0.02, 40), mat(0x6a1e1a, { rough: 0.35 }), { p: [0, 0.22, 0] }));
+  [[0.08, 0.05], [-0.12, -0.02], [0.02, -0.14], [-0.04, 0.13]].forEach(([x, z]) => g.add(mesh(sphere(0.055, 14, 10), mat(0xfaf6ee, { rough: 0.5 }), { p: [x, 0.24, z], s: [1, 0.7, 1] })));
+  return g;
+}
+function token() { // 축제 엽전: 네모 구멍 난 놋쇠 동전 + 빨간 술
+  const g = new THREE.Group();
+  const coin = new THREE.Shape(); coin.absarc(0, 0, 0.32, 0, Math.PI * 2);
+  const hole = new THREE.Path(); hole.moveTo(-0.08, -0.08); hole.lineTo(0.08, -0.08); hole.lineTo(0.08, 0.08); hole.lineTo(-0.08, 0.08); hole.lineTo(-0.08, -0.08);
+  coin.holes.push(hole);
+  const geo = new THREE.ExtrudeGeometry(coin, { depth: 0.05, bevelEnabled: true, bevelSize: 0.012, bevelThickness: 0.012, bevelSegments: 2, curveSegments: 40 });
+  geo.translate(0, 0, -0.025);
+  g.add(mesh(geo, gold(0xd8a840), { p: [0, 0.42, 0], r: [-0.25, 0.35, 0] }));
+  g.add(mesh(tube([[0, 0.78, -0.02], [0.02, 0.62, 0], [0, 0.5, 0.02]], 0.014), mat(0xc8302a), {}));
+  g.add(mesh(cone(0.05, 0.16, 10), mat(0xd8402a), { p: [0.02, 0.06, 0.06], r: [Math.PI, 0, 0] }));
+  g.add(mesh(tube([[0, 0.12, 0.05], [0.02, 0.0, 0.06]], 0.012), mat(0xc8302a), {}));
+  g.add(sparkle([0.28, 0.72, 0.15], 0.09));
+  return g;
+}
+
 const BUILD = {
+  fest_hwajeon: hwajeon, fest_surichwi: surichwi, fest_songpyeon: songpyeon, fest_patjuk: patjuk, fest_token: token,
   goods_carrotjuice: () => glassCup({ fill: 0xf2902a, straw: 0xf6f0e0, garnish: (() => { const s = mesh(cyl(0.09, 0.09, 0.03, 20), mat(0xf28a2a), { p: [-0.18, 0.6, 0.06], r: [Math.PI / 2, 0, 0.3] }); return s; })() }),
   goods_kimchi: kimchi,
   goods_juice: () => carafe({ fill: 0xe0402a, slice: fruitSlice(0xd8322a, 0xf26a4a, 0xf6d870, { p: [0.17, 0.8, 0.05], r: [Math.PI / 2 - 0.2, 0, -0.5] }) }), // 토마토 주스: 유리 주전자 + 토마토 조각

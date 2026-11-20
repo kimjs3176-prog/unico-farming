@@ -195,9 +195,9 @@ export class RiceView {
       case 'till': this.sim.till(i); g.audio.play('dig'); g.juice.shake(0.2); u.playAction('hoe', 1.25); break;
       case 'flood': this.sim.flood(i); g.audio.play('water'); u.playAction('water', 1.2); g.fx.sprinkle(this.paddies[i].x, this.paddies[i].z); break;
       case 'plant':
-        if (!g.economy.useItem('rice_seed')) return g.ui.toast('볍씨가 없어요. 장터에서 사 오세요 🛒');
+        if (!g.economy.useItem('rice_seed')) return g.ui.toast('볍씨가 없어요. 장터에서 사 오세요 🛒', { sfx: 'deny' });
         this.sim.plant(i); g.audio.play('plant'); u.playAction('plant', 1.2); g.onEvent('riceplant'); g.ui.toast('🌱 모내기 완료! 물 높이를 단계별 적정 범위로 맞춰 주세요'); break;
-      case 'need_seed': g.ui.toast('볍씨가 없어요. 장터에서 사 오세요 🛒'); break;
+      case 'need_seed': g.ui.toast('볍씨가 없어요. 장터에서 사 오세요 🛒', { sfx: 'deny' }); break;
       case 'water': this.sim.water(i); g.audio.play('water'); u.playAction('water', 1); g.fx.sprinkle(this.paddies[i].x, this.paddies[i].z); break;
       case 'drain': this.sim.drain(i); g.audio.play('click'); u.playAction('think', 0.8); g.ui.toast('💧 물꼬를 터서 물을 뺐어요'); break;
       case 'weed': this.sim.weed(i); g.audio.play('dig'); u.playAction('hoe', 1.25); g.fx.pop(this.paddies[i].x, this.paddies[i].z, '🌿'); break;
