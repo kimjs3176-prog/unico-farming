@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { heightAt, HILLS, CHESTS, shoreR, shoreDist, shorePolygon, SHORES } from './terrain.js';
+import { heightAt, HILLS, CHESTS, shoreR, shoreDist, shorePolygon, sandWidth, SHORES } from './terrain.js';
 import { Scenery } from './scenery.js';
 import { Precipitation } from './precip.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -484,12 +484,12 @@ export class World {
       ctx.fillRect(P(kp[0]), P(kp[1]), M(kp[2] - kp[0]), M(kp[3] - kp[1]));
       // 연못·호수 모래 물가: 물가 굴곡을 따라 폭이 들쭉날쭉 (호수 부두 옆은 넓은 모래 물굽이)
       ctx.fillStyle = '#d0b886';
-      for (const W of [L.pond, L.lake]) shoreFill(W, (a) => 0.8 + 0.5 * (0.5 + 0.5 * Math.sin(3 * a + W.r) * Math.cos(5 * a - 1.3)) + (W === L.lake ? 1.3 * Math.max(0, 1 - Math.abs(Math.atan2(Math.sin(a + 1.15), Math.cos(a + 1.15))) / 0.35) : 0));
+      for (const W of [L.pond, L.lake]) shoreFill(W, (a) => sandWidth(W, a));
     });
-    // 물에 젖은 모래 띠 (물가 바로 바깥, 짙게)
-    soft(M(0.25), () => {
-      ctx.fillStyle = '#b39663';
-      for (const W of [L.pond, L.lake]) shoreFill(W, () => 0.28);
+    // 물에 젖은 모래 띠: 물가 바깥 약 0.5m, 마른 모래보다 25% 어둡게, 부드럽게 번짐 (기본 카메라 거리에서도 보이게)
+    soft(M(0.3), () => {
+      ctx.fillStyle = '#a08a5e';
+      for (const W of [L.pond, L.lake]) shoreFill(W, () => 0.42);
     });
     // 광장 줄눈 + 중앙 엠블럼 원
     {
@@ -712,7 +712,7 @@ export class World {
     this.place('scarecrow', L.scarecrow.x, L.scarecrow.z, 0.4, 1, { r: 0.35 });
     this.place('dock', L.dock.x, L.dock.z, L.dock.rot, 1, { collide: false });
     // 연못가: 돌 무더기와 갈대 (낚시 데크 쪽은 비움)
-    this._shoreDress(L.pond, Q, mulberry32(17), { clusters: 6, keep: [{ a: Math.atan2(L.dock.z - L.pond.z, L.dock.x - L.pond.x), w: 0.75 }] });
+    this._shoreDress(L.pond, Q, mulberry32(17), { clusters: 7, keep: [{ a: Math.atan2(L.dock.z - L.pond.z, L.dock.x - L.pond.x), w: 0.75 }] });
     this._lake(Q, rnd);
     this._mountains();
     this.sun.position.set(30, 50, 20);
@@ -790,7 +790,9 @@ export class World {
   }
 
   /**
-   * 물가 꾸미기: 돌·이끼 바위 2~4개 무더기를 고르지 않은 간격으로, 무더기 사이에는 물가에 걸친 갈대·풀 (모두 충돌 없음, 정적 병합)
+   * 물가 꾸미기 (모두 충돌 없음, 정적 병합 → 그리기 횟수는 늘지 않음)
+   *  - 돌·이끼 바위 무더기: 큰 돌 하나 옆에 작은 돌 1~3개 (위에 쌓지 않고 옆으로), 높이는 폭의 0.8배까지 눌러 돌탑처럼 보이지 않게
+   *  - 무더기 사이: 납작한 조약돌 8~12개 (물가선 ±0.2m), 물가에 걸친 갈대·풀
    * keep: 비워 둘 방향 [{a, w}] (부두·낚시 자리)
    */
   _shoreDress(W, Q, rnd, { clusters = 6, keep = [] } = {}) {
@@ -798,27 +800,56 @@ export class World {
     const at = (a, off) => { const r = shoreR(W, a) + off; return [W.x + Math.cos(a) * r, W.z + Math.sin(a) * r]; };
     // 낚시터 전체가 예약 구역이라 예약 대신 길·벤치·가로등만 피함
     const free = (x, z) => !this.onPath(x, z, 0.3) && !this.obstacles.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + 0.5);
-    const rocks = Q ? ['rock_1', 'rock_2', 'rock_3', 'mossrock_1', 'mossrock_2', 'mossrock_3'] : ['rock'];
+    // 키 큰 rock_1·mossrock_1 은 세워 둔 기둥처럼 보여 뺌
+    const rocks = Q ? ['rock_2', 'rock_3', 'rock_4', 'mossrock_2', 'mossrock_3', 'mossrock_4'] : ['rock'];
     const reeds = ['grass_q', 'grass_q2', 'plant_1', 'plant_2'];
+    const size = new THREE.Vector3();
+    const rock = (name, x, z, sc, k) => {
+      const o = this.place(name, x, z, rnd() * 6.28, sc, { collide: false });
+      new THREE.Box3().setFromObject(o).getSize(size);
+      const lim = k * Math.max(size.x, size.z);
+      if (size.y > lim) o.scale.y *= lim / size.y;
+      return o;
+    };
     const base = rnd() * Math.PI * 2, step = (Math.PI * 2) / clusters;
     const centers = [];
     for (let i = 0; i < clusters; i++) {
-      const a = base + i * step + (rnd() - 0.5) * step * 0.55; // 고르지 않은 간격
-      if (blocked(a)) continue;
+      let a = base + i * step + (rnd() - 0.5) * step * 0.55; // 고르지 않은 간격
+      // 길·벤치에 막히면 조금씩 옮겨 봄 (무더기 수가 너무 줄지 않게)
+      let ok = false;
+      for (let t = 0; t < 5 && !ok; t++) {
+        const tryA = a + (t ? (t % 2 ? 1 : -1) * Math.ceil(t / 2) * step * 0.18 : 0);
+        if (blocked(tryA) || !free(...at(tryA, 0.4))) continue;
+        a = tryA; ok = true;
+      }
+      if (!ok) continue;
       centers.push(a);
-      const n = 2 + Math.floor(rnd() * 3), R = shoreR(W, a);
+      const R = shoreR(W, a);
+      const big = 0.75 + rnd() * 0.35;
+      rock(pick3(rnd, rocks), ...at(a, 0.25 + rnd() * 0.25), big * (Q ? 1 : 0.8), 0.8);
+      // 작은 돌: 큰 돌 양옆으로 (물에 반쯤 잠기기도)
+      const n = 1 + Math.floor(rnd() * 3);
       for (let k = 0; k < n; k++) {
-        // 큰 돌 하나 + 작은 돌 몇 개, 일부는 물에 반쯤 잠김 (물가 - 0.2m)
-        const da = ((rnd() - 0.5) * 1.1) / R, off = k === 0 ? 0.25 + rnd() * 0.3 : -0.2 + rnd() * 0.6;
-        const [x, z] = at(a + da, off);
-        if (!free(x, z)) continue;
-        const sc = k === 0 ? 0.75 + rnd() * 0.35 : 0.35 + rnd() * 0.3;
-        this.place(pick3(rnd, rocks), x, z, rnd() * 6.28, sc * (Q ? 1 : 0.8), { collide: false });
+        const side = k % 2 ? -1 : 1, da = (side * (0.5 + 0.25 * k + rnd() * 0.2)) / R;
+        const [x, z] = at(a + da, -0.2 + rnd() * 0.5);
+        if (free(x, z)) rock(pick3(rnd, rocks), x, z, (0.35 + rnd() * 0.25) * (Q ? 1 : 0.8), 0.7);
       }
     }
     if (!Q) return;
-    // 무더기 사이 갈대 덤불 (물가선에 걸치게), 비워 둘 곳 제외
     centers.sort((p, q) => p - q);
+    const nearCluster = (a) => centers.some((c) => Math.abs(Math.atan2(Math.sin(a - c), Math.cos(a - c))) * shoreR(W, a) < 1.0);
+    // 조약돌: 납작하게 (높이 ×0.5), 물가선 ±0.2m 에 흩어 맨 모래 물가를 채움
+    const pebbles = 8 + Math.floor(rnd() * 5);
+    for (let i = 0, tries = 0; i < pebbles && tries < pebbles * 4; tries++) {
+      const a = rnd() * Math.PI * 2;
+      if (blocked(a) || nearCluster(a)) continue;
+      const [x, z] = at(a, -0.2 + rnd() * 0.4);
+      if (!free(x, z)) continue;
+      const o = this.place(rnd() > 0.5 ? 'rock_2' : 'rock_3', x, z, rnd() * 6.28, 0.18 + rnd() * 0.14, { collide: false });
+      o.scale.y *= 0.5;
+      i++;
+    }
+    // 무더기 사이 갈대 덤불 (물가선에 걸치게), 비워 둘 곳 제외
     for (let i = 0; i < centers.length; i++) {
       const a0 = centers[i], a1 = i + 1 < centers.length ? centers[i + 1] : centers[0] + Math.PI * 2;
       const gap = a1 - a0;

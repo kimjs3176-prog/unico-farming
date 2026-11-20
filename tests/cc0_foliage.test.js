@@ -36,3 +36,24 @@ test('잎 정점 합계가 굽기 전보다 줄고, 줄기·바위는 그대로 
   assert.ok(verts < OLD_LEAF_VERTS, `잎 정점 ${verts}`);
   for (const t of tops.filter((n) => /^rock_\d$/.test(n.getName()))) for (const p of primsOf(t, /^stone/)) assert.ok(softness(p) < SOFT_MIN, t.getName());
 });
+
+/** 잎 덩어리 아래쪽 그늘: 맨 아래 정점은 맨 위보다 이 비율 이상 어두움 (1 - 0.35) */
+const BOTTOM_SHADE = 0.7;
+
+test('소나무 잎은 정점 색이 있고 단 아래쪽이 위쪽보다 어두움 (삼각형·재질 그대로)', () => {
+  for (const t of tops.filter((n) => /^pine_\d$/.test(n.getName()))) {
+    for (const p of primsOf(t, /^leaf/)) {
+      const col = p.getAttribute('COLOR_0'), pos = p.getAttribute('POSITION');
+      assert.ok(col, `${t.getName()} COLOR_0 없음`);
+      let lo = [Infinity, 0], hi = [-Infinity, 0];
+      const e = [], c = [];
+      for (let i = 0; i < pos.getCount(); i++) {
+        pos.getElement(i, e); col.getElement(i, c);
+        const v = (c[0] + c[1] + c[2]) / 3;
+        if (e[1] < lo[0]) lo = [e[1], v];
+        if (e[1] > hi[0]) hi = [e[1], v];
+      }
+      assert.ok(lo[1] <= hi[1] * BOTTOM_SHADE + 0.02, `${t.getName()} 아래 ${lo[1].toFixed(2)} 위 ${hi[1].toFixed(2)}`);
+    }
+  }
+});

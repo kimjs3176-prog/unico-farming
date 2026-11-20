@@ -50,3 +50,13 @@ test('물가 굴곡: ±15% 안, 부두 뿌리는 뭍·데크 끝은 물 위, 낚
   for (const [x, z] of [[-17.6, 27.2], [-17.4, 34.6], [-10.4, 23.4], [-6.9, 25.6], [LAYOUT.npcs.fisher.x, LAYOUT.npcs.fisher.z]]) assert.ok(shoreDist(K, x, z) < 0, `호수가 (${x},${z})`);
   for (const [x, z] of [[-17.6, 15.5], [-16.5, 21.8]]) assert.ok(shoreDist(P, x, z) < -0.6, `연못가 (${x},${z})`);
 });
+
+test('물가 모래 폭: 어디서나 0.8m 이상, 호수 부두 옆(서남쪽 -1.15rad)은 넓은 모래 물굽이', async () => {
+  const { sandWidth } = await import('../src/game/terrain.js');
+  const pond = { id: 'pond', r: 4.5 }, lake = { id: 'lake', r: 6 };
+  for (let i = 0; i < 64; i++) {
+    const a = (i / 64) * Math.PI * 2;
+    assert.ok(sandWidth(pond, a) >= 0.8 && sandWidth(pond, a) <= 1.3, `연못 ${a.toFixed(2)}`);
+  }
+  assert.ok(sandWidth(lake, -1.15) > sandWidth(pond, -1.15) + 1.2, `물굽이 ${sandWidth(lake, -1.15)}`);
+});

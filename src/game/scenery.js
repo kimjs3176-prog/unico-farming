@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { LAYOUT, cellKey } from './world.js';
-import { heightAt, shoreR, shoreDist } from './terrain.js';
+import { heightAt, shoreR, shoreDist, sandWidth } from './terrain.js';
 import { SURF } from './surface.js';
 import { nightFactor } from './sim/tod.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
@@ -228,6 +228,26 @@ export class Scenery {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
     let n = 0, tries = 0;
     const B = LAYOUT.bounds - 2;
+    // 물가 꽃 송이: 모래가 끝나고 풀이 시작하는 곳에 2~3송이씩 (연못·호수 테두리). 맨 앞에 넣어 밀도를 낮춰도 남음, 따로 뽑는 난수라 들판 꽃 배치는 그대로
+    const srnd = mulberry32(91);
+    for (const [W, tufts] of [[LAYOUT.pond, 9], [LAYOUT.lake, 11]]) {
+      for (let t = 0, tries = 0; t < tufts && tries < tufts * 5; tries++) {
+        const a = srnd() * Math.PI * 2, r = shoreR(W, a) + sandWidth(W, a) + 0.1 + srnd() * 0.3;
+        const x0 = W.x + Math.cos(a) * r, z0 = W.z + Math.sin(a) * r;
+        if (this.world.isBlocked(x0, z0, 0.35) || this.world.onPath?.(x0, z0, 0.4)) continue;
+        const pc = palette[Math.floor(srnd() * palette.length)], k = 2 + Math.floor(srnd() * 2);
+        for (let i = 0; i < k; i++) {
+          const x = x0 + (srnd() - 0.5) * 0.5, z = z0 + (srnd() - 0.5) * 0.5;
+          p.set(x, heightAt(x, z), z);
+          q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), srnd() * 6.28);
+          const s = 0.75 + srnd() * 0.45;
+          mesh.setMatrixAt(n, m.compose(p, q, sc.set(s, s, s)));
+          mesh.setColorAt(n, col.setHex(pc));
+          n++;
+        }
+        t++;
+      }
+    }
     // 군락: 무작위 중심 주변에 모여 핌
     const clusters = Array.from({ length: 40 }, () => [(rnd() - 0.5) * 2 * B, (rnd() - 0.5) * 2 * B, palette[Math.floor(rnd() * palette.length)]]);
     while (n < COUNT && tries < COUNT * 8) {
@@ -313,7 +333,9 @@ export class Scenery {
       // 물가 거품 색: 낮은 흰색, 밤은 수면과 함께 어두운 달빛 회청색 (하얀 표시처럼 뜨지 않게)
       vec3 foamCol(){ return mix(vec3(0.97, 0.99, 1.0) * mix(uLit, vec3(1.0), 0.15), vec3(0.55, 0.62, 0.8) * uLit * 1.6, uNight); }
       uniform vec4 uRip[${RIPPLES}];
-      varying vec3 vW; varying vec4 vPool; // xy: 중심(x,z), z: 그 방향 물가 반지름, w: 물가까지 거리(굴곡을 따라)
+      varying vec3 vW; varying vec4 vPool; // xy: 중심(x,z), z: 평균 반지름(깊이용 상수), w: 물가까지 거리(굴곡을 따라)
+      // 물가 젖은 모래 색 (world.js 젖은 띠와 같은 색, 선형): 물 끝을 모래로 녹여 칼로 자른 선이 안 보이게
+      vec3 shoreSand(){ return vec3(0.36, 0.265, 0.12) * uLit * mix(1.12, 0.9, uNight); }
       float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
         return mix(mix(hsh(i), hsh(i + vec2(1, 0)), u.x), mix(hsh(i + vec2(0, 1)), hsh(i + vec2(1, 1)), u.x), u.y); }
@@ -359,8 +381,8 @@ export class Scenery {
         vec3 V = normalize(cameraPosition - vW);
         vec3 N = normalize(vec3(-s.x * 1.4, 1.0, -s.y * 1.4));
         fres = 0.06 + 0.94 * pow(1.0 - max(dot(V, N), 0.0), 5.0);
-        // 깊이: 물가는 얕고 밝은 청록, 가운데는 깊은 파랑 (반경이 큰 호수가 더 깊게)
-        float depth = smoothstep(0.0, radius * 0.75, edgeD);
+        // 깊이: 물가는 얕고 밝은 청록, 가운데는 깊은 파랑 (반경이 큰 호수가 더 깊게). 평균 반지름 기준 → 굴곡마다 얼룩지지 않게
+        float depth = smoothstep(0.0, radius * 0.6, edgeD);
         vec3 base = mix(shallow, deep * mix(1.0, 0.85, smoothstep(4.8, 5.6, radius)), depth);
         // 물결 마루에 햇빛이 비쳐 살짝 밝아지는 산란
         base += vec3(0.05, 0.16, 0.14) * clamp(s.z * 14.0 + 0.3, 0.0, 1.0) * uDay * (1.0 - depth * 0.4);
@@ -369,9 +391,11 @@ export class Scenery {
         float surge = 0.5 + 0.5 * sin(uTime * 1.3 - d * 2.0);
         // 띠는 0.5m 안팎으로 좁게, 큰 얼룩 노이즈로 군데군데만 (고른 흰 고리가 아니라 돌·부두 근처에 모인 거품처럼)
         float band = smoothstep(0.45 + surge * 0.15, 0.03, edgeD + (vnoise(vW.xz * 2.6 + uTime * 0.25) - 0.5) * 0.3);
-        band *= smoothstep(0.35, 0.7, vnoise(vW.xz * 0.55 + center * 0.37 + vec2(0.0, uTime * 0.05)));
+        band *= smoothstep(0.2, 0.6, vnoise(vW.xz * 0.55 + center * 0.37 + vec2(0.0, uTime * 0.05))) * 0.7 + 0.3;
         float breakup = smoothstep(0.35, 0.75, vnoise(vW.xz * 7.0 - uTime * 0.4));
-        foam = clamp(band * (0.35 + 0.65 * breakup) * mix(1.0, 0.5, uNight) + rfoam * (0.5 + 0.5 * breakup) * mix(1.0, 0.35, uNight), 0.0, 1.0); // 밤: 거품·고리는 은빛으로 은은하게
+        // 물가 바로 앞 가는 거품 줄은 끊기지 않게 (물과 모래 사이 테두리)
+        band = max(band * (0.35 + 0.65 * breakup), smoothstep(0.12, 0.0, edgeD) * 0.55);
+        foam = clamp(band * mix(1.0, 0.5, uNight) + rfoam * (0.5 + 0.5 * breakup) * mix(1.0, 0.35, uNight), 0.0, 1.0); // 밤: 거품·고리는 은빛으로 은은하게
         // 햇빛 반짝임 (넓은 하이라이트 + 잘게 부서지는 반짝이)
         vec3 L = normalize(sunDir);
         float sd = max(dot(reflect(-V, N), L), 0.0);
@@ -421,6 +445,7 @@ export class Scenery {
               vec3 refl = texture2DProj(tDiffuse, uv).rgb;
               vec3 c = mix(base, refl * 0.95, clamp(fres * 0.9 + 0.12, 0.0, 0.9));
               c = mix(c, foamCol(), foam * 0.7);
+              c = mix(c, shoreSand(), smoothstep(0.15, 0.0, vPool.w) * 0.65);
               gl_FragColor = vec4(c, 1.0);
               #include <tonemapping_fragment>
               #include <colorspace_fragment>
@@ -434,7 +459,8 @@ export class Scenery {
         vertexShader: `attribute vec4 pool; varying vec3 vW; varying vec4 vPool; void main(){ vPool = pool; vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
         fragmentShader: `${COMMON}
           void main(){ float fres, foam; vec2 slope; vec3 base = waterBase(fres, foam, slope);
-            vec3 c = mix(base, skyCol, clamp(fres * 0.8, 0.0, 0.85)); c = mix(c, foamCol(), foam * 0.7); gl_FragColor = vec4(c, 1.0);
+            vec3 c = mix(base, skyCol, clamp(fres * 0.8, 0.0, 0.85)); c = mix(c, foamCol(), foam * 0.7);
+            c = mix(c, shoreSand(), smoothstep(0.15, 0.0, vPool.w) * 0.65); gl_FragColor = vec4(c, 1.0);
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
           }`,
@@ -668,7 +694,7 @@ function mulberry32(a) {
 
 /**
  * 물가 굴곡(terrain.js shoreR)을 따른 수면: 극좌표 격자 (가운데 부채꼴 + 고리 3겹, seg 방향).
- * 로컬 (x, -z) 평면 (수면은 x 축으로 -90° 눕힘). pool 속성 = (중심 x, z, 그 방향 물가 반지름, 물가까지 거리) → 거품·깊이가 굴곡을 따름
+ * 로컬 (x, -z) 평면 (수면은 x 축으로 -90° 눕힘). pool 속성 = (중심 x, z, 평균 반지름, 물가까지 거리) → 거품은 굴곡을 따르고 깊이는 평균 반지름으로 고르게
  */
 export function shoreWaterGeo(W, seg = 96, rings = [0.6, 0.88, 1]) {
   const pos = [W.x, -W.z, 0], pool = [W.x, W.z, W.r, W.r], idx = [];
@@ -676,7 +702,7 @@ export function shoreWaterGeo(W, seg = 96, rings = [0.6, 0.88, 1]) {
     const a = (j / seg) * Math.PI * 2, R = shoreR(W, a); // 월드 각도 a: 로컬 y = -z 라 로컬에서는 시계 방향
     for (const t of rings) {
       pos.push(W.x + Math.cos(a) * R * t, -(W.z + Math.sin(a) * R * t), 0);
-      pool.push(W.x, W.z, R, R * (1 - t));
+      pool.push(W.x, W.z, W.r, R * (1 - t));
     }
   }
   const K = rings.length, v = (j, k) => 1 + (j % seg) * K + k;

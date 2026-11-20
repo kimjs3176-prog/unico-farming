@@ -87,3 +87,9 @@ export function shorePolygon(W, n = 96, off = 0) {
   }
   return pts;
 }
+
+/** 물가 모래 폭(m): 물가 굴곡 바깥으로 들쭉날쭉, 호수 부두 옆은 넓은 모래 물굽이 (땅 칠하기·물가 꽃이 같이 씀) */
+export function sandWidth(W, a) {
+  const bay = W?.id === 'lake' ? 1.3 * Math.max(0, 1 - Math.abs(wrapA(a + 1.15)) / 0.35) : 0;
+  return 0.8 + 0.5 * (0.5 + 0.5 * Math.sin(3 * a + W.r) * Math.cos(5 * a - 1.3)) + bay;
+}

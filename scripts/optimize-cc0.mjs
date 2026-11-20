@@ -3,6 +3,7 @@
 //       node scripts/optimize-cc0.mjs --prune-nature   (원본 없이 public/models/q_nature.glb 에서 안 쓰는 노드만 빼기)
 //       node scripts/optimize-cc0.mjs --soften-nature  (원본 없이 q_nature.glb 잎 법선만 부드럽게 굽기)
 //       node scripts/optimize-cc0.mjs --soften-animals (원본 없이 목장 동물 q_*.glb 법선만 부드럽게 굽기)
+//       node scripts/optimize-cc0.mjs --shade-nature   (원본 없이 q_nature.glb 잎에 단마다 아래쪽 그늘·색 흔들림 정점 색 굽기)
 // 결과: public/models/q_*.glb  (라이선스: docs/ASSETS_CC0.md)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -162,7 +163,53 @@ function softenNormals(doc, prims, deg) {
 
 /** 나무·덤불 잎(leaf, leaf_dark, leaf_autumn*) 프리미티브만 부드럽게 — 줄기·바위·이끼는 재질로 걸러져 그대로 */
 const leafPrims = (doc) => doc.getRoot().listMeshes().flatMap((m) => m.listPrimitives()).filter((p) => /^leaf/.test(p.getMaterial()?.getName() || ''));
-function softenFoliage(doc) { softenNormals(doc, leafPrims(doc), SOFT_DEG.leaf); }
+function softenFoliage(doc) { softenNormals(doc, leafPrims(doc), SOFT_DEG.leaf); shadeFoliage(doc); }
+
+/**
+ * 잎 정점 색 굽기 (그리기 횟수·삼각형 그대로): 붙어 있는 잎 덩어리(소나무는 단 하나)마다
+ *  - 아래로 갈수록 어둡게: 1 - 0.35 × (1 - 덩어리 안 높이 비율), 아래를 향한 면은 조금 더
+ *  - 덩어리마다 색을 10% 안팎 흔듦 (따뜻한 연두 ~ 푸른 초록) → 단이 한 장의 평평한 종이처럼 보이지 않게
+ * 재질 색 × 정점 색으로 그려짐 (GLTFLoader 가 COLOR_0 이 있으면 vertexColors 를 켬). 다시 돌려도 결과 같음
+ */
+const TINTS = [[1, 1, 1], [1, 0.96, 0.86], [0.9, 1, 0.95], [0.95, 0.97, 0.9], [1, 0.93, 0.9]];
+function shadeFoliage(doc) {
+  let parts = 0;
+  for (const p of leafPrims(doc)) {
+    const pos = p.getAttribute('POSITION'), nrm = p.getAttribute('NORMAL'), idx = p.getIndices(), n = pos.getCount();
+    if (!idx) continue;
+    const P = new Float32Array(n * 3), e = [];
+    for (let i = 0; i < n; i++) { pos.getElement(i, e); P.set(e, i * 3); }
+    // 덩어리 나누기: 삼각형으로 이어지거나 같은 자리(1e-4)에 있는 정점끼리
+    const up = Int32Array.from({ length: n }, (_, i) => i);
+    const find = (i) => { while (up[i] !== i) i = up[i] = up[up[i]]; return i; };
+    const join = (a, b) => { a = find(a); b = find(b); if (a !== b) up[a] = b; };
+    const I = idx.getArray(), seen = new Map();
+    for (let t = 0; t < I.length; t += 3) { join(I[t], I[t + 1]); join(I[t], I[t + 2]); }
+    for (let i = 0; i < n; i++) {
+      const k = `${Math.round(P[i * 3] * 1e4)},${Math.round(P[i * 3 + 1] * 1e4)},${Math.round(P[i * 3 + 2] * 1e4)}`;
+      if (seen.has(k)) join(i, seen.get(k)); else seen.set(k, i);
+    }
+    const lo = new Map(), hi = new Map(), ids = new Map();
+    for (let i = 0; i < n; i++) {
+      const r = find(i), y = P[i * 3 + 1];
+      lo.set(r, Math.min(lo.get(r) ?? Infinity, y)); hi.set(r, Math.max(hi.get(r) ?? -Infinity, y));
+      if (!ids.has(r)) ids.set(r, ids.size);
+    }
+    parts += ids.size;
+    const C = new Uint8Array(n * 3), nv = [];
+    for (let i = 0; i < n; i++) {
+      const r = find(i), h = hi.get(r) - lo.get(r), t = h > 1e-4 ? (P[i * 3 + 1] - lo.get(r)) / h : 1;
+      let v = 1 - 0.35 * (1 - t);
+      if (nrm) { nrm.getElement(i, nv); if (nv[1] < -0.2) v *= 0.9; }
+      const tint = TINTS[(ids.get(r) * 7 + n) % TINTS.length];
+      for (let c = 0; c < 3; c++) C[i * 3 + c] = Math.round(Math.min(1, v * tint[c]) * 255);
+    }
+    const old = p.getAttribute('COLOR_0');
+    p.setAttribute('COLOR_0', doc.createAccessor().setType('VEC3').setArray(C).setNormalized(true).setBuffer(pos.getBuffer() || doc.getRoot().listBuffers()[0]));
+    if (old && !old.listParents().some((x) => x !== doc.getRoot())) old.dispose();
+  }
+  return parts;
+}
 
 async function finish(doc, out, { anim = false, soft = false } = {}) {
   if (anim) {
@@ -240,6 +287,17 @@ async function softenFile(name, pick, deg, maxGrow) {
 }
 const allPrims = (d) => d.getRoot().listMeshes().flatMap((m) => m.listPrimitives());
 if (MODE === '--soften-nature') await softenFile('q_nature', leafPrims, SOFT_DEG.leaf, 1);
+if (MODE === '--shade-nature') {
+  const file = path.join(OUT, 'q_nature.glb');
+  const doc = await io.read(file);
+  const tris = (d) => d.getRoot().listMeshes().flatMap((m) => m.listPrimitives()).reduce((s, p) => s + (p.getIndices()?.getCount() ?? 0) / 3, 0);
+  const t0 = tris(doc), parts = shadeFoliage(doc);
+  await doc.transform(dedup(), prune());
+  await io.write(file, doc);
+  const t1 = tris(await io.read(file));
+  console.log(`q_nature.glb: 잎 덩어리 ${parts}개 정점 색, 삼각형 ${t0} → ${t1}, ${(fs.statSync(file).size / 1024).toFixed(0)}KB`);
+  if (t1 !== t0) process.exitCode = 1;
+}
 if (MODE === '--soften-animals') for (const n of SOFT_ANIMALS) await softenFile(n, allPrims, SOFT_DEG.animal, 1.05);
 
 const qmul = (a, b) => [

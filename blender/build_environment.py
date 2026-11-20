@@ -479,18 +479,18 @@ def hen():
     shine = material("eye_shine", "#ffffff")
     body = empty("Body", loc=(0, 0, 0.36), parent=root)
     join("BodyMesh", [
-        sphere("body", white, loc=(0, 0.02, 0), radius=0.2, scale=(0.95, 1.3, 1.0), rot=(-10, 0, 0), segments=12, rings=8),
-        sphere("chest", white, loc=(0, F * 0.14, 0.05), radius=0.15, scale=(1, 1, 1.05), segments=12, rings=8),
+        sphere("body", white, loc=(0, 0.02, 0), radius=0.2, scale=(0.95, 1.3, 1.0), rot=(-10, 0, 0), segments=16, rings=12),
+        sphere("chest", white, loc=(0, F * 0.14, 0.05), radius=0.15, scale=(1, 1, 1.05), segments=16, rings=12),
         cone("tail", white, loc=(0, 0.27, 0.15), radius=0.11, depth=0.26, rot=(-38, 0, 0), segments=8, smooth=False),
         cone("tail_tip", cream, loc=(0, 0.32, 0.26), radius=0.06, depth=0.11, rot=(-30, 0, 0), segments=8, smooth=False),
-        sphere("wingL", cream, loc=(-0.175, 0.04, 0.02), radius=0.13, scale=(0.32, 1.2, 0.72), rot=(-12, 0, 0), segments=8, rings=5),
-        sphere("wingR", cream, loc=(0.175, 0.04, 0.02), radius=0.13, scale=(0.32, 1.2, 0.72), rot=(-12, 0, 0), segments=8, rings=5),
+        sphere("wingL", cream, loc=(-0.175, 0.04, 0.02), radius=0.13, scale=(0.32, 1.2, 0.72), rot=(-12, 0, 0), segments=12, rings=8),
+        sphere("wingR", cream, loc=(0.175, 0.04, 0.02), radius=0.13, scale=(0.32, 1.2, 0.72), rot=(-12, 0, 0), segments=12, rings=8),
     ], parent=body)
     head = empty("Head", loc=(0, F * 0.2, 0.17), parent=body)
     # 큰 머리(0.13) + 큰 눈(0.026) + 흰 반짝임 → 귀여운 비율
     join("HeadMesh", [
         cylinder("neck", white, loc=(0, 0, -0.02), radius=0.085, radius2=0.08, depth=0.16, segments=8),
-        sphere("head", white, loc=(0, F * 0.01, 0.10), radius=0.13, scale=(0.92, 1.0, 0.98), segments=12, rings=8),
+        sphere("head", white, loc=(0, F * 0.01, 0.10), radius=0.13, scale=(0.92, 1.0, 0.98), segments=16, rings=12),
         cone("beak", beak, loc=(0, F * 0.15, 0.085), radius=0.03, depth=0.07, rot=(F * -90, 0, 0), segments=8, smooth=False),
         sphere("comb1", red, loc=(0, F * 0.06, 0.225), radius=0.034, segments=5, rings=4),
         sphere("comb2", red, loc=(0, F * 0.0, 0.24), radius=0.04, segments=5, rings=4),
@@ -499,8 +499,9 @@ def hen():
         sphere("wattleR", red, loc=(0.014, F * 0.125, 0.02), radius=0.022, scale=(0.7, 1, 1.4), segments=5, rings=4),
         sphere("eyeL", eye, loc=(-0.085, F * 0.075, 0.12), radius=0.026, segments=7, rings=5),
         sphere("eyeR", eye, loc=(0.085, F * 0.075, 0.12), radius=0.026, segments=7, rings=5),
-        sphere("shineL", shine, loc=(-0.092, F * 0.095, 0.132), radius=0.009, segments=4, rings=3),
-        sphere("shineR", shine, loc=(0.092, F * 0.095, 0.132), radius=0.009, segments=4, rings=3),
+        # 반짝임: 중심을 눈 표면 위에 (절반이 밖으로 나옴), 위·부리 쪽으로 조금 → 그늘에서도 흰 점이 보이게
+        sphere("shineL", shine, loc=(-0.1, F * 0.094, 0.132), radius=0.011, segments=6, rings=4),
+        sphere("shineR", shine, loc=(0.1, F * 0.094, 0.132), radius=0.011, segments=6, rings=4),
     ], parent=head)
     for n, x in (("LegL", -0.07), ("LegR", 0.07)):
         leg = empty(n, loc=(x, 0.03, -0.14), parent=body)

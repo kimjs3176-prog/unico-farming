@@ -53,6 +53,9 @@ test('three 로 읽어도 뼈대 메시(SkinnedMesh)·skinIndex·법선이 있�
   }
 });
 
+/** 몸·가슴 구 16x12 (352 삼각형씩) + 꼬리: 12x8 이면 이보다 적음 */
+const BODY_MIN_TRIS = 700;
+
 test('암탉: 큰 머리·부드러운 몸 (아기 같은 비율)', async () => {
   const doc = await io.read('public/models/hen.glb');
   const head = doc.getRoot().listMeshes().find((m) => /Head/.test(m.getName()));
@@ -61,6 +64,9 @@ test('암탉: 큰 머리·부드러운 몸 (아기 같은 비율)', async () => 
   const min = [9, 9, 9], max = [-9, -9, -9], e = [];
   for (let i = 0; i < pos.getCount(); i++) { pos.getElement(i, e); for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], e[k]); max[k] = Math.max(max[k], e[k]); } }
   assert.ok(max[0] - min[0] > 0.23, `머리 폭 ${(max[0] - min[0]).toFixed(3)}`);
-  const body = doc.getRoot().listMeshes().find((m) => /Body/.test(m.getName()));
-  assert.ok(softness(body.listPrimitives()[0]) > 0.02, '몸이 각짐');
+  // 부드러움 값은 면이 잘수록 작아짐 (각진 모델은 0) → 0 이 아닌지 + 몸 구가 촘촘한지(16x12) 함께 봄
+  const body = doc.getRoot().listMeshes().find((m) => /Body/.test(m.getName())).listPrimitives()[0];
+  const s = softness(body), tris = body.getIndices().getCount() / 3;
+  assert.ok(s > 0.01, `몸이 각짐 ${s.toFixed(4)}`);
+  assert.ok(tris >= BODY_MIN_TRIS, `몸 삼각형 ${tris}`);
 });

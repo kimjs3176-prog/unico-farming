@@ -43,6 +43,8 @@ export const DEFERRED_MODELS = [['q_horse', 'q_donkey', 'q_alpaca'], ['q_wolf', 
 const SOFT_FUR = new Set(['q_cow', 'q_sheep', 'q_shiba', 'q_alpaca', 'q_horse', 'q_donkey']);
 /** 키 큰 구경 동물은 조금 작게 (머리 꼭대기가 유니코 머리보다 높지 않게) */
 const LOAD_SCALE = { q_alpaca: 0.85, q_horse: 0.85 };
+/** 머리 뼈 배율 (아기 같은 큰 머리, 주민·유니코와 같은 귀여운 비율). 동작에 배율 채널이 없어 그대로 유지됨. 귀·뿔은 머리 뼈 아래라 함께 커짐 */
+export const HEAD_SCALE = { q_cow: 1.25, q_horse: 1.25, q_donkey: 1.25, q_alpaca: 1.22, q_sheep: 1.15 };
 /** 뼈대 동물 컬링 구 여유 배율: 걷기·뛰기·풀 뜯기 동작이 기본 자세 구 밖으로 나가지 않게 */
 const SKIN_SPHERE_PAD = 1.5;
 
@@ -126,6 +128,8 @@ export class Assets {
           gltf.scene.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh) dequantize(o.geometry); }); // 합치기 전에 압축 좌표 풀기
           if (MERGE_PARTS.has(n)) mergeSiblings(gltf.scene, MERGE_LOOSE.has(n));
           prepare(gltf.scene);
+          // 암탉: 작고 둥근 몸이 제 그림자를 받으면 그림자 지도의 면이 얼룩덜룩 각져 보임 → 받지 않음 (땅 그림자는 그대로 드리움)
+          if (n === 'hen') gltf.scene.traverse((o) => { if (o.isMesh) o.receiveShadow = false; });
           applyLeafRole(gltf.scene, n, this.leafMats);
           this.scenes.set(n, gltf.scene);
         } catch (e) {
@@ -181,6 +185,7 @@ export class Assets {
       prepare(gltf.scene, { fur: true, soft: SOFT_FUR.has(n), spots: n === 'q_cow' ? 'Main' : null }); // 젖소: 얼룩무늬 (양은 털 질감)
       // 바깥 묶음 노드 배율만 바꿈 (목장 화면이 루트 배율을 새끼 크기로 덮어쓰므로)
       if (LOAD_SCALE[n]) gltf.scene.children[0]?.scale.multiplyScalar(LOAD_SCALE[n]);
+      if (HEAD_SCALE[n]) gltf.scene.traverse((o) => { if (o.isBone && o.name === 'Head') o.scale.setScalar(HEAD_SCALE[n]); });
       skinSpheres(gltf.scene);
       this.anims.set(n, gltf.animations);
       this.scenes.set(n, gltf.scene);
