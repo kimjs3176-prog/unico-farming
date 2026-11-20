@@ -336,7 +336,7 @@ export class FX {
           r.phase = 1; r.t = 0; r.life = 1.5;
           for (let k = 0; k < n; k++) {
             const yv = 1 - (2 * (k + 0.5)) / n, rr = Math.sqrt(1 - yv * yv), th = k * 2.39996; // 피보나치 구
-            const sp = 3.2 + Math.random() * 0.5;
+            const sp = 3.2 + ((k * 0.618034) % 1) * 0.5; // 별마다 다른 속도 (난수 대신 황금비: 퍼짐이 늘 고르게)
             vel[k * 3] = Math.cos(th) * rr * sp; vel[k * 3 + 1] = yv * sp + 0.6; vel[k * 3 + 2] = Math.sin(th) * rr * sp;
             pos[k * 3] = s.x; pos[k * 3 + 1] = s.y; pos[k * 3 + 2] = s.z;
           }

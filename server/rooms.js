@@ -14,7 +14,7 @@ export function sanitizeName(name) {
 
 /** 옷차림(모습) 문자열: 영문 소문자·숫자·점·하이픈만, 48자까지 (클라이언트가 다시 정해진 이름만 골라 씀) */
 export function sanitizeLook(s) {
-  return String(s ?? '').replace(/[^a-z0-9.-]/g, '').slice(0, 48);
+  return String(s ?? '').replace(/[^a-z0-9._-]/g, '').slice(0, 48);
 }
 
 /** 플레이어끼리 상호작용 (인사·하이파이브·선물·친구): 정해진 종류·값만, 받는 사람에게만 전달 */

@@ -1,4 +1,5 @@
 import { decodeLook } from './sim/costume.js';
+import { titleById } from './sim/titles.js';
 import { Unico } from './unico.js';
 import { jumpStep, JUMP_V } from './player.js';
 
@@ -257,7 +258,7 @@ export class Net {
       r.l = p.l;
       const look = decodeLook(p.l);
       r.unico.setOutfit(look);
-      const t = typeof look.title === 'string' ? look.title.slice(0, 16) : '';
+      const t = titleById(look.title)?.name ?? ''; // 받은 것은 칭호 id → 표시 이름 (모르는 id 는 비움)
       if (t !== (r.title || '')) { r.title = t; this.labelOf(r); }
     }
     if (p.x !== undefined) { r.target.x = p.x; r.target.z = p.z; }

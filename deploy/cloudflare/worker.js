@@ -280,7 +280,7 @@ export class FarmRoom {
       if (this.players().length >= MAX_PLAYERS) { try { ws.send(JSON.stringify({ t: 'full' })); ws.close(1013, 'full'); } catch { /* 이미 닫힘 */ } return; }
       p.clientId = validClientId(m.clientId) ? m.clientId : '';
       p.name = String(m.name || '').replace(/[<>&"'`]/g, '').trim().slice(0, 12) || '유니코';
-      p.l = String(m.l || '').replace(/[^a-z0-9.-]/g, '').slice(0, 48); // 옷차림
+      p.l = String(m.l || '').replace(/[^a-z0-9._-]/g, '').slice(0, 48); // 옷차림
       ws.serializeAttachment(p);
       const n = this.players().length;
       ws.send(JSON.stringify({ t: 'welcome', id: p.id, room: p.room, count: n, players: this.players().filter((x) => x.id !== p.id).map((x) => this.pub(x)), goal: goalMsg(this.goalState?.goal, this.goalState?.tally) }));
@@ -325,7 +325,7 @@ export class FarmRoom {
       this.broadcast({ t: 'state', players: [this.pub(p)] }, p.id);
     } else if (m.t === 'look') {
       // 옷 갈아입기는 1초에 한 번까지: 그 안에 또 오면 버리지 않고 마지막 것을 1초가 지난 뒤 전함
-      const l = String(m.l || '').replace(/[^a-z0-9.-]/g, '').slice(0, 48);
+      const l = String(m.l || '').replace(/[^a-z0-9._-]/g, '').slice(0, 48);
       const now = Date.now(), had = p.ln !== undefined;
       delete p.ln;
       if (l === (p.l || '')) { if (had) ws.serializeAttachment(p); } // 같은 옷이면 보낼 것 없음 (미뤄 둔 것도 취소)

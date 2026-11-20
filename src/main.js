@@ -2,6 +2,7 @@
 // 나머지 메서드는 src/game/game_*.js 믹스인 — gfx(그래픽·화면 크기) · save(저장) · story(컷신) · travel(이동) · progress(퀘스트 진행), 부팅은 src/boot.js
 import { record, rethrowLater, showFatal, setCrashContext, FailGate } from './game/crash.js'; // 맨 먼저: 다른 모듈을 읽는 중의 오류부터 기록
 import { josa } from './game/sim/josa.js';
+import { isTitleId, titleIdOf } from './game/sim/titles.js';
 import { HomeView } from './game/view/home_view.js';
 import { TownView } from './game/view/town_view.js';
 import { AutoPlay } from './game/autoplay.js';
@@ -343,7 +344,7 @@ class Game {
     return { hat: o.hat ?? null, scarf: o.scarf ?? null, goggles: !!o.goggles, sprout: o.sprout === undefined ? true : !!o.sprout, costume: this.costume.wearing };
   }
   /** 다른 접속자에게 보내는 모습 문자열 (칭호는 정해진 것만 실림 — encodeLook 이 고름) */
-  look() { return encodeLook({ ...this.outfitNow(), title: this.flags?.title ?? null }); }
+  look() { const t = this.flags?.title ?? this.player?.title ?? null; return encodeLook({ ...this.outfitNow(), title: isTitleId(t) ? t : titleIdOf(t) }); } // 칭호는 이름이 아니라 정해진 id 로만 보냄
   /** 옷차림을 내 유니코에 입히고 (send 면) 접속자에게 알림 */
   applyLook(send = true) {
     const o = this.outfitNow();

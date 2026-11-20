@@ -62,11 +62,11 @@ PORT=8787 MAX_PLAYERS_PER_ROOM=50 MAX_ROOMS=20 npm start
 - **브라우저 연기 시험** (`scripts/smoke.mjs`): Actions 탭 → CI → **Run workflow** 로 실행하면 `test` 다음에 `smoke` 작업이 돕니다 (소프트웨어 WebGL 이라 몇 분). 휴대폰 크기(412x839, 낮음)로 입장 20초 동안 오류 없음, 게임 루프가 돎, 인트로 '건너뛰기' 가 5초 안에 풀림, 저장 → 새로 고침 → '저장된 농장을 불러왔어요', 낚시터·KOAT 체험관·우리 집으로 순간이동해도 컷신·대화가 5초 안에 풀림을 보고, 이어서 데스크톱(1280x800, 높음·화면 효과 켜짐)으로 따로 입장해 10초 동안 오류가 없는지 확인합니다. 바깥 주소(글꼴·날씨·릴레이 서버)는 모두 막고 돌립니다.
   - 내 컴퓨터에서: `VITE_WS_URL= npm run build && npm i --no-save playwright && npx playwright install chromium && npm run smoke`
 - **빌드 번호**: 빌드한 `index.html`·`pixel.html` 에 `<meta name="unico-build" content="<커밋 앞 7자> <빌드 날짜>">` 가 들어갑니다 (Vercel 은 `VERCEL_GIT_COMMIT_SHA`, Actions 는 `GITHUB_SHA`, 그 밖에는 `git rev-parse`, 모두 없으면 `dev`). 오류 제보를 받으면 브라우저 콘솔에서 `document.querySelector('meta[name=unico-build]').content` 로 어느 배포인지 확인하세요. 아직은 게임 화면 어디에도 나오지 않습니다 — 설정 창 아래 작은 글씨(`빌드 1a2b3c4 · 2026-11-09`)와 오류 제보·진단 복사 문구가 이 meta 를 읽게 할 예정입니다. 그때도 빌드 상수 `__BUILD__` 대신 meta 를 읽습니다 (`__BUILD__` 를 JS 에서 쓰면 커밋마다 큰 main 청크 이름이 바뀌어 휴대폰이 다시 받음).
-- **생성물 검사** (`npm run check:gen`, `tests/gen/*.check.mjs`): 문서의 수치 표·아이콘 아틀라스처럼 콘텐츠를 바꿀 때마다 다시 만들어야 하는 것. CI 의 `gen-check` 작업에서 돌지만 실패해도 배포·합치기를 막지 않습니다 (규칙은 `tests/gen/README.md`). 어긋났다고 나오면 아래 명령으로 다시 만들어 커밋하세요. 지금 검사는 아이템 아이콘 아틀라스 하나이고, 수치 표 명령은 **아직 없습니다** (검사를 추가할 때 함께 생김).
+- **생성물 검사** (`npm run check:gen`, `tests/gen/*.check.mjs`): 문서의 수치 표·아이콘 아틀라스처럼 콘텐츠를 바꿀 때마다 다시 만들어야 하는 것. CI 의 `gen-check` 작업에서 돌지만 실패해도 배포·합치기를 막지 않습니다 (규칙은 `tests/gen/README.md`). 어긋났다고 나오면 아래 명령으로 다시 만들어 커밋하세요. 지금 검사는 아이템 아이콘 아틀라스·UI 아이콘·수치 표입니다.
 
   | 생성물 | 다시 만드는 명령 | 검사 |
   |---|---|---|
-  | `docs/BALANCE.md` 수치 표 | `node scripts/balance.mjs --md` — **아직 없음** (지금 `balance.mjs` 는 `--md` 를 모르고 콘솔 표만 출력) | 표 검사와 함께 추가 예정 |
+  | `docs/BALANCE.md` 수치 표 | `node scripts/balance.mjs --md` | `tests/gen/docs_balance.check.mjs` |
   | 아이템 아이콘 아틀라스 (`public/ui/items.webp`·`items_deco.webp`·`src/ui/item_icons.gen.js`) | `npm run bake:icons` (Playwright Chromium 필요: 전역 설치 또는 `npm i --no-save playwright`) | `tests/gen/item_atlas.check.mjs` |
 
 ### 내 컴퓨터에서 미리 시험하기
