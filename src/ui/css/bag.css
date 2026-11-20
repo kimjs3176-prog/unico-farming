@@ -3,14 +3,17 @@
 .seed-grid button { background: #fff; color: var(--ink); border: 2px solid #e5e5e5; box-shadow: none; padding: 12px 8px; font-size: 15px; }
 .seed-grid button:hover { border-color: var(--teal); }
 .seed-grid button .q { display: block; font-size: 12px; color: #666; }
-/* 아이템 그림 한 칸 (ui/item_icons.js): 이모지 또는 구운 아틀라스 칸. 크기는 글자 크기(em) */
-.ico { display: inline-block; width: 1.15em; height: 1.15em; line-height: 1.15em; text-align: center; vertical-align: middle; flex: none; }
+/* 아이템 그림 한 칸 (ui/item_icons.js): 이모지(.em) 또는 구운 아틀라스 칸(.it). 크기는 글자 크기(em)
+   .ico 는 UI 아이콘 세트와 같은 이름 → 늘 .em/.it 와 함께 걸어 다른 아이콘 크기를 바꾸지 않음 */
+.ico:is(.em, .it) { display: inline-block; width: 1.15em; height: 1.15em; line-height: 1.15em; text-align: center; vertical-align: middle; flex: none; }
 .ico.it { background-repeat: no-repeat; }
 /* 못 만난 도감 칸: 같은 그림의 그림자 */
-.ico.locked { filter: brightness(0) opacity(0.18); }
+.ico:is(.em, .it).locked { filter: brightness(0) opacity(0.18); }
 /* 도감 */
 .book-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .book-tabs button { padding: 7px 12px; }
+.book-tabs button b { font: inherit; }
+.book-tabs button small { font-size: 0.85em; margin-left: 4px; }
 .book-prog { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; font-size: 13px; color: var(--ink); }
 .book-prog .bp-bar { height: 10px; border-radius: 999px; overflow: hidden; }
 .book-prog .bp-bar i { display: block; height: 100%; border-radius: 999px; transition: width 0.4s; }
@@ -19,8 +22,11 @@
 .book-cell { background: #f7f7f7; border-radius: 14px; padding: 10px 6px; text-align: center; display: flex; flex-direction: column; gap: 2px; border: 2px solid #eee; }
 .book-cell .em { font-size: 30px; }
 .book-cell .bk-ic { display: block; line-height: 1; margin-bottom: 2px; }
-.book-cell .bk-ic .ico { width: 1.2em; height: 1.2em; line-height: 1.2em; }
+.book-cell .bk-ic .ico:is(.em, .it) { width: 1.2em; height: 1.2em; line-height: 1.2em; }
 .book-cell small { color: #777; font-size: 11px; }
+/* 힌트는 두 줄까지 (칸 아래가 잘리지 않게) */
+.book-cell .bk-hint { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.book-cell .bk-tier { font-size: 11px; letter-spacing: -1px; }
 .book-cell.locked { opacity: 0.55; filter: grayscale(1); }
 .book-grid .book-cell.locked .bk-ic { opacity: 1; filter: none; }
 /* 가방: 셈 배지가 붙은 칸 격자 (PC 5칸 · 폰 4칸) */
@@ -28,10 +34,10 @@
 .seed-grid.bag-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-bottom: 4px; }
 @media (max-width: 600px) { .seed-grid.bag-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .seed-grid .bag-slot { position: relative; aspect-ratio: 1; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 14px; min-height: 48px; }
-.bag-slot .ico { font-size: 34px; }
+.bag-slot .ico:is(.em, .it) { font-size: 34px; }
 .bag-slot .n { position: absolute; right: 3px; bottom: 3px; min-width: 20px; padding: 1px 5px; border-radius: 999px; font: 700 12px/1.3 var(--display); text-align: center; }
 .bag-slot .pip { position: absolute; left: 4px; top: 2px; font-size: 10px; letter-spacing: -1px; line-height: 1; }
-.bag-slot.packet .ico { font-size: 26px; }
+.bag-slot.packet .ico:is(.em, .it) { font-size: 26px; }
 .bag-detail { display: flex; align-items: center; gap: 10px; min-height: 56px; margin: 0 0 4px; padding: 8px 12px; border-radius: 14px; font-size: 13px; }
 .bag-detail .bd-tx { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .bag-detail small { font-size: 12px; }
@@ -39,5 +45,30 @@
 .bag-empty .be-ic { font-size: 46px; }
 .bag-foot { margin: 6px 0 0; }
 .seed-pick .packet { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 40px; vertical-align: middle; }
-/* 도감 탭 넷: 좁은 화면에서도 한 줄 */
-@media (max-width: 600px) { .book-tabs { flex-wrap: nowrap; gap: 4px; } .book-tabs button { flex: 1 1 0; min-width: 0; padding: 7px 4px; font-size: 13px; white-space: nowrap; } }
+/* 도감 탭 넷: 좁은 화면에서도 한 줄 (이름 위 · 셈 아래 두 줄) */
+@media (max-width: 600px) {
+  .book-tabs { flex-wrap: nowrap; gap: 4px; }
+  .book-tabs button { flex: 1 1 0; min-width: 0; padding: 6px 4px; font-size: 13px; line-height: 1.2; white-space: nowrap; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .book-tabs button small { margin: 0; font-size: 11px; }
+}
+/* 가방 칸 이름: 마우스로 올리면 말풍선 (PC) · 넓은 화면은 칸 아래 작은 이름 */
+@media (pointer: fine) {
+  .bag-slot[data-name]:hover::after { content: attr(data-name); position: absolute; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%); padding: 3px 8px; border-radius: 8px; font-size: 12px; white-space: nowrap; z-index: 3; pointer-events: none; }
+}
+.bag-slot .nm { display: none; }
+@media (min-width: 601px) {
+  .seed-grid .bag-slot { flex-direction: column; gap: 0; }
+  .bag-slot .nm { display: block; max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 1.2; margin-top: 1px; }
+}
+/* 도감 보상 카드 (bookRewardCard): 받은 것 한 줄씩 + 칭호 배지 + 확인 */
+.book-reward .br-rows { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 10px; }
+.book-reward .br-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px; font-size: 15px; }
+.book-reward .br-ic { flex: none; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 28px; border-radius: 12px; }
+.book-reward .br-tx { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.book-reward .br-tx small { font-size: 12px; }
+.book-reward .br-titles { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; }
+.book-reward .br-lb { font-weight: 700; font-size: 13px; }
+.book-reward .br-pill { padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+.book-reward .br-titles small { flex-basis: 100%; font-size: 12px; }
+.book-reward .br-quests { margin: 0 0 8px; }
+.book-reward .br-ok { display: block; width: 100%; margin-top: 4px; font-size: 16px; }

@@ -1,4 +1,4 @@
-import { TITLE_BY_ID } from './titles.js';
+import { isTitleId } from './titles.js';
 
 /**
  * 코스튬 (렌더링 무관, 테스트: tests/costume.test.js)
@@ -120,7 +120,7 @@ function cleanSet(s, owned) {
 /** 다른 접속자에게 보낼 모습: "코스튬.모자.스카프.고글.새싹[.칭호]" (없으면 '-', 칭호는 정해진 id 일 때만 6번째 칸) */
 export function encodeLook({ costume = null, hat = null, scarf = null, goggles = false, sprout = true, title = null } = {}) {
   const out = [costume || '-', hat || '-', scarf || '-', goggles ? 1 : 0, sprout === false ? 0 : 1];
-  if (title && TITLE_BY_ID[title]) out.push(title);
+  if (isTitleId(title)) out.push(title);
   return out.join('.');
 }
 
@@ -134,6 +134,6 @@ export function decodeLook(s) {
     goggles: gg === '1',
     sprout: sp !== '0',
   };
-  if (TITLE_BY_ID[tt]) out.title = tt; // 칭호: 정해진 id 만 (글을 그대로 받지 않음), 없으면 칸도 없음 (예전 모습과 같게)
+  if (isTitleId(tt)) out.title = tt; // 칭호: 정해진 id 만 (글을 그대로 받지 않음), 없으면 칸도 없음 (예전 모습과 같게)
   return out;
 }

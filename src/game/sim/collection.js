@@ -17,11 +17,11 @@ export const COMPLETE_REWARD = { fish: 2500, bug: 1200, fruit: 300, ship: 2000 }
 
 /** 이정표: 탭마다 5종을 채울 때마다 작은 선물 (미끼·퇴비 + 꾸미기 소품) */
 export const MILESTONE_EVERY = 5;
-const MILESTONE_ITEM = { fish: 'bait', bug: 'compost', fruit: 'compost', ship: 'compost' };
+// 과일(4종)은 5종에 못 미쳐 이정표 없이 완성 보상만
+const MILESTONE_ITEM = { fish: 'bait', bug: 'compost', ship: 'compost' };
 const MILESTONE_DECOR = {
   fish: ['bucket', 'barrel', 'lamp', 'well', 'bench'],
   bug: ['flowerbed', 'planter', 'berrybush'],
-  fruit: ['planter'],
   ship: ['crate', 'sack', 'hay', 'cart', 'scarecrow'],
 };
 

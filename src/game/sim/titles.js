@@ -29,13 +29,16 @@ export const TITLES = [
     return t ? [{ id: `v-${vid.toLowerCase().replace(/[^a-z0-9]/g, '')}`, name: t, icon: '💌', desc: '주민과 ♥5' }] : [];
   }),
 ];
-export const TITLE_BY_ID = Object.fromEntries(TITLES.map((t) => [t.id, t]));
+// 프로토타입 없는 객체: 'constructor'·'toString' 같은 물려받은 이름을 칭호로 치지 않게
+export const TITLE_BY_ID = Object.freeze(Object.assign(Object.create(null), Object.fromEntries(TITLES.map((t) => [t.id, t]))));
+/** 정해진 칭호 id 인가 (문자열이고 TITLE_BY_ID 에 제 것으로 있을 때만) */
+export const isTitleId = (id) => typeof id === 'string' && Object.hasOwn(TITLE_BY_ID, id);
 const BY_NAME = new Map(TITLES.map((t) => [t.name, t]));
 
 /** 칭호 이름 → id (모르는 이름이면 null: 다른 접속자에게 보내지 않음) */
 export const titleIdOf = (name) => BY_NAME.get(name)?.id ?? null;
 /** id → 칭호 (모르는 id 는 null) */
-export const titleById = (id) => TITLE_BY_ID[id] ?? null;
+export const titleById = (id) => (isTitleId(id) ? TITLE_BY_ID[id] : null);
 
 /** 기록으로 새로 열린 칭호 이름 목록 (owned: 이미 가진 이름 배열) */
 export function checkTitles(ctx, owned = []) {

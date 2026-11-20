@@ -2,7 +2,7 @@
 // main.js 에서 Object.assign(Game.prototype, …) 으로 붙임 (축약 메서드라 this 는 Game)
 import { CATEGORY_NAMES, ITEMS } from './sim/items.js';
 import { BOOK_CATS_3D } from './sim/collection.js';
-import { checkTitles } from './sim/titles.js';
+import { checkTitles, TITLES } from './sim/titles.js';
 import { FARM_LEVELS } from './sim/farm.js';
 import { VILLAGERS } from './sim/villagers.js';
 import { actionXp, MG_DAILY } from './sim/quests.js';
@@ -46,30 +46,65 @@ function giveCostume(g, id) {
 export const FINALE_WITH_M = 6;
 
 export const GameProgress = {
-  /** 도감 등록 후: 진행 퀘스트, 카테고리 완성 보상 */
+  /**
+   * 도감 등록 후: 진행 퀘스트, 이정표 선물, 카테고리 완성 보상, 칭호
+   * 한 번에 받은 것은 보상 카드 하나로 모음 (다른 창이 열려 있으면 알림 하나 + 창을 닫은 뒤 카드)
+   */
   afterCollect() {
     const C = this.collection;
-    this.onEvent('book', C.natureCount ? C.natureCount() : Object.keys(C.entries).length); // '도감 N종' 퀘스트는 자연 도감만
+    const quests = [];
+    this.onEvent('book', C.natureCount ? C.natureCount() : Object.keys(C.entries).length, null, { quests }); // '도감 N종' 퀘스트는 자연 도감만
+    const rows = [];
+    let tier = 0;
     // 이정표 (탭마다 5종): 미끼·퇴비는 가방, 소품은 꾸미기 보관함 (놓을 때 무료)
-    const gifts = [];
     for (const m of C.claimMilestones?.() || []) {
-      if (m.decor && giveDecor(this, m.decor, 1)) gifts.push(`${CATEGORY_NAMES[m.cat]} ${m.at}종 · ${DECOR_BY_ID[m.decor].icon} ${DECOR_BY_ID[m.decor].name} (꾸미기 보관함)`);
-      for (const [id, n] of Object.entries(m.item || {})) { this.economy.addItem(id, n); gifts.push(`${CATEGORY_NAMES[m.cat]} ${m.at}종 · ${ITEMS[id]?.emoji ?? ''} ${ITEMS[id]?.name ?? id} ${n}개`); }
-    }
-    if (gifts.length) {
-      reward(this, 2, { label: '📖' });
-      // 장터처럼 다른 창이 열려 있으면 그 창을 닫지 않고 알림만
-      if (this.ui.panel) this.ui.toast(`📖 도감 보상! ${gifts.join(' · ')}`, { type: 'reward', key: 'bookgift' });
-      else this.ui.result('📖 도감 이정표 보상!', gifts);
+      const head = `${CATEGORY_NAMES[m.cat]} ${m.at}종`;
+      if (m.decor) {
+        // 꾸미기 보관함이 아직 없으면(첫 준비 전·시험) 이정표를 쓰지 않고 다음에 다시 받게
+        if (!giveDecor(this, m.decor, 1)) { delete C.rewarded[`${m.cat}@${m.at}`]; continue; }
+        const d = DECOR_BY_ID[m.decor];
+        rows.push({ ic: this.ui.itemIcon?.(`decor:${m.decor}`, { size: 30 }) ?? d.icon, t: `<b>${d.name}</b> <small>${head} · 꾸미기 보관함</small>` });
+      }
+      for (const [id, n] of Object.entries(m.item || {})) {
+        this.economy.addItem(id, n);
+        rows.push({ ic: this.ui.itemIcon?.(id, { size: 30 }) ?? ITEMS[id]?.emoji ?? '', t: `<b>${ITEMS[id]?.name ?? id} ×${n}</b> <small>${head} · 가방</small>` });
+      }
+      tier = Math.max(tier, 2);
     }
     for (const r of C.claimCompletions(BOOK_CATS_3D)) {
       this.economy.earn(r.money);
-      reward(this, 3, { label: '🏅' }); // 3단계 보상 연출 (만세·팡파르)
-      const lines = [`${CATEGORY_NAMES[r.cat] || r.cat} 도감을 모두 채웠어요!`, `보상 +${r.money}🪙`, '🏆 집 책장 위에 트로피가 놓였어요'];
-      if (this.ui.panel) this.ui.toast(`🏅 ${lines.join(' · ')}`, { type: 'reward', key: 'bookdone' });
-      else this.ui.result('🏅 도감 완성!', lines);
+      rows.push({ ic: '🏆', t: `<b>${CATEGORY_NAMES[r.cat] || r.cat} 도감 완성!</b> <small>집 책상 위 선반에 트로피</small>` });
+      rows.push({ ic: '🪙', t: `<b>+${r.money.toLocaleString()}🪙</b> <small>완성 보상</small>` });
+      tier = 3;
     }
-    this.checkTitles();
+    const titles = this.checkTitles({ quiet: !!rows.length });
+    if (rows.length) {
+      reward(this, tier, { label: tier >= 3 ? '🏅' : '📖' }); // 3단계: 만세·팡파르
+      const tt = titles.map((name) => ({ name, icon: TITLES.find((t) => t.name === name)?.icon ?? '🏅' }));
+      const qs = quests.map((q) => `✅ 퀘스트 “${q.title}” 완료${AUTO_CLAIM.has(q.id) ? ` +${q.reward.money}🪙` : ` · ${touchUI() ? '목표 칩' : 'Q 퀘스트 창'}에서 보상 받기`}`);
+      this._showBookReward({ head: tier >= 3 ? '🏅 도감 완성!' : '📖 도감 보상!', rows, titles: tt, quests: qs });
+    } else for (const q of quests) this._questDoneToast(q);
+    this.ui.refreshBook?.(); // 도감 창이 열려 있으면 머리글(다음 보상까지)을 다시 그림
+  },
+
+  /** 도감 보상 카드: 창이 없으면 바로, 다른 창이 열려 있으면 알림 하나 + 창을 닫은 뒤 (여러 번이면 한 카드로 합침) */
+  _showBookReward(card) {
+    const q = this._bookCard;
+    if (q) { q.rows.push(...card.rows); q.titles.push(...card.titles); q.quests.push(...card.quests); if (card.head.startsWith('🏅')) q.head = card.head; }
+    else this._bookCard = { ...card, rows: [...card.rows], titles: [...card.titles], quests: [...card.quests] };
+    const busy = () => !!(this.ui.panel || this.dialogue?.active || this.cinema?.locked);
+    const show = () => {
+      const c = this._bookCard;
+      this._bookCard = null;
+      if (!c) return;
+      if (this.ui.bookRewardCard) this.ui.bookRewardCard(c);
+      else this.ui.result(c.head, c.rows.map((r) => `${r.ic} ${r.t}`));
+    };
+    if (!busy()) { clearInterval(this._bookCardT); this._bookCardT = null; show(); return; }
+    if (!q) this.ui.toast('📖 도감 보상을 받았어요! 창을 닫으면 보여 줄게요', { type: 'reward', key: 'bookgift' });
+    if (this._bookCardT || typeof setInterval === 'undefined') return;
+    this._bookCardT = setInterval(() => { if (busy()) return; clearInterval(this._bookCardT); this._bookCardT = null; show(); }, 400);
+    this._bookCardT.unref?.(); // node 시험이 끝나기를 막지 않게
   },
 
   /** 모은 기록으로 열린 칭호를 가진 칭호 목록(flags.titles)에 더함 (달기는 옷장 칭호 탭에서). 새로 연 이름 목록 */
@@ -90,6 +125,12 @@ export const GameProgress = {
     return got;
   },
 
+  /** 퀘스트 완료 알림 한 줄 */
+  _questDoneToast(q) {
+    if (AUTO_CLAIM.has(q.id)) this.ui.toast(`✅ ${q.title} 완료! +${q.reward.money}🪙`);
+    else this.ui.toast(`✅ ${q.title} 완료! ${touchUI() ? '목표 칩을 눌러 보상 받기' : 'Q 또는 목표 칩에서 보상 받기'}`);
+  },
+
   /** 계절 도전 (저장 칸 'weekly'): 없으면 만듦 */
   seasonChallenges() { return (this.weekly ||= new SeasonChallenges()); },
 
@@ -103,15 +144,13 @@ export const GameProgress = {
    * 게임 이벤트 → 퀘스트 진행 + 계절 도전 + 행동 경험치 + 마을 별점
    * key: 수확 작물 id · 잡은 아이템 id · 미니게임 id (mgstars) 처럼 이벤트를 자세히
    */
-  onEvent(event, amount = 1, key = null) {
+  onEvent(event, amount = 1, key = null, opts = {}) {
     this._fbDirty = true;
     const done = this.quests.report(event, amount);
     // 보유 금액 퀘스트도 같이 살핌 (완료 알림이 빠지지 않게)
     if (event !== 'money') done.push(...this.quests.report('money', this.economy.money));
-    for (const q of done) {
-      if (AUTO_CLAIM.has(q.id)) this.ui.toast(`✅ ${q.title} 완료! +${q.reward.money}🪙`);
-      else this.ui.toast(`✅ ${q.title} 완료! ${touchUI() ? '목표 칩을 눌러 보상 받기' : 'Q 또는 목표 칩에서 보상 받기'}`);
-    }
+    // opts.quests: 부른 쪽이 완료 알림을 모아 보상 카드에 (afterCollect)
+    for (const q of done) opts.quests ? opts.quests.push(q) : this._questDoneToast(q);
     // 계절 도전
     const W = this.seasonChallenges();
     if (!W.key && this.world) W.sync(this.world.day, this._challengeCtx());

@@ -26,7 +26,7 @@ export function sourceOf(key) {
   const it = ITEMS[key];
   if (!it) return '';
   if (key.startsWith('fest_')) return key === 'fest_token' ? '축제 놀이에서 받아요 · 축제 장터에서 써요' : '축제 날 주민이 나눠 줘요';
-  if (key.startsWith('rice_') && key !== 'rice_seed') return '논에서 거둔 벼를 탈곡해요 · 잘 돌볼수록 ★';
+  if (key.startsWith('rice_') && key !== 'rice_seed') return '논 벼 탈곡 · 잘 돌볼수록 ★';
   const SRC = {
     rice_seed: '장터에서 사요 · 논에 모내기', paddy: '논에서 거둬요 · 방앗간에서 탈곡', bait: '낚시 가게에서 사요 · 입질이 빨라져요',
     compost: '퇴비통에서 만들거나 장터에서 사요', weed: '밭 김매기에서 나와요 · 퇴비 재료', pet_treat: '장터에서 사요 · 콩이 간식',
@@ -44,7 +44,7 @@ export function sourceOf(key) {
 /** 출하 도감 못 만난 칸 힌트 (짧게) */
 export function shipHint(key) {
   if (CROPS[key]) return `밭 · Lv.${CROPS[key].unlockLevel} 씨앗`;
-  if (/^rice_\d$/.test(key)) return `논 탈곡 · ${'★'.repeat(+key.slice(5))}`;
+  if (/^rice_\d$/.test(key)) return `★${key.slice(5)} 쌀 출하`;
   const it = ITEMS[key];
   if (it?.cat === 'ranch') return '♥4 동물이 가끔';
   if (it?.cat === 'goods') return /cheese|yarn|castella|yogurt|butter|scarf/.test(key) ? '목장 공방 가공' : '장독대 가공';
@@ -89,12 +89,16 @@ export const BagPanel = {
     const g = this.game, c = g.collection;
     const p = this.openPanel('📖 유니코 도감');
     p.classList.add('book');
-    // 아직 못 받은 이정표·완성 보상이 있으면 지금 받음 (창이 열려 있어 알림으로)
-    if (BOOK_CATS_3D.some((k) => c.nextMilestone?.(k)?.left === 0) || c.completed?.().some((k) => !c.rewarded[k])) g.afterCollect?.();
+    p.dataset.kind = 'book'; p.dataset.cat = cat; // 보상을 받은 뒤 다시 그리기 (refreshBook)
+    // 아직 못 받은 이정표·완성 보상이 있으면 지금 받음 (보상 카드는 창을 닫은 뒤) → 아래 머리글은 받은 뒤 상태로 그림
+    if (BOOK_CATS_3D.some((k) => c.nextMilestone?.(k)?.left === 0) || c.completed?.().some((k) => !c.rewarded[k])) {
+      this._bookDrawing = true;
+      try { g.afterCollect?.(); } finally { this._bookDrawing = false; }
+    }
     const tabs = h('div', 'book-tabs');
     for (const k of BOOK_CATS_3D) {
       const pr = c.progress(k);
-      const t = h('button', k === cat ? 'on' : 'ghost', `${CATEGORY_NAMES[k]} <span class="nw">${pr.got}/${pr.total}</span>${pr.got === pr.total ? ' 🏅' : ''}`);
+      const t = h('button', k === cat ? 'on' : 'ghost', `<b>${CATEGORY_NAMES[k]}${pr.got === pr.total ? ' 🏅' : ''}</b><small class="nw">${pr.got}/${pr.total}</small>`);
       t.setAttribute('aria-pressed', String(k === cat));
       t.onclick = () => this.openBook(k);
       tabs.append(t);
@@ -103,7 +107,7 @@ export const BagPanel = {
     const list = listOf(cat), pr = c.progress(cat);
     // 진행 막대 + 다음 보상까지
     const nx = c.nextMilestone?.(cat);
-    const nxText = pr.got === pr.total ? `🏅 완성! 보상 ${COMPLETE_REWARD[cat].toLocaleString()}🪙 받음 · 집 책장 위에 트로피`
+    const nxText = pr.got === pr.total ? `🏅 완성! 보상 ${COMPLETE_REWARD[cat].toLocaleString()}🪙 받음 · 트로피는 집 책상 위 선반에`
       : nx ? `${nx.left ? `다음 보상까지 <b>${nx.left}종</b>` : '<b>보상 받을 차례!</b>'} <small>(${nx.at}종: ${giftText(milestoneReward(cat, nx.at))})</small>`
         : `다 모으면 <b>${COMPLETE_REWARD[cat].toLocaleString()}🪙</b> + 트로피`;
     p.append(h('div', 'book-prog', `<div class="bp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${pr.total}" aria-valuenow="${pr.got}" aria-label="${CATEGORY_NAMES[cat]} 도감 ${pr.got}/${pr.total}"><i style="width:${pr.total ? (pr.got / pr.total) * 100 : 0}%"></i></div><span>${nxText}</span>`));
@@ -122,9 +126,12 @@ export const BagPanel = {
       const it = ITEMS[k] || CROPS[k] || {}, e = c.entries[k];
       const ic = `<span class="bk-ic">${this.itemIcon(k, { size: 40, locked: !e, baked })}</span>`;
       if (cat === 'ship') {
-        grid.append(h('div', `book-cell${e ? '' : ' locked'}`, e
+        // 쌀은 등급마다 칸이 따로 → 못 만난 칸에도 ★ 등급, 그림은 등급 색 빛 (t-N)
+        const tier = /^rice_(\d)$/.exec(k)?.[1];
+        const tierTx = tier ? `<small class="bk-tier" aria-label="${tier}등급">${'★'.repeat(+tier)}</small>` : '';
+        grid.append(h('div', `book-cell${e ? '' : ' locked'}${tier ? ` t-${tier}` : ''}`, e
           ? `${ic}<b>${nameOf(k)}</b><small>출하 ${e.count.toLocaleString()}개</small>`
-          : `${ic}<b>???</b><small class="bk-hint">${shipHint(k)}</small>`));
+          : `${ic}<b>???</b>${tierTx}<small class="bk-hint">${tier ? '논 → 탈곡' : shipHint(k)}</small>`));
         continue;
       }
       // 계절 알약: 계절마다 색 (지금 계절은 진하게, 나머지는 흐리게), 한 계절에만 나오면 ⏳ · 못 만난 칸엔 어디서 찾는지 힌트
@@ -144,6 +151,31 @@ export const BagPanel = {
     p.append(h('p', 'mk-note', `💡 ${tip}`));
   },
 
+  /** 열린 도감 창 다시 그리기 (보상을 받은 뒤 머리글 '다음 보상까지'를 맞춤). openBook 이 그리는 중이면 그대로 */
+  refreshBook() {
+    const p = this.panel;
+    if (p?.dataset.kind === 'book' && !this._bookDrawing) this.openBook(p.dataset.cat || 'fish');
+  },
+
+  /**
+   * 도감 보상 카드 하나: 받은 것 한 줄씩(그림 + 이름), 새 칭호는 작은 배지, 확인 하나
+   * card: { head, rows: [{ ic: 그림 HTML, t: 글 HTML }], titles: [{ icon, name }], quests: [글] }
+   */
+  bookRewardCard({ head, rows = [], titles = [], quests = [] }) {
+    const p = this.openPanel(head);
+    p.dataset.kind = 'result'; // 오토플레이 중에는 잠시 보여 준 뒤 자동으로 닫음
+    p.classList.add('book-reward');
+    p.append(h('div', 'br-rows', rows.map((r) => `<div class="br-row"><span class="br-ic" aria-hidden="true">${r.ic}</span><span class="br-tx">${r.t}</span></div>`).join('')));
+    if (titles.length) {
+      p.append(h('div', 'br-titles', `<span class="br-lb">🏅 새 칭호</span>${titles.map((t) => `<span class="br-pill">${t.icon} ${t.name}</span>`).join('')}<small>집 옷장의 🏅 칭호 탭에서 달 수 있어요</small>`));
+    }
+    if (quests.length) p.append(h('p', 'mk-note br-quests', quests.join('<br>')));
+    const b = h('button', 'gold br-ok', '확인');
+    b.onclick = () => this.closePanel();
+    p.append(b);
+    return p;
+  },
+
   openInventory() {
     const g = this.game, eco = g.economy;
     const p = this.openPanel('🎒 가방');
@@ -159,7 +191,7 @@ export const BagPanel = {
       const sellable = !key.startsWith('seed:') && key !== 'feed' && key !== 'paddy' && ITEMS[key]?.cat !== 'seed';
       const price = sellable ? eco.sellPrice(key) : 0;
       detail.innerHTML = `<span class="bd-ic">${this.itemIcon(key, { size: 44 })}</span><span class="bd-tx"><b>${nameOf(key)} <span class="qty">×${n.toLocaleString()}</span></b>`
-        + `<small>${sellable ? `💰 오늘 ${price.toLocaleString()}🪙에 팔려요` : '팔지 않는 물건'}</small><small>📍 ${sourceOf(key)}</small></span>`;
+        + `<small>${sellable ? `💰 오늘 ${price.toLocaleString()}🪙에 팔려요` : useText(key)}</small><small>📍 ${sourceOf(key)}</small></span>`;
       detail.classList.add('show');
     };
     if (!all.length) {
@@ -176,9 +208,9 @@ export const BagPanel = {
       for (const [key, n, , cat] of items) { // sec: 이 묶음
         const pip = pipOf(key);
         const b = h('button', `bag-slot c-${cat}${sec === 'seed' ? ' packet' : ''}`,
-          `${this.itemIcon(key, { size: 34, baked })}<span class="n">${n > 999 ? '999+' : n}</span>${pip ? `<span class="pip ${pip.cls}" aria-hidden="true">${'★'.repeat(Math.min(5, pip.n))}</span>` : ''}`);
+          `${this.itemIcon(key, { size: 34, baked })}<span class="nm" aria-hidden="true">${nameOf(key)}</span><span class="n">${n > 999 ? '999+' : n}</span>${pip ? `<span class="pip ${pip.cls}" aria-hidden="true">${'★'.repeat(Math.min(5, pip.n))}</span>` : ''}`);
         b.setAttribute('aria-label', `${nameOf(key)} ${n}개`);
-        b.title = nameOf(key);
+        b.dataset.name = nameOf(key); // PC: 마우스를 올리면 이름 말풍선 (CSS)
         b.onclick = () => show(key, n, b);
         grid.append(b);
       }
@@ -213,6 +245,19 @@ export const BagPanel = {
     p.append(grid);
   },
 };
+
+/** 팔지 않는 물건의 쓰임 (가방 설명 카드): 씨앗은 자라는 시간·장터 값 */
+export function useText(key) {
+  if (key.startsWith('seed:')) {
+    const c = CROPS[key.slice(5)];
+    return c ? `🌱 심으면 ${c.growTime}초 뒤 수확 · 장터 씨앗 ${c.seedPrice}🪙` : '🌱 밭에 심어요';
+  }
+  const USE = {
+    feed: '🐄 목장 동물에게 하루 한 번', paddy: '🌾 방앗간에서 탈곡하면 쌀', rice_seed: '🌱 논에 모내기 · 볍씨', bait: '🎣 낚시할 때 저절로 써요',
+    compost: '🌱 심을 때 같이 주면 빨리 자라요', weed: '♻️ 퇴비통에 넣어요', pet_treat: '🐶 콩이에게 주면 좋아해요', fest_token: '🎉 축제 장터에서 써요',
+  };
+  return USE[key] || '🎁 모아 두는 물건';
+}
 
 /** 이정표 선물 글: '🪱 떡밥 5개' · '🪣 양동이' */
 export function giftText(r) {

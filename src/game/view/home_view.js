@@ -301,7 +301,7 @@ export class HomeView {
     if (this.inside || this._fadeT || this._sleeping || g.ride.driving) return; // 페이드 중 E 를 또 눌러도 한 번만
     g.ui.closePanel();
     g.audio.play('door');
-    // 도감을 새로 다 채웠으면 책장 위 트로피를 놓은 방으로 다시 지음 (들어갈 때만, 그리기 호출 그대로)
+    // 도감을 새로 다 채웠으면 트로피를 놓은 방으로 다시 지음 (들어갈 때만, 그리기 호출 그대로)
     if ((g.collection?.completed?.() || []).join(',') !== this._trophyKey) this.buildRoom();
     this._warmRoom();
     this._fade('🏠', () => {
@@ -319,7 +319,19 @@ export class HomeView {
       cam.yaw = 0; cam.pitch = 0.92; cam.distance = [9.5, 10.5, 12][this.sim.level]; cam.first = true;
       g.world.playerCollision = (next, r) => this._collide(next, r);
       g.ui.toast(`🏠 ${this.sim.info.name}에 들어왔어요 · 가구 앞에서 E`);
+      this._showNewTrophy();
     });
+  }
+
+  /** 새로 놓인 트로피: 처음 들어올 때 한 번만 선반 위 반짝임 + 알림 (본 것은 flags.trophySeen) */
+  _showNewTrophy() {
+    const g = this.game, f = (g.flags ||= {}), seen = new Set(f.trophySeen || []);
+    const fresh = (g.collection?.completed?.() || []).filter((c) => !seen.has(c));
+    const at = this.room?.furnAt?.trophies, gp = this.room?.group.position;
+    if (!fresh.length || !at || !gp) return;
+    f.trophySeen = [...seen, ...fresh];
+    for (const [t, n] of [[500, 22], [900, 14], [1400, 10]]) setTimeout(() => { if (this.inside) g.fx?.burst?.(gp.x + at.x, gp.y + at.y, gp.z + at.z, 0xfff3a0, n); }, t);
+    setTimeout(() => { if (this.inside) g.ui.toast('🏆 책상 위 트로피 선반에 새 트로피가 놓였어요!', { type: 'reward', key: 'trophy' }); }, 900);
   }
 
   /** 나가기: 문 앞으로, 카메라·바깥 원래대로. quick: 지도 이동 (남은 들어가기·나가기 페이드는 취소하고 바로) */
@@ -471,7 +483,7 @@ export class HomeView {
         group('🌱 머리 새싹 (모자를 쓰면 가려져요)', [[true, '있음'], [false, '없음']], 'sprout');
         if (cover) body.append(el('p', 'mk-note', `${cover.icon} ${cover.name}${josa(cover.name, '을/를')} 입는 동안에는 옷에 따라 모자·스카프가 가려질 수 있어요`));
       } else if (tab === 'title') {
-        // 🏅 칭호: 가진 칭호를 골라 이름표·프로필에 (다른 접속자에게도 보임). 못 연 칭호는 여는 방법
+        // 🏅 칭호: 가진 칭호를 골라 내 이름표에. 못 연 칭호는 여는 방법
         g.checkTitles?.({ quiet: true });
         const f = (g.flags ||= {}), own = new Set(f.titles || []), cur = g.player.title;
         const grid = el('div', 'cos-grid title-grid');
@@ -491,7 +503,7 @@ export class HomeView {
           slot(t.icon, t.name, has ? t.desc : `${this._lk()} ${t.desc}`, !has ? 'locked' : cur === t.name ? 'on' : 'own', () => pick(t.name));
         }
         for (const name of own) if (!known.has(name)) slot('💌', name, '받은 칭호', cur === name ? 'on' : 'own', () => pick(name));
-        body.append(el('p', 'mk-note', `가진 칭호 ${own.size}개 · 도감·출하·우정·체험관으로 더 모아요. 고른 칭호는 함께하는 친구들에게도 보여요`));
+        body.append(el('p', 'mk-note', `가진 칭호 ${own.size}개 · 도감·출하·우정·체험관으로 더 모아요. 고른 칭호는 내 이름표에 달려요`));
         body.append(grid);
       } else {
         const rows = el('div', 'rows');
