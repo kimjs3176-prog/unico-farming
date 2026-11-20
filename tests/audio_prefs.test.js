@@ -77,3 +77,11 @@ test('크기를 바꾸고 apply 하면 효과음·목소리·주변 소리 게�
   assert.equal(a.voiceBus.gain.events.at(-1)[1], 0.3);
   assert.equal(a.amb.gain.events.at(-1)[1], 0.2);
 });
+
+test('환경설정 소리 칸: 끔이면 모두, 효과음만이면 음악 칸만 흐리게', async () => {
+  const { volDimmed } = await import('../src/ui/panels/settings.js');
+  for (const k of ['master', 'music', 'sfx', 'amb']) { assert.equal(volDimmed(k, 'off'), true); assert.equal(volDimmed(k, 'all'), false); }
+  assert.equal(volDimmed('music', 'sfx'), true);
+  assert.equal(volDimmed('sfx', 'sfx'), false);
+  assert.equal(volDimmed('amb', 'sfx'), false);
+});

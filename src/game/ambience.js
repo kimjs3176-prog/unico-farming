@@ -203,6 +203,26 @@ export class Ambience {
     }
   }
 
+  /** 설정에서 '주변 소리' 크기를 놓았을 때: 주변 소리 버스로 1초쯤 물결 + 새 (크기를 귀로 맞춰 보게) */
+  preview() {
+    const a = this.audio, c = a._ctx?.();
+    if (!c || !a.enabled || !a.amb) return false;
+    const t = c.currentTime, out = a.amb;
+    // 물결 한 번 차올랐다 잦아듦
+    const src = c.createBufferSource(); src.buffer = a.noiseBuf;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500; lp.Q.value = 0.5;
+    const env = c.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(BED_LEVEL.water * 1.4, t + 0.35);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    src.connect(lp).connect(env).connect(out);
+    src.start(t, this.rng() * 1.5); src.stop(t + 1.2);
+    // 새 짹짹 두 번 + 퐁당
+    for (let i = 0; i < 2; i++) a.tone(3200 + i * 300, 0.07, 'sine', 0.03, 900, { at: 0.15 + i * 0.12, rev: 0.2, out });
+    a.tone(760, 0.09, 'sine', 0.05, -350, { at: 0.6, rev: 0.25, out });
+    return true;
+  }
+
   /** 개구리: 280Hz 사각파 25ms 두 번 → 900Hz 띠통과 */
   frog(out, n = 4, k = 1) {
     const a = this.audio, c = a.ctx, r = this.rng;

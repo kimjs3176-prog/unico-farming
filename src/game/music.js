@@ -71,6 +71,18 @@ export class Music {
     this.timer = setInterval(() => this.schedule(), 25);
   }
 
+  /** 지금 음악이 들리는 중인지 (켜짐 + 쉬는 중 아님) */
+  audible() { return this.on && this.audio.enabled && this.audio.musicOn !== false && !(this.themed && this.phase === 'rest'); }
+
+  /** 설정에서 '음악' 크기를 놓았을 때: 쉬는 중이면 음악 버스로 짧은 화음 두 개 (들리는 중이면 그대로 듣게) */
+  preview() {
+    const a = this.audio, c = a._ctx?.();
+    if (!c || !a.enabled || !a.music || this.audible()) return false;
+    const L = MUSIC_LEVEL;
+    [[60, 64, 67], [65, 69, 72]].forEach((ch, i) => { for (const n of ch) a.tone(NOTE(n), 0.9, 'triangle', 0.034 * L.pad, 0, { at: i * 0.45, rev: 0.6, lp: 1300, out: a.music }); });
+    return true;
+  }
+
   /** 지금 날씨의 비 소리 크기 */
   rainLevel() { return rainGainFor(this.scene.kind, this.scene.precip); }
 
@@ -91,7 +103,8 @@ export class Music {
     else this.mood = s.daylight < 0.35 ? 'night' : 'day';
     // 장소 환경음: 화면 갱신 때 (초당 4번까지는 ambience 가 거름)
     const amb = this.ambience, c = this.audio.ctx;
-    if (amb && this.game && c) {
+    // 초당 4번만 상태를 만듦 (매 화면마다 객체를 버리지 않게)
+    if (amb && this.game && c && c.currentTime - amb.last >= 0.25) {
       const st = amb.stateOf(this.game, s);
       st.night = this.mood === 'night'; st.rainLevel = this.rainLevel();
       this.env = st;

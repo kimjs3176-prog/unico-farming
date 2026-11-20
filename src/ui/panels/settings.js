@@ -1,13 +1,25 @@
 // 환경설정(그래픽 품질·글자 크기)·도움말 창
 import { h } from '../dom.js';
 import { PRESETS, PRESET_INFO, SHADOWS, applyPreset, UI_SCALES, uiScaleOf } from '../../game/quality.js';
-import { canVibrate, hapticPrefs, shakePrefs } from '../../game/juice.js';
+import { canVibrate, hapticPrefs, shakePrefs, reducedMotion } from '../../game/juice.js';
 import { copyDiag } from '../../game/crash.js';
 import { touchUI } from '../../game/input.js';
 
 /** 소리 크기 칸: 전체·음악·효과음·주변 소리 */
 const VOL_ROWS = [['master', '전체'], ['music', '음악'], ['sfx', '효과음'], ['amb', '주변 소리']];
-const SOUND_MODES = [['all', '🔊 모두 켬'], ['sfx', '🎵 효과음만'], ['off', '🔇 끔']];
+const SOUND_MODES = [['all', '🔊', '모두 켬'], ['sfx', '🎵', '효과음만'], ['off', '🔇', '끔']];
+
+/** 이 소리 크기 칸이 지금 소리 상태에서 꺼져 있는지 (끔: 모두, 효과음만: 음악) */
+export const volDimmed = (k, mode) => mode === 'off' || (mode === 'sfx' && k === 'music');
+
+/** 소리 크기 칸 한 줄 (이름·막대·퍼센트를 같은 칸 폭으로 맞춤) */
+function volRow(k, n, v, mode) {
+  const pct = Math.round(v * 100), dim = volDimmed(k, mode);
+  return `<label class="gfx-row snd-row" style="display:grid;grid-template-columns:5em 1fr 3.2em;${dim ? 'opacity:0.45' : ''}"${dim ? ' aria-disabled="true"' : ''}>`
+    + `<span style="width:auto;text-align:left">${n}</span>`
+    + `<input type="range" min="0" max="100" step="5" data-vol="${k}" value="${pct}" aria-label="${n} 크기" aria-valuetext="${n} ${pct}%" style="min-height:44px">`
+    + `<span style="width:auto">${pct}%</span></label>`;
+}
 
 /** 세부 항목이 어느 프리셋과 똑같은지 (아니면 사용자 지정) */
 function matchPreset(s) {
@@ -22,10 +34,24 @@ export const SettingsPanel = {
     const g = this.game;
     const p = this.openPanel('⚙️ 환경설정');
     p.dataset.kind = 'settings';
+    // 컷신 중에 열면 '건너뛰기' 단추가 창 머리 위에 겹치므로 창이 열린 동안 숨김
+    const skip = typeof document !== 'undefined' ? document.querySelector('.cine-skip') : null;
+    if (skip && p.parentNode && typeof MutationObserver === 'function') {
+      skip.style.visibility = 'hidden';
+      // 다시 연 환경설정 창이 있으면 그대로 숨김 (옛 창의 알림이 늦게 와도)
+      const mo = new MutationObserver(() => {
+        if (p.isConnected) return;
+        mo.disconnect();
+        if (!document.querySelector('.panel[data-kind="settings"]')) skip.style.visibility = '';
+      });
+      mo.observe(p.parentNode, { childList: true });
+    }
     const render = () => {
       const s = g.gfx;
       const cur = s.preset;
       const lvl = cur === 'auto' ? s.autoLevel : cur;
+      const mode = g.audio.mode ?? 'all';
+      const rm = reducedMotion();
       const presetBtns = ['auto', 'low', 'medium', 'high'].map((k) => `<button class="gfx-preset ${cur === k ? 'on' : ''}" data-p="${k}"><b>${PRESET_INFO[k].name}</b>${k === 'auto' && cur === 'auto' ? `<small>지금: ${PRESET_INFO[s.autoLevel].name}</small>` : ''}</button>`).join('');
       p.querySelector('.gfx-body')?.remove();
       const body = h('div', 'gfx-body', `
@@ -45,10 +71,12 @@ export const SettingsPanel = {
         ${canVibrate() ? `<h3>📳 진동</h3>
         <label class="gfx-row check"><input type="checkbox" data-pref="haptics" ${hapticPrefs.get() ? 'checked' : ''}> 진동 (수확·입질·버튼을 누를 때 살짝)</label>` : ''}
         <h3>🔊 소리${touchUI() ? '' : ' <small style="font-weight:normal">N 키로도 바꿔요</small>'}</h3>
-        <div class="gfx-presets snd-modes">${SOUND_MODES.map(([k, n]) => `<button class="gfx-preset ${(g.audio.mode ?? 'all') === k ? 'on' : ''}" data-snd="${k}" aria-pressed="${(g.audio.mode ?? 'all') === k}"><b>${n}</b></button>`).join('')}</div>
-        ${VOL_ROWS.map(([k, n]) => `<label class="gfx-row"><span style="display:inline-block;min-width:4.6em">${n}</span> <input type="range" min="0" max="100" step="5" data-vol="${k}" value="${Math.round((g.audio.volume?.[k] ?? 0) * 100)}"><span>${Math.round((g.audio.volume?.[k] ?? 0) * 100)}%</span></label>`).join('')}
+        <div class="gfx-presets snd-modes" style="grid-template-columns:repeat(3,1fr)">${SOUND_MODES.map(([k, ic, n]) => `<button class="gfx-preset ${mode === k ? 'on' : ''}" data-snd="${k}" aria-pressed="${mode === k}"><span aria-hidden="true" style="font-size:18px;line-height:1">${ic}</span><b style="white-space:nowrap">${n}</b></button>`).join('')}</div>
+        ${VOL_ROWS.map(([k, n]) => volRow(k, n, g.audio.volume?.[k] ?? 0, mode)).join('')}
+        ${mode === 'off' ? '<p class="gfx-tip">소리가 꺼져 있어요 — 위에서 켜 주세요</p>' : mode === 'sfx' ? '<p class="gfx-tip">음악이 꺼져 있어요 — 음악을 들으려면 \'모두 켬\'을 눌러 주세요</p>' : ''}
         <h3>🎥 화면 움직임</h3>
-        <label class="gfx-row check"><input type="checkbox" data-pref="shake" ${shakePrefs.get() ? 'checked' : ''}> 화면 흔들림 (천둥·수확 때 카메라가 살짝 흔들려요)</label>
+        <label class="gfx-row check"${rm ? ' style="opacity:0.55"' : ''}><input type="checkbox" data-pref="shake" ${shakePrefs.get() && !rm ? 'checked' : ''} ${rm ? 'disabled' : ''}> 화면 흔들림 (천둥·수확 때 카메라가 살짝 흔들려요)</label>
+        ${rm ? '<p class="gfx-tip">기기의 \'동작 줄이기\' 설정이 켜져 있어 흔들림은 꺼져 있어요</p>' : ''}
         <p class="gfx-tip">💡 끊긴다면: 품질 '낮음' → 해상도 낮추기 → 그림자 끄기 순으로 시도해 보세요. 설정은 이 브라우저에 저장돼요.</p>
         <button class="ghost gfx-help" style="margin-top:6px">❓ 도움말 · 조작법 보기</button>
         <button class="ghost gfx-diag" style="margin-top:6px">📋 진단 정보 복사</button>
@@ -65,16 +93,23 @@ export const SettingsPanel = {
       body.querySelector('.gfx-diag').onclick = () => copyDiag(note, note);
       // 소리: 세 단추(모두 켬·효과음만·끔) + 크기 (움직이는 동안 바로 반영, 놓으면 저장하고 들려 줌)
       const A = g.audio;
+      // 단추·N 키 모두 afterSound 가 이 창을 다시 그림
+      const setMode = (m) => { const st = A.setMode ? A.setMode(m) : m; this.afterSound?.(st); return st; };
       body.querySelectorAll('[data-snd]').forEach((b) => (b.onclick = () => {
-        const st = A.setMode ? A.setMode(b.dataset.snd) : b.dataset.snd;
-        this.afterSound?.(st);
-        if (st !== 'off') A.play('click');
-        render();
+        if (setMode(b.dataset.snd) !== 'off') A.play('click');
       }));
       body.querySelectorAll('[data-vol]').forEach((el) => {
-        const k = el.dataset.vol;
-        el.oninput = () => { A.volume[k] = +el.value / 100; A.apply?.(); el.nextElementSibling.textContent = el.value + '%'; };
-        el.onchange = () => { A.save?.(); A.play(k === 'music' || k === 'amb' ? 'pop' : 'click'); };
+        const k = el.dataset.vol, name = VOL_ROWS.find((r) => r[0] === k)[1];
+        el.oninput = () => { A.volume[k] = +el.value / 100; A.apply?.(); el.nextElementSibling.textContent = el.value + '%'; el.setAttribute('aria-valuetext', `${name} ${el.value}%`); };
+        el.onchange = () => {
+          A.save?.();
+          // 꺼진 칸을 움직이면 소리를 다시 켬 (움직여도 안 들리면 고장 난 것처럼 보임)
+          if (volDimmed(k, A.mode ?? 'all')) setMode('all');
+          // 미리 듣기는 그 버스로: 주변 소리는 새·물소리, 음악은 쉬는 중이면 짧은 화음, 나머지는 딸깍
+          if (k === 'amb') g.music?.ambience?.preview?.();
+          else if (k === 'music') g.music?.preview?.();
+          else A.play('click');
+        };
       });
       const sk = body.querySelector('[data-pref="shake"]');
       sk.onchange = () => { shakePrefs.set(sk.checked); if (g.juice) g.juice.screenShake = sk.checked; if (sk.checked) g.juice?.shake?.(0.3); };
@@ -92,6 +127,7 @@ export const SettingsPanel = {
       });
       this.updateFps();
     };
+    this._settingsRender = render;
     render();
   },
 

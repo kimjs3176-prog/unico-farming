@@ -115,3 +115,31 @@ test('동물 목소리(소·양·닭·말·당나귀·알파카)·여우 깽깽�
   const f = (p) => { for (const s of c.started) s.onended?.(); c.currentTime += 1; const k = c.started.length; a.play('moo', 1, { pitch: p }); return c.started.slice(k).find((s) => s.type === 'sawtooth').frequency.events[0][1]; };
   assert.ok(Math.abs(f(1.06) / f(1) - 1.06) < 1e-9);
 });
+
+test('setScene 은 초당 4번만 환경음 상태를 만듦 (매 화면마다 객체를 버리지 않게)', async () => {
+  const { Music } = await import('../src/game/music.js');
+  const a = make(), am = new Ambience(a, {});
+  let made = 0;
+  const orig = am.stateOf.bind(am);
+  am.stateOf = (g, s) => { made++; return orig(g, s); };
+  const m = new Music(a, { themes: true }).attach({ player: { position: { x: 0, z: 0 } } }, { themes: true, ambience: am });
+  const sc = { daylight: 1, kind: 'clear', precip: 0, wind: 0.1 };
+  for (let i = 0; i < 15; i++) { a.ctx.currentTime = 1 + i / 60; m.setScene(sc); }
+  assert.equal(made, 1);
+  a.ctx.currentTime = 1.3; m.setScene(sc);
+  assert.equal(made, 2);
+});
+
+test('설정 미리 듣기: 주변 소리는 주변 소리 버스로, 음악은 쉬는 중일 때만 음악 버스로', async () => {
+  const { Music } = await import('../src/game/music.js');
+  const a = make(), am = new Ambience(a, {});
+  assert.equal(am.preview(), true);
+  const m = new Music(a, { themes: true });
+  assert.equal(m.preview(), true, '음악이 멈춰 있으면 짧은 화음');
+  m.on = true; m.phase = 'play';
+  assert.equal(m.preview(), false, '들리는 중이면 그대로 듣게');
+  m.phase = 'rest';
+  assert.equal(m.preview(), true);
+  a.enabled = false;
+  assert.equal(am.preview(), false);
+});

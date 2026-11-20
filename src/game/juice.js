@@ -50,7 +50,7 @@ export const hapticPrefs = {
   set(on) { try { globalThis.localStorage?.setItem(HAPTIC_KEY, on ? '1' : '0'); } catch { /* 저장 못 해도 이번 판은 그대로 */ } },
 };
 
-// 화면 흔들림 설정 (기본 켜짐, 움직임 줄이기 설정이 켜져 있으면 저장값과 상관없이 끔)
+// 화면 흔들림 저장값 (기본 켜짐). 기기의 움직임 줄이기는 여기서가 아니라 Juice.motionOk 가 막음
 const SHAKE_KEY = 'unico.shake';
 export const shakePrefs = {
   get() { try { return globalThis.localStorage?.getItem(SHAKE_KEY) !== '0'; } catch { return true; } },

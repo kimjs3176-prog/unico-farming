@@ -232,6 +232,8 @@ export const ActionbarUI = {
   afterSound(st) {
     if (st !== 'off') this.game.music?.start?.();
     this.syncSoundBtn();
+    // 환경설정 창이 열려 있으면 소리 단추·크기 칸도 새 상태로 (N 키로 바꿔도)
+    if (this.panel?.dataset.kind === 'settings' && this.panel.isConnected) this._settingsRender?.();
   },
   /** 소리 버튼 그림 = 지금 소리 상태 */
   syncSoundBtn() {

@@ -183,12 +183,12 @@ export class Pests {
     g.onEvent('shoo');
   }
 
-  /** 미니맵용 위치 */
   /** 그 자리에서 나는 울음 (멀면 작게·카메라 기준 좌우). minGain: 경고라 멀어도 이만큼은 들림 */
   _say(pos, name, vol = 1, minGain = 0) {
     const a = this.game.audio;
     if (a.playAt) a.playAt(name, pos.x, pos.z, vol, { minGain }); else a.play(name, vol);
   }
 
+  /** 미니맵용 위치 */
   markers() { return this.list.filter((p) => p.state !== 'flee').map((p) => p.root.position); }
 }
