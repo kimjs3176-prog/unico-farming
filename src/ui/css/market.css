@@ -32,7 +32,7 @@
 .mk-total { flex: 1; font-size: 14px; }
 .mk-total b { color: #b7791f; font-size: 17px; }
 @media (max-width: 600px) { .mk-row { flex-wrap: wrap; } .mk-tabs { gap: 4px; } .mk-tabs button { font-size: 14px; padding: 8px 2px; white-space: nowrap; position: relative; }
-  .mk-tabs button i { position: absolute; top: -6px; right: -3px; margin: 0; padding: 0 5px; font-size: 11px; line-height: 16px; } /* 탭이 다섯 개라 개수 표시는 모서리에 */
+  .mk-tabs button i { position: absolute; top: 1px; right: 1px; margin: 0; padding: 0 4px; font-size: 10px; line-height: 14px; } /* 탭이 다섯 개라 개수 표시는 모서리 안쪽에 (탭 밖으로 삐져나오지 않게) */
   .panel.market { height: min(calc(78vh / var(--ui-zoom, 1)), 680px); height: min(calc(78dvh / var(--ui-zoom, 1)), 680px); } }
 .mk-ev.fest { background: #fff0c2; color: #a85b00; }
 /* 장터: 창을 화면 높이에 맞추고 위(코인·탭)를 한 줄로 → '모두 판매하기' 막대가 잘리지 않음 (세로 폰 78vh 규칙보다 뒤라 568x320 에서도 이김) */

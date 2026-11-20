@@ -96,7 +96,7 @@ export const MarketPanel = {
       const scroll = body.scrollTop;
       const cur = this.marketTab;
       top.innerHTML = '';
-      const coin = h('div', 'mk-coin', `🪙 <b class="money">${Math.max(0, eco.money - (this.coinHold || 0)).toLocaleString()}</b> 코인${eco.festival ? ` <span class="mk-ev fest">🎉 ${(eco.festival.name || '축제').split('!')[0]} · 모두 ${eco.festival.mult}배</span>` : ''}${eco.event ? ` <span class="mk-ev">🔥 ${eco.event.name}</span>` : ''}`);
+      const coin = h('div', 'mk-coin', `🪙 <b class="money">${Math.max(0, eco.money - (this.coinHold || 0)).toLocaleString()}</b> 코인${eco.festival ? ` <span class="mk-ev fest">${/^\p{Extended_Pictographic}/u.test(eco.festival.name || '') ? '' : '🎉 '}${(eco.festival.name || '축제').split('!')[0]} · 모두 ${eco.festival.mult}배</span>` : ''}${eco.event ? ` <span class="mk-ev">🔥 ${eco.event.name}</span>` : ''}`);
       const tabs = h('div', 'mk-tabs');
       for (const [id, label] of TABS) {
         const n = id === 'sell' ? sellables().filter(([k]) => eco.count(k) > 0).length : 0;
