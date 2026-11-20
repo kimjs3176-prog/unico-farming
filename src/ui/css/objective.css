@@ -53,3 +53,5 @@
 @media (max-width: 600px) {
   body.obj-peek #ui > .toasts { top: calc(var(--hud-b, 40px) + 86px + var(--tip-h, 0px)); }
 }
+/* 이야기가 끝난 뒤의 목표 (계절 도전·다음 별): 금빛 테두리 */
+.objective.fb:not(.done) { border-color: #ecd28e; }

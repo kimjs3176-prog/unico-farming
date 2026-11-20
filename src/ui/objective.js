@@ -4,6 +4,7 @@ import { touchUI } from '../game/input.js';
 import { fmtEta } from '../game/guide.js';
 import { josa } from '../game/sim/josa.js';
 import { CROPS } from '../game/sim/crops.js';
+import { LettersUI } from './letters.js';
 
 const PEEK_MS = 7000;
 /** 휴대폰 한 줄 칩인가 (objective.css 의 모바일 조건과 같음) */
@@ -12,6 +13,7 @@ const compact = () => typeof matchMedia !== 'undefined' && (compactMq ||= matchM
 
 /** 목표 칩 메서드 (UI.prototype 에 합쳐짐) */
 export const ObjectiveUI = {
+  ...LettersUI, // 편지 카드·편지함 (letters.js)
   /** 목표 안내 칩. extra: { eta, dry, ready, pet } (밭 작물 남은 시간) 또는 { more, seeds } (더 심을 칸) */
   setObjective(q, dist, ang, extra = null) {
     if (!this.objective) {
@@ -38,7 +40,9 @@ export const ObjectiveUI = {
       const desc = (touchUI() && q.descTouch) || q.desc;
       const sub = q.complete ? `눌러서 보상 받기${touchUI() ? '' : ' <span class="hint-kbd">(Q: 퀘스트 창)</span>'}` : desc;
       const side = q.complete ? '<span class="claim">🎁 받기</span>' : hasDist ? '<span class="dir">▲</span>' : '';
-      this.objective.innerHTML = `<span class="ic">${q.complete ? '🎁' : '🎯'}</span><div class="tt"><span class="nm">${q.complete ? '보상 받기: ' : ''}${q.title}</span>${!q.complete && q.goal > 1 ? `<span class="cnt">${q.count}/${q.goal}</span>` : ''}<span class="eta"></span><small>${sub}<span class="dist"></span><span class="wait"></span></small><div class="bar"><i style="width:${Math.round((q.count / q.goal) * 100)}%"></i></div></div>${side}`;
+      const ic = q.complete ? '🎁' : q.kind === 'weekly' ? '🗓️' : q.kind === 'star' ? '⭐' : '🎯';
+      this.objective.classList.toggle('fb', !!q.kind); // 이야기가 끝난 뒤의 목표 (계절 도전·다음 별)
+      this.objective.innerHTML = `<span class="ic">${ic}</span><div class="tt"><span class="nm">${q.complete ? '보상 받기: ' : ''}${q.kind === 'star' ? q.title.replace(/^⭐ /, '') : q.title}</span>${!q.complete && q.goal > 1 ? `<span class="cnt">${q.count}/${q.goal}</span>` : ''}<span class="eta"></span><small>${sub}<span class="dist"></span><span class="wait"></span></small><div class="bar"><i style="width:${Math.round((q.count / q.goal) * 100)}%"></i></div></div>${side}`;
       this._objDist = this.objective.querySelector('.dist');
       this._objDir = this.objective.querySelector('.dir');
       this._objEtaEl = this.objective.querySelector('.eta');
@@ -99,10 +103,11 @@ export const ObjectiveUI = {
   /** 칩 누르기: 완료면 보상 받기, 휴대폰에서 접혀 있으면 먼저 펼치기, 아니면 퀘스트 창 */
   _objTap() {
     const q = this._objQ, g = this.game;
-    if (q?.complete) { g.claimQuest(q.id.split(':')[0]); return; }
+    if (q?.kind === 'weekly' && q.complete) { g.claimChallenge?.(q.i); return; }
+    if (q?.complete && !q.kind) { g.claimQuest(q.id.split(':')[0]); return; }
     if (compact() && !this._peeking) { this._objPeek(true); return; }
     this._objPeek(false);
-    this.openQuests();
+    this.openQuests(q?.kind === 'weekly' ? 'season' : q?.kind === 'star' ? 'town' : undefined);
   },
 
   /** 휴대폰 펼쳐 보기 (7초 뒤 접힘). 펼친 동안 알림을 아래로 비켜 줌 (body.obj-peek) */

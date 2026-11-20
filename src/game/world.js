@@ -8,6 +8,10 @@ import { timeOfDay, nightFactor } from './sim/tod.js';
 import { Birds } from './birds.js';
 import { whenFontReady } from './label.js';
 import { shadowRadiusFor } from './shadow_soft.js';
+import { peekTownStar } from './save.js';
+
+/** 마을 별 4개 동상 자리 후보 (장터 옆 광장, 길·소품을 피한 첫 빈자리) */
+export const STATUE_SPOTS = [[-5.8, -9.2], [-5.4, -6.6], [-5.6, -13.4], [5.2, -13.6], [-6.2, -4.4], [4.2, -15.6], [-4.6, -16.4], [4.8, -7.4]];
 
 /** 월드 레이아웃 상수 (m). +X 동쪽, +Z 남쪽, 스폰 (0,0,9) */
 export const LAYOUT = {
@@ -244,6 +248,12 @@ export class World {
     this._ground();
     this._decorate();
     this._paintGround();
+    // 마을 별 4개 동상: 저장에 이미 있으면 정적 묶음에 함께 (그리기 호출 늘지 않음), 처음 생기면 addStatue 가 따로
+    // 밟고 지나가는 소품·주민 자리·과일나무도 피함
+    const clear = (x, z) => !this.isBlocked(x, z, 1.4) && !(this.placed || []).some((o) => Math.abs(o.x - x) < o.hx + 1.3 && Math.abs(o.z - z) < o.hz + 1.3)
+      && !Object.values(LAYOUT.npcs).some((n) => Math.hypot(n.x - x, n.z - z) < 3) && !LAYOUT.orchard.some((t) => Math.hypot(t.x - x, t.z - z) < 3);
+    this.statueSpot = STATUE_SPOTS.find(([x, z]) => clear(x, z)) || STATUE_SPOTS[0];
+    if (peekTownStar() >= 4) this.addStatue({ batch: true });
     this._batchStatic();
     this.scenery = new Scenery(this);
     this.scenery.ridges = this.ridges;
@@ -553,7 +563,7 @@ export class World {
     // 장터 / 우물 / 표지판
     this.place('market', L.market.x, L.market.z, 0);
     this.place('well', L.well.x, L.well.z, 0.4);
-    this.signText(this.place('sign', -1.9, 5.8, 0.2, 1, { collide: false, dynamic: true }), '🦄 유니코 팜', '← 스마트팜 · 목장 →');
+    this.townSign = this.signText(this.place('sign', -1.9, 5.8, 0.2, 1, { collide: false, dynamic: true }), '🦄 유니코 팜', '← 스마트팜 · 목장 →'); // 마을 별이 뜨면 다시 칠함
     this.signText(this.place('sign', 11, 11, -0.6, 1, { collide: false, dynamic: true }), '🚜 밭갈이', '트랙터 체험 →');
     this.place('wheelbarrow', -4, 5.5, 1.2, 1, { collide: false });
     // KayKit 소품 (CC0): 장터 옆 채소 상자·자루, 우물가 물동이, 새 마을 부지 입구 자재 더미
@@ -857,26 +867,115 @@ export class World {
   signText(m, title, sub) {
     const tex = (text, w, h, size, bg) => {
       const c = document.createElement('canvas'); c.width = w; c.height = h;
-      const g = c.getContext('2d'), font = `900 ${size}px 'Unico Coin', Jua, "Noto Sans KR", sans-serif`;
+      const g = c.getContext('2d');
+      const st = { text };
+      const fontOf = (px) => `900 ${px}px 'Unico Coin', Jua, "Noto Sans KR", sans-serif`;
       const paint = () => {
         g.fillStyle = bg; g.fillRect(0, 0, w, h);
         g.fillStyle = '#4a2f1b'; g.textAlign = 'center'; g.textBaseline = 'middle';
-        g.font = font;
-        g.fillText(text, w / 2, h / 2 + 2);
+        g.font = fontOf(size);
+        // 판보다 길면 글자를 줄여 맞춤 (별이 붙은 마을 이름 등)
+        const tw = g.measureText(st.text).width, fit = tw > w * 0.92 ? Math.floor(size * (w * 0.92) / tw) : size;
+        if (fit !== size) g.font = fontOf(fit);
+        g.fillText(st.text, w / 2, h / 2 + 2);
       };
       paint();
       const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
-      whenFontReady(font, text, () => { paint(); t.needsUpdate = true; }); // 한글 조각이 늦게 오면 다시 칠함 (캔버스 크기는 그대로)
+      whenFontReady(fontOf(size), text, () => { paint(); t.needsUpdate = true; }); // 한글 조각이 늦게 오면 다시 칠함 (캔버스 크기는 그대로)
+      t.userData.set = (v) => { if (v === st.text) return; st.text = v; paint(); t.needsUpdate = true; whenFontReady(fontOf(size), v, () => { paint(); t.needsUpdate = true; }); };
       return t;
     };
+    const maps = [];
     const mk = (text, w, h, y, rz, bg, size) => {
-      const pl = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex(text, 512, Math.round(512 * h / w), size, bg), roughness: 0.9 }));
+      const map = tex(text, 512, Math.round(512 * h / w), size, bg);
+      maps.push(map);
+      const pl = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map, roughness: 0.9 }));
       pl.position.set(0, y, 0.115);
       pl.rotation.z = rz;
       m.add(pl);
     };
     mk(title, 1.16, 0.46, 1.2, 0, '#f5efe0', 92);
     if (sub) mk(sub, 0.86, 0.31, 0.75, -0.14, '#e8c872', 54);
+    // 다시 칠하기 손잡이: 같은 캔버스에 새 글 (판 크기는 그대로)
+    return { repaint: (t, sb) => { if (t) maps[0].userData.set(t); if (sb && maps[1]) maps[1].userData.set(sb); } };
+  }
+
+  /** 마을 별 1개 깃발: 표지판 ↔ 가로등 사이 삼각 깃발 한 줄 (InstancedMesh 하나, 낮은 품질에선 숨김) */
+  setBunting(on) {
+    this._buntingOn = !!on;
+    if (on && !this.bunting) {
+      const head = this.lampHeads?.find((v) => Math.abs(v.x - 3.4) < 0.6 && Math.abs(v.z - 7.6) < 0.6);
+      const A = new THREE.Vector3(-1.75, 1.42, 5.82), B = head ? new THREE.Vector3(head.x - 0.15, head.y - 0.2, head.z) : new THREE.Vector3(3.3, 2.5, 7.6);
+      const N = 13, geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.13, 0, 0, 0.13, 0, 0, 0, -0.3, 0], 3));
+      geo.computeVertexNormals();
+      const mat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
+      const im = new THREE.InstancedMesh(geo, mat, N);
+      const cols = [0xf25c54, 0xfac03e, 0x5bc0eb, 0x6dbb4f, 0xff9fb3, 0xb38cff];
+      const o = new THREE.Object3D(), c = new THREE.Color(), yaw = Math.atan2(B.x - A.x, B.z - A.z);
+      for (let i = 0; i < N; i++) {
+        const t = (i + 0.5) / N;
+        o.position.lerpVectors(A, B, t);
+        o.position.y -= Math.sin(t * Math.PI) * 0.45; // 늘어진 줄
+        o.rotation.set(0, yaw + Math.PI / 2, (i % 2 ? 0.06 : -0.06));
+        o.updateMatrix();
+        im.setMatrixAt(i, o.matrix);
+        im.setColorAt(i, c.setHex(cols[i % cols.length]));
+      }
+      im.castShadow = false; im.receiveShadow = false;
+      im.matrixAutoUpdate = false;
+      im.computeBoundingSphere();
+      this.bunting = im;
+      this.scene.add(im);
+    }
+    if (this.bunting) this.bunting.visible = this._buntingOn && this.quality?.level !== 'low';
+  }
+
+  /**
+   * 마을 별 4개: 장터 옆 광장 유니콘 동상 (받침 + 몸 + 금빛 뿔). batch: 월드를 만들 때 정적 묶음에 넣음
+   * 실행 중에 처음 생기면 재질별로 합친 메시 셋 (한 번만)
+   */
+  addStatue({ batch = false } = {}) {
+    if (this.statue) return this.statue;
+    const [x, z] = this.statueSpot || STATUE_SPOTS[0];
+    const stone = new THREE.MeshStandardMaterial({ color: 0xd9d1c2, roughness: 0.85, metalness: 0 });
+    const base = new THREE.MeshStandardMaterial({ color: 0x9c8f7c, roughness: 0.9, metalness: 0 });
+    const gold = new THREE.MeshStandardMaterial({ color: 0xe6b84a, roughness: 0.45, metalness: 0.2 });
+    const parts = [];
+    const add = (geo, mat, px, py, pz, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
+      geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(px, py, pz), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz)));
+      parts.push([geo, mat]);
+    };
+    // 받침 두 단 + 몸통·다리·목·머리·꼬리, 금빛 뿔·갈기 끝
+    add(new THREE.CylinderGeometry(1.05, 1.15, 0.35, 20), base, 0, 0.175, 0);
+    add(new THREE.CylinderGeometry(0.8, 0.9, 0.5, 20), base, 0, 0.6, 0);
+    add(new THREE.SphereGeometry(0.42, 16, 12), stone, 0, 1.55, 0, 0, 0, 0, 1.45, 0.85, 0.85);
+    for (const [lx, lz] of [[-0.38, -0.17], [-0.38, 0.17], [0.38, -0.17], [0.38, 0.17]]) add(new THREE.CylinderGeometry(0.08, 0.07, 0.62, 8), stone, lx, 1.12, lz);
+    add(new THREE.CylinderGeometry(0.15, 0.2, 0.55, 10), stone, 0.55, 1.95, 0, 0, 0, -0.55);
+    add(new THREE.SphereGeometry(0.22, 14, 10), stone, 0.78, 2.22, 0, 0, 0, 0, 1.25, 0.95, 0.9);
+    add(new THREE.ConeGeometry(0.06, 0.4, 10), gold, 0.86, 2.55, 0, 0, 0, -0.35);
+    add(new THREE.ConeGeometry(0.1, 0.5, 8), stone, -0.68, 1.48, 0, 0, 0, 2.4);
+    add(new THREE.BoxGeometry(0.42, 0.06, 0.08), gold, 0.48, 2.12, 0, 0, 0, -0.55);
+    const g = new THREE.Group();
+    const byMat = new Map();
+    for (const [geo, mat] of parts) {
+      if (batch) { g.add(new THREE.Mesh(geo, mat)); continue; }
+      (byMat.get(mat) || byMat.set(mat, []).get(mat)).push(geo.index ? geo.toNonIndexed() : geo);
+    }
+    for (const [mat, geos] of byMat) {
+      const merged = mergeGeometries(geos.map((q) => { for (const k of Object.keys(q.attributes)) if (k !== 'position' && k !== 'normal') q.deleteAttribute(k); return q; }), false);
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      g.add(mesh);
+    }
+    g.position.set(x, heightAt(x, z), z);
+    g.rotation.y = -0.5;
+    this.scene.add(g);
+    if (batch) this.staticObjs.push(g);
+    else { g.updateMatrixWorld(true); g.traverse((o) => { o.matrixAutoUpdate = false; }); }
+    this.obstacles.push({ x, z, r: 1.15 });
+    this.statue = g;
+    return g;
   }
 
   /** 원경 산맥: 안개에 묻히지 않는 푸른 실루엣으로 깊이감 (대기 원근) */
@@ -1035,6 +1134,7 @@ export class World {
   // ------------------------------------------------------------ 시간
   update(dt, focus = null) {
     this.focusPos = focus;
+    if (this.bunting) this.bunting.visible = this._buntingOn && this.quality?.level !== 'low'; // 품질을 바꾸면 따라감
     this.frameNo = (this.frameNo || 0) + 1; // 프레임 번호 (연못 반사 갱신 주기 등)
     for (const a of this.animated) a.update(dt);
     if (this.groundTime) this.groundTime.value += dt;

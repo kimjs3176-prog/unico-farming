@@ -1,4 +1,6 @@
 /** 퀘스트 / 레벨 / 업적 */
+import { CROPS } from './crops.js';
+import { ITEMS } from './items.js';
 export const QUESTS = [
   { id: 'till1',     title: '첫 밭 갈기',          desc: '빈 밭에서 E 를 눌러 밭을 갈아보세요',      descTouch: '빈 밭을 톡 누르거나 노란 E 버튼으로 밭을 갈아 보세요', event: 'till',     goal: 1, reward: { money: 30, xp: 20 } },
   { id: 'plant3',    title: '당근 심기',            desc: '갈아둔 밭에 씨앗 3개를 심으세요',          event: 'plant',    goal: 3, reward: { money: 40, xp: 30 } },
@@ -35,7 +37,7 @@ export const QUESTS = [
   { id: 'star3',     title: '특상품 농부',          desc: '물·김매기·퇴비로 잘 돌봐 ⭐⭐⭐ 특상품을 수확하세요', event: 'star3', goal: 1, reward: { money: 120, xp: 90 } },
   { id: 'process2',  title: '장독대 장인',          desc: '밭 서쪽 장독대에서 가공품 2개 만들기 (김치·주스·잼)', event: 'process', goal: 2, reward: { money: 150, xp: 120 } },
   { id: 'order3',    title: '로컬푸드 납품',        desc: '주문 게시판의 주문을 3건 납품하세요',          event: 'order',    goal: 3, reward: { money: 200, xp: 150 } },
-  { id: 'fest1',     title: '수확 축제',            desc: '7일마다 열리는 유니코 수확 축제 날을 맞이하세요',  event: 'festival', goal: 1, reward: { money: 120, xp: 80 } },
+  { id: 'fest1',     title: '계절 축제',            desc: '계절마다 마지막 날(7일째) 열리는 계절 축제를 맞이하세요',  event: 'festival', goal: 1, reward: { money: 120, xp: 80 } },
   { id: 'sleep1',    title: '첫 단잠',              desc: '저녁 6시 이후 유니코 집 침대에서 잠을 자 보세요',  event: 'sleep',    goal: 1, reward: { money: 80, xp: 60 } },
   { id: 'greet1',    title: '반가워요',             desc: '다른 플레이어 가까이에서 E → 👋 인사하기',          descTouch: '다른 플레이어 가까이에서 E 버튼 → 👋 인사하기', event: 'greet',    goal: 1, reward: { money: 60, xp: 50 } },
   { id: 'five3',     title: '하이파이브 세 번',     desc: '다른 플레이어와 하이파이브를 3번 하세요',            event: 'highfive', goal: 3, reward: { money: 150, xp: 120 } },
@@ -62,6 +64,35 @@ export const QUESTS = [
 
 export const LEVELS = [0, 100, 250, 500, 900, 1500, 2400, 3600, 5200, 7500];
 
+/** 행동 경험치 (퀘스트 말고 평소 놀이에서): 이벤트마다 한 번 */
+export const ACTION_XP = { thresh: 15, order: 10, vreq: 10 };
+/** 물고기·곤충 희귀도(1~4)별 경험치, 아이템을 모르면 FLAT_CATCH */
+export const CATCH_XP = [0, 3, 6, 12, 25];
+export const FLAT_CATCH = 3;
+/** 미니게임 별 하나당 · 하루에 게임마다 경험치를 주는 판 수 */
+export const MG_XP_PER_STAR = 10;
+export const MG_DAILY = 3;
+
+/** 작물 하나 수확 경험치: 오래 자라는 작물일수록 (당근 2 · 옥수수 6) */
+export const harvestXp = (crop) => Math.max(1, Math.round((CROPS[crop]?.growTime ?? 30) / 30));
+
+/**
+ * 행동 하나의 경험치 (미니게임 하루 제한·자동 진행 반감은 부르는 쪽에서)
+ * key: 작물 id (수확) · 아이템 id (물고기·곤충) · 별 수 (mgstars 의 amount)
+ */
+export function actionXp(event, amount = 1, key = null) {
+  const n = Math.max(0, Number(amount) || 0);
+  switch (event) {
+    case 'harvest': return key && CROPS[key] ? harvestXp(key) * n : n;
+    case 'fish': case 'bug': { // 낚시터는 'fish' 와 'lakefish' 가 함께 오므로 'fish' 에서만
+      const r = key && ITEMS[key]?.rarity;
+      return r ? CATCH_XP[Math.min(4, Math.max(1, r))] : FLAT_CATCH;
+    }
+    case 'mgstars': return Math.min(3, Math.floor(n)) * MG_XP_PER_STAR;
+    default: return (ACTION_XP[event] || 0) * (n > 0 ? 1 : 0);
+  }
+}
+
 export class Quests {
   constructor() {
     this.progress = {}; // id -> count
@@ -78,6 +109,20 @@ export class Quests {
     return lv;
   }
   get nextXp() { return LEVELS[Math.min(this.level, LEVELS.length - 1)]; }
+  /** 최고 레벨인가 */
+  get maxed() { return this.level >= LEVELS.length; }
+
+  /**
+   * 경험치 더하기 (모든 경험치는 여기로): { levelUp, from, to, level } — 한 번에 여러 레벨도
+   * n 이 0 이하·숫자가 아니면 바뀌지 않음
+   */
+  gainXp(n) {
+    const from = this.level;
+    const v = Math.round(Number(n));
+    if (Number.isFinite(v) && v > 0) this.xp += v;
+    const to = this.level;
+    return { levelUp: to > from, from, to, level: to };
+  }
 
   /** 게임 이벤트 보고 */
   report(event, amount = 1) {
@@ -97,10 +142,8 @@ export class Quests {
     const q = QUESTS.find((x) => x.id === id);
     if (!q || this.claimed[id] || !this.isComplete(q)) return null;
     this.claimed[id] = true;
-    const before = this.level;
-    this.xp += q.reward.xp;
-    const levelUp = this.level > before;
-    return { reward: q.reward, levelUp, level: this.level };
+    const r = this.gainXp(q.reward.xp);
+    return { reward: q.reward, levelUp: r.levelUp, level: r.level, from: r.from };
   }
 
   /** 활성 퀘스트(미수령) 목록, 완료된 것 우선 */

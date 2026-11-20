@@ -1,19 +1,79 @@
-// 퀘스트 창: 받을 보상 → 지금 장 → 다음 장(잠김) → 업적·장기 목표(접힘) (+ 미니게임 최고 기록)
-import { h } from '../dom.js';
+// 퀘스트 창: 우리 마을 별점 줄 → 편지함 → 탭 [📜 이야기 | 🗓️ 계절 도전]
+//  이야기: 받을 보상 → 지금 장 → 다음 장(잠김) → 업적·장기 목표(접힘) (+ 미니게임 최고 기록), 모든 장을 마치면 마을 카드
+//  계절 도전: 이번 계절 3개 + 세 개 모두 보상 + 도전 도장
+import { h, esc } from '../dom.js';
 import { recordsHtml } from '../minigame_frame.js';
 import { touchUI } from '../../game/input.js';
 import { QUESTS } from '../../game/sim/quests.js';
 import { CHAPTERS, QMETA, currentChapter, chapterProgress } from '../../game/sim/chapters.js';
+import { starLine, STAR_REWARDS, MAX_STARS } from '../../game/sim/town_rating.js';
+import { daysLeft, STAMP_EVERY } from '../../game/sim/weekly.js';
+import { seasonOf } from '../../game/sim/season.js';
+import { unreadLetters } from '../letters.js';
 
 const BY_ID = Object.fromEntries(QUESTS.map((q) => [q.id, q]));
 
 /** 퀘스트 창 메서드 (UI.prototype 에 합쳐짐) */
+/** 마을 별점 줄 (접힘) / 카드 (펼침): 별·막대·다음 별 할 일 */
+export function townHtml(R, { full = false } = {}) {
+  const max = R.stars >= MAX_STARS;
+  const next = max ? '<div class="tw-next done">별 다섯 개 마을이에요! 🎉 계속 농사지을 수 있어요</div>'
+    : full ? `<div class="tw-reward">다음 별 선물: ${STAR_REWARDS[R.stars + 1].icon} ${esc(STAR_REWARDS[R.stars + 1].text)}</div><div class="tw-list">${R.next.slice(0, 3).map((n, i) => `<div class="tw-it"><span class="ic">${n.icon}</span><span class="tx">${esc(n.label)}${i === 0 ? '' : ' <small>또는</small>'}</span><span class="qty">${n.have}/${n.need}</span></div>`).join('')}</div>`
+      : `<div class="tw-next">다음 별: ${R.next[0] ? `${R.next[0].icon} ${esc(R.next[0].short)}` : ''}</div>`;
+  return `<div class="tw-head"><span class="tw-name">🏘️ 우리 마을</span><span class="tw-stars" aria-label="마을 별 ${R.stars}개">${starLine(R.stars)}</span></div>`
+    + `<div class="tw-bar" role="progressbar" aria-label="다음 별까지" aria-valuenow="${Math.round(R.frac * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.round(R.frac * 100)}%"></i></div>${next}`;
+}
+
 export const QuestsPanel = {
-  openQuests() {
+  /** tab: 'story' | 'season' | 'town' (마을 카드를 펼친 이야기 탭). 없으면 이야기, 이야기가 비면 계절 도전 */
+  openQuests(tab) {
     const g = this.game;
     const p = this.openPanel('📜 퀘스트');
+    p.classList.add('qpanel');
     const rec = h('div', 'mg-records', `<h3>🎮 미니게임 최고 기록</h3><div class="rows">${recordsHtml()}</div>`);
     let openAch = false, openDone = false; // 업적·완료 칸 펼침 (다시 그려도 유지)
+    let townOpen = tab === 'town';
+    const W = g.seasonChallenges?.();
+    if (W && !W.key) g.progressNewDay?.(g.world.day);
+    const storyEmpty = () => {
+      const Q = g.quests;
+      return !currentChapter(Q) && !QUESTS.some((x) => !Q.claimed[x.id] && (Q.isComplete(x) || QMETA[x.id].wait || QMETA[x.id].peers));
+    };
+    let tabNow = tab === 'season' || (!tab && W && (storyEmpty() || (W.claimable > 0 && !QUESTS.some((x) => !g.quests.claimed[x.id] && g.quests.isComplete(x))))) ? 'season' : 'story';
+    // 마을 별점 줄 (누르면 펼침)
+    const town = h('button', 'tw-strip ghost');
+    town.setAttribute('aria-expanded', 'false');
+    const paintTown = () => {
+      const R = g.checkTown?.() || g.townRating;
+      if (!R) { town.style.display = 'none'; return; }
+      town.innerHTML = townHtml(R, { full: townOpen });
+      town.classList.toggle('open', townOpen);
+      town.setAttribute('aria-expanded', String(townOpen));
+    };
+    town.onclick = () => { townOpen = !townOpen; paintTown(); };
+    // 편지함
+    const mail = h('details', 'lt-box');
+    const paintMail = () => {
+      const got = g.flags.letters?.got?.length || 0, unread = unreadLetters(g.flags).length;
+      mail.style.display = got ? '' : 'none';
+      if (!got) return;
+      mail.innerHTML = '';
+      mail.append(h('summary', '', `📬 편지함 <span class="qprog">${unread ? `새 편지 ${unread}` : got}</span>`));
+      mail.append(this.letterList());
+      if (unread) mail.open = true;
+    };
+    // 탭
+    const tabs = h('div', 'qt-tabs');
+    tabs.setAttribute('role', 'tablist');
+    const tabBtn = (id, label) => {
+      const b = h('button', 'qt-tab', label);
+      b.setAttribute('role', 'tab');
+      b.onclick = () => { if (tabNow === id) return; tabNow = id; g.audio?.play?.('click', 0.5); render(); };
+      b.dataset.tab = id;
+      return b;
+    };
+    tabs.append(tabBtn('story', '📜 이야기'), tabBtn('season', '🗓️ 계절 도전'));
+    p.append(town, mail, tabs);
     const fold = (cls, title, n, rows, get, set) => {
       const d = h('details', cls);
       d.open = get();
@@ -42,8 +102,45 @@ export const QuestsPanel = {
       r.append(b);
       return r;
     };
+    const renderSeason = () => {
+      const wrap = h('div', 'qrows wk');
+      const day = g.world.day, s = seasonOf(day), d = daysLeft(day);
+      wrap.append(h('h3', 'qhead', `🗓️ 이번 계절 도전 <span class="qprog">${s.icon} ${s.name} · ${d ? `D-${d}` : '오늘 마감'}</span>`));
+      wrap.append(h('div', 'wk-note', `계절 축제 날(7일째)까지 · 다 하고 못 받은 보상은 다음 계절에 자동으로 받아요`));
+      const rows = h('div', 'rows');
+      (W?.view() || []).forEach((c, i) => {
+        const r = h('div', `row quest wk-row${c.claimed ? ' claimed' : c.complete ? ' done' : ''}`,
+          `<span class="wk-ic">${c.icon}</span><div class="qmain"><div class="nm">${c.claimed ? '✅ ' : ''}${esc(c.title)}</div>${c.claimed ? '' : `<div class="bar"><i style="width:${Math.round((c.count / c.goal) * 100)}%"></i></div>`}</div><span class="qty">${c.count}/${c.goal}</span>`);
+        if (!c.claimed) {
+          const b = h('button', c.complete ? 'gold' : 'ghost', c.complete ? '받기' : '보상');
+          b.disabled = !c.complete;
+          b.setAttribute('aria-label', c.complete ? `${c.title} 보상 받기` : '아직 진행 중');
+          b.onclick = () => { g.claimChallenge?.(i); render(); };
+          r.append(b);
+        }
+        rows.append(r);
+      });
+      wrap.append(rows);
+      const n = W?.list.filter((c) => c.claimed).length || 0, st = W?.stamps || 0;
+      wrap.append(h('div', `wk-bonus${W?.bonus ? ' got' : ''}`, `<span class="ic">${W?.bonus ? '🎉' : '🎁'}</span><span>${W?.bonus ? '이번 계절 도전을 모두 마쳤어요!' : `세 개 모두 받으면 꾸미기 소품 + 도전 도장 (${n}/3)`}<small>도전 도장 ${st}개 · ${STAMP_EVERY}개마다 귀한 선물 (다음까지 ${STAMP_EVERY - (st % STAMP_EVERY)}개)</small></span>`));
+      p.insertBefore(wrap, rec);
+      rec.style.display = 'none';
+    };
     const render = () => {
       p.querySelectorAll('.qrows').forEach((e) => e.remove());
+      paintTown(); paintMail();
+      // 모든 장을 마친 이야기 탭은 아래 마을 카드가 같은 내용 → 위 줄은 숨김
+      if (tabNow === 'story' && !currentChapter(g.quests)) town.style.display = 'none';
+      else if (g.townRating) town.style.display = '';
+      const wkn = W?.claimable || 0;
+      for (const b of tabs.children) {
+        const on = b.dataset.tab === tabNow;
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-selected', String(on));
+        if (b.dataset.tab === 'season') b.innerHTML = `🗓️ 계절 도전${wkn ? ` <i>${wkn}</i>` : ''}`;
+      }
+      if (tabNow === 'season') { renderSeason(); return; }
+      rec.style.display = '';
       const Q = g.quests, wrap = h('div', 'qrows');
       // 받을 보상 (HUD 의 빨간 수와 같은 목록)
       const ready = QUESTS.filter((x) => !Q.claimed[x.id] && Q.isComplete(x));
@@ -70,7 +167,15 @@ export const QuestsPanel = {
         if (done.children.length) wrap.append(fold('qdone', '✅ 완료', done.children.length, done, () => openDone, (v) => { openDone = v; }));
         const next = CHAPTERS.find((c) => c.n === cur.n + 1);
         if (next) wrap.append(h('div', 'row quest qlock', `<span class="nm">🔒 다음 장: ${next.n}장 ${next.title}</span><small>${cur.n}장을 마치면 열려요 (${pr.done}/${pr.total})</small>`));
-      } else wrap.append(h('h3', 'qhead', '📖 모든 장을 마쳤어요! 🎉'));
+      } else {
+        // 모든 장을 마침: 마을 꿈 카드 (별·막대·다음 별 할 일)
+        const R = g.townRating;
+        wrap.append(h('h3', 'qhead', '📖 모든 장을 마쳤어요! 이제 마을의 꿈 ⭐'));
+        if (R) wrap.append(h('div', 'tw-card', townHtml(R, { full: true })));
+        const go = h('button', 'ghost tw-go', '🗓️ 이번 계절 도전 보기');
+        go.onclick = () => { tabNow = 'season'; render(); };
+        wrap.append(go);
+      }
       // 업적·장기 목표: 기다리는 목표·친구 목표·끝낸 장의 남은 것·뒷장인데 이미 시작한 것 (예전 저장도 고정할 수 있게)
       const ach = QUESTS.filter((x) => {
         if (Q.claimed[x.id] || Q.isComplete(x)) return false;

@@ -181,6 +181,9 @@ export const GameSave = {
     });
     step('socialDay', () => this.social.newDay(this.world.day));
     step('player', () => { if (num(s.player?.x) && num(s.player?.z)) this.player.position.set(s.player.x, 0, s.player.z); });
+    // 계절 도전 (칸이 없으면 새로) · 마을 별·레벨 선물은 조용히 맞춤 (예전 저장이 축하를 다시 보지 않게)
+    step('weekly', () => this.seasonChallenges?.().load(s.weekly));
+    step('progress', () => this.progressAfterLoad?.());
     return failed;
   },
 

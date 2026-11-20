@@ -497,7 +497,7 @@ export class FarmView {
     const r = this.sim.harvest(i, grace ? 2 : 1);
     if (!r) return null;
     const C = CROPS[r.crop], u = g.player.unico;
-    g.economy.addCrop(r.crop, r.amount); g.onEvent('harvest', r.amount);
+    g.economy.addCrop(r.crop, r.amount); g.onEvent('harvest', r.amount, r.crop); // 작물 id: 계절 도전·수확 경험치
     this.face(i); u.playAction('pull', 1.05);
     const it = { i, r, t: 0, total: 0, phase: 'wait', m: null, from: new THREE.Vector3(t.x, 0.35, t.z), head: new THREE.Vector3(), lifted: false };
     it.hit = (kind) => { if (kind === 'pull') this._spawnItem(); };

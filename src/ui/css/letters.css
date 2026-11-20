@@ -1,3 +1,45 @@
 /* 편지 — W4-A 가 채움 (letters.js) */
 /* 주의: theme.css 가 이 파일 뒤에 읽혀 button(.gold·.ghost)·.panel·.panel h2(::after)·.panel h3 을 다시 칠함 → 같은 세기면 테마가 이김.
    덮으려면 클래스 하나 더: .panel.letter h2, .letter button.gold (.row 배경은 테마가 !important) */
+
+/* 편지 카드 (letters.js openLetter): 줄 그은 종이 + 별 줄 + 선물 칸 */
+.panel.letter { width: min(calc(92vw / var(--ui-zoom, 1)), 420px); }
+.panel.letter h2 { justify-content: center; }
+.letter .lt-paper { position: relative; padding: 16px 18px 14px; border-radius: 16px; color: #4a3424; font-size: 15px; line-height: 1.6;
+  background: repeating-linear-gradient(180deg, #fffdf6 0, #fffdf6 25px, #efe3c8 25px, #efe3c8 26px); border: 2px solid #ead9b8; box-shadow: inset 0 0 0 4px #fffaf0, 0 3px 0 rgba(107,74,46,0.12); word-break: keep-all; }
+.letter .lt-paper p { margin: 0 0 6px; }
+.letter .lt-to { font-family: var(--display); color: #8a6a4a; font-size: 14px; }
+.letter .lt-title { font-family: var(--display); font-size: 20px; color: var(--teal-t, #17736b); margin: 2px 0 8px; line-height: 1.3; }
+.letter .lt-from { text-align: right; font-family: var(--display); color: #8a6a4a; margin-top: 6px; }
+.letter .lt-more { margin-top: 8px; font-size: 13px; color: #3c7a2c; text-align: center; }
+.letter .lt-stars { position: relative; text-align: center; font-size: 30px; letter-spacing: 4px; color: #a87200; text-shadow: 0 2px 0 #fff, 0 0 8px rgba(250,192,62,0.5); margin-bottom: 4px; }
+.letter .lt-stars.pop { animation: lt-pop 0.6s cubic-bezier(.3,1.6,.5,1) both; }
+.letter .lt-burst { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+.letter .lt-burst i { position: absolute; left: -6px; top: -6px; width: 12px; height: 12px; background: var(--gold); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); opacity: 0; animation: lt-star 0.9s ease-out both; animation-delay: calc(0.25s + var(--d)); }
+.letter .lt-burst i:nth-child(2n) { background: #7cc6ff; }
+.letter .lt-burst i:nth-child(3n) { background: #ff9fb3; }
+.letter .lt-gift { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; padding: 8px 12px; border-radius: 14px; background: #fff3cf; border: 2px dashed #e6c26a; }
+.letter .lt-gift .ic { font-size: 26px; }
+.letter .lt-gift small { display: block; font-size: 11.5px; color: #6f5236; line-height: 1.2; }
+.letter .lt-btns { display: flex; gap: 8px; margin-top: 12px; }
+.letter .lt-btns button { flex: 1; min-height: 46px; font-size: 16px; }
+@keyframes lt-pop { 0% { transform: scale(1.8); opacity: 0; } 100% { transform: none; opacity: 1; } }
+@keyframes lt-star { 0% { opacity: 0; transform: rotate(var(--a)) translateY(0) scale(0.4); } 25% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--a)) translateY(-70px) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .letter .lt-stars.pop { animation: none; } .letter .lt-burst { display: none; } }
+
+/* 편지함 (퀘스트 창 위) */
+details.lt-box { margin: 0 0 8px; }
+details.lt-box > summary { cursor: pointer; font-family: var(--display); font-size: 15px; padding: 6px 2px; list-style-position: inside; color: #7a5b3a; }
+.lt-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.lt-list button.lt-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 6px 12px; text-align: left; border-radius: 14px; background: #fffdf6; color: var(--brown); border: 2px solid #ead9b8; box-shadow: none; text-shadow: none; }
+.lt-list button.lt-row.new { border-color: #e6c26a; background: #fff6dc; }
+.lt-row .ic { font-size: 22px; flex: none; }
+.lt-row .nm { flex: 1; min-width: 0; font-size: 15px; line-height: 1.25; }
+.lt-row .nm small { display: block; font-size: 12px; color: #6f604f; }
+.lt-row .lt-new { flex: none; font-weight: 400; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #c2412b; color: #fff; }
+
+/* 📜 버튼: 받을 보상이 없을 때 새 편지 표시 */
+.hud-btn.mail .qbadge { display: block; background: #fff6dc; color: #6b4a2e; box-shadow: 0 0 0 2px #e6c26a; font-size: 11px; }
+
+/* '+N XP' 작은 표시 (hud.js xpFloat, coin-plus 움직임을 같이 씀) */
+.coin-plus.xp-plus { color: #17736b; font-size: 15px; }

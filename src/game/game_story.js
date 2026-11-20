@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { LAYOUT } from './world.js';
 import { saveGame } from './save.js';
+import { sendLetter } from '../ui/letters.js';
 
 /** 반려견이 뛰어 들어오는 거리(m): 순간이동 따라가기(22m)보다 가깝게 */
 export const PET_RUN_IN = 9;
@@ -87,13 +88,14 @@ export function introSteps(g) {
   }
   steps.push(
     { face: guide, toward: [0, 0], emote: 'wave' }, // 마무리: 안내 강아지 얼굴 + 뒤로 밭
-    { say: [{ ...G, emote: 'wave', text: '먼저 밭부터 갈아 보자! KOAT 체험관은 지도에서 언제든 갈 수 있어 😊' }] },
+    { say: [{ ...G, emote: 'wave', text: '먼저 밭부터 갈아 보자! KOAT 체험관은 지도에서 언제든 갈 수 있어 😊' }, { ...G, emote: 'cheer', text: '언젠가 우리 마을을 별 다섯 개 마을로 만들어 보자! ⭐' }] }, // 마을의 꿈 (한 줄 더)
     { run: () => {
       // 끝나면 내 뒤에서 밭(북쪽)을 바라봄
       if (me) me.facing = Math.PI;
       if (g.followCam) g.followCam.yaw = 0;
       if (pet) pet.settle?.(0);
       g.flags.petIntro = true;
+      sendLetter(g, 'star0'); // '유니코 마을 살리기' 편지 (📬 표시로 언제든 읽음)
       g.ui.toast('🎯 왼쪽 위 목표를 따라가 보세요');
       saveGame(g);
     } },

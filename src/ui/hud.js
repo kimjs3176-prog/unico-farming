@@ -6,6 +6,10 @@ import { PRESET_INFO } from '../game/quality.js';
 import { portraitSVG } from './portrait2d.js';
 import { showRibbon, showUnlockCard } from './levelup.js';
 import { reward } from '../game/reward.js';
+import { unreadLetters } from './letters.js';
+
+/** '+N XP' 작은 표시: 이 간격(ms)에 한 번만 (모아서), 낮은 품질은 더 드물게 */
+export const XP_FLOAT_MS = 1500, XP_FLOAT_MS_LOW = 3000;
 
 /** 레벨업: 리본 뒤 만세까지(ms), 만세 뒤 해금 카드까지(ms) — 합이 리본 시간(RIBBON_MS 1.8초)보다 길어 카드가 리본과 겹치지 않음 */
 export const LV_CHEER_AT = 500, LV_CARD_AFTER = 1400;
@@ -39,9 +43,12 @@ export function coinArc(dx, dy, side = 0, n = 9) {
 
 /** 경험치 고리 % (이번 레벨 시작점부터) */
 export function xpPct(q) {
+  if (q.maxed) return 100; // 최고 레벨: 고리를 가득
   const prev = q.level > 1 ? (q.nextXp === q.xp ? q.xp : LEVEL_PREV(q)) : 0;
   return Math.max(0, Math.min(100, Math.round(((q.xp - prev) / Math.max(1, q.nextXp - prev)) * 100)));
 }
+/** 배지 경험치 글: 최고 레벨이면 'MAX' */
+export const xpText = (q) => (q.maxed ? `MAX · ${q.xp.toLocaleString()} XP` : `${q.xp}/${q.nextXp} XP`);
 /** 받지 않은 완료 퀘스트 수 */
 export function claimableCount(q) {
   let n = 0;
@@ -265,8 +272,32 @@ export const HudUI = {
     this._xpPeek = setTimeout(() => this.badge.classList.remove('show-xp'), 2400);
   },
 
-  /** 받을 수 있는 퀘스트 보상이 있나 (☰ 메뉴의 빨간 점에 씀) */
-  hasClaimable() { return claimableCount(this.game.quests) > 0; },
+  /** 받을 수 있는 퀘스트·계절 도전 보상이나 안 읽은 편지가 있나 (☰ 메뉴의 빨간 점에 씀) */
+  hasClaimable() {
+    const g = this.game;
+    return claimableCount(g.quests) > 0 || (g.weekly?.claimable || 0) > 0 || unreadLetters(g.flags).length > 0;
+  },
+
+  /** '+N XP' 작은 표시 (배지 옆): 짧은 사이에 여러 번 오면 모아서 한 번 */
+  xpFloat(n) {
+    if (!(n > 0) || !this.badge || typeof document === 'undefined') return;
+    this._xpAcc = (this._xpAcc || 0) + n;
+    if (this._xpFloatT) return;
+    const low = this.game.quality?.level === 'low';
+    const wait = Math.max(0, (this._xpFloatAt || 0) + (low ? XP_FLOAT_MS_LOW : XP_FLOAT_MS) - Date.now());
+    this._xpFloatT = setTimeout(() => {
+      this._xpFloatT = 0;
+      this._xpFloatAt = Date.now();
+      const v = this._xpAcc;
+      this._xpAcc = 0;
+      const r = this.badge.querySelector('.pb-ring')?.getBoundingClientRect();
+      if (!r || !r.width) return;
+      const f = h('div', 'coin-plus xp-plus', `+${v} XP`);
+      f.style.left = `${r.right + 4}px`; f.style.top = `${r.bottom - 12}px`;
+      document.body.append(f);
+      setTimeout(() => f.remove(), 900);
+    }, wait);
+  },
 
   /**
    * 플레이어 레벨업 축하 (updateHud 가 레벨이 오른 것을 보고 부름 → 퀘스트·체험관 투어·그 밖의 모든 경험치)
@@ -375,8 +406,8 @@ export const HudUI = {
     const hadXp = this._hv?.xpv;
     put('xpv', this.badge, '--xp', String(pct));
     if (hadXp !== undefined && hadXp !== String(pct)) this.pulseXp();
-    put('xp', el.xp, 'text', `${q.xp}/${q.nextXp} XP`);
-    put('lvTitle', this.badge, 'title', `레벨 ${q.level} · 경험치 ${q.xp}/${q.nextXp}`);
+    put('xp', el.xp, 'text', xpText(q));
+    put('lvTitle', this.badge, 'title', q.maxed ? `최고 레벨 ${q.level} · 경험치 ${q.xp}` : `레벨 ${q.level} · 경험치 ${q.xp}/${q.nextXp}`);
     // 레벨이 오르면 축하 (불러온 기록·되돌리기처럼 한꺼번에 크게 바뀌면 조용히 맞춤)
     const lv = q.level;
     if (this._lvSeen === undefined || lv < this._lvSeen || lv - this._lvSeen > 3) this._lvSeen = lv;
@@ -390,12 +421,14 @@ export const HudUI = {
     if (ev || fest) put('ban', this.banner, 'text', [fest?.name, ev && '📈 ' + ev.name].filter(Boolean).join('  ·  '));
     if (this._fest !== !!fest) { this._fest = !!fest; this.banner.classList.toggle('fest', !!fest); }
     // 받지 않은 완료 퀘스트 수: 매 프레임이라 목록을 복사·정렬하지 않고 세기만, 글자는 수가 바뀔 때만
-    const n = claimableCount(q);
-    if (n !== this._qn) {
-      this._qn = n;
-      el.qb.textContent = n ? String(n) : '';
+    const n = claimableCount(q) + (g.weekly?.claimable || 0);
+    const mail = unreadLetters(g.flags).length;
+    if (n !== this._qn || mail !== this._qmail) {
+      this._qn = n; this._qmail = mail;
+      el.qb.textContent = n ? String(n) : mail ? '📬' : '';
       this.btnQuest.classList.toggle('has', n > 0);
-      this.btnQuest.setAttribute('aria-label', `퀘스트 (Q)${n ? ` · 받을 보상 ${n}개` : ''}`);
+      this.btnQuest.classList.toggle('mail', !n && mail > 0);
+      this.btnQuest.setAttribute('aria-label', `퀘스트 (Q)${n ? ` · 받을 보상 ${n}개` : ''}${mail ? ` · 새 편지 ${mail}통` : ''}`);
     }
   },
 

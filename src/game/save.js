@@ -52,6 +52,7 @@ export function saveGame(game, opt = {}) {
       costume: game.costume?.toJSON(),
       social: game.social?.toJSON(),
       decor: game.decor?.toJSON(),
+      weekly: game.weekly?.toJSON(),
       pet: game.pet?.ok ? game.pet.toJSON() : undefined,
     };
     if (!sane(data)) { lastError = 'state'; warnOnce('위치·코인 값이 숫자가 아니어서 건너뜀'); return false; }
@@ -104,6 +105,11 @@ export function loadSaveInfo() {
   if (!isObj(d)) return { status: 'broken', data: null, raw };
   if ((Number(d.v) || 1) > SAVE_VERSION) return { status: 'newer', data: d, raw };
   try { return { status: 'ok', data: migrate(d), raw }; } catch { return { status: 'broken', data: null, raw }; }
+}
+
+/** 저장된 마을 별 수 (월드를 만들 때 동상을 정적 묶음에 넣을지 미리 봄, 못 읽으면 0) */
+export function peekTownStar() {
+  try { const n = loadSave()?.flags?.townStar; return Number.isFinite(n) ? n : 0; } catch { return 0; }
 }
 
 /** 예전 함수: 읽은 기록 (없거나 못 읽으면 null) */

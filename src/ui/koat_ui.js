@@ -400,7 +400,7 @@ export function installKoatUI(UI) {
         g.economy.earn(r.money);
         g.ui.flyToCoin?.(r.money, b.getBoundingClientRect());
         const lv0 = g.quests.level;
-        g.quests.xp += r.xp;
+        if (g.addXp) g.addXp(r.xp, { float: false }); else g.quests.gainXp(r.xp); // 레벨 선물·축하가 함께 (HUD 가 레벨 변화를 봄)
         if (g.npcs?.grantTitle) g.npcs.grantTitle(r.title); else g.player.setTitle?.(r.title); // 칭호 목록에도 남김 (새로고침 뒤에도 유지)
         // 투어 완주: 큰 보상. 이 경험치로 레벨이 오르면 레벨업 축하(HUD)가 대신 함 (팡파르가 겹치지 않게)
         if (g.quests.level === lv0) reward(g, 3);

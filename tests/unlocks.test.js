@@ -41,7 +41,10 @@ test('여러 레벨을 한 번에 올라도 사이 레벨 해금을 모두 종�
   assert.deepEqual(cardAction(g), { label: '🛒 장터 열기', open: 'market' });
   assert.deepEqual(cardAction([{ kind: 'decor' }]), { label: '🪑 꾸미기', open: 'decor' });
   assert.equal(cardAction([{ kind: 'rod' }]), null);
-  assert.deepEqual(unlocksBetween(6, 7), []);
+  // Lv.6 위는 레벨 선물 (꾸미기 보관함으로) → 꾸미기 버튼
+  const g7 = unlocksBetween(6, 7);
+  assert.deepEqual(g7.map((x) => x.kind), ['gift']);
+  assert.deepEqual(cardAction(g7), { label: '🪑 꾸미기', open: 'decor' });
 });
 
 test('카드 그림이 장터 단추(🛒)와 겹치지 않음: 외바퀴 수레는 다른 그림', () => {

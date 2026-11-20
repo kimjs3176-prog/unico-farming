@@ -77,6 +77,31 @@ function targetOf(id, g) {
   }
 }
 
+/** 계절 도전 → 길 안내에 빌려 쓸 퀘스트 id (밭 일은 밭 칸 안내) */
+const CHALLENGE_TARGET = {
+  harvest: 'star3', harvest_key: 'star3', star3: 'star3', weed: 'weed2', fert: 'fert3', process: 'process2', order: 'order3', thresh: 'riceharv',
+  tractor: 'tractor1', smartfarm: 'smart1', feed: 'feed3', collect: 'collect5', animalcare: 'care5', rprocess: 'rprocess2', petfeed: 'petfeed3',
+  fish: 'fish1', fish_night: 'fish1', lakefish: 'lake1', fightwin: 'fight3', dive: 'dive3', bug: 'bug1', shake: 'shake3',
+};
+
+/** 따라갈 퀘스트가 없을 때의 목표(계절 도전·다음 별)가 가리킬 곳: { pos, tile, ringOnly } 또는 null (글만) */
+export function fallbackTarget(goal, g, st = { i: -1 }) {
+  if (!goal || goal.complete) return null;
+  const L = LAYOUT;
+  if (goal.kind === 'weekly') {
+    const id = CHALLENGE_TARGET[goal.tid];
+    if (!id) return null;
+    if (FARM_TUTORIAL.has(id)) return farmTarget(id, g, st);
+    const p = targetOf(id, g);
+    return p ? { pos: p, tile: false, ringOnly: false } : null;
+  }
+  if (goal.kind === 'star') {
+    const at = { built: L.town.entry, home: L.home.door, book: L.dock, stamps: L.koat.gate }[goal.part];
+    return at ? { pos: new THREE.Vector3(at.x, 0, at.z), tile: false, ringOnly: false } : null;
+  }
+  return null;
+}
+
 /**
  * 농사 퀘스트가 가리킬 실제 밭 한 칸 (플레이어에게 가장 가까운 칸, 다른 칸이 2m 넘게 더 가까워질 때까지 유지)
  * st: { i } 유지용 상태. 반환 { pos, tile, i, ringOnly } 또는 null (농사 퀘스트가 아니면 null)
@@ -250,7 +275,12 @@ export class Guide {
   /** 길잡이 한마디 (길잡이 NPC 대화 첫 줄) */
   hint() {
     const g = this.game, cur = this.current();
-    if (!cur) return '오늘 할 일은 다 했어! 마을을 자유롭게 둘러봐 🌼';
+    if (!cur) {
+      const fb = g.fallbackGoal?.();
+      if (fb?.kind === 'weekly') return fb.complete ? '계절 도전을 해냈어! 퀘스트 창에서 보상을 받자 🗓️' : `이번 계절 도전: ${fb.title}! 계절 축제 날까지 해 보자 🗓️`;
+      if (fb?.kind === 'star') return `마을에 별을 하나 더 달자! ${fb.desc.split(' · ')[0]} ⭐`;
+      return '오늘 할 일은 다 했어! 마을을 자유롭게 둘러봐 🌼';
+    }
     if (cur.complete) return '보상 받는 거 잊지 마! 📜';
     const H = HINTS[cur.id];
     return H ? H(g) : `${cur.title}! ${(touchUI() && cur.descTouch) || cur.desc}`;
@@ -339,6 +369,23 @@ export class Guide {
       g.saveTimer = Math.max(g.saveTimer || 0, 9);
       if (c) this._showCard(c);
     }
+    // 새 날: 계절 도전 기간·마을 별점 (매 프레임 아님)
+    const day = g.world?.day;
+    if (this._day === undefined) this._day = day;
+    else if (day !== this._day) { this._day = day; g.progressNewDay?.(day); }
+    // 마을 별 카드: 창·대화·컷신이 없을 때 (별 다섯은 마을 사람들 축하 컷신 뒤에)
+    const stars = g.flags.starCard;
+    if (stars?.length && !this._card && free && !g.ui.panel && !this._auto && !g.flags.chapterCard?.length && g.ui.openLetter) {
+      const n = Math.max(...stars);
+      delete g.flags.starCard;
+      g.saveTimer = Math.max(g.saveTimer || 0, 9);
+      const show = () => {
+        if (g.reward) g.reward(3, { label: '⭐' }); else g.audio?.play('win');
+        const giftText = n === 3 && g.flags.starGift3 ? `마을 선물 의상: ${g.flags.starGift3}` : undefined;
+        this._card = g.ui.openLetter(`star${n}`, { celebrate: true, giftText });
+      };
+      if (n >= 5 && g.townFinale) g.townFinale().then(show, show); else show();
+    }
     let cur = this.current();
     // 첫 농사 자동 보상: 도장 찍고 0.7초 뒤 (컷신·대화가 끝난 다음). 따라가는 퀘스트가 아니어도 (📌 고정 중이어도) 받음
     const q = g.quests;
@@ -348,15 +395,21 @@ export class Guide {
       this._autoT += step;
       if (this._autoT >= 0.7 && free) { this._auto = null; g.claimQuest(autoId, { quiet: true }); cur = this.current(); }
     } else this._auto = null;
+    // 따라갈 퀘스트가 없으면: 계절 도전 → 다음 별 (목표 칩이 비지 않게)
+    let fb = null;
+    if (!cur && !this._auto) fb = cur = g.fallbackGoal?.() || null;
     // 가리킬 곳
     let tgt = null, tile = false, ringOnly = false;
-    if (cur && !cur.complete) {
+    if (fb) {
+      const ft = fallbackTarget(fb, g, this._st);
+      if (ft) ({ pos: tgt, tile, ringOnly } = ft);
+    } else if (cur && !cur.complete) {
       if (FARM_TUTORIAL.has(cur.id)) {
         const ft = farmTarget(cur.id, g, this._st);
         if (ft) ({ pos: tgt, tile, ringOnly } = ft);
       } else tgt = targetOf(cur.id, g);
     }
-    const fo = farmObjective(cur, g);
+    const fo = fb ? null : farmObjective(cur, g);
     if (fo) {
       cur = fo.q;
       if (!tgt) tgt = fo.tgt;
@@ -409,7 +462,7 @@ export class Guide {
     const hideArrow = !!(tgt && cur && FARM_TUTORIAL.has(cur.id.split(':')[0]));
     if (g.player?.arrow && (hideArrow || this._arrowHid)) { g.player.arrow.visible = !hideArrow; this._arrowHid = hideArrow; }
     // 장 완료 카드가 뜰 차례·떠 있는 동안은 다음 목표를 숨겼다가 닫으면 펼쳐 보여 줌
-    if (this._card || g.flags.chapterCard?.length) { g.ui.setObjective(null); return; }
+    if (this._card || g.flags.chapterCard?.length || g.flags.starCard?.length) { g.ui.setObjective(null); return; }
     g.ui.setObjective(cur, dist, ang, extra);
   }
 }
