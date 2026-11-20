@@ -125,9 +125,23 @@ export const LAYOUT = {
     [27.5, -11.2, 34, -6.5], // 목장 가공소
     [-21, 3.4, -15.8, 8.2],
     [13, -39, 37, -18.4], [29.5, -14.5, 32.5, -11.5], [32, 14, 38, 20], [-18, -27, -12, -21], [-8.5, -27.5, 8.5, -14], [5, -11, 13, 0.5], [7.5, -23, 13, -17], [-11, -25, -7.5, -17.5], [-9, 10, -2, 16.5],
+    [-33.5, -1.2, -19.2, 19.4, 'trees'], // 새 마을 부지 5곳 + 안내판 (지은 건물·공사 자리에 나무·바위가 겹치지 않게)
     [-1.6, 15.2, 6.0, 23.6, 'trees'], // 유니코 집 (커진 집과 마당에 나무가 겹치지 않게, 풀은 남김)
     [6.0, 12.0, 31.6, 27.8, 'trees']], // 트랙터 마당(밭갈이) — 나무만 막음
 };
+
+/** 흙길(LAYOUT.paths) 중심선까지 거리 ≤ 폭/2 + pad 이면 true (나무·바위·덤불이 길을 막거나 길 위에 서지 않게) */
+export function pathNear(x, z, pad = 0) {
+  for (const { pts, w } of LAYOUT.paths) {
+    const lim = w / 2 + pad;
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, az] = pts[i - 1], [bx, bz] = pts[i], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+      if (Math.hypot(x - (ax + dx * t), z - (az + dz * t)) <= lim) return true;
+    }
+  }
+  return false;
+}
 
 const DAY_LENGTH = 360; // 실제 초 = 게임 하루
 // 애니메이션·상호작용이 있어 병합하면 안 되는 모델
@@ -500,6 +514,11 @@ export class World {
     return r > g * 0.95; // 잔디는 g 가 r 보다 확실히 큼
   }
 
+  /** 흙길 위인가 (길 중심선에서 폭/2 + pad 안). _decorate 는 지면을 칠하기 전이라 isBare 대신 이것으로 나무·바위·덤불을 길에서 비킴 */
+  onPath(x, z, pad = 0) {
+    return pathNear(x, z, pad);
+  }
+
   /** forGrass: 풀 심을 때는 '나무만 막는' 자리(5번째 값 'trees')는 비워 두지 않음 */
   isReserved(x, z, pad = 0, forGrass = false) {
     return LAYOUT.reserved.some(([x0, z0, x1, z1, only]) => !(forGrass && only === 'trees') && x > x0 - pad && x < x1 + pad && z > z0 - pad && z < z1 + pad);
@@ -600,12 +619,12 @@ export class World {
       const a = (i / 52) * Math.PI * 2 + rnd() * 0.1;
       const r = L.bounds - 2 + rnd() * 6;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      if (this.isReserved(x, z, 1.5) || this.isBlocked(x, z, 2.0)) continue; // 나무끼리 겹치지 않게 간격
+      if (this.isReserved(x, z, 1.5) || this.isBlocked(x, z, 2.0) || this.onPath(x, z, 1.4)) continue; // 나무끼리 겹치지 않게 간격, 길 위·길가 바로 옆은 비움
       const n = treeName(true);
       this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.5) * treeScale(n), { r: 0.6 });
     }
-    const spots = [[-8, -6], [-5, -9], [-11, 13], [-20, 4], [-28, -2], [30, 14], [20, 22], [-30, 22], [35.8, -4], [-18, 24], [-14, -18], [-22, 10]];
-    for (const [x, z] of spots) { if (this.isBlocked(x, z, 1.0) || this.isReserved(x, z, 0)) continue; const n = Q ? pick(['tree_1', 'tree_2', 'tree_3', 'tree_4', 'tree_5', 'birch_1', 'birch_2', 'autumn_1']) : treeName(false); this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.4) * treeScale(n), { r: 0.6 }); }
+    const spots = [[-8, -6], [-5, -9], [-11, 13], [-28, -2], [30, 14], [20, 22], [-30, 22], [35.8, -4], [-18, 24], [-20, -18.5]]; // (-20,4)·(-22,10) 은 새 마을 길·부지와 겹쳐 뺌, 방앗간 앞 (-14,-18) 은 옆으로
+    for (const [x, z] of spots) { if (this.isBlocked(x, z, 1.0) || this.isReserved(x, z, 0) || this.onPath(x, z, 1.4)) continue; const n = Q ? pick(['tree_1', 'tree_2', 'tree_3', 'tree_4', 'tree_5', 'birch_1', 'birch_2', 'autumn_1']) : treeName(false); this.place(n, x, z, rnd() * 6.28, (0.9 + rnd() * 0.4) * treeScale(n), { r: 0.6 }); }
     // 연못가 버드나무
     if (Q) for (const [x, z] of [[-17.6, 15.5], [-16.5, 21.8]]) if (!this.isBlocked(x, z, 1.6)) this.place(rnd() > 0.5 ? 'willow_1' : 'willow_2', x, z, rnd() * 6.28, 1.35, { r: 0.6 });
     // 연잎 (낚시 데크 반대편)
@@ -615,20 +634,20 @@ export class World {
     }
     for (let i = 0; i < 26; i++) {
       const x = (rnd() - 0.5) * 70, z = (rnd() - 0.5) * 70;
-      if (this.isBlocked(x, z, 2.5) || this.isReserved(x, z, 1) || Math.hypot(x, z) < 12) continue;
+      if (this.isBlocked(x, z, 2.5) || this.isReserved(x, z, 1) || this.onPath(x, z, 0.6) || Math.hypot(x, z) < 12) continue;
       const n = !Q ? (rnd() > 0.5 ? 'bush' : 'flowers') : pick(['bush_1', 'bush_2', 'berrybush_1', 'berrybush_2', 'flowers', 'flowers_q', 'plant_1', 'plant_2', 'plant_3']);
       this.place(n, x, z, rnd() * 6.28, Q && /bush/.test(n) ? 1.1 : 1, { collide: false });
     }
     for (let i = 0; i < 10; i++) {
       const x = (rnd() - 0.5) * 60, z = (rnd() - 0.5) * 60;
-      if (this.isBlocked(x, z, 2.5) || this.isReserved(x, z, 1) || Math.hypot(x, z) < 14) continue;
+      if (this.isBlocked(x, z, 2.5) || this.isReserved(x, z, 1) || this.onPath(x, z, 0.6) || Math.hypot(x, z) < 14) continue;
       this.place(Q ? pick(['rock_1', 'rock_2', 'rock_3', 'mossrock_1', 'mossrock_2', 'mossrock_3']) : 'rock', x, z, rnd() * 6.28, 0.8 + rnd() * 0.6);
     }
     // 숲 가장자리 소품: 그루터기, 통나무, 덤불
     if (Q) for (let i = 0; i < 22; i++) {
       const a = rnd() * Math.PI * 2, r = L.bounds - 6 + rnd() * 5;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      if (this.isBlocked(x, z, 1.9) || this.isReserved(x, z, 1)) continue; // 지나갈 틈(1.6m 이상) 남기기
+      if (this.isBlocked(x, z, 1.9) || this.isReserved(x, z, 1) || this.onPath(x, z, 0.6)) continue; // 지나갈 틈(1.6m 이상) 남기기
       const n = pick(['stump', 'stump_moss', 'log', 'log_moss', 'plant_4', 'plant_5', 'bush_1', 'mossrock_4', 'grass_q', 'grass_q2']);
       this.place(n, x, z, rnd() * 6.28, 1, { collide: /log|stump/.test(n) });
     }

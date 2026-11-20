@@ -226,3 +226,12 @@ test('배치: 밭 칸 위에는 가로등·나무·세워 둔 탈것·주민이 
   for (const t of L.orchard) assert.ok(!inFarm(t.x, t.z, 1), `나무 (${t.x}, ${t.z})`);
   for (const [k, n] of Object.entries(L.npcs)) assert.ok(!inFarm(n.x, n.z, 0.5), k);
 });
+
+test('배치: 흙길 판정과 새 마을 부지 예약 (나무·바위·덤불이 길과 건설 부지를 막지 않게)', async () => {
+  const { LAYOUT: L, pathNear } = await import('../src/game/world.js');
+  assert.ok(pathNear(0, 0), '중앙 길 위');
+  assert.ok(!pathNear(-6, -1.5), '밭 안쪽 (길에서 먼 곳)');
+  assert.ok(pathNear(-22.8, 9.4, 1.4), '새 마을 가는 길 옆 (예전 나무 자리)');
+  const inRes = (x, z) => L.reserved.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1);
+  for (const s of L.town.sites) assert.ok(inRes(s.x, s.z), `부지 (${s.x}, ${s.z}) 예약`);
+});
