@@ -48,6 +48,142 @@ function modelPreload(versions) {
   };
 }
 
+/** 도트 판 파일 (서비스 워커가 손대지 않음: 목록에 넣지 않고 요청도 그대로 통과) */
+export const PIXEL_RE = /pixel|Galmuri/i;
+
+/**
+ * 서비스 워커 본문 (sw.js). c: { cache, base, core, modelsGz, modelsRaw, extra }
+ *  - 설치: core 는 모두(addAll), 모델·초상화는 되는 만큼(allSettled). skipWaiting 은 설정의 '지금 새로 고침'(SKIP_WAITING)으로만
+ *  - 켜질 때: 다른 'unico-*' 캐시 지우기 + 내비게이션 미리 받기
+ *  - 화면(내비게이션)은 '/'·'/index.html' 만: 망 먼저, 끊기거나 4초 넘으면 캐시한 index.html (내비게이션 응답은 캐시에 쓰지 않음 → 캐시의 index.html 과 해시 파일이 늘 짝)
+ *  - /assets/*·?v= 주소·/portraits/*: 캐시 먼저. 구글 글꼴 파일(fonts.gstatic.com): 캐시 주고 뒤에서 새로 받기. 글꼴 CSS·다른 출처·Range·/ws·도트 판은 그대로 통과
+ */
+export function swSource(c) {
+  return `// 유니코 팜 서비스 워커 (vite.config.js 가 빌드 때 만듦 — 고치지 말 것)
+const CACHE = ${JSON.stringify(c.cache)}, BASE = ${JSON.stringify(c.base)};
+const CORE = ${JSON.stringify(c.core)};
+const MODELS_GZ = ${JSON.stringify(c.modelsGz)}, MODELS_RAW = ${JSON.stringify(c.modelsRaw)}, EXTRA = ${JSON.stringify(c.extra)};
+const PIXEL = ${PIXEL_RE};
+const CORE_SET = new Set(CORE);
+const NAV_MS = 4000;
+self.addEventListener('install', (e) => {
+  e.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    await c.addAll(CORE);
+    const models = 'DecompressionStream' in self ? MODELS_GZ : MODELS_RAW;
+    await Promise.allSettled(models.concat(EXTRA).map((u) => c.add(u)));
+  })());
+});
+self.addEventListener('activate', (e) => {
+  e.waitUntil((async () => {
+    for (const k of await caches.keys()) if (k.startsWith('unico-') && k !== CACHE) await caches.delete(k);
+    try { await self.registration.navigationPreload?.enable(); } catch (_) { /* 없으면 그냥 */ }
+  })());
+});
+self.addEventListener('message', (e) => { if (e.data === 'SKIP_WAITING') self.skipWaiting(); });
+const cachedIndex = async () => (await caches.match(BASE + 'index.html', { cacheName: CACHE })) || caches.match(BASE, { cacheName: CACHE });
+async function nav(e) {
+  const net = (async () => (await e.preloadResponse) || fetch(e.request))();
+  net.catch(() => {});
+  let timer;
+  const late = new Promise((r) => { timer = setTimeout(r, NAV_MS, 'late'); });
+  try {
+    const r = await Promise.race([net, late]);
+    if (r !== 'late') return r;
+    return (await cachedIndex()) || (await net);
+  } catch (err) {
+    const c = await cachedIndex();
+    if (c) return c;
+    throw err;
+  } finally { clearTimeout(timer); }
+}
+async function cacheFirst(req) {
+  const c = await caches.open(CACHE);
+  const hit = await c.match(req);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res.status === 200) c.put(req, res.clone()).catch(() => {});
+  return res;
+}
+async function netFirst(req) {
+  try { return await fetch(req); } catch (err) { const hit = await caches.match(req, { cacheName: CACHE }); if (hit) return hit; throw err; }
+}
+async function staleWhile(req) {
+  const c = await caches.open(CACHE);
+  const hit = await c.match(req);
+  const net = fetch(req).then((res) => { if (res.ok) c.put(req, res.clone()).catch(() => {}); return res; });
+  if (hit) { net.catch(() => {}); return hit; }
+  return net;
+}
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET' || req.headers.has('range')) return;
+  const u = new URL(req.url);
+  if (u.origin !== self.location.origin) {
+    if (u.hostname === 'fonts.gstatic.com') e.respondWith(staleWhile(req));
+    return;
+  }
+  if (!u.pathname.startsWith(BASE)) return;
+  const p = '/' + u.pathname.slice(BASE.length);
+  if (p.startsWith('/ws') || PIXEL.test(p)) return;
+  if (req.mode === 'navigate') {
+    if (p === '/' || p === '/index.html') e.respondWith(nav(e));
+    return;
+  }
+  if (p.startsWith('/assets/') || p.startsWith('/portraits/') || u.searchParams.has('v')) e.respondWith(cacheFirst(req));
+  else if (CORE_SET.has(u.pathname)) e.respondWith(netFirst(req));
+});
+`;
+}
+
+/** 서비스 워커에 미리 넣을 목록: 3D 판 첫 화면(index.html)이 쓰는 청크·CSS + 공용 파일 + 모델(.gz·원본) + 초상화. 도트 판·아이템 아이콘 판은 뺌 */
+export function swLists(bundle, versions, base = '/', publicDir = 'public') {
+  const chunks = Object.values(bundle);
+  const main = chunks.find((x) => x.type === 'chunk' && x.isEntry && x.facadeModuleId && /index\.html$/.test(x.facadeModuleId))
+    || chunks.find((x) => x.type === 'chunk' && x.isEntry && x.name === 'main');
+  const files = new Set();
+  const walk = (name, seen = new Set()) => {
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    const ch = bundle[name];
+    if (!ch || ch.type !== 'chunk') return;
+    files.add(ch.fileName);
+    for (const css of ch.viteMetadata?.importedCss || []) files.add(css);
+    for (const n of [...(ch.imports || []), ...(ch.dynamicImports || [])]) walk(n, seen);
+  };
+  if (main) walk(main.fileName);
+  for (const x of chunks) if (x.type === 'asset' && /^assets\/model-preload-/.test(x.fileName)) files.add(x.fileName);
+  const pub = (p) => fs.existsSync(path.join(publicDir, p));
+  const core = ['', 'index.html', 'manifest.webmanifest', 'font-css.js', 'fonts/unico-coin.woff2',
+    'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'portraits/cheer.webp']
+    .filter((p) => p === '' || p === 'index.html' || pub(p))
+    .concat([...files].sort())
+    .filter((p) => !PIXEL_RE.test(p))
+    .map((p) => base + p);
+  const names = Object.keys(versions).sort();
+  const modelsGz = names.map((f) => `${base}models/${f}.gz?v=${versions[f]}`);
+  const modelsRaw = names.map((f) => `${base}models/${f}?v=${versions[f]}`);
+  const portraits = fs.existsSync(path.join(publicDir, 'portraits'))
+    ? fs.readdirSync(path.join(publicDir, 'portraits')).filter((f) => /\.webp$/.test(f) && f !== 'cheer.webp').sort().map((f) => `${base}portraits/${f}`) : [];
+  return { core, modelsGz, modelsRaw, extra: portraits };
+}
+
+/** 빌드 때 sw.js 를 만듦: 목록·캐시 이름을 본문에 넣어서 → 무엇이든 바뀌면 sw.js 글자가 바뀌어 브라우저가 새 버전을 알아챔 */
+function serviceWorker(versions) {
+  let base = '/';
+  return {
+    name: 'unico-sw',
+    apply: 'build',
+    configResolved(c) { base = c.base || '/'; },
+    generateBundle(_, bundle) {
+      const lists = swLists(bundle, versions, base);
+      const html = bundle['index.html']?.source || '';
+      const cache = 'unico-' + crypto.createHash('sha1').update(JSON.stringify(lists) + String(html) + swSource({ cache: '', base, ...lists })).digest('hex').slice(0, 8);
+      this.emitFile({ type: 'asset', fileName: 'sw.js', source: swSource({ cache, base, ...lists }) });
+    },
+  };
+}
+
 /**
  * 빌드 번호 '<커밋 앞 7자> <빌드 날짜(한국 시간)>': 플레이어 오류 제보를 어느 배포인지 잇기 위해
  * 커밋은 Vercel·GitHub Actions 환경변수 → git → 없으면 'dev' (Vercel 빌드에는 .git 이 없을 수 있음)
@@ -83,7 +219,7 @@ export default defineConfig(({ command }) => {
   return {
     // __BUILD__: 같은 빌드 번호 (쓰는 청크는 커밋마다 해시가 바뀜 → 브라우저 코드는 meta 를 먼저). 개발 서버에는 없음 → typeof 로 확인
     define: versions ? { __MODEL_V__: JSON.stringify(versions), __BUILD__: JSON.stringify(build) } : {},
-    plugins: versions ? [modelPreload(versions), buildMeta(build)] : [],
+    plugins: versions ? [modelPreload(versions), buildMeta(build), serviceWorker(versions)] : [],
     server: {
       port: 5173,
       proxy: {

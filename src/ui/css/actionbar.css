@@ -2,7 +2,11 @@
 /* 하단 액션바 */
 .actionbar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 4px; background: rgba(35,25,22,0.82); padding: 6px; border-radius: 20px; box-shadow: var(--shadow); backdrop-filter: blur(6px); }
 .actionbar button { background: transparent; box-shadow: none; color: #fff; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 12px; font-size: 11px; font-weight: 600; border-radius: 14px; min-width: 56px; }
-.actionbar button span { font-size: 20px; }
+.actionbar button span { font-size: 20px; line-height: 1; }
+/* 자체 아이콘: 나무 칸(34×30) 안에 24px, 폰은 20px */
+.actionbar button span .ico { width: 24px; height: 24px; vertical-align: 0; display: block; }
+.bar-toggle .ico { display: block; margin: auto; }
+.auto-chip b .ico { width: 1.2em; height: 1.2em; vertical-align: -0.25em; }
 .actionbar button:hover { background: rgba(255,255,255,0.12); }
 .actionbar .sep { width: 1px; background: rgba(255,255,255,0.2); margin: 4px 2px; }
 .emote-menu { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); display: flex; gap: 6px; background: var(--panel); padding: 8px; border-radius: 16px; box-shadow: var(--shadow); }
@@ -38,6 +42,7 @@ body.cine .auto-chip { opacity: 0; pointer-events: none; }
   #ui.bar-open .actionbar { display: flex; }
   .actionbar button { flex: 1 1 0; min-width: 0; min-height: 48px; padding: 4px 0; font-size: 11px; border-radius: 10px; white-space: nowrap; overflow: hidden; }
   .actionbar button span { font-size: 16px; }
+  .actionbar button span .ico { width: 21px; height: 21px; }
   .actionbar .sep { display: none; }
   .emote-menu { left: calc(8px + var(--sal)); bottom: calc(62px + var(--sab)); transform: none; max-width: calc(100vw / var(--ui-zoom, 1) - 16px - var(--sal) - var(--sar)); flex-wrap: wrap; }
   .auto-chip { bottom: calc(126px + var(--sab)); font-size: 11px; padding: 4px 10px; z-index: 3; }

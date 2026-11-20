@@ -3,6 +3,7 @@ import { LAYOUT } from '../game/world.js';
 import { HILLS } from '../game/terrain.js';
 import { touchUI } from '../game/input.js';
 import { BUSY_TRAVEL, BUSY_TOAST } from '../game/game_travel.js';
+import { icoBitmap } from './icons.js';
 
 /** 빠른 이동 장소 (지도 아래 버튼) — x,z 는 도착 지점(길 위) */
 export const PLACES = [
@@ -11,7 +12,7 @@ export const PLACES = [
   { id: 'ranch', name: '🐄 목장', x: 14, z: 3 },
   { id: 'paddy', name: '🌾 논', x: 0, z: -15.5 },
   { id: 'smartfarm', name: '📱 스마트팜', x: -15.5, z: -6 },
-  { id: 'pond', name: '🪷 연못', x: -7.3, z: 13.4 },
+  { id: 'pond', name: '🌸 연못', x: -7.3, z: 13.4 },
   { id: 'lake', name: '🎣 낚시터', x: -12.5, z: 22.4 },
   { id: 'field', name: '🚜 밭갈이', x: 26, z: 15 },
   { id: 'koat', name: '🏢 KOAT 체험관', x: 25, z: -24 },
@@ -71,6 +72,15 @@ export function mapZoom(rectW, offsetW) {
 
 /** 작은 지도에서 이보다 작게(px) 보이는 잔 시설은 그리지 않음 (뜻 없는 점이 되므로) */
 export const MIN_PROP_PX = 6;
+
+/**
+ * 물가 모양: world.shoreShape(id) 가 주는 점 목록([[x,z]…] 또는 [{x,z}…])을 [[x,z]…] 로, 없거나 너무 적으면 null (동그라미로 그림)
+ */
+export function shorePoints(shape) {
+  if (!Array.isArray(shape) || shape.length < 3) return null;
+  const pts = shape.map((p) => (Array.isArray(p) ? [p[0], p[1]] : [p?.x, p?.z]));
+  return pts.every(([x, z]) => Number.isFinite(x) && Number.isFinite(z)) ? pts : null;
+}
 
 /** 우상단 미니맵 (2D 캔버스). 누르면 큰 지도가 열리고, 큰 지도에서 원하는 곳을 누르면 그곳으로 이동 */
 export class Minimap {
@@ -132,7 +142,7 @@ export class Minimap {
   /** 고정 그림 캐시가 낡았는가: 크기·마을 공사·전망대 발견이 바뀌면 다시 그림 */
   _staticKey(v, big) {
     const g = this.game;
-    let k = `${v.S}|${v.k}|${big ? 1 : 0}|${g.season?.season?.id ?? g.season?.cur ?? ''}|`;
+    let k = `${v.S}|${v.k}|${big ? 1 : 0}|${g.season?.season?.id ?? g.season?.cur ?? ''}|${this._icoGen || 0}|`;
     for (const [i] of LAYOUT.town.sites.entries()) k += g.town?.sim.sites[i]?.state === 'empty' || !g.town ? '0' : '1';
     if (big || v.S >= 120) for (const H of HILLS) k += g.explore?.seen?.[H.id] ? 'y' : 'n';
     return k;
@@ -172,8 +182,9 @@ export class Minimap {
     const rect = (x0, z0, x1, z1, col) => { c.fillStyle = col; c.fillRect(X(x0), Z(z0), (x1 - x0) * k, (z1 - z0) * k); };
     // 잔 시설: 작은 지도에서 MIN_PROP_PX 보다 작으면 생략
     const prop = (x0, z0, x1, z1, col) => { if (big || Math.max(x1 - x0, z1 - z0) * k >= MIN_PROP_PX) rect(x0, z0, x1, z1, col); };
-    // 언덕: 등고선처럼 겹친 원 (+ 작은 지도는 폰이 아니면 산 표시, 큰 지도는 전망대)
+    // 언덕: 등고선처럼 겹친 원 (+ 작은 지도는 폰이 아니면 산 표시, 다녀온 곳은 깃발 꽂힌 산). 자체 아이콘 그림 (굵은 지도용)
     const hillIcon = big || S >= 120;
+    const ipx = Math.round(12 * ui);
     for (const H of HILLS) {
       for (let ring = 3; ring >= 1; ring--) {
         c.fillStyle = `rgba(${70 + ring * 6}, ${120 + ring * 8}, 60, ${0.14 + (3 - ring) * 0.08})`;
@@ -181,8 +192,9 @@ export class Minimap {
       }
       if (hillIcon) {
         const seen = this.game.explore?.seen?.[H.id];
-        c.font = `${10 * ui}px 'Unico Coin', sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#000';
-        c.fillText(seen ? '🔭' : '⛰️', X(H.x), Z(H.z));
+        // 그림이 아직 안 읽혔으면 이번엔 건너뛰고, 읽히면 고정 그림을 다시 그림 (_staticKey 의 그림 준비 표시가 바뀜)
+        const b = icoBitmap(seen ? 'pin-view' : 'pin-hill', Math.round(ipx * 2), () => { this._icoGen = (this._icoGen || 0) + 1; });
+        if (b?.ready) c.drawImage(b.img, X(H.x) - ipx / 2, Z(H.z) - ipx / 2, ipx, ipx);
       }
     }
     // 흙길
@@ -195,8 +207,15 @@ export class Minimap {
     rect(L.smartfarm.x - 4, L.smartfarm.z - 4.5, L.smartfarm.x + 4, L.smartfarm.z + 4.5, '#eaf7ff');
     const fd = L.field; rect(fd.x0, fd.z0, fd.x0 + fd.cols * fd.cell, fd.z0 + fd.rows * fd.cell, '#b08a5a');
     rect(L.market.x - 1.5, L.market.z - 0.6, L.market.x + 1.5, L.market.z + 0.6, '#e35d5d');
-    c.fillStyle = '#6fc3e8'; c.beginPath(); c.arc(X(L.pond.x), Z(L.pond.z), L.pond.r * k, 0, 7); c.fill();
-    c.beginPath(); c.arc(X(L.lake.x), Z(L.lake.z), L.lake.r * k, 0, 7); c.fill();
+    // 연못·호수: 물가 모양이 있으면 그 모양, 없으면 동그라미
+    c.fillStyle = '#6fc3e8';
+    for (const [id, w] of [['pond', L.pond], ['lake', L.lake]]) {
+      const pts = shorePoints(this.game.world?.shoreShape?.(id));
+      c.beginPath();
+      if (pts) { pts.forEach(([x, z], i) => (i ? c.lineTo(X(x), Z(z)) : c.moveTo(X(x), Z(z)))); c.closePath(); }
+      else c.arc(X(w.x), Z(w.z), w.r * k, 0, 7);
+      c.fill();
+    }
     for (const b of L.lake.pier) rect(b.x0, b.z0, b.x1, b.z1, '#b08457');
     prop(L.ranchWork.x - 1.4, L.ranchWork.z - 1.4, L.ranchWork.x + 1.4, L.ranchWork.z + 1.4, '#f2c84b');
     prop(L.craft.jars.x - 1.7, L.craft.jars.z - 0.8, L.craft.jars.x + 1.7, L.craft.jars.z + 0.8, '#5a3523');

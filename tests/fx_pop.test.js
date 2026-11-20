@@ -82,6 +82,6 @@ test('모든 fx.pop( 자리가 길잡이 표에 있고, 표대로 가방·지갑
 
 test('예전 정규식 가방 날리기를 HUD 가 명시적인 길로 바꿔 끼움 (onPop·onCoin)', () => {
   const hud = readFileSync(new URL('src/ui/hud.js', ROOT), 'utf8');
-  assert.match(hud, /g\.fx\.onPop = \(t, p\) => this\.flyToBag\(t, p\)/);
+  assert.match(hud, /g\.fx\.onPop = \(t, p, o\) => this\.flyToBag\(t, p, o\)/);
   assert.match(hud, /g\.fx\.onCoin = \(n, p\) => this\.flyToCoin\(n, p\)/);
 });

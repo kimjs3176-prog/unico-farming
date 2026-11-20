@@ -2,7 +2,7 @@
 코인 아이콘 글꼴 만들기: python3 scripts/coin/build_coin_font.py  (pip install fonttools brotli)
 → public/fonts/unico-coin.woff2  (🪙 U+1FA99 한 글자, COLRv0 컬러 글꼴)
 """
-# Fluent Emoji Flat 'coin' (MIT, Microsoft) → COLRv0 컬러 폰트 (U+1FA99 🪙 하나만)
+# 자체 제작 코인 그림 coin.svg (채움 층만) → COLRv0 컬러 폰트 (U+1FA99 🪙 하나만, 글꼴 이름·주소는 그대로)
 import os, re
 HERE = os.path.dirname(os.path.abspath(__file__))
 from fontTools.fontBuilder import FontBuilder
@@ -12,7 +12,7 @@ from fontTools.pens.cu2quPen import Cu2QuPen
 from fontTools.svgLib.path import parse_path
 from fontTools.pens.reverseContourPen import ReverseContourPen
 from fontTools.ttLib.tables import otTables
-svg = open(os.path.join(HERE, 'fluent_coin_flat.svg')).read()
+svg = open(os.path.join(HERE, 'coin.svg')).read()
 paths = re.findall(r'<path([^>]*)/>', svg)
 layers = []
 for attrs in paths:

@@ -24,7 +24,8 @@
 
 /* 코인 지갑: 숫자가 바뀌어도 폭이 흔들리지 않게 고정폭 숫자 + 최소 폭(ch) */
 .purse { flex: none; display: flex; align-items: center; gap: 5px; margin-top: 8px; height: 36px; padding: 0 12px 0 8px; border-radius: 18px; }
-.purse .coin-ico { font-style: normal; font-size: 20px; line-height: 1; }
+.purse .coin-ico { font-style: normal; font-size: 20px; line-height: 1; display: flex; }
+.purse .coin-ico .ico { width: 1.1em; height: 1.1em; vertical-align: 0; }
 .purse .money { font-size: 20px; min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
 .money { font-weight: 900; display: inline-block; }
 .money.bump { animation: bump 0.4s cubic-bezier(.3,1.8,.5,1); }
@@ -36,16 +37,24 @@
 .hud-top .calendar { margin: 0 0 0 auto; flex: none; width: 150px; padding: 5px 10px 6px; display: flex; flex-direction: column; align-items: stretch; gap: 1px; border-radius: 14px 14px 5px 5px; text-align: left; }
 .calendar .cal-l1, .calendar .cal-l2 { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; overflow: hidden; }
 .calendar .cal-l1 { justify-content: space-between; }
-.calendar .cal-s { font-size: 15px; }
+.calendar .cal-s { font-size: 15px; display: inline-flex; align-items: center; gap: 3px; }
+.calendar .cal-si .ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; display: block; }
 .calendar .cal-w { font-size: 12px; }
 .calendar .cal-t { font-size: 22px; line-height: 1.1; font-variant-numeric: tabular-nums; font-weight: 400; }
-.calendar .cal-wx { font-size: 18px; margin-left: auto; }
+.calendar .cal-wx { font-size: 18px; margin-left: auto; align-self: center; line-height: 1; }
+.calendar .cal-wx .ico { display: block; }
 .calendar .cal-temp { font-size: 15px; font-variant-numeric: tabular-nums; }
 .hud-top .calendar:hover:not(:disabled) { transform: none; filter: brightness(1.03); }
 
 /* 오른쪽 버튼: 가방 · 퀘스트 · 설정 · 도움말 (달력 왼쪽, 44px 동그라미). 단축키 글자는 올리거나 키보드로 고를 때만 */
 .hud-right { position: absolute; top: 18px; right: calc(12px + 150px + 12px); display: flex; gap: 8px; }
 .hud-right .hud-btn { position: relative; width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 20px; display: grid; place-items: center; }
+.hud-right .hud-btn .ico { width: 26px; height: 26px; }
+/* 도움말: 이모지 ❔ 대신 굵은 '?' 글자 (크림 단추 위 갈색) */
+.hud-btn .help-q { font-family: var(--display); font-weight: 400; font-size: 25px; line-height: 1; color: var(--brown); }
+.hud-btn .qbadge .ico { width: 14px; height: 14px; vertical-align: -2px; }
+.p-badge .pb-lv .ico { width: 1.05em; height: 1.05em; vertical-align: -0.18em; margin-right: 2px; }
+.boost-chip .ico { width: 1.15em; height: 1.15em; vertical-align: -0.22em; }
 .hud-right .hud-btn.bump { animation: bump 0.4s cubic-bezier(.3,1.8,.5,1); }
 .hud-btn .kc { position: absolute; left: 50%; bottom: -15px; transform: translateX(-50%); font-size: 11px; line-height: 1; padding: 2px 5px; border-radius: 5px; opacity: 0; pointer-events: none; transition: opacity 0.12s; }
 .hud-btn:hover .kc, .hud-btn:focus-visible .kc { opacity: 1; }
@@ -69,6 +78,7 @@ body.cine .hud-right, body.cine .boost-chip, body.cine .p-badge, body.cine .cale
 /* 지갑으로 날아가는 코인: 위로 튀었다가 곡선으로 (경로·크기는 hud.js 의 animate), 안쪽 글자는 빙글 (낮음 품질은 빛 없음 — hud.js 가 filter 를 끔) */
 .fly.coin { font-size: 30px; line-height: 1; transition: none; filter: drop-shadow(0 0 4px rgba(255,214,90,0.9)) drop-shadow(0 2px 1px rgba(120,70,0,0.35)); }
 .fly.coin i { display: inline-block; font-style: normal; animation: coin-spin 0.3s linear infinite; }
+.fly .ico { width: 1em; height: 1em; vertical-align: 0; display: block; }
 @keyframes coin-spin { 0% { transform: scaleX(1); } 50% { transform: scaleX(0.25); } 100% { transform: scaleX(1); } }
 @media (prefers-reduced-motion: reduce) { .fly.coin i { animation: none; } }
 .coin-plus { position: fixed; z-index: 41; pointer-events: none; font-family: var(--display); font-size: 18px; color: #a8650a; text-shadow: 0 1px 0 #fff, 0 0 4px #fff; white-space: nowrap; animation: coin-plus 0.85s ease-out forwards; }
@@ -100,6 +110,7 @@ body.cine .hud-right, body.cine .boost-chip, body.cine .p-badge, body.cine .cale
   .calendar .cal-temp { display: none; } /* 폰은 시각·날씨 그림만 (기온은 날씨 창·읽어 주기 글에) */
   .hud-right { top: calc(var(--map-b, 140px) + 14px); right: calc(4px + var(--sar)); width: 86px; justify-content: space-between; gap: 0; }
   .hud-right .hud-btn { width: 40px; height: 40px; font-size: 18px; }
+  .hud-right .hud-btn .ico { width: 23px; height: 23px; }
   .hud-right .quest-btn, .hud-right .help-btn { display: none; } /* 설정(⚙)은 남김: 폰에서 그래픽 품질·소리·글자 크기로 가는 길 */
   .hud-right .hud-btn::after { content: ''; position: absolute; inset: -3px; }
   .fly.coin { font-size: 24px; }

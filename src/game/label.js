@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fixEmoji, icoBitmap } from '../ui/icons.js';
 
 const FAMILY = `'Unico Coin', Jua, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
 
@@ -46,16 +47,25 @@ const clearBg = (bg) => /^transparent$|rgba\([^)]*,\s*0(\.0+)?\s*\)$/.test(Strin
 /** 글자·숫자가 있으면 테두리 (이모지만 있으면 그림자만: 컬러 이모지 글꼴은 테두리가 안 그려지거나 상자로 그려짐) */
 const hasLetters = (t) => /[\p{L}\p{N}+\-]/u.test(t);
 
-/** 캔버스 텍스트 스프라이트 (이름표 / 말풍선) */
-export function makeLabel(text, { color = '#ffffff', bg = 'rgba(35,25,22,0.75)', size = 42, scale = 0.0055 } = {}) {
+/**
+ * 캔버스 텍스트 스프라이트 (이름표 / 말풍선)
+ * icon: 자체 아이콘 이름 (icons.svg) — 글 왼쪽에 그림, 그림이 늦게 읽히면 읽힌 뒤 다시 그림
+ * 오래된 기기에 없는 새 이모지(🪱·🫏 등)는 옛 이모지로 바꿔 그림 (fixEmoji)
+ */
+export function makeLabel(text, { color = '#ffffff', bg = 'rgba(35,25,22,0.75)', size = 42, scale = 0.0055, icon = null } = {}) {
+  text = fixEmoji(text);
   const font = `${size}px ${FAMILY}`;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const clear = clearBg(bg);
   let tex = null, sprite = null, dead = false;
+  const isz = Math.round(size * 1.05), igap = icon ? Math.round(size * 0.22) : 0;
+  const bmp = icon ? icoBitmap(icon, isz * 2, () => { if (!dead) draw(); }) : null;
+  const iw = icon ? isz + igap : 0; // 아이콘 자리 (그림이 아직이어도 미리 비워 둠 → 읽힌 뒤 크기가 안 바뀜)
   const draw = () => {
     ctx.font = font;
-    const w = Math.ceil(ctx.measureText(text).width) + 40;
+    const tw = Math.ceil(ctx.measureText(text).width);
+    const w = tw + 40 + iw;
     const h = size + 28;
     if (canvas.width !== w || canvas.height !== h) {
       tex?.dispose(); // 크기가 바뀌면 GPU 텍스처를 새로 잡아야 함 (크기 고정 저장)
@@ -79,12 +89,14 @@ export function makeLabel(text, { color = '#ffffff', bg = 'rgba(35,25,22,0.75)',
         ctx.lineJoin = 'round';
         ctx.lineWidth = Math.max(4, Math.round(size * 0.13));
         ctx.strokeStyle = '#4a2c18';
-        ctx.strokeText?.(text, w / 2, h / 2 + 2);
+        ctx.strokeText?.(text, w / 2 + iw / 2, h / 2 + 2);
         ctx.shadowColor = 'rgba(0,0,0,0)';
       }
     }
+    const tx = w / 2 + iw / 2;
+    if (bmp?.ready) ctx.drawImage(bmp.img, tx - tw / 2 - iw, (h - isz) / 2, isz, isz);
     ctx.fillStyle = color;
-    ctx.fillText(text, w / 2, h / 2 + 2);
+    ctx.fillText(text, tx, h / 2 + 2);
     ctx.shadowColor = 'rgba(0,0,0,0)';
     sprite?.scale.set(w * scale, h * scale, 1);
     if (tex) tex.needsUpdate = true;

@@ -84,3 +84,45 @@ test('자체 서버: 매니페스트는 manifest+json 으로 보냄', () => {
   const src = read('server/index.js').toString();
   assert.match(src, /'\.webmanifest': 'application\/manifest\+json'/);
 });
+
+test('설치형 앱 매니페스트: id·방향·분류 + 넓은/좁은 스크린샷이 적힌 크기 그대로 있음', () => {
+  const m = JSON.parse(read('public/manifest.webmanifest'));
+  assert.equal(m.id, '/');
+  assert.equal(m.orientation, 'any');
+  assert.deepEqual(m.categories, ['games', 'education']);
+  // JPEG 크기: SOF0~2 표시에서 높이·너비
+  const jpg = (p) => { const b = readBin(p); let i = 2; while (i < b.length) { const mk = b[i + 1], len = b.readUInt16BE(i + 2); if (mk >= 0xc0 && mk <= 0xc2) return `${b.readUInt16BE(i + 7)}x${b.readUInt16BE(i + 5)}`; i += 2 + len; } return ''; };
+  assert.deepEqual(m.screenshots.map((s) => s.form_factor).sort(), ['narrow', 'wide']);
+  for (const s of m.screenshots) {
+    assert.equal(s.type, 'image/jpeg');
+    assert.equal(jpg(`public/${s.src}`), s.sizes, s.src);
+    assert.ok(s.label);
+  }
+});
+
+test('구글 글꼴 CSS 는 첫 화면을 막지 않음: preload + media=print + font-css.js 가 켬, 미리 연결 두 개는 그대로', () => {
+  const html = read('index.html');
+  const GF = 'https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap';
+  assert.ok(html.includes(`<link rel="preload" as="style" href="${GF}" />`));
+  assert.ok(html.includes(`<link id="gf-css" rel="stylesheet" media="print" href="${GF}" />`));
+  assert.equal((html.match(/rel="stylesheet"[^>]*fonts\.googleapis|fonts\.googleapis[^>]*rel="stylesheet"/g) || []).length, 1, '구글 CSS 는 print 로 붙인 하나뿐');
+  assert.match(html, /<script src="\/font-css\.js" async><\/script>/);
+  assert.match(html, /rel="preconnect" href="https:\/\/fonts\.googleapis\.com"/);
+  assert.match(html, /rel="preconnect" href="https:\/\/fonts\.gstatic\.com" crossorigin/);
+  const js = read('public/font-css.js');
+  assert.match(js, /getElementById\('gf-css'\)/);
+  assert.match(js, /l\.media = 'all'/);
+  assert.match(js, /window\.__gfReady = new Promise/);
+  assert.match(html, /<script type="module" src="\/src\/game\/sw_register\.js"><\/script>/);
+});
+
+test('코인 글꼴: 자체 그림으로 다시 만듦 (MIT 그림·라이선스 파일 없음), 글꼴 이름·주소는 그대로', () => {
+  assert.equal(existsSync(new URL('scripts/coin/fluent_coin_flat.svg', root)), false);
+  assert.equal(existsSync(new URL('scripts/coin/LICENSE-fluentui-emoji.txt', root)), false);
+  assert.match(read('scripts/coin/build_coin_font.py'), /'coin\.svg'/);
+  const b = readBin('public/fonts/unico-coin.woff2');
+  assert.equal(b.toString('latin1', 0, 4), 'wOF2');
+  assert.ok(b.length < 1024, `${b.length}바이트`);
+  assert.match(read('src/ui/css/base.css'), /@font-face \{ font-family: 'Unico Coin'; src: url\('\/fonts\/unico-coin\.woff2'\)/);
+  assert.doesNotMatch(read('src/ui/css/base.css'), /Fluent|MIT/);
+});

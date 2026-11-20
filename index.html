@@ -16,7 +16,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+  <!-- 구글 글꼴 CSS: 첫 화면을 막지 않게 (미리 받기 + media=print 로 붙여 두고 font-css.js 가 받은 뒤 켬). 막힌 망에서도 제목이 바로 보임 -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" />
+  <link id="gf-css" rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" />
+  <script src="/font-css.js" async></script>
   <link rel="stylesheet" href="/src/ui/style.css" />
   <link rel="stylesheet" href="/src/ui/theme.css" />
 </head>
@@ -55,5 +58,7 @@
     </div>
   </div>
   <script type="module" src="/src/main.js"></script>
+  <!-- 설치형 앱: 오프라인으로도 열리게 하는 서비스 워커 등록·설치 단추 (배포 빌드에서만, 게임이 뜬 뒤) -->
+  <script type="module" src="/src/game/sw_register.js"></script>
 </body>
 </html>

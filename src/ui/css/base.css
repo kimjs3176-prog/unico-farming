@@ -1,6 +1,6 @@
 /* 바탕: 코인 글꼴·색 변수·글꼴·#ui 층(클릭·확대·안전 영역)·기본 단추 */
-/* 🪙 코인: 오래된 Windows 등 시스템에 없는 이모지라 안 보이던 문제 → 코인 한 글자만 든 컬러 글꼴(524바이트)을 앞에 둠
-   (Fluent Emoji Flat 'coin', MIT · Microsoft — docs/ASSETS_CC0.md). unicode-range 덕분에 다른 글자는 그대로 */
+/* 🪙 코인: 오래된 Windows 등 시스템에 없는 이모지라 안 보이던 문제 → 코인 한 글자만 든 컬러 글꼴을 앞에 둠
+   (자체 제작 그림 scripts/coin/coin.svg → build_coin_font.py, 어느 기기에서나 같은 모양). unicode-range 덕분에 다른 글자는 그대로 */
 @font-face { font-family: 'Unico Coin'; src: url('/fonts/unico-coin.woff2') format('woff2'); unicode-range: U+1FA99; font-display: block; }
 :root {
   --ink: #231916; --teal: #30b6aa; --teal-d: #299d93; --gold: #fac03e; --leaf: #6dbb4f; --pink: #f1deec;
@@ -34,3 +34,5 @@ button.ghost { background: #eee; color: var(--ink); box-shadow: 0 3px 0 #ccc; }
 button.gold { background: var(--gold); color: var(--ink); box-shadow: 0 3px 0 #d9a21c; }
 button:disabled { opacity: 0.45; cursor: default; }
 @keyframes popin { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+/* 자체 아이콘 (icons.js ico): 글자 크기의 1.25배, 글줄 가운데쯤 */
+.ico { display: inline-block; width: 1.25em; height: 1.25em; vertical-align: -0.28em; flex: none; overflow: visible; pointer-events: none; }

@@ -7,6 +7,7 @@ import { portraitSVG } from './portrait2d.js';
 import { showRibbon, showUnlockCard } from './levelup.js';
 import { reward } from '../game/reward.js';
 import { unreadCount } from './letters.js';
+import { ico, injectSprite, SEASON_ICO, weatherIco, emojiHtml } from './icons.js';
 
 /** '+N XP' 작은 표시: 이 간격(ms)에 한 번만 (모아서), 낮은 품질은 더 드물게 */
 export const XP_FLOAT_MS = 1500, XP_FLOAT_MS_LOW = 3000;
@@ -60,9 +61,14 @@ export const seasonLine = (icon, name, dayIn) => `${icon} ${name} ${dayIn}일`;
 
 /** 위쪽 HUD 메서드 (UI.prototype 에 합쳐짐) */
 export const HudUI = {
+  /** 자체 아이콘 HTML (다른 화면 코드도 this.ico?.('lock') 처럼 씀) */
+  ico,
+  /** 오래된 기기에 없는 새 이모지를 자체 아이콘·옛 이모지로 바꾼 HTML */
+  emojiHtml,
   /** 위쪽 HUD 만들기 (FPS 칩 → 위쪽 막대 → 오른쪽 버튼 → 부스트·이벤트 배너 순서로 붙임) */
   buildHud() {
     const root = this.root;
+    injectSprite(); // 아이콘 그림 묶음 (한 번만)
     this.top = h('div', 'hud-top');
     // 플레이어 배지: 얼굴 + 경험치 고리(--xp) + 'Lv N' 이름표. 누르면 경험치 숫자
     this.badge = h('button', 'p-badge', '<span class="pb-ring"><span class="pb-face"></span></span><span class="pb-lv">Lv <b class="lv">1</b></span><span class="pb-xp"></span>');
@@ -70,25 +76,25 @@ export const HudUI = {
     this.badge.onclick = () => this.peekXp();
     this.levelChip = this.badge;
     // 코인 지갑: 날아온 코인이 닿는 곳 (this.coinTarget)
-    this.purse = h('div', 'purse', '<i class="coin-ico">🪙</i><b class="money">0</b>');
+    this.purse = h('div', 'purse', `<i class="coin-ico">${ico('coin')}</i><b class="money">0</b>`);
     this.purse.title = '코인';
     this.moneyChip = this.purse;
     this.coinTarget = this.purse;
     // 달력: 미니맵 위에 붙은 나무 판 (계절·날짜 / 시각·날씨·기온). 누르면 날씨 창
-    this.calendar = h('button', 'calendar', '<span class="cal-l1"><span class="cal-s">🌸 봄 1일</span><small class="cal-w">1/7</small></span><span class="cal-l2"><b class="cal-t">08:00</b><span class="cal-wx">🌤️</span><span class="cal-temp"></span></span>');
+    this.calendar = h('button', 'calendar', `<span class="cal-l1"><span class="cal-s"><span class="cal-si">${ico('spring')}</span><span class="cal-st">봄 1일</span></span><small class="cal-w">1/7</small></span><span class="cal-l2"><b class="cal-t">08:00</b><span class="cal-wx">${ico('suncloud')}</span><span class="cal-temp"></span></span>`);
     this.calendar.title = '날씨 자세히 보기 · 계절은 7일마다 바뀌어요 (제철 작물은 빨리 자라고 비싸게 팔려요)';
     this.calendar.onclick = () => this.openWeather();
     this.weatherChip = this.calendar;
     // 오른쪽 버튼: 가방 · 퀘스트(받을 보상 수) · 설정 · 도움말 (폰은 가방·설정만). 단축키는 올리거나 키보드로 고를 때만
     const right = (this.hudRight = h('div', 'hud-right'));
-    this.btnBag = h('button', 'ghost hud-btn bag-btn', '🎒<kbd class="kc">I</kbd>');
+    this.btnBag = h('button', 'ghost hud-btn bag-btn', `${ico('bag')}<kbd class="kc">I</kbd>`);
     this.btnBag.setAttribute('aria-label', '가방 (I)');
-    this.btnQuest = h('button', 'ghost hud-btn quest-btn', '📜<b class="qbadge"></b><kbd class="kc">Q</kbd>');
+    this.btnQuest = h('button', 'ghost hud-btn quest-btn', `${ico('quest')}<b class="qbadge"></b><kbd class="kc">Q</kbd>`);
     this.btnQuest.setAttribute('aria-label', '퀘스트 (Q)');
-    this.btnSettings = h('button', 'ghost hud-btn set-btn', '⚙️');
+    this.btnSettings = h('button', 'ghost hud-btn set-btn', ico('gear'));
     this.btnSettings.setAttribute('aria-label', '환경설정');
     this.btnSettings.title = '환경설정 (그래픽 품질·소리·글자 크기)';
-    this.btnHelp = h('button', 'ghost hud-btn help-btn', '❔');
+    this.btnHelp = h('button', 'ghost hud-btn help-btn', '<b class="help-q" aria-hidden="true">?</b>') // 이모지 ❔ 는 크림 단추 위에서 거의 안 보였음;
     this.btnHelp.setAttribute('aria-label', '도움말');
     this.btnHelp.title = '도움말';
     this.btnSettings.onclick = () => this.openSettings();
@@ -101,7 +107,7 @@ export const HudUI = {
     this.top.append(this.badge, this.purse, this.calendar);
     root.append(this.top, right);
     // 성장 부스트: 미니맵 아래 가장자리에 걸친 작은 알약
-    this.boostChip = h('div', 'boost-chip', '🌱 <span class="v"></span>');
+    this.boostChip = h('div', 'boost-chip', `${ico('sprout')} <span class="v"></span>`);
     this.boostChip.title = '성장 부스트';
     this.boostChip.style.display = 'none';
     root.append(this.boostChip);
@@ -113,7 +119,10 @@ export const HudUI = {
   /** 계절 줄 (season_view 가 날이 바뀔 때 부름) */
   setSeason(icon, name, dayIn) {
     const s = this.calendar?.querySelector('.cal-s'), w = this.calendar?.querySelector('.cal-w');
-    if (s) s.textContent = seasonLine(icon, name, dayIn);
+    const si = this.calendar?.querySelector('.cal-si'), st = this.calendar?.querySelector('.cal-st');
+    // 계절 그림은 자체 아이콘, 글은 '봄 1일' (모르는 이모지면 그대로 글로)
+    if (si && st && SEASON_ICO[icon]) { si.innerHTML = ico(SEASON_ICO[icon]); st.textContent = `${name} ${dayIn}일`; }
+    else if (s) s.textContent = seasonLine(icon, name, dayIn);
     if (w) w.textContent = `${dayIn}/7`;
   },
 
@@ -121,7 +130,8 @@ export const HudUI = {
   setWeather(w, svc) {
     this.weatherInfo = { w, svc };
     const c = this.calendar;
-    c.querySelector('.cal-wx').textContent = w.emoji;
+    const wi = weatherIco(w);
+    if (wi !== this._wxIco) { this._wxIco = wi; c.querySelector('.cal-wx').innerHTML = ico(wi); }
     c.querySelector('.cal-temp').textContent = w.temperature != null ? `${Math.round(w.temperature)}°` : '';
     c.setAttribute('aria-label', `날씨 ${w.label}${w.temperature != null ? ` ${Math.round(w.temperature)}도` : ''}`);
     if (this.panel?.dataset.kind === 'weather') this.openWeather();
@@ -135,7 +145,7 @@ export const HudUI = {
     const { w, svc } = info;
     const src = { live: '실시간 (Open-Meteo)', manual: '수동 설정', offline: '연결 실패 · 맑음으로 표시', default: '기본값' }[svc.source] || svc.source;
     const rows = [
-      `${w.emoji} <b>${w.label}</b>${w.temperature != null ? ` · ${Math.round(w.temperature)}°C` : ''}`,
+      `${ico(weatherIco(w))} <b>${w.label}</b>${w.temperature != null ? ` · ${Math.round(w.temperature)}°C` : ''}`,
       `📍 ${esc(svc.loc?.name || '-')}${svc.usingDefault ? ' (기본 위치)' : ''}  <small>${svc.usingDefault ? "아래 '📡 내 위치 날씨'를 누르면 지금 있는 동네 날씨로 바뀌어요 (위치는 약 1km 단위로만 써요)" : '(위치 권한을 거부하면 기본 위치를 사용해요)'}</small>`,
       `💨 바람 ${Math.round(w.windKmh || 0)} km/h · ☁️ 구름 ${Math.round(w.cloud * 100)}%`,
       `🔄 출처: ${src} · 15분마다 갱신`,
@@ -166,12 +176,13 @@ export const HudUI = {
   },
 
   /** 월드 위치에서 가방 버튼으로 아이콘이 날아감 (가방에 실제로 들어온 물건만) */
-  flyToBag(text, worldPos) {
+  flyToBag(text, worldPos, o) {
     const g = this.game;
     const s = this._screenOf(worldPos);
     if (!s) return;
     const bag = this.btnBag.getBoundingClientRect();
-    const el = h('div', 'fly', text);
+    // 아이템 아이콘 판(item_icons)이 있으면 그 그림, 아니면 이모지 (오래된 기기에 없는 새 이모지는 바꿔서)
+    const el = h('div', 'fly', (o?.id && this.itemIcon?.(o.id, { size: 30 })) || emojiHtml(esc(text)));
     el.style.left = `${s.x - 15}px`; el.style.top = `${s.y - 15}px`;
     document.body.append(el);
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -217,7 +228,7 @@ export const HudUI = {
         let el = null;
         if (tgt && (this._liveCoins || 0) < COIN_LIVE_CAP && !document.hidden) {
           this._liveCoins = (this._liveCoins || 0) + 1;
-          el = h('div', 'fly coin', '<i>🪙</i>');
+          el = h('div', 'fly coin', `<i>${ico('coin')}</i>`);
           if (low) el.style.filter = 'none';
           const jx = (Math.random() - 0.5) * 26, jy = (Math.random() - 0.5) * 18; // 한 점에서 나오지 않게 살짝 흩뿌림
           el.style.left = `${sx + jx - 15}px`; el.style.top = `${sy + jy - 15}px`;
@@ -356,7 +367,7 @@ export const HudUI = {
     // 처음 한 번: 효과 연결 (가방·지갑으로 날리기, 보상 등급) · 배지 얼굴
     if (!this._wired && g.fx) {
       this._wired = true;
-      g.fx.onPop = (t, p) => this.flyToBag(t, p);
+      g.fx.onPop = (t, p, o) => this.flyToBag(t, p, o);
       g.fx.onCoin = (n, p) => this.flyToCoin(n, p);
       g.reward ||= (tier, o) => reward(g, tier, o);
     }
@@ -408,7 +419,7 @@ export const HudUI = {
       this._maxed = mx;
       this.badge.classList.toggle('maxed', mx);
       const pill = this.badge.querySelector('.pb-lv');
-      if (pill) { pill.innerHTML = mx ? '<span aria-hidden="true">👑</span><b class="lv">MAX</b>' : `Lv <b class="lv">${q.level}</b>`; el.lv = pill.querySelector('.lv'); if (this._hv) delete this._hv.lv; }
+      if (pill) { pill.innerHTML = mx ? `${ico('crown')}<b class="lv">MAX</b>` : `Lv <b class="lv">${q.level}</b>`; el.lv = pill.querySelector('.lv'); if (this._hv) delete this._hv.lv; }
       this.badge.setAttribute('aria-label', mx ? '최고 레벨' : '레벨');
     }
     const pct0 = xpPct(q), pct = pct0 > 0 ? Math.max(3, pct0) : 0; // 조금이라도 있으면 고리에 보이게 3% 부터
@@ -434,7 +445,8 @@ export const HudUI = {
     const mail = unreadCount(g.flags);
     if (n !== this._qn || mail !== this._qmail) {
       this._qn = n; this._qmail = mail;
-      el.qb.textContent = n ? String(n) : mail ? '📬' : '';
+      if (n || !mail) el.qb.textContent = n ? String(n) : '';
+      else el.qb.innerHTML = ico('mail');
       this.btnQuest.classList.toggle('has', n > 0);
       this.btnQuest.classList.toggle('mail', !n && mail > 0);
       this.btnQuest.setAttribute('aria-label', `퀘스트 (Q)${n ? ` · 받을 보상 ${n}개` : ''}${mail ? ` · 새 편지 ${mail}통` : ''}`);

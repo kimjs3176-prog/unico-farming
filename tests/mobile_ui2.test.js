@@ -49,7 +49,7 @@ test('전체 화면 단추: 켜져도 오토플레이의 켜짐 표시(on: 강�
 
 test('☰ 메뉴: 환경설정·도움말 칸, 빨간 점은 새 버튼·받을 보상(hasClaimable)', () => {
   const src = read('src/ui/actionbar.js').toString();
-  assert.match(src, /\['⚙️', '설정', \(\) => this\.openSettings\(\)\], \['❓', '도움말', \(\) => this\.openHelp\(\)\]/);
+  assert.match(src, /\['gear', '설정', \(\) => this\.openSettings\(\)\], \['help', '도움말', \(\) => this\.openHelp\(\)\]/);
   assert.match(src, /classList\.add\('mob-only'\)/);
   assert.match(src, /this\.hasClaimable\?\.\(\)/);
   // 환경설정 창에도 도움말 줄, 진동은 기기에 있을 때만

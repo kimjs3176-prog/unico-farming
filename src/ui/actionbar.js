@@ -3,6 +3,7 @@ import { h } from './dom.js';
 import { isMobileDevice } from '../game/quality.js';
 import { coachText, hudParams, initHud, newReveals, isVisible } from '../game/sim/hud_reveal.js';
 import { touchUI } from '../game/input.js';
+import { ico } from './icons.js';
 
 /** iPhone·iPad 인가 (iPadOS 사파리는 'Macintosh' 로 알려서 터치 점 수로 가림) */
 export function isIOS(nav = typeof navigator !== 'undefined' ? navigator : null) {
@@ -32,23 +33,24 @@ export const ActionbarUI = {
     // k 가 있는 버튼은 단계적 공개 (hud_reveal.js): 차례가 오거나 접속해야 보임
     this.bar = h('div', 'actionbar');
     this.hudBtns = {};
+    // icon: 자체 아이콘 이름 (icons.svg)
     const mk = (icon, label, fn, k) => {
-      const b = h('button', '', `<span>${icon}</span>${label}`);
+      const b = h('button', '', `<span>${ico(icon)}</span>${label}`);
       b.onclick = fn;
       b.setAttribute('aria-label', label); // 버튼이 적을 때 글자를 숨겨도 이름은 남게
       if (k) { b.dataset.k = k; this.hudBtns[k] = b; b.hidden = !isVisible(k, game.flags?.hud, game.net?.connected); }
       this.bar.append(b);
       return b;
     };
-    mk('🦄', '행동', () => this.toggleEmotes(), 'emote');
-    mk('💬', '말하기', () => this.chatInput.focus(), 'talk');
-    mk('🛒', '장터', () => this.openMarket(), 'market');
-    mk('📖', '도감', () => this.openBook(), 'book');
-    mk('🏢', '체험관', () => game.goKoat(), 'koat');
-    mk('🪑', '꾸미기', () => (game.decor?.mode ? game.decor.stop() : game.decor?.open()), 'decor');
+    mk('unico', '행동', () => this.toggleEmotes(), 'emote');
+    mk('talk', '말하기', () => this.chatInput.focus(), 'talk');
+    mk('market', '장터', () => this.openMarket(), 'market');
+    mk('book', '도감', () => this.openBook(), 'book');
+    mk('koat', '체험관', () => game.goKoat(), 'koat');
+    mk('decor', '꾸미기', () => (game.decor?.mode ? game.decor.stop() : game.decor?.open()), 'decor');
     this.bar.append(h('div', 'sep'));
-    mk('🏡', '농장 방', () => this.openRooms(), 'rooms');
-    this.soundBtn = mk('🔊', '소리', () => this.cycleSound());
+    mk('home', '농장 방', () => this.openRooms(), 'rooms');
+    this.soundBtn = mk('sound', '소리', () => this.cycleSound());
     this.soundBtn.title = '소리 켜기·끄기 (N)';
     this.syncSoundBtn(); // 저장해 둔 소리 상태로 그림
     // N 키: 소리 순환 (M 은 지도). 글자를 치는 중에는 무시
@@ -61,26 +63,26 @@ export const ActionbarUI = {
       };
       addEventListener('keydown', this._sndKey);
     }
-    mk('📸', '찰칵', () => this.snapshot());
-    this.autoBtn = mk('🤖', '자동', () => game.autoplay.toggle(), 'auto');
+    mk('camera', '찰칵', () => this.snapshot());
+    this.autoBtn = mk('auto', '자동', () => game.autoplay.toggle(), 'auto');
     this.autoBtn.title = '오토플레이 (P)';
     // ☰ 메뉴(휴대폰)에만: 환경설정·도움말 (넓은 화면은 오른쪽 위 버튼)
-    for (const [icon, label, fn] of [['⚙️', '설정', () => this.openSettings()], ['❓', '도움말', () => this.openHelp()]]) mk(icon, label, fn).classList.add('mob-only');
+    for (const [icon, label, fn] of [['gear', '설정', () => this.openSettings()], ['help', '도움말', () => this.openHelp()]]) mk(icon, label, fn).classList.add('mob-only');
     if (canFullscreen()) {
-      this.fsBtn = mk('⛶', '전체 화면', () => toggleFullscreen());
+      this.fsBtn = mk('fullscreen', '전체 화면', () => toggleFullscreen());
       this.fsBtn.classList.add('fs-btn');
       this.bar.classList.add('has-fs');
       // 'on' 은 붙이지 않음 (오토플레이의 '켜짐' 강조·통통 튀기가 따라옴) — 이름만 바꿈
       const sync = () => {
         const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
-        this.fsBtn.innerHTML = on ? '<span>🗗</span>창 모드' : '<span>⛶</span>전체 화면';
+        this.fsBtn.innerHTML = on ? `<span>${ico('window')}</span>창 모드` : `<span>${ico('fullscreen')}</span>전체 화면`;
       };
       document.addEventListener('fullscreenchange', sync);
       document.addEventListener('webkitfullscreenchange', sync);
     }
     root.append(this.bar);
     // 모바일: 행동 막대는 ☰ 버튼 하나로 접어 두고, 누르면 펼침 (버튼을 고르면 다시 접힘)
-    this.barToggle = h('button', 'bar-toggle', '☰');
+    this.barToggle = h('button', 'bar-toggle', ico('menu'));
     this.barToggle.title = '메뉴';
     this.barToggle.setAttribute('aria-label', '메뉴 열기');
     this.barToggle.onclick = () => this.setBarOpen(!this.root.classList.contains('bar-open'));
@@ -163,7 +165,7 @@ export const ActionbarUI = {
 
   setBarOpen(open) {
     this.root.classList.toggle('bar-open', open);
-    this.barToggle.textContent = open ? '✕' : '☰';
+    this.barToggle.innerHTML = ico(open ? 'close' : 'menu');
     this.barToggle.setAttribute('aria-label', open ? '메뉴 닫기' : '메뉴 열기');
     if (open) {
       // 접혀 있는 동안 새로 열린 버튼은 펼칠 때 한 번 통 튀김
@@ -240,7 +242,8 @@ export const ActionbarUI = {
     const a = this.game?.audio, b = this.soundBtn;
     if (!a || !b?.firstChild) return;
     const st = a.mode ?? (a.enabled ? (a.musicOn ? 'all' : 'sfx') : 'off');
-    b.firstChild.textContent = { all: '🔊', sfx: '🎵', off: '🔇' }[st];
+    const name = { all: 'sound', sfx: 'music', off: 'mute' }[st];
+    if (b.firstChild.dataset?.ico !== name) { b.firstChild.innerHTML = ico(name); if (b.firstChild.dataset) b.firstChild.dataset.ico = name; }
   },
 
   /** 새 버튼 등장: NEW 표시 + 통 튀김 + 한 줄 안내 (접혀 있으면 ☰ 에 빨간 점) */
@@ -284,7 +287,7 @@ export const ActionbarUI = {
       document.getElementById('ui').append(this.autoChip);
     }
     this.autoChip.classList.toggle('hidden', !text);
-    const html = text ? `<b>🤖 자동</b> ${text} <i>✕</i>` : '';
+    const html = text ? `<b>${ico('auto')} 자동</b> ${text} <i>✕</i>` : '';
     if (html !== this.autoHtml) { this.autoChip.innerHTML = html; this.autoHtml = html; }
   },
 };

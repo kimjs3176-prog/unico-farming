@@ -95,3 +95,9 @@ body.panel-see #ui > .scrim { display: none; }
 /* 가구: 놓은 줄은 아래로 · '✓ 놓음' */
 .furn-rows .mk-row.owned { background: #f3f8ee !important; }
 .furn-done { flex: none; font-size: 13px; font-weight: 800; color: #2f7d4f; background: #e2f3dc; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+/* ✕ 닫기: 글꼴마다 다르게 그려지던 '✕' 글자 대신 둥근 끝 X 그림 (마스크라 단추 글자색 그대로). 단추·aria-label 은 ui.js 그대로 */
+.panel h2 button.close { position: relative; font-size: 0; color: transparent; text-shadow: none; }
+.panel h2 button.close::before { content: ''; position: absolute; inset: 0; margin: auto; width: 18px; height: 18px; background: #fff;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6l12 12M18 6L6 18' stroke='%23000' stroke-width='3.6' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6l12 12M18 6L6 18' stroke='%23000' stroke-width='3.6' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  pointer-events: none; }
