@@ -2,7 +2,7 @@
 // (브라우저 없이 같은 선택자끼리만 단순 계산 — 규칙 목록·화면 크기는 tests/lib/css_env.js)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { RULES, value, PHONE, LAND, DESK, DESK2, WIDE } from './lib/css_env.js';
+import { RULES, value, mediaMatches, PHONE, LAND, DESK, DESK2, WIDE } from './lib/css_env.js';
 
 test('데스크톱 값은 그대로 (모바일 규칙이 새지 않음)', () => {
   assert.equal(value(WIDE, '.chat', 'bottom'), '12px'); // 넓은 창은 채팅이 바닥 그대로 (좁은 창은 아래 시험)
@@ -68,9 +68,10 @@ test('가로 폰: 스마트팜·논 패널이 떠도 알림·배너가 가려지
   // 패널 왼쪽 끝(오른쪽 98px + 폭 340px)보다 알림 오른쪽 끝이 왼쪽에: 8 + (W - 452) <= W - 438 (미니맵 86px + 여백)
   assert.match(value(LAND, '.smart-panel', 'right'), /^calc\(98px/);
   assert.match(value(LAND, '.smart-panel', 'width'), /^min\(340px/);
-  // 세로 폰·데스크톱은 그대로
+  // 세로 폰·데스크톱도 알림·배너는 창 배경막(6) 위 (창 10 아래)
   for (const env of [PHONE, DESK]) {
-    assert.equal(value(env, '.toasts', 'z-index'), undefined);
+    assert.equal(value(env, '.toasts', 'z-index'), '7');
+    assert.equal(value(env, '.event-banner', 'z-index'), '7');
     assert.equal(value(env, '#ui:has(> .smart-panel) > .toasts', 'left'), undefined);
   }
 });
@@ -91,4 +92,32 @@ test('게임 UI 길게 누르기 방지, 입력칸은 그대로 글자 입력', 
   assert.ok(has('-webkit-user-select', 'none') && has('user-select', 'none') && has('-webkit-touch-callout', 'none'));
   const inp = RULES.find((r) => r.media.length === 0 && r.sel.split(',').map((s) => s.trim()).includes('#ui input'));
   assert.ok(inp && inp.decls.some(([p, v]) => p === '-webkit-user-select' && v === 'text'));
+});
+
+test('창 배경막: 알림(7)·창(10) 아래, 꾸미기 막대(5) 위 · 옷장/꾸미기 창은 배경막 없음', () => {
+  const z = (env, sel) => +value(env, sel, 'z-index');
+  assert.equal(z(DESK, '.scrim'), 6);
+  for (const env of [PHONE, LAND, DESK]) assert.ok(z(env, '.toasts') > z(env, '.scrim'), `알림이 배경막 위 (${env.w}x${env.h})`);
+  assert.ok(z(DESK, '.panel') > z(DESK, '.scrim'));
+  assert.ok(z(DESK, '.decor-bar') < z(DESK, '.scrim'));
+  assert.equal(value(DESK, '.scrim', 'backdrop-filter'), undefined, '낮은 품질에서도 가볍게: 흐림 없음');
+  assert.equal(value(DESK, 'body.panel-see #ui > .scrim', 'display'), 'none');
+  assert.equal(value(DESK, 'body.panel-open #ui > .decor-bar', 'visibility'), 'hidden');
+});
+
+test('폰에서 창이 떠 있으면 아래·옆 조작 버튼과 미니맵을 숨김 (데스크톱은 그대로)', () => {
+  // :is( , ) 안의 쉼표 때문에 value() 대신 규칙을 직접 찾음
+  const PRE = 'body.panel-open:not(.panel-see) #ui > :is(';
+  const hide = (env, prop) => {
+    let v;
+    for (const r of RULES) if (r.sel.startsWith(PRE) && r.media.every((m) => mediaMatches(m, env))) for (const [p, x] of r.decls) if (p === prop) v = x;
+    return v;
+  };
+  for (const env of [PHONE, LAND]) {
+    assert.equal(hide(env, 'opacity'), '0');
+    assert.equal(hide(env, 'pointer-events'), 'none');
+  }
+  assert.equal(hide(DESK, 'opacity'), undefined);
+  const rule = RULES.find((r) => r.sel.startsWith(PRE));
+  for (const c of ['.touch-btn', '.actionbar', '.minimap', '.bar-toggle', '.objective']) assert.ok(rule.sel.includes(c), c);
 });

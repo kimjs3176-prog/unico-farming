@@ -14,12 +14,30 @@ export const BUILDINGS = {
   mill:       { name: '풍차 방앗간', emoji: '🌬️', price: 2400, time: 120, lv: 3, desc: '매일 아침 방앗간 임대 수입 +80 코인', effect: { daily: 80 } },
 };
 export const RUSH_PER_SEC = 2;
+/**
+ * 건물 등급 ★2·★3 (BUILDINGS 는 그대로 — 도트 판 src/pixel/regions.js 도 같은 표를 씀)
+ *  - 값: 기본 가격의 2.5배·6배. 대부분 꾸밈(조금 큰 모양·깃발) + 수익이 아닌 효과, 수익 효과는 조금만 (직판장 최대 ×1.15, 방앗간·온실은 그대로)
+ *  - effect 는 그 등급의 효과 전체 (기본 효과를 바꿔 씀)
+ */
+export const TIER_MULT = [1, 2.5, 6];
+export const TIER_LV = [1, 4, 6]; // 등급별 최소 레벨 (건물 해금 레벨과 큰 쪽)
+export const TIERS = {
+  pavilion:   [null, { effect: { gift: 2 }, desc: '매일 아침 주민 선물이 2개' }, { effect: { gift: 3 }, desc: '매일 아침 주민 선물이 3개' }],
+  tank:       [null, { effect: { waterMult: 1.75 }, desc: '물 준 밭이 1.75배 오래 촉촉' }, { effect: { waterMult: 2.0 }, desc: '물 준 밭이 2배 오래 촉촉' }],
+  stand:      [null, { effect: { sellMult: 1.12 }, desc: '장터 판매가 +12%' }, { effect: { sellMult: 1.15 }, desc: '장터 판매가 +15%' }],
+  glasshouse: [null, { effect: { growMult: 1.15 }, desc: '꽃 화단이 생기는 예쁜 온실 (효과는 그대로)' }, { effect: { growMult: 1.15 }, desc: '금빛 풍향계가 달린 온실 (효과는 그대로)' }],
+  mill:       [null, { effect: { daily: 80 }, desc: '새로 칠한 날개 (수입은 그대로)' }, { effect: { daily: 80 }, desc: '금빛 날개와 깃발 (수입은 그대로)' }],
+};
+export const MAX_TIER = 3;
+/** 등급 올리는 값 (tier: 올릴 등급 2·3) */
+export const tierPrice = (type, tier) => Math.round(BUILDINGS[type].price * TIER_MULT[tier - 1]);
+export const tierLevel = (type, tier) => Math.max(BUILDINGS[type].lv, TIER_LV[tier - 1]);
 /** 쉼터 정자 선물 후보 (아이템 id, 개수) */
 export const GIFTS = [['compost', 1], ['fruit_apple', 2], ['fruit_peach', 2], ['pet_treat', 1], ['rice_seed', 1], ['fruit_pear', 2]];
 
 export class TownSim {
   constructor(sites = 5) {
-    this.sites = Array.from({ length: sites }, () => ({ type: null, state: 'empty', left: 0 }));
+    this.sites = Array.from({ length: sites }, () => ({ type: null, state: 'empty', left: 0, tier: 1 }));
   }
 
   /** 이 건물이 (공사 중 포함) 이미 있는가 */
@@ -41,7 +59,7 @@ export class TownSim {
   /** 공사 시작 → 든 비용 (못 지으면 0) */
   build(i, type, money, level = 99) {
     if (this.whyNot(i, type, money, level)) return 0;
-    Object.assign(this.sites[i], { type, state: 'building', left: BUILDINGS[type].time });
+    Object.assign(this.sites[i], { type, state: 'building', left: BUILDINGS[type].time, tier: 1 });
     return BUILDINGS[type].price;
   }
 
@@ -62,12 +80,39 @@ export class TownSim {
 
   progress(i) { const s = this.sites[i]; if (!s?.type) return 0; return s.state === 'done' ? 1 : 1 - s.left / BUILDINGS[s.type].time; }
 
-  /** 완성된 건물 효과 합치기 */
+  tierOf(i) { return this.sites[i]?.tier || 1; }
+
+  /** 다음 등급 { tier, price, lv, desc } (더 없으면 null) */
+  nextTier(i) {
+    const s = this.sites[i];
+    if (!s || s.state !== 'done' || !TIERS[s.type]) return null;
+    const t = this.tierOf(i) + 1;
+    if (t > MAX_TIER) return null;
+    return { tier: t, price: tierPrice(s.type, t), lv: tierLevel(s.type, t), desc: TIERS[s.type][t - 1].desc };
+  }
+
+  whyNotUpgrade(i, money, level = 99) {
+    const n = this.nextTier(i);
+    if (!n) return this.sites[i]?.state === 'done' ? '가장 높은 등급이에요' : '완성된 건물만 올릴 수 있어요';
+    if (level < n.lv) return `Lv.${n.lv}부터 올릴 수 있어요`;
+    if (money < n.price) return `코인이 ${n.price - money} 모자라요`;
+    return null;
+  }
+
+  /** 등급 올리기 → 든 비용 (못 하면 0) */
+  upgrade(i, money, level = 99) {
+    if (this.whyNotUpgrade(i, money, level)) return 0;
+    const n = this.nextTier(i);
+    this.sites[i].tier = n.tier;
+    return n.price;
+  }
+
+  /** 완성된 건물 효과 합치기 (등급이 있으면 그 등급의 효과) */
   effects() {
     const e = { sellMult: 1, growMult: 1, waterMult: 1, daily: 0, gift: 0 };
     for (const s of this.sites) {
       if (s.state !== 'done') continue;
-      const f = BUILDINGS[s.type].effect;
+      const t = s.tier || 1, f = (t > 1 && TIERS[s.type]?.[t - 1]?.effect) || BUILDINGS[s.type].effect;
       if (f.sellMult) e.sellMult *= f.sellMult;
       if (f.growMult) e.growMult *= f.growMult;
       if (f.waterMult) e.waterMult *= f.waterMult;
@@ -90,7 +135,9 @@ export class TownSim {
     if (!d?.sites) return;
     d.sites.forEach((s, i) => {
       if (!this.sites[i] || (s.type && !BUILDINGS[s.type])) return;
-      this.sites[i] = { type: s.type || null, state: s.type ? (s.state === 'building' ? 'building' : 'done') : 'empty', left: Math.max(0, +s.left || 0) };
+      const state = s.type ? (s.state === 'building' ? 'building' : 'done') : 'empty';
+      const tier = state === 'done' ? Math.max(1, Math.min(MAX_TIER, s.tier | 0 || 1)) : 1; // 옛 저장은 등급 없음 → 1
+      this.sites[i] = { type: s.type || null, state, left: Math.max(0, +s.left || 0), tier };
     });
   }
 }

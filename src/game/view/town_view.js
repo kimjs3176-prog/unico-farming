@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
-import { TownSim, BUILDINGS } from '../sim/town.js';
+import { TownSim, BUILDINGS, TIERS, MAX_TIER, tierPrice } from '../sim/town.js';
+import { reward, BUY_SOUND } from '../reward.js';
 import { ITEMS } from '../sim/items.js';
 import { confetti } from '../../ui/minigame_frame.js';
 
@@ -83,6 +84,19 @@ const SHAPES = {
   },
 };
 
+/** 등급 깃발: ★2 은빛 · ★3 금빛 깃발과 별 (건물 옆 오른쪽 뒤) */
+const TIER_SCALE = [1, 1.08, 1.15];
+const FLAG_MAT = [null, M(0xdfe6ee, { roughness: 0.4, metalness: 0.4 }), M(0xf2c14e, { roughness: 0.35, metalness: 0.5, emissive: 0x3a2a00 })];
+function tierFlag(tier) {
+  const g = new THREE.Group(), m = FLAG_MAT[tier - 1];
+  g.add(cyl(0.05, 0.06, 3.4, MAT.woodD, 6, 0, 1.7, 0));
+  const flag = box(0.9, 0.55, 0.04, tier >= 3 ? MAT.red : MAT.white, 0.47, 3.05, 0); g.add(flag);
+  for (let k = 0; k < tier; k++) g.add(ball(0.11, m, 0.22 + k * 0.26, 3.05, 0.05));
+  g.add(ball(0.12, m, 0, 3.48, 0));
+  g.position.set(2.3, 0, -1.6);
+  return g;
+}
+
 /** 빈 부지: 흙 + 말뚝 4개 + 줄 */
 function siteMarker() {
   const g = new THREE.Group();
@@ -159,6 +173,12 @@ export class TownView {
       s.root.add(s.scaf);
     }
     if (!building && s.scaf) { s.root.remove(s.scaf); s.scaf = null; }
+    const tier = st.state === 'done' ? st.tier || 1 : 1;
+    if (tier !== (s.tier || 1)) {
+      if (s.flag) { s.root.remove(s.flag); s.flag = null; }
+      if (tier > 1) { s.flag = tierFlag(tier); s.flag.traverse((o) => { if (o.isMesh) o.castShadow = true; }); s.root.add(s.flag); }
+      s.tier = tier;
+    }
     s.marker.visible = st.state !== 'done';
     s.obstacle.r = st.state === 'empty' ? 0 : 2.1;
   }
@@ -178,13 +198,14 @@ export class TownView {
     let best = null, bd = 3.2;
     for (const s of this.sites) {
       const st = this.sim.sites[s.i];
-      if (s.type !== st.type || (st.state === 'building') !== !!s.scaf) this.sync(s.i);
+      if (s.type !== st.type || (st.state === 'building') !== !!s.scaf || (st.state === 'done' ? st.tier || 1 : 1) !== (s.tier || 1)) this.sync(s.i);
       if (s.mesh) {
         // 공사 중: 아래부터 차오름 · 완공 직후: 통 튀어나옴
         const k = st.state === 'building' ? 0.08 + 0.92 * this.sim.progress(s.i) : 1;
         let pop = 1;
         if (s.pop > 0) { s.pop = Math.max(0, s.pop - dt); pop = 1 + Math.sin((1 - s.pop / 0.6) * Math.PI) * 0.18; }
-        s.mesh.scale.set(pop, k * pop, pop);
+        const ts = TIER_SCALE[(s.tier || 1) - 1];
+        s.mesh.scale.set(pop * ts, k * pop * ts, pop * ts);
         s.mesh.userData.spin?.rotation.set(0, 0, s.mesh.userData.spin.rotation.z - dt * 0.9);
       }
       if (s.scaf) {
@@ -203,7 +224,8 @@ export class TownView {
     if (st.state === 'empty') return { d: bd, label: '🏗️ 건설 부지 · 건물 짓기', key: 'build', onInteract: () => this.openBuild(best.i) };
     const B = BUILDINGS[st.type];
     if (st.state === 'building') return { d: bd, label: `🔨 ${B.name} 공사 중 ${Math.floor(this.sim.progress(best.i) * 100)}% · 바로 완성 ${this.sim.rushCost(best.i)}🪙`, key: 'rush', onInteract: () => this.openRush(best.i) };
-    return { d: bd, label: `${B.emoji} ${B.name}: ${B.desc}`, key: 'building', onInteract: () => { g.audio.play('click'); g.ui.toast(`${B.emoji} ${B.name} — ${B.desc}`); } };
+    const stars = '★'.repeat(st.tier || 1);
+    return { d: bd, label: `${B.emoji} ${B.name} ${stars} · 등급 올리기`, key: 'building', onInteract: () => this.openTier(best.i) };
   }
 
   /** 건물 고르기 창 */
@@ -258,6 +280,53 @@ export class TownView {
     const c = document.createElement('button'); c.className = 'ghost'; c.textContent = '기다릴게요'; c.onclick = () => g.ui.closePanel();
     const row = document.createElement('div'); row.className = 'mg-btns'; row.append(c, b);
     p.append(row);
+  }
+
+  /** 완성된 건물: 등급(★) 올리기 창 — 대부분 꾸밈이고 효과는 조금만 */
+  openTier(i) {
+    const g = this.game, eco = g.economy, st = this.sim.sites[i], B = BUILDINGS[st.type], tier = st.tier || 1;
+    const p = g.ui.openPanel(`${B.emoji} ${B.name} ${'★'.repeat(tier)}${'☆'.repeat(MAX_TIER - tier)}`);
+    p.classList.add('build-panel');
+    const cur = tier > 1 ? TIERS[st.type][tier - 1].desc : B.desc;
+    p.append(Object.assign(document.createElement('p'), { className: 'mk-note', innerHTML: `지금 효과: <b>${cur}</b><br>${tier >= MAX_TIER ? '🥇 가장 높은 등급이에요 · 금빛 깃발이 펄럭여요' : `등급을 올리면 건물이 조금 커지고 ${tier >= 2 ? '금빛' : '은빛'} 깃발이 꽂혀요`}` }));
+    const rows = document.createElement('div'); rows.className = 'rows';
+    for (let t = 2; t <= MAX_TIER; t++) {
+      const T = TIERS[st.type][t - 1], done = tier >= t, isNext = t === tier + 1;
+      const r = document.createElement('div');
+      r.className = 'row mk-row build-row' + (done ? '' : isNext ? '' : ' none');
+      const price = tierPrice(st.type, t);
+      r.innerHTML = `<span class="ic">${t === 2 ? '🥈' : '🥇'}</span><span class="nm">${'★'.repeat(t)} 등급<br><small>${T.desc}</small></span><span class="pr">${done ? '' : `${price.toLocaleString()}🪙`}</span>`;
+      const b = document.createElement('button');
+      if (done) { b.className = 'ghost'; b.textContent = '✅ 완료'; b.disabled = true; }
+      else {
+        const why = isNext ? this.sim.whyNotUpgrade(i, eco.money, g.quests.level) : `★${t - 1} 다음에`;
+        b.className = why ? (/Lv|다음/.test(why) ? 'locked' : '') : 'gold';
+        b.textContent = why && /Lv/.test(why) ? `🔒 ${why.split('부터')[0]}` : why && /다음/.test(why) ? `🔒 ${why}` : '올리기';
+        b.disabled = !!why;
+        if (why) b.title = why;
+        b.onclick = () => this.upgradeTier(i);
+      }
+      r.append(b);
+      rows.append(r);
+    }
+    p.append(rows);
+  }
+
+  upgradeTier(i) {
+    const g = this.game, eco = g.economy, s = this.sites[i], B = BUILDINGS[this.sim.sites[i].type];
+    const cost = this.sim.upgrade(i, eco.money, g.quests.level);
+    if (!cost) return;
+    eco.spend(cost);
+    g.ui.closePanel();
+    this.sync(i);
+    s.pop = 0.6;
+    this.apply();
+    g.audio.play(BUY_SOUND); g.audio.play('hammer', 0.6);
+    reward(g, 2, { sound: null });
+    g.fx.burst(s.p.x, 2.5, s.p.z, 0xfff3a0, 30);
+    g.ui.toast(`${B.emoji} ${B.name}${'★'.repeat(this.sim.tierOf(i))} 등급이 되었어요! ${TIERS[this.sim.sites[i].type][this.sim.tierOf(i) - 1].desc}`);
+    g.onEvent('towntier', this.sim.tierOf(i));
+    g.saveTimer = Math.max(g.saveTimer || 0, 9); // 1초 안에 저장
   }
 
   _finish(i) {

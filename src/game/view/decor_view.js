@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { heightAt } from '../terrain.js';
 import { LAYOUT } from '../world.js';
 import { routineSpots } from '../sim/routine.js';
-import { DecorSim, DECOR, DECOR_BY_ID, DECOR_CATS, DECOR_MAX, outsideZones, snapAhead } from '../sim/decor.js';
+import { DecorSim, DECOR_ALL, DECOR_BY_ID, DECOR_CATS, DECOR_MAX, outsideZones, snapAhead } from '../sim/decor.js';
 import { saveGame } from '../save.js';
 import { touchUI } from '../input.js';
 import { reward, BUY_SOUND } from '../reward.js';
@@ -16,6 +16,26 @@ import { reward, BUY_SOUND } from '../reward.js';
  *  - 놓을 수 없는 곳: 물·밭·논·목장·트랙터 마당·건설 부지·주민 자리·문 앞·다른 물건 위·큰 물건은 흙길 위
  */
 const OK_COL = new THREE.Color(0x4fd07a), BAD_COL = new THREE.Color(0xe35d5d);
+/** 색 바꾼 소품의 재질: (모델, 색)마다 한 번만 복제해 같은 소품끼리 나눠 씀 → 놓을수록 재질·셰이더가 늘지 않음 */
+const TINTED = new Map();
+const _hsl = { h: 0, s: 0, l: 0 };
+function tintedMat(model, tint, m) {
+  const key = `${model}|${tint.color}|${tint.mode}|${tint.mats || ''}`;
+  let cache = TINTED.get(key);
+  if (!cache) TINTED.set(key, (cache = new Map()));
+  let c = cache.get(m.uuid);
+  if (c) return c;
+  c = m;
+  if (m.color) {
+    const col = m.color;
+    col.getHSL(_hsl);
+    const leafy = col.g > col.r && col.g > col.b; // 잎·풀빛
+    const pick = tint.mode === 'mats' ? tint.mats.includes(m.name) : tint.mode === 'green' ? leafy : _hsl.l > 0.12; // 'all': 아주 어두운 철·그림자 재질은 그대로
+    if (pick) { c = m.clone(); c.color.lerp(new THREE.Color(tint.color), tint.mode === 'mats' ? 0.85 : 0.72); c.name = `${m.name || 'mat'}_tint`; }
+  }
+  cache.set(m.uuid, c);
+  return c;
+}
 
 export class DecorView {
   constructor(game) {
@@ -63,6 +83,7 @@ export class DecorView {
     let obj;
     try { obj = a.clone(d.model); } catch { obj = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshStandardMaterial({ color: 0xc8a070 })); }
     obj.scale.multiplyScalar(d.scale);
+    if (d.tint) obj.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map((m) => tintedMat(d.model, d.tint, m)) : tintedMat(d.model, d.tint, o.material); });
     return obj;
   }
 
@@ -237,7 +258,7 @@ export class DecorView {
     for (const [id, label] of DECOR_CATS) { const t = el('button', id === cat ? 'on' : '', label); t.onclick = () => this.open(id); tabs.append(t); }
     p.append(tabs);
     const grid = el('div', 'cos-grid decor-grid');
-    for (const d of DECOR.filter((x) => x.cat === cat)) {
+    for (const d of DECOR_ALL.filter((x) => x.cat === cat && (!x.limited || sim.storedOf(x.id) > 0))) {
       const st = sim.storedOf(d.id), locked = st <= 0 && g.quests.level < d.lv;
       const b = el('button', `cos-slot${locked ? ' locked' : ''}`);
       b.append(el('span', 'ic', d.icon), el('b', '', d.name), el('small', '', st > 0 ? `🧺 보관함 ${st}개 · 무료` : locked ? `🔒 Lv.${d.lv}` : `${d.price}🪙`));
@@ -246,6 +267,7 @@ export class DecorView {
       grid.append(b);
     }
     p.append(grid);
+    if (cat === 'special') p.append(el('p', 'mk-note', '✨ 색이 다른 한정 소품은 장터의 ‘✨ 오늘’ 탭에 날마다 바뀌어 나와요'));
     const row = el('div', 'decor-foot');
     const mv = el('button', 'ghost', '✋ 옮기기·치우기');
     mv.disabled = sim.count === 0;

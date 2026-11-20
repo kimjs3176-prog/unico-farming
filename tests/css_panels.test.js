@@ -34,3 +34,45 @@ test('미니게임 창은 투명도만 나타남 (화면 전체가 미끄러지�
   assert.ok(kf, `@keyframes ${name}`);
   assert.ok(!/transform/.test(kf), kf);
 });
+
+test('세로 폰: 창은 아래에 붙는 시트 (옷장 빼고), 등장·흔들림은 translate 속성이라 위치와 겹쳐도 어긋나지 않음', () => {
+  const sheet = '.panel:not(.wardrobe)';
+  assert.equal(value(PHONE, sheet, 'bottom'), '0');
+  assert.equal(value(PHONE, sheet, 'position'), 'absolute', '체험관 결과 창(.koat-result relative)도 시트로');
+  assert.equal(value(PHONE, sheet, 'top'), 'auto');
+  assert.equal(value(PHONE, sheet, 'transform'), 'none');
+  assert.equal(value(PHONE, sheet, 'border-radius'), '22px 22px 0 0');
+  assert.match(value(PHONE, sheet, 'max-height'), /var\(--hud-b/);
+  assert.match(value(PHONE, sheet, 'padding-bottom'), /var\(--sab/);
+  assert.match(value(PHONE, sheet, 'animation'), /^sheetin /);
+  assert.equal(value(PHONE, `${sheet} > h2::before`, 'width'), '36px');
+  assert.match(value(PHONE, '.panel.shake', 'animation'), /^sheetshake /);
+  // 데스크톱·가로 폰은 가운데 창 그대로
+  for (const env of [DESK, LAND]) assert.equal(value(env, sheet, 'bottom'), undefined);
+  const css = readCss('src/ui/style.css') + readCss('src/ui/theme.css');
+  for (const name of ['sheetin', 'sheetshake', 'panelout']) {
+    const kf = css.match(new RegExp(`@keyframes ${name} \\{([^}]*\\{[^}]*\\})*[^}]*\\}`))?.[0] || '';
+    assert.ok(kf, name);
+    assert.ok(!/transform/.test(kf), `${name} 는 transform 대신 translate/scale 속성: ${kf}`);
+  }
+});
+
+test('창 닫힘: 0.14초 흐려짐, 누름 막음, 움직임 줄이기에서는 투명도만', () => {
+  assert.match(value(DESK, '#ui > .panel.closing', 'animation'), /^panelout 0\.14s/);
+  assert.equal(value(DESK, '#ui > .panel.closing', 'pointer-events'), 'none');
+  assert.equal(value(DESK, '#ui > .scrim.closing', 'pointer-events'), 'none');
+  assert.equal(value({ ...DESK, reducedMotion: true }, '#ui > .panel.closing', 'animation-name'), 'fadeout');
+  assert.equal(value(DESK, '#ui > .panel.closing', 'animation-name'), undefined);
+});
+
+test('장터 줄은 목록 폭에 맞춤: 좁으면 두 줄 격자, 설명 마디는 줄바꿈 없음, 옛 55% 규칙 없음', () => {
+  assert.equal(value(DESK, '.mk-body', 'container-type'), 'inline-size');
+  assert.match(value(DESK, '.mk-body .mk-row', 'grid-template-areas'), /"ic nm pr btns" "ic meta pr btns"/);
+  assert.equal(value(DESK, '.mk-row .meta > span.nw', 'white-space'), 'nowrap');
+  const css = readCss('src/ui/style.css');
+  const narrow = css.match(/@container \(max-width: 460px\) \{([\s\S]*?)\n\}/)?.[1] || '';
+  assert.match(narrow, /grid-template-areas: "ic nm pr" "ic meta btns"/);
+  assert.match(narrow, /button\.locked \{ min-width: auto/);
+  assert.match(narrow, /\.lk-x \{ display: none/);
+  for (const env of [PHONE, DESK]) assert.equal(value(env, '.mk-row .nm', 'min-width'), undefined);
+});

@@ -33,7 +33,7 @@ srv.listen(0, async () => {
   await skip();
 
   const audit = () => p.evaluate(() => {
-    const panel = game.ui.panel || document.querySelector('.panel') || game.ui.drivePad; // 운전 버튼(ride_pad)은 창이 아니라 버튼 묶음
+    const panel = game.ui.panel || document.querySelector('.panel:not(.closing)') || game.ui.drivePad; // 운전 버튼(ride_pad)은 창이 아니라 버튼 묶음
     if (!panel) return { missing: true };
     // 창이 미끄러져 들어오는 중이면 끝난 자리로 잼 (느린 점검 환경에서 등장 애니메이션 중간을 화면 밖으로 잘못 잡지 않게)
     for (const a of panel.getAnimations({ subtree: true })) { try { if (a.effect?.getTiming().iterations !== Infinity) a.finish(); } catch { /* 무한 반복은 그대로 */ } }
@@ -115,6 +115,12 @@ srv.listen(0, async () => {
     ['market_sell', () => { game.ui.marketAll = true; game.ui.openMarket('sell'); }],
     ['market_fac', () => game.ui.openMarket('fac')],
     ['market_cos', () => { game.costume.buy('overalls', { money: 99999 }); game.costume.wear('overalls'); game.ui.openMarket('cos'); }],
+    ['market_today', () => game.ui.openMarket('today')],
+    ['home_desk', () => game.home.open('home')],
+    ['home_style', () => game.home.open('style')],
+    ['home_furn', () => game.home.open('furn')],
+    ['decor_special', () => game.decor.open('special')],
+    ['town_tier', () => { const t = game.town; t.sim.build(0, 'tank', 99999); t.sim.rush(0); t.sync(0); t.openTier(0); }],
     ['inventory', () => game.ui.openInventory()],
     ['quests', () => game.ui.openQuests()],
     ['seed', () => game.ui.openSeedPicker(() => {}, { fert: 4 })],
@@ -147,7 +153,7 @@ srv.listen(0, async () => {
   const report = {};
   for (const [id, fn] of PANELS) {
     try {
-      await p.evaluate(() => { game.ui.closePanel(); });
+      await p.evaluate(() => { game.ui.closePanel(false); }); // 닫힘 애니메이션 없이 (다음 창 점검에 섞이지 않게)
       await p.evaluate(`(${fn.toString()})()`);
       await sleep(1400); // 등장 애니메이션·카운트업 끝날 때까지
       await skip();

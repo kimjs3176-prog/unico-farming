@@ -2,9 +2,9 @@ import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LAYOUT } from '../world.js';
-import { HomeSim, HOME_LEVELS, OUTFIT } from '../sim/home.js';
-import { COSTUMES, COSTUME } from '../sim/costume.js';
-import { buildRoom, IO } from './home_interior.js';
+import { HomeSim, HOME_LEVELS, OUTFIT, WALLPAPERS, FLOORS, FURNITURE } from '../sim/home.js';
+import { COSTUMES, COSTUME, COSTUME_VARIANTS } from '../sim/costume.js';
+import { buildRoom, applyRoomStyle, IO } from './home_interior.js';
 import { SURF, enhanceMaterial } from '../surface.js';
 import { ITEMS } from '../sim/items.js';
 import { saveGame } from '../save.js';
@@ -191,7 +191,7 @@ export class HomeView {
   /** 실내 방 다시 짓기 (집 단계가 바뀌면) */
   buildRoom() {
     if (this.room) { this.game.world.scene.remove(this.room.group); this.room.group.traverse((o) => o.geometry?.dispose()); }
-    this.room = buildRoom(this.sim.level, { glass: this.roomGlass, lampMat: this.roomLampMat });
+    this.room = buildRoom(this.sim.level, { glass: this.roomGlass, lampMat: this.roomLampMat }, { colors: this.sim.colors(), furniture: this.sim.furniture });
     this.room.group.position.set(IO.x, IO.y, IO.z);
     this.game.world.scene.add(this.room.group);
     this.room.group.visible = this.inside;
@@ -441,6 +441,8 @@ export class HomeView {
           const how = c.unlock === 'stamps' ? '🏢 체험관 스탬프 6개' : c.festival ? `🎉 축제 날 장터 ${c.price}🪙` : `🛒 장터 ${c.price}🪙 · Lv.${c.lv}`;
           slot(c.id, c.icon, c.name, owned ? `✨ ${c.perkText}` : `🔒 ${how}`, !owned ? 'locked' : cs.wearing === c.id ? 'on' : 'own', () => { cs.wear(c.id); this._applyCos(c); render(); });
         }
+        // 색 바꾼 판은 가진 것만 (오늘의 특별 상품·레벨 보상으로 얻음)
+        for (const c of COSTUME_VARIANTS) if (cs.has(c.id)) slot(c.id, c.icon, c.name, `🎨 색 바꾼 판 · ✨ ${c.perkText}`, cs.wearing === c.id ? 'on' : 'own', () => { cs.wear(c.id); this._applyCos(c); render(); });
         body.append(grid);
         body.append(el('p', 'mk-note', '코스튬은 장터의 👗 의상 탭에서 사요. 입고 있는 옷의 혜택만 적용돼요'));
       } else if (tab === 'acc') {
@@ -502,11 +504,21 @@ export class HomeView {
     this.game.onEvent('outfit');
   }
 
-  /** 집 창 */
-  open() {
+  /** 집 창: 🏠 집(잠자기·넓히기) · 🎨 벽지·바닥 · 🛋️ 가구 */
+  open(tab = this._homeTab || 'home') {
     const g = this.game, ui = g.ui, w = g.world, S = this.sim, eco = g.economy;
+    this._homeTab = tab;
     const p = ui.openPanel(`🏠 ${S.info.name}`);
-    const add = (cls, html) => { const e = document.createElement('div'); e.className = cls; e.innerHTML = html; p.append(e); return e; };
+    p.classList.add('home-desk');
+    const add = (cls, html, to = p) => { const e = document.createElement('div'); e.className = cls; e.innerHTML = html; to.append(e); return e; };
+    const tabs = add('mk-tabs', '');
+    for (const [id, label] of [['home', '🏠 집'], ['style', '🎨 벽지·바닥'], ['furn', '🛋️ 가구']]) {
+      const t = document.createElement('button'); t.className = id === tab ? 'on' : ''; t.textContent = label;
+      t.onclick = () => { if (id !== tab) { g.audio.play('click', 0.5); this.open(id); } };
+      tabs.append(t);
+    }
+    if (tab === 'style') return this._openStyle(p, add);
+    if (tab === 'furn') return this._openFurniture(p, add);
     add('mk-note', `${S.info.desc}${S.rested(w.day) ? '<br>😊 오늘은 푹 자서 개운해요 (걷는 속도 +15%)' : ''}`);
     const rows = document.createElement('div'); rows.className = 'rows'; p.append(rows);
     // 잠자기
@@ -528,6 +540,69 @@ export class HomeView {
     } else ur.innerHTML = '<span class="ic">🏡</span><span class="nm">가장 큰 집이에요<br><small>매일 아침 우편함에 선물이 와요</small></span>';
     rows.append(ur);
     if (S.mail()) add('mk-note', `📬 우편함: 매일 아침 ${S.mail().coins}🪙${S.mail().items.length ? ` + ${S.mail().items.map(([id, k]) => `${ITEMS[id]?.emoji || ''}${ITEMS[id]?.name || id} ${k}개`).join(', ')}` : ''}`);
+    add('mk-note', '🎨 벽지·바닥과 🛋️ 가구로 방을 꾸밀 수 있어요 (위 탭)');
+  }
+
+  /** 벽지·바닥: 색 견본 칸. 산 것은 눌러서 바로 갈아입힘 (방을 다시 짓지 않고 색만) */
+  _openStyle(p, add) {
+    const g = this.game, S = this.sim, eco = g.economy, lv = g.quests.level;
+    for (const [kind, title, list, a, b] of [['wall', '🎨 벽지', WALLPAPERS, 'wall', 'wallB'], ['floor', '🪵 바닥', FLOORS, 'floor', 'floorB']]) {
+      add('', `<h3>${title}</h3>`);
+      const grid = add('cos-grid style-grid', '');
+      for (const x of list) {
+        const own = S.hasStyle(kind, x.id), on = S.style[kind] === x.id, why = own ? null : S.whyNotStyle(kind, x.id, eco.money, lv);
+        const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
+        const sub = on ? '가진 것' : own ? '가진 것 · 눌러서 바꾸기' : why && /Lv/.test(why) ? `🔒 Lv.${x.lv}` : `${x.price.toLocaleString()}🪙`;
+        const btn = document.createElement('button');
+        btn.className = `cos-slot${on ? ' on' : ''}${why && /Lv/.test(why) ? ' locked' : ''}`;
+        btn.innerHTML = `<span class="swatch" style="background:linear-gradient(180deg, ${hex(x[a])} 0 58%, ${hex(x[b])} 58% 100%)"></span><b>${x.name}</b><small>${sub}</small>${on ? '<i>쓰는 중</i>' : ''}`;
+        btn.disabled = !!why;
+        if (why) btn.title = why;
+        btn.onclick = () => {
+          if (own) { S.setStyle(kind, x.id); g.audio.play('pop', 0.6); }
+          else {
+            const cost = S.buyStyle(kind, x.id, eco.money, lv);
+            if (cost < 0) return;
+            if (cost > 0) eco.spend(cost);
+            g.audio.play(BUY_SOUND); reward(g, 1, { sound: null });
+            g.ui.toast(`${x.icon} ${x.name}${josa(x.name, '으로/로')} 방을 꾸몄어요!`);
+          }
+          applyRoomStyle(S.colors());
+          saveGame(g);
+          this.open('style');
+        };
+        grid.append(btn);
+      }
+    }
+    add('mk-note', '산 벽지·바닥은 계속 가지고 있어서 언제든 다시 바꿀 수 있어요');
+  }
+
+  /** 가구: 사면 방에 바로 놓임 (벽에 걸거나 가구 위에 올려 길을 막지 않음) */
+  _openFurniture(p, add) {
+    const g = this.game, S = this.sim, eco = g.economy, lv = g.quests.level;
+    add('mk-note', `방에 놓은 가구 <b>${S.furniture.length}/${FURNITURE.length}</b> · 사면 바로 방에 생겨요`);
+    const rows = add('rows', '');
+    for (const x of FURNITURE) {
+      const own = S.hasFurniture(x.id), why = own ? null : S.whyNotFurniture(x.id, eco.money, lv);
+      const r = add(`row mk-row${own ? '' : ' none-soft'}`, `<span class="ic">${x.icon}</span><span class="nm">${x.name}${own ? ' <span class="qty">놓음</span>' : ''}<br><small>${x.desc}</small></span><span class="pr">${own ? '' : `${x.price.toLocaleString()}🪙`}</span>`, rows);
+      if (own) continue;
+      const b = document.createElement('button');
+      b.className = why ? (/Lv/.test(why) ? 'locked' : '') : 'gold';
+      b.textContent = why && /Lv/.test(why) ? `🔒 Lv.${x.lv}` : '사기';
+      b.disabled = !!why;
+      if (why) b.title = why;
+      b.onclick = () => {
+        const cost = S.buyFurniture(x.id, eco.money, lv);
+        if (!cost) return;
+        eco.spend(cost);
+        this.buildRoom();
+        g.audio.play(BUY_SOUND); reward(g, 2, { sound: null });
+        g.ui.toast(`${x.icon} ${x.name}${josa(x.name, '을/를')} 방에 놓았어요!`);
+        saveGame(g);
+        this.open('furn');
+      };
+      r.append(b);
+    }
   }
 
   upgrade() {

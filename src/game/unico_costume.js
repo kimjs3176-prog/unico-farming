@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeBodySDF, surfacePoint, bonePos } from './unico_mesh.js';
+import { COSTUME } from './sim/costume.js';
 
 /**
  * 두 발 유니코 코스튬 모양 (규칙·혜택은 sim/costume.js)
@@ -181,9 +182,30 @@ const BUILD = {
 };
 
 const CACHE = {};
+/**
+ * 색 바꾼 판: 바탕 옷 모양을 그대로 쓰고 tint 에 적힌 재질(이름 'cos_'+키)만 복제해 색을 바꿈
+ * (sim/costume.js COSTUME_VARIANTS 와 같은 목록 — sim 은 화면 없이 시험하므로 색 표만 여기서 다시 읽음)
+ */
+function variantShape(v) {
+  const base = costumeShape(v.base);
+  if (!base) return null;
+  const mats = new Map();
+  const swap = (m) => {
+    const key = m.name?.startsWith('cos_') ? m.name.slice(4) : null;
+    if (!key || v.tint[key] === undefined) return m;
+    if (!mats.has(key)) { const c = m.clone(); c.color.setHex(v.tint[key]); c.name = `cos_${key}_${v.id}`; mats.set(key, c); }
+    return mats.get(key);
+  };
+  const parts = {};
+  for (const [k, list] of Object.entries(base.parts)) parts[k] = list.map(([geo, m]) => [geo, swap(m)]);
+  return { ...base, parts };
+}
 /** 코스튬 모양 (처음 쓸 때 한 번 만들고 모든 유니코가 공유) */
 export function costumeShape(id) {
-  if (!BUILD[id]) return null;
-  return (CACHE[id] ||= BUILD[id]());
+  if (CACHE[id]) return CACHE[id];
+  if (BUILD[id]) return (CACHE[id] = BUILD[id]());
+  const v = COSTUME[id];
+  if (v?.variant && BUILD[v.base]) return (CACHE[id] = variantShape(v));
+  return null;
 }
 export const COSTUME_IDS = Object.keys(BUILD);

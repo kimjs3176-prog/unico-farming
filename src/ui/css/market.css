@@ -6,7 +6,6 @@
 .panel.market { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 14px; width: min(calc(94vw / var(--ui-zoom, 1)), 600px);
   height: min(calc(86vh / var(--ui-zoom, 1)), 680px); height: min(calc(86dvh / var(--ui-zoom, 1)), 680px); }
 /* 글자 크게(확대) 설정에서도 창이 화면 높이를 넘지 않게: vh 는 확대 배율만큼 나눠 줌 */
-.mk-row button.locked { min-width: 132px; }
 .panel.market h2 { position: static; box-shadow: none; margin-bottom: 4px; }
 .mk-top { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; border-bottom: 2px dashed rgba(107,74,46,0.18); }
 .mk-coin { display: flex; align-items: center; gap: 6px; font-size: 15px; flex-wrap: wrap; }
@@ -32,7 +31,8 @@
 .mk-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 2px dashed rgba(107,74,46,0.18); }
 .mk-total { flex: 1; font-size: 14px; }
 .mk-total b { color: #b7791f; font-size: 17px; }
-@media (max-width: 600px) { .mk-row { flex-wrap: wrap; } .mk-row .nm { min-width: 55%; } .mk-tabs button { font-size: 14px; padding: 8px 4px; }
+@media (max-width: 600px) { .mk-row { flex-wrap: wrap; } .mk-tabs { gap: 4px; } .mk-tabs button { font-size: 14px; padding: 8px 2px; white-space: nowrap; position: relative; }
+  .mk-tabs button i { position: absolute; top: -6px; right: -3px; margin: 0; padding: 0 5px; font-size: 11px; line-height: 16px; } /* 탭이 다섯 개라 개수 표시는 모서리에 */
   .panel.market { height: min(calc(78vh / var(--ui-zoom, 1)), 680px); height: min(calc(78dvh / var(--ui-zoom, 1)), 680px); } }
 .mk-ev.fest { background: #fff0c2; color: #a85b00; }
 /* 장터: 창을 화면 높이에 맞추고 위(코인·탭)를 한 줄로 → '모두 판매하기' 막대가 잘리지 않음 (세로 폰 78vh 규칙보다 뒤라 568x320 에서도 이김) */
@@ -44,3 +44,38 @@
   .mk-tabs button { padding: 6px 4px; }
   .mk-foot { padding-top: 6px; }
 }
+
+/* 장터 목록 줄: 그림 · 이름 · 값 · 단추, 설명은 이름 아래 한 줄 (마디마다 붙어 있어 '판매 42🪙' 가 갈라지지 않음) */
+.mk-body { container-type: inline-size; }
+.mk-body .mk-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; grid-template-areas: "ic nm pr btns" "ic meta pr btns"; column-gap: 8px; row-gap: 2px; align-items: center; }
+.mk-body .mk-row > .ic { grid-area: ic; }
+.mk-body .mk-row > .nm { grid-area: nm; }
+.mk-body .mk-row > .pr { grid-area: pr; }
+.mk-body .mk-row > .meta { grid-area: meta; }
+.mk-body .mk-row > .btns { grid-area: btns; display: flex; gap: 6px; justify-content: flex-end; }
+.mk-body .mk-row > .btns:empty { display: none; }
+.mk-body .mk-row button.locked { min-width: 132px; }
+.mk-row .meta { font-size: 12px; color: #74604c; font-weight: 500; line-height: 1.35; }
+.mk-row .meta > span.nw { white-space: nowrap; }
+/* 좁은 목록(폰·글자 크게): 두 줄 격자 — 위 '그림 이름 값', 아래 '그림 설명 단추'. 잠긴 단추는 '🔒 Lv.2' 만 */
+@container (max-width: 460px) {
+  .mk-body .mk-row { grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: "ic nm pr" "ic meta btns"; row-gap: 4px; }
+  .mk-body .mk-row button.locked { min-width: auto; padding: 6px 10px; }
+  .mk-body .lk-x { display: none; }
+}
+/* 판매: 단추 자리에서 '+N🪙' 이 떠오름 (창 안, 알림 장 대신) */
+.mk-gain { position: absolute; z-index: 5; pointer-events: none; white-space: nowrap; font-family: var(--display, Jua), sans-serif; font-size: 20px; color: #a8650a;
+  text-shadow: 0 2px 0 #fff, 0 0 6px rgba(255,255,255,0.9); animation: mkgain 0.9s ease-out forwards; }
+@keyframes mkgain { from { opacity: 0; transform: translate(-50%, 6px) scale(0.8); } 20% { opacity: 1; transform: translate(-50%, -6px) scale(1.1); } to { opacity: 0; transform: translate(-50%, -42px) scale(1); } }
+/* 다 팔아서 사라지는 줄: 흐려졌다가(0.12초) 접힘(0.16초) */
+.mk-body .mk-row.sold { pointer-events: none; overflow: hidden; animation: mksold 0.28s ease-in forwards; }
+@keyframes mksold { 0% { opacity: 1; scale: 1; max-height: 140px; } 43% { opacity: 0; scale: 0.96; max-height: 140px; } 100% { opacity: 0; scale: 0.96; max-height: 0; padding-top: 0; padding-bottom: 0; margin-top: -6px; border-width: 0; } }
+/* 개수가 바뀐 줄: '보유 N' 이 톡 */
+.mk-row .qty.pop { display: inline-block; animation: qtypop 0.36s cubic-bezier(.3,1.6,.5,1); }
+@keyframes qtypop { from { transform: scale(1.4); color: #b7791f; } to { transform: scale(1); } }
+.mk-today b { color: #c2410c; }
+@media (prefers-reduced-motion: reduce) {
+  .mk-gain { animation-name: mkgainfade; }
+  .mk-row .qty.pop { animation: none; }
+}
+@keyframes mkgainfade { from { opacity: 0; transform: translate(-50%, -12px); } 25% { opacity: 1; } to { opacity: 0; transform: translate(-50%, -12px); } }

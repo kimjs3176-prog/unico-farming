@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HomeSim, HOME_LEVELS, WAKE_AT, RESTED_SPEED } from '../src/game/sim/home.js';
+import { HomeSim, HOME_LEVELS, WAKE_AT, RESTED_SPEED, WALLPAPERS, FLOORS, FURNITURE } from '../src/game/sim/home.js';
 
 const at = (h) => h / 24;
 
@@ -57,4 +57,45 @@ test('옷차림 저장: 정해진 것만 받아들임', async () => {
   h.load({ outfit: { hat: 'crown', scarf: '<x>' } });
   assert.equal(h.outfit.hat, null); assert.equal(h.outfit.scarf, null);
   assert.ok(OUTFIT.hat.includes('helmet'));
+});
+
+test('집 꾸미기 목록: 벽지·바닥 8가지씩(300~2,000) + 기본, 가구 10가지 남짓(200~3,000)', () => {
+  for (const list of [WALLPAPERS, FLOORS]) {
+    assert.equal(list[0].price, 0, '첫 칸은 기본(무료)');
+    assert.equal(list.length - 1, 8);
+    for (const x of list.slice(1)) assert.ok(x.price >= 300 && x.price <= 2000, `${x.id} ${x.price}`);
+  }
+  assert.ok(FURNITURE.length >= 10 && FURNITURE.length <= 12, String(FURNITURE.length));
+  for (const x of FURNITURE) assert.ok(x.price >= 200 && x.price <= 3000, `${x.id} ${x.price}`);
+});
+
+test('벽지 사기: 바로 입힘, 가진 것은 다시 바꿀 수 있고 두 번 사지 않음 · 레벨·코인 조건', () => {
+  const h = new HomeSim();
+  assert.match(h.whyNotStyle('wall', 'night', 99999, 1), /Lv\.6/);
+  assert.equal(h.buyStyle('wall', 'peach', 100, 9), -1);
+  assert.equal(h.buyStyle('wall', 'peach', 300, 9), 300);
+  assert.equal(h.style.wall, 'peach');
+  assert.equal(h.colors().wall, WALLPAPERS.find((x) => x.id === 'peach').wall);
+  assert.equal(h.buyStyle('wall', 'peach', 9999, 9), -1, '이미 가짐');
+  assert.ok(h.setStyle('wall', 'cream'));
+  assert.equal(h.setStyle('wall', 'mint'), false, '안 가진 것으로는 못 바꿈');
+  assert.equal(h.style.wall, 'cream');
+});
+
+test('집 꾸미기 저장·불러오기: 벽지·바닥·가구가 그대로, 옛 저장은 기본 방', () => {
+  const h = new HomeSim();
+  h.buyStyle('floor', 'check', 9999, 9); h.buyStyle('wall', 'sky', 9999, 9);
+  assert.equal(h.buyFurniture('teddy', 9999, 9), 400);
+  assert.equal(h.buyFurniture('teddy', 9999, 9), 0, '같은 가구는 하나만');
+  assert.match(h.whyNotFurniture('statue', 99999, 3), /Lv\.6/);
+  const back = new HomeSim(); back.load(JSON.parse(JSON.stringify(h.toJSON())));
+  assert.deepEqual(back.style, { wall: 'sky', floor: 'check' });
+  assert.deepEqual(back.styles.floor, ['oak', 'check']);
+  assert.deepEqual(back.furniture, ['teddy']);
+  const old = new HomeSim(); old.load({ level: 1, restedDay: 3, sleeps: 2, outfit: {} });
+  assert.deepEqual(old.style, { wall: 'cream', floor: 'oak' });
+  assert.deepEqual(old.furniture, []);
+  const odd = new HomeSim(); odd.load({ style: { wall: 'night' }, styles: { wall: ['<x>'] }, furniture: ['sofa', 'clock', 'clock'] });
+  assert.equal(odd.style.wall, 'cream', '안 가진 벽지는 입히지 않음');
+  assert.deepEqual(odd.furniture, ['clock']);
 });

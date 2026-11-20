@@ -66,7 +66,7 @@
 .decor-foot { display: flex; justify-content: flex-end; margin-top: 10px; }
 .decor-bar { position: absolute; left: 50%; bottom: 174px; /* 아래 'E 놓기' 안내(bottom 120px) 위로 */ transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: linear-gradient(180deg, #a56c3e 0%, var(--wood) 45%, var(--wood-d) 100%); border-radius: 16px; box-shadow: inset 0 2px 0 rgba(255,220,170,0.45), 0 0 0 2px #4a2c18, 0 8px 18px rgba(20,14,10,0.35); max-width: calc(100vw / var(--ui-zoom, 1) - 24px); flex-wrap: wrap; justify-content: center; z-index: 5; }
 /* 창이 열려 있는 동안에는 꾸미기 막대를 숨김 (창 가장자리로 막대 단추가 눌리지 않게) */
-#ui:has(> .panel) > .decor-bar { visibility: hidden; }
+body.panel-open #ui > .decor-bar { visibility: hidden; }
 .decor-what { color: #fff8ea; font-family: var(--display); font-size: 15px; padding: 0 6px; text-shadow: 0 1px 0 rgba(0,0,0,0.45); white-space: nowrap; }
 .decor-bar button { padding: 8px 12px; font-size: 14px; min-height: 40px; }
 @media (max-width: 600px) { .decor-bar { bottom: 196px; } .decor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -102,3 +102,28 @@
 /* ---- 접근성: 글자 명암 대비 (WCAG 2.1 SC 1.4.3, scripts/a11y-check.mjs · docs/a11y) ---- */
 .panel h2 { background: linear-gradient(180deg, var(--teal-t-hi) 0%, var(--teal-t) 60%, var(--teal-t-d) 100%); }
 .row .pr { color: var(--teal-t); }   /* 청록 가격 4.5 → 5.7:1 */
+
+/* ---------------- 세로 폰: 창은 아래에서 올라오는 시트 (옷장은 위의 자기 자리) ----------------
+   위치를 transform 대신 left/right/bottom 으로 잡고, 등장·흔들림은 translate 속성이라 서로 겹쳐도 어긋나지 않음 */
+@media (max-width: 600px) {
+  .panel:not(.wardrobe) { position: absolute; left: calc(4px + var(--sal, 0px)); right: calc(4px + var(--sar, 0px)); width: auto; top: auto; bottom: 0; transform: none;
+    max-height: calc(100vh / var(--ui-zoom, 1) - var(--hud-b, 40px) - 8px); max-height: calc(100dvh / var(--ui-zoom, 1) - var(--hud-b, 40px) - 8px);
+    border-radius: 22px 22px 0 0; padding-bottom: calc(14px + var(--sab, 0px)); animation: sheetin 0.28s cubic-bezier(.3,1.3,.5,1); }
+  /* 끌개 손잡이 (모양만: 시트라는 표시) */
+  .panel:not(.wardrobe) > h2::before { content: ''; position: absolute; left: 50%; top: 5px; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: rgba(255,255,255,0.6); pointer-events: none; }
+  .panel:not(.wardrobe) > h2 { padding-top: 16px; }
+  .panel.shake { animation: sheetshake 0.12s 3; }
+}
+@keyframes sheetin { from { opacity: 0; translate: 0 48px; } to { opacity: 1; translate: 0 0; } }
+@keyframes sheetshake { 25% { translate: -5px 0; } 75% { translate: 5px 0; } }
+
+/* ---------------- 창 닫힘: 0.14초 흐려지며 살짝 작아짐 (scale 속성 → 창마다 다른 transform 과 겹쳐도 그대로) ---------------- */
+#ui > .panel.closing { pointer-events: none; animation: panelout 0.14s ease-in forwards; }
+#ui > .scrim.closing { pointer-events: none; animation: fadeout 0.14s ease-in forwards; }
+@keyframes panelout { from { opacity: 1; scale: 1; } to { opacity: 0; scale: 0.96; } }
+@keyframes fadeout { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  #ui > .panel.closing { animation-name: fadeout; }
+  .panel:not(.wardrobe) { animation-name: mgfade; }
+  .panel.shake { animation: none; }
+}

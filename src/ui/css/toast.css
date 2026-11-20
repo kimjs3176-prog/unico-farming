@@ -1,6 +1,8 @@
 /* 알림·이벤트 배너·한 번만 뜨는 팁 카드 (toast.js · tip.js · hud.js) */
 /* 알림: 캐릭터를 가리지 않게 오른쪽 위 미니맵 아래에 오른쪽 맞춤 (팁 카드만 가운데). 들어올 때 0.22초, 나갈 때 0.26초 — 머무는 시간은 글 길이로 toast.js 가 정함 */
 .toasts { position: absolute; top: calc(var(--hud-b, 52px) + 176px); right: calc(12px + var(--sar)); display: flex; flex-direction: column; gap: 6px; align-items: flex-end; transition: top 0.2s ease; }
+/* 알림·이벤트 배너는 창 배경막(6) 위에 (창 10 보다는 아래, 터치는 각 장만) */
+.toasts, .event-banner { z-index: 7; }
 /* 장마다 폭을 맞추고 왼쪽 맞춤, 맨 앞 그림은 고정 폭 칸(.ic)에 → 그림이 한 줄로 섬 */
 .toast { display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-width: min(260px, calc(80vw / var(--ui-zoom, 1))); max-width: min(320px, calc(92vw / var(--ui-zoom, 1))); text-align: left;
   background: var(--panel); border: 3px solid var(--panel-edge); color: var(--brown); padding: 8px 14px 8px 10px; border-radius: 22px; box-shadow: 0 4px 0 rgba(107,74,46,0.15); animation: toast-in 0.22s cubic-bezier(.3,1.4,.5,1) both; font-size: 15px; line-height: 1.35; word-break: keep-all; overflow-wrap: anywhere; }

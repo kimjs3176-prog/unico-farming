@@ -13,7 +13,23 @@ export const COSTUMES = [
   { id: 'koat', name: '체험관 조끼', icon: '🏢', unlock: 'stamps', perk: { koat_coins: 1.2 }, perkText: '체험관 미니게임 코인 +20%', desc: '청록 조끼와 사원증. 체험관 스탬프 6개를 모두 모으면 받아요' },
   { id: 'hanbok', name: '고운 한복', icon: '🎎', price: 800, festival: true, perk: { friend: 1.5 }, perkText: '주민 선물 우정 +50%', desc: '색동 소매 저고리와 치마. 수확 축제 날에만 장터에서 팔아요' },
 ];
-export const COSTUME = Object.fromEntries(COSTUMES.map((c) => [c.id, c]));
+/**
+ * 색 바꾼 판 (variant): 모양·혜택은 바탕 옷(base) 그대로, 천 색만 다름 (tint: 재질 이름 → 색, unico_costume.js)
+ * 장터 의상 탭에는 없고 오늘의 특별 상품(sim/shelf.js)·레벨 보상으로만 얻음
+ */
+const VARIANTS = [
+  ['overalls_pink', 'overalls', '분홍 멜빵바지', 1500, 5, { denim: 0xf29bb4, denimD: 0xd97a98, shirtChk: 0x7fc8e8 }],
+  ['raincoat_sky', 'raincoat', '하늘색 비옷', 1600, 5, { rain: 0x8fd3f5, rainD: 0x5fb6e0 }],
+  ['hanbok_mint', 'hanbok', '민트 한복', 1800, 6, { hbJeo: 0xc8f0e0, hbSkirt: 0x2fa89c, hbRed: 0x1f7a6e }],
+  ['chef_berry', 'chef', '딸기 앞치마', 2000, 6, { chefAp: 0xf7c6d4, chefNavy: 0x8e3b5c, chefRed: 0xf2a03d }],
+  ['beekeeper_lemon', 'beekeeper', '레몬 양봉 모자', 2200, 7, { beeW: 0xfff3b0, beeBand: 0x6dbb4f, beeBelt: 0xf2c14e }],
+  ['koat_gold', 'koat', '금빛 체험관 조끼', 3000, 8, { koatV: 0xe2b13c, koatT: 0x1f9e93 }],
+];
+export const COSTUME_VARIANTS = VARIANTS.map(([id, base, name, price, lv, tint]) => {
+  const b = COSTUMES.find((c) => c.id === base);
+  return { id, base, name, icon: b.icon, price, lv, tint, variant: true, perk: b.perk, perkText: b.perkText, desc: `${b.name}의 색 바꾼 판` };
+});
+export const COSTUME = Object.fromEntries([...COSTUMES, ...COSTUME_VARIANTS].map((c) => [c.id, c]));
 export const SET_SLOTS = 3;
 const HATS = [null, 'straw', 'helmet'], SCARVES = [null, 'red', 'green', 'blue'];
 
@@ -27,12 +43,13 @@ export class CostumeSim {
   has(id) { return this.owned.has(id); }
 
   /** 살 수 없는 이유 (없으면 null) */
-  whyNotBuy(id, { money = 0, level = 99, festival = false } = {}) {
+  whyNotBuy(id, { money = 0, level = 99, festival = false, shelf = false } = {}) {
     const c = COSTUME[id];
     if (!c) return '없는 옷이에요';
     if (this.has(id)) return '이미 가지고 있어요';
     if (c.unlock === 'stamps') return '체험관 스탬프 6개를 모으면 받아요';
     if (c.festival && !festival) return '수확 축제 날에만 팔아요';
+    if (c.variant && !shelf) return '오늘의 특별 상품에만 나와요';
     if (level < (c.lv || 1)) return `Lv.${c.lv}부터 살 수 있어요`;
     if (money < c.price) return `코인이 ${c.price - money} 모자라요`;
     return null;
@@ -50,6 +67,13 @@ export class CostumeSim {
     const got = [];
     for (const c of COSTUMES) if (c.unlock === 'stamps' && !this.has(c.id) && stamps >= stampsTotal) { this.owned.add(c.id); got.push(c.id); }
     return got;
+  }
+
+  /** 보상으로 받기 (레벨 보상 등) → 새로 받았으면 true */
+  grant(id) {
+    if (!COSTUME[id] || this.has(id)) return false;
+    this.owned.add(id);
+    return true;
   }
 
   wear(id) {

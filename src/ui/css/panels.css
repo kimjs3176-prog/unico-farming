@@ -48,3 +48,21 @@
 .wd h3 { margin: 12px 0 6px; }
 .wd-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .wd-row button { flex: 1 1 auto; min-width: 84px; }
+
+/* 창 배경막: 창(10) 아래·알림(7) 아래, 흐림 효과 없이 색만 (낮은 품질에서도 가벼움). 누르면 창이 닫힘 (ui.dismiss) */
+.scrim { position: absolute; inset: 0; background: rgba(32, 22, 14, 0.38); z-index: 6; animation: mgfade 0.2s; }
+/* 옷장·꾸미기 창은 뒤의 유니코·농장을 보면서 고르므로 배경막 없음 */
+body.panel-see #ui > .scrim { display: none; }
+/* 폰: 창이 떠 있는 동안 아래·옆 버튼과 미니맵·목표 칩은 숨김 (창 가장자리로 잘못 눌리지 않게). 닫히기 시작하면 바로 돌아옴 */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  #ui > :is(.bar-toggle, .touch-btn, .actionbar, .minimap, .objective, .chat, .auto-chip, .jump-btn, .cam-pad, .prompt) { transition: opacity 0.15s; }
+  body.panel-open:not(.panel-see) #ui > :is(.bar-toggle, .touch-btn, .actionbar, .minimap, .objective, .chat, .auto-chip, .jump-btn, .cam-pad, .prompt) { opacity: 0; pointer-events: none; }
+}
+
+/* 집 책상: 벽지·바닥 견본 칸 (위 벽 · 아랫단/널빤지 두 색) */
+.style-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.style-grid .cos-slot { min-height: 96px; }
+.style-grid .swatch { width: 44px; height: 32px; border-radius: 8px; box-shadow: inset 0 0 0 2px rgba(107,74,46,0.25); margin-bottom: 2px; }
+.style-grid .cos-slot.locked .swatch { filter: grayscale(0.7); opacity: 0.55; }
+.panel.home-desk .mk-tabs { margin-bottom: 8px; }
+@media (max-width: 600px) { .style-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
