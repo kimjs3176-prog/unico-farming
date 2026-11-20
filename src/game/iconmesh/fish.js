@@ -6,6 +6,11 @@ import { makeFish, FISH_LOOK } from '../fishmesh.js';
  *  - 아이콘 카메라(앞·조금 위)에서 옆모습이 보이게 머리를 오른쪽 앞으로 살짝 돌림
  */
 export const FISH_ICON_KEYS = Object.keys(FISH_LOOK);
+// 닮은 종이 나란히 놓여도 갈리게 종마다 자세를 조금씩 (yaw 몸 돌림 · tilt 머리 들기)
+const POSE = {
+  fish_minnow: { yaw: 0.5, tilt: 0.2 }, fish_smelt: { yaw: 0.2, tilt: 0.5 }, fish_skygazer: { yaw: 0.25, tilt: 0.55 },
+  fish_kchub: { yaw: 0.45, tilt: 0.3 }, fish_palechub: { yaw: 0.2, tilt: 0.42 }, fish_nuchi: { yaw: 0.38, tilt: 0.26 },
+};
 
 export function fishIcon(id) {
   if (!FISH_LOOK[id]) return null;
@@ -13,9 +18,10 @@ export function fishIcon(id) {
   const f = makeFish(id, 1);
   if (L.shape === 'snail' || L.shape === 'turtle') { f.rotation.y = 0.55; return f; } // 기는 것: 비스듬히 위에서
   // 헤엄치는 것·새우·가재: 옆모습 3/4, 칸을 넓게 쓰게 머리를 오른쪽 위로 비스듬히 (긴 몸일수록 더)
-  f.rotation.set(0, L.shape ? 0.45 : 0.32, 0);
+  const P = POSE[id];
+  f.rotation.set(0, P?.yaw ?? (L.shape ? 0.45 : 0.32), 0);
   const tilt = new THREE.Group();
-  tilt.rotation.z = L.shape === 'crayfish' ? 0.35 : L.shape === 'shrimp' ? 0.15 : (L.long || 1) > 1.4 ? 0.62 : 0.38;
+  tilt.rotation.z = P?.tilt ?? (L.shape === 'crayfish' ? 0.35 : L.shape === 'shrimp' ? 0.15 : (L.long || 1) > 1.4 ? 0.62 : 0.38);
   tilt.add(f);
   tilt.userData.dispose = f.userData.dispose;
   return tilt;

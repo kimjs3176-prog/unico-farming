@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { ITEMS } from '../src/game/sim/items.js';
-import { makeFish, showLength, FISH_LOOK } from '../src/game/fishmesh.js';
+import { makeFish, showLength, FISH_LOOK, setFishQuality } from '../src/game/fishmesh.js';
 import { iconCats, iconBuilder } from '../src/game/iconmesh/index.js';
 
 /** 정점이 모두 유한하고 크기가 적당한지 (월드 좌표) */
@@ -77,15 +77,38 @@ test('아이콘 열쇠: ITEMS 전부 + 작물·생산물·사료·코스튬·꾸
 });
 
 const FISH_DRAW_MAX = 8; // 낚은 물고기 들어 보이기: 예전(6~8번)보다 그리기 횟수가 늘지 않게
+const tris = (g) => { let n = 0; g.traverse((o) => { if (o.isMesh) n += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; }); return n; };
+const draws = (g) => { let n = 0; g.traverse((o) => { if (o.isMesh) n++; }); return n; };
+
 test(`makeFish: 지느러미·눈·다리를 재질별로 합쳐 한 마리 그리기 ${FISH_DRAW_MAX}번 이하 (휴대폰 낮음 포함)`, () => {
-  for (const lvl of ['high', 'low']) {
-    globalThis.game = { quality: { level: lvl } };
-    try {
-      for (const id of Object.keys(FISH_LOOK)) {
-        let n = 0;
-        makeFish(id, 0.4).traverse((o) => { if (o.isMesh) n++; });
-        assert.ok(n <= FISH_DRAW_MAX, `${lvl}/${id}: ${n}번`);
-      }
-    } finally { delete globalThis.game; }
+  for (const lo of [false, true]) {
+    for (const id of Object.keys(FISH_LOOK)) {
+      const n = draws(makeFish(id, 0.4, { lo }));
+      assert.ok(n <= FISH_DRAW_MAX, `${lo ? 'low' : 'high'}/${id}: ${n}번`);
+    }
   }
+});
+
+// 휴대폰 낮음: 예전 모양(붕어 966개 · 송어 1362개) 수준. 껍데기·집게가 있는 것은 조금 더 허용
+const FISH_LO_TRIS = 1100, SHELL_LO_TRIS = 1800;
+test(`makeFish 낮음: 물고기 한 마리 삼각형 ${FISH_LO_TRIS}개 이하 (새우·가재·우렁이·자라 ${SHELL_LO_TRIS}개 이하)`, () => {
+  for (const id of Object.keys(FISH_LOOK)) {
+    const n = tris(makeFish(id, 0.4, { lo: true }));
+    const max = FISH_LOOK[id].shape ? SHELL_LO_TRIS : FISH_LO_TRIS;
+    assert.ok(n <= max, `${id}: ${n}개 (한도 ${max})`);
+    assert.ok(n < tris(makeFish(id, 0.4, { lo: false })), `${id}: 낮음이 높음보다 가볍지 않음`);
+  }
+});
+
+test('makeFish: window.game 이 아직 없을 때(게임 생성자 안)도 setFishQuality 로 낮음을 따름', () => {
+  // 준비: 호수 장면처럼 globalThis.game 없이 만듦
+  assert.equal(globalThis.game, undefined);
+  const hi = tris(makeFish('fish_crucian', 0.22));
+  setFishQuality('low');
+  try {
+    // 실행·확인
+    assert.ok(tris(makeFish('fish_crucian', 0.22)) <= FISH_LO_TRIS);
+    assert.ok(tris(makeFish('fish_crucian', 0.22, { lo: false })) === hi, '명시한 lo 가 우선');
+  } finally { setFishQuality(null); }
+  assert.equal(tris(makeFish('fish_crucian', 0.22)), hi);
 });

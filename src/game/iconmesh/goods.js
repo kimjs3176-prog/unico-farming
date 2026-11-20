@@ -4,7 +4,7 @@ import { eggBody, milkBottle, fleece, leaf } from './fruit.js';
 
 /**
  * 가공품·특별 생산물·물속 보물·쌀·씨앗류 아이콘 (위 = +y, 앞 = +z)
- *  병·단지·컵·덩어리에 색 라벨과 뚜껑 · 쌀은 등급마다 그릇 색 · 자루는 천 색
+ *  병·단지·컵·덩어리에 색 라벨과 뚜껑 · 쌀은 등급마다 밥 높이·김·그릇 · 자루는 묶은 삼베 + 표시 + 쏟아진 것
  */
 const CREAM = 0xfff4dc;
 
@@ -32,15 +32,6 @@ function labelMark(c, y, { leafC = 0x4a9a32, z = 0.295 } = {}) {
   const l = leaf(0.07, 0.04, leafC); l.position.set(0.0, y + 0.045, z + 0.01); l.rotation.set(0, 0, 0.9); g.add(l);
   return g;
 }
-/** 병: 액체 색 + 라벨 + 뚜껑 */
-function bottle({ fill, label = CREAM, cap = 0xd84a3a, mark = null }) {
-  const g = new THREE.Group();
-  g.add(mesh(lathe([[0, 0], [0.17, 0], [0.19, 0.04], [0.19, 0.42], [0.15, 0.52], [0.08, 0.6], [0.075, 0.7], [0, 0.7]], 32), shiny(fill, { rough: 0.12 })));
-  g.add(mesh(cyl(0.193, 0.193, 0.18, 32, true), mat(label, { rough: 0.7, side: THREE.DoubleSide }), { p: [0, 0.22, 0] }));
-  g.add(mesh(cyl(0.085, 0.085, 0.07, 20), mat(cap, { rough: 0.45 }), { p: [0, 0.73, 0] }));
-  if (mark) g.add(mark);
-  return g;
-}
 /** 유리컵 + 음료 + 빨대 */
 function glassCup({ fill, straw = 0xffffff, garnish = null }) {
   const g = new THREE.Group();
@@ -59,30 +50,88 @@ function bowl(c, rim = null, { w = 0.42, h = 0.24 } = {}) {
   if (rim) g.add(mesh(torus(w * 0.98, 0.016, 48, 8), shiny(rim, { metal: rim === 0xf2c23a ? 0.6 : 0 }), { p: [0, h, 0], r: [Math.PI / 2, 0, 0] }));
   return g;
 }
-/** 자루: 불룩한 몸 + 묶인 목 + 위로 벌어진 입 */
-function sack({ c, band = null, seedC = null, tag = null }) {
+/** 자루: 불룩한 몸 + 끈으로 묶은 좁은 목 + 위로 벌어진 주름 + 삼베 짜임 (앞쪽에 표시·쏟아진 것) */
+function sack({ c, rope = 0xc8a46a, extra = [] }) {
   const g = new THREE.Group();
-  const geo = lathe([[0, 0], [0.26, 0.0], [0.36, 0.1], [0.38, 0.3], [0.32, 0.48], [0.16, 0.6], [0.12, 0.62], [0.18, 0.7], [0.24, 0.78], [0.2, 0.8], [0, 0.72]], 40);
-  const R = rng(9);
-  const noise = Array.from({ length: 64 }, () => R());
-  paint(geo, (x, y, z) => { const a = Math.atan2(z, x); return mixC(c, 0x000000, 0.12 * noise[Math.floor(((a + Math.PI) / (Math.PI * 2)) * 32 + y * 30) & 63]).lerp(C(0x000000), 0.18 * smooth(0.5, 0.62, y) * smooth(0.72, 0.62, y)); });
-  // 천 주름: 각도 따라 조금 울퉁불퉁
+  // 옆 모양을 곡선으로 이어 고리를 촘촘하게 (짜임 무늬가 보이게)
+  const prof = new THREE.SplineCurve([[0.0, 0], [0.3, 0.0], [0.4, 0.07], [0.44, 0.22], [0.42, 0.38], [0.33, 0.52], [0.18, 0.62], [0.1, 0.67], [0.13, 0.71], [0.22, 0.79], [0.29, 0.86], [0.24, 0.89], [0.15, 0.84], [0.04, 0.8]].map(([r, y]) => new THREE.Vector2(r, y)));
+  const pts = prof.getPoints(40).map((v) => [v.x, v.y]);
+  pts.unshift([0, 0]); pts.push([0, 0.79]);
+  const geo = lathe(pts, 56);
   const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i), a = Math.atan2(z, x), k = 1 + 0.03 * Math.sin(a * 7 + p.getY(i) * 8); p.setX(i, x * k); p.setZ(i, z * k); }
-  geo.computeVertexNormals();
-  g.add(mesh(geo, mat(0xffffff, { vc: true, rough: 0.9 })));
-  g.add(mesh(torus(0.13, 0.025, 24, 8), mat(0xc8a46a, { rough: 0.8 }), { p: [0, 0.62, 0], r: [Math.PI / 2, 0, 0] }));
-  if (band) g.add(mesh(cyl(0.385, 0.385, 0.1, 40, true), mat(band, { rough: 0.7, side: THREE.DoubleSide }), { p: [0, 0.3, 0] }));
-  if (seedC) { // 입구에 낟알 소복
-    const s = new THREE.SphereGeometry(0.19, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2);
-    paint(s, (x, y, z) => mixC(seedC, 0x8a6a2a, Math.abs(Math.sin(x * 60) * Math.sin(z * 60)) > 0.7 ? 0.4 : 0));
-    g.add(mesh(s, mat(0xffffff, { vc: true, rough: 0.7 }), { p: [0, 0.74, 0], s: [1, 0.5, 1] }));
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x);
+    const fold = 1 + 0.2 * Math.sin(a * 6) * smooth(0.68, 0.86, y) + 0.035 * Math.sin(a * 5 + y * 9) * smooth(0.62, 0.3, y); // 윗단 주름 · 몸 구김
+    const sq = 1 - 0.14 * smooth(0.6, 0.2, y); // 앞뒤로 조금 납작
+    p.setXYZ(i, x * fold, y + 0.03 * Math.sin(a * 6) * smooth(0.75, 0.88, y), z * fold * sq);
   }
-  if (tag) g.add(tag);
+  geo.computeVertexNormals();
+  paint(geo, (x, y, z) => {
+    const a = Math.atan2(z, x), u = a * 0.42 / Math.PI * 40, v = y * 46;
+    const weave = (Math.abs(Math.sin(u * Math.PI)) > 0.75 ? 0.1 : 0) + (Math.abs(Math.sin(v * Math.PI)) > 0.8 ? 0.08 : 0);
+    return mixC(c, 0x000000, weave + 0.2 * smooth(0.55, 0.66, y) * smooth(0.72, 0.66, y)).lerp(C(0xffffff), 0.1 * smooth(0.2, 0.5, y + z * 0.4));
+  });
+  g.add(mesh(geo, mat(0xffffff, { vc: true, rough: 0.92 })));
+  // 끈: 목에 두 번 감고 앞으로 늘어진 끝
+  const rm = mat(rope, { rough: 0.8 });
+  for (const dy of [0, 0.035]) g.add(mesh(torus(0.115, 0.026, 28, 8), rm, { p: [0, 0.655 + dy, 0], r: [Math.PI / 2, 0, 0] }));
+  g.add(mesh(tube([[0.05, 0.66, 0.1], [0.1, 0.6, 0.17], [0.07, 0.5, 0.22]], 0.02, 10, 6), rm));
+  g.add(mesh(tube([[-0.02, 0.66, 0.11], [-0.08, 0.58, 0.18], [-0.13, 0.52, 0.2]], 0.02, 10, 6), rm));
+  for (const e of extra) if (e) g.add(e);
+  return g;
+}
+/** 꾸미기 '곡식 자루' 아이콘: 표시 없는 삼베 자루 + 위로 소복한 낟알 */
+export function grainSack() {
+  const g = sack({ c: 0xc8a870, extra: [spill(73, 10, () => sphere(0.03, 8, 6).scale(0.7, 0.55, 1.3), 0xe8c050)] });
+  g.rotation.y = -0.25;
+  return g;
+}
+/** 자루 앞면에 찍은 표시 (평평한 도형) */
+const stamp = (shape, c, { y = 0.32, sc = 1, z = 0.4 } = {}) => { const m = mesh(flat(shape, 0.006, true), mat(c, { rough: 0.85 }), { p: [0, y, z], s: sc }); m.rotation.x = -0.12; return m; };
+/** 볍씨 표시: 이삭 모양 (낟알 다섯) */
+function grainStamp(c) {
+  const g = new THREE.Group(), m = mat(c, { rough: 0.8 });
+  const zAt = (y) => 0.395 - Math.max(0, y - 0.24) * 0.6; // 자루 앞면을 따라
+  g.add(mesh(cyl(0.016, 0.016, 0.3, 6), m, { p: [0.01, 0.27, zAt(0.27)], r: [-0.2, 0, 0.12] }));
+  for (let i = 0; i < 5; i++) for (const sd of [-1, 1]) {
+    if (i === 4 && sd > 0) continue;
+    const y = 0.22 + i * 0.05;
+    g.add(mesh(sphere(0.05, 10, 8), m, { p: [-0.012 * i + sd * 0.055, y, zAt(y)], s: [0.6, 1.3, 0.35], r: [-0.2, 0, sd * 0.6] }));
+  }
+  return g;
+}
+/** 바닥에 쏟아진 알갱이 */
+function spill(seed, n, makeGeo, c, { cx = 0.1, cz = 0.42, spread = 0.2 } = {}) {
+  const g = new THREE.Group(), R = rng(seed), m = mat(c, { rough: 0.6 }), geo = makeGeo();
+  for (let i = 0; i < n; i++) {
+    const a = R() * Math.PI * 2, r = Math.sqrt(R()) * spread;
+    const mm = mesh(geo, m, { p: [cx + Math.cos(a) * r, 0.025 + (spread - r) * 0.25 * (i % 3 === 0 ? 1 : 0.4), cz + Math.sin(a) * r * 0.6], r: [R() * 3, R() * 3, R() * 3] });
+    g.add(mm);
+  }
   return g;
 }
 
 // ---------------------------------------------------------------- 가공품
+/** 유리 주전자: 비치는 유리 + 안의 음료 + 손잡이 + 테두리에 과일 조각 */
+function carafe({ fill, slice }) {
+  const g = new THREE.Group();
+  g.add(mesh(lathe([[0, 0.02], [0.2, 0.02], [0.23, 0.08], [0.23, 0.4], [0.16, 0.5], [0, 0.5]], 32), shiny(fill, { rough: 0.2 }))); // 음료
+  g.add(mesh(lathe([[0.215, 0.0], [0.245, 0.06], [0.245, 0.42], [0.15, 0.6], [0.14, 0.74], [0.18, 0.8], [0.17, 0.81], [0.125, 0.75], [0.135, 0.6], [0.23, 0.42], [0.23, 0.06], [0.205, 0.015]], 36), mat(0xeaf6fa, { rough: 0.05, opacity: 0.4 })));
+  g.add(mesh(lathe([[0, -0.0], [0.22, 0.0], [0.22, 0.025], [0, 0.025]], 32), mat(0xeaf6fa, { rough: 0.05, opacity: 0.6 })));
+  g.add(mesh(tube([[-0.24, 0.62, 0], [-0.36, 0.6, 0], [-0.37, 0.36, 0], [-0.24, 0.24, 0]], 0.028, 16, 8), mat(0xeaf6fa, { rough: 0.05, opacity: 0.55 }))); // 손잡이
+  g.add(mesh(lathe([[0.24, 0.42], [0.24, 0.43], [0.0, 0.43]], 32), mat(mixC(fill, 0xffffff, 0.35).getHex(), { rough: 0.3 }), { p: [0, 0.07, 0] })); // 음료 윗면 거품
+  if (slice) g.add(slice);
+  return g;
+}
+/** 과일 단면 조각 (반달) */
+function fruitSlice(skin, flesh, seedC, { p = [0.12, 0.82, 0.08], r = [0.2, 0.4, -0.5], sc = 1 } = {}) {
+  const geo = new THREE.CylinderGeometry(0.14, 0.14, 0.04, 24, 1, false, 0, Math.PI);
+  const g = group(mesh(geo, mat(skin, { rough: 0.35 })));
+  g.add(mesh(new THREE.CircleGeometry(0.125, 20, 0, Math.PI).rotateX(-Math.PI / 2), mat(flesh, { rough: 0.5, side: THREE.DoubleSide }), { p: [0, 0.021, 0] }));
+  for (let i = 0; i < 4; i++) { const a = 0.4 + i * 0.75; g.add(mesh(sphere(0.018, 8, 6), mat(seedC), { p: [Math.cos(a) * 0.06, 0.024, -Math.sin(a) * 0.06], s: [1, 0.5, 1.4] })); }
+  g.position.set(...p); g.rotation.set(...r); g.scale.setScalar(sc);
+  return g;
+}
 function kimchi() {
   const g = bowl(0xf4f0e6, 0x3a6ab8, { w: 0.44, h: 0.22 });
   const R = rng(3), red = mat(0xffffff, { vc: true, rough: 0.6, side: THREE.DoubleSide });
@@ -171,6 +220,24 @@ function teaCup() {
   return g;
 }
 
+function honeyBerryJar() {
+  const g = new THREE.Group(), h = 0.6;
+  g.add(mesh(lathe([[0, 0.02], [0.22, 0.02], [0.26, 0.08], [0.26, h * 0.86], [0, h * 0.86]], 32), shiny(0xf2a42a, { rough: 0.15, emissive: 0x5a2a00, ei: 0.2 }))); // 꿀
+  const R = rng(5);
+  for (let i = 0; i < 6; i++) { // 꿀 속 딸기
+    const a = (i / 6) * Math.PI * 2 + 0.3, y = 0.14 + (i % 3) * 0.13;
+    g.add(mesh(lathe([[0, -0.07], [0.04, -0.05], [0.06, 0.01], [0.05, 0.05], [0, 0.055]], 14), shiny(0xd8202a), { p: [Math.cos(a) * 0.17, y, Math.sin(a) * 0.17], r: [R(), a, R() * 0.6] }));
+  }
+  g.add(mesh(lathe([[0.27, 0.0], [0.29, 0.06], [0.29, h * 0.88], [0.23, h * 0.94], [0.23, h], [0.22, h], [0.22, h * 0.94], [0.275, h * 0.88], [0.275, 0.06], [0.255, 0.01]], 36), mat(0xf6fbfc, { rough: 0.05, opacity: 0.35 }))); // 유리
+  const c = new THREE.SphereGeometry(0.34, 32, 12, 0, Math.PI * 2, 0, Math.PI * 0.42);
+  paint(c, (x, y, z) => { const a = Math.floor((x + 1) * 7) % 2, b = Math.floor((z + 1) * 7) % 2; return a && b ? C(0xe0901a) : a || b ? C(0xf6c050) : C(0xfff6e0); });
+  c.scale(1, 0.4, 1);
+  g.add(mesh(c, mat(0xffffff, { vc: true, rough: 0.8, side: THREE.DoubleSide }), { p: [0, h - 0.07, 0] }));
+  g.add(mesh(torus(0.235, 0.016, 32, 6), mat(0x8a5a2a), { p: [0, h - 0.035, 0], r: [Math.PI / 2, 0, 0] }));
+  g.add(mesh(tube([[0.1, h - 0.03, 0.21], [0.16, h - 0.12, 0.25], [0.12, h - 0.2, 0.27]], 0.012, 8, 5), mat(0x8a5a2a)));
+  return g;
+}
+
 // ---------------------------------------------------------------- 보물
 function clamShell(open = 0.35, c = 0x9a8a72) {
   const g = new THREE.Group();
@@ -213,12 +280,13 @@ function ricePaddy() {
   g.rotation.z = -0.35;
   return g;
 }
-const RICE_BOWL = [null, [0x9a6a3a, null], [0xa8c8a0, 0x6a9a6a], [0xf6f4f0, 0x3a6ab8], [0xc23a2a, 0xf2c23a], [0xf2c23a, 0xfff0a0]];
+const RICE_BOWL = [null, [0x9a6a3a, null], [0x8ac0a0, 0x4a8a6a], [0xf6f4f0, 0x2a5ab8], [0xb8261c, 0xf2c23a], [0xf2c23a, 0xfff0a0]];
 function riceBowl(grade) {
   const [c, rim] = RICE_BOWL[grade];
   const g = bowl(c, rim, { w: 0.42, h: 0.26 });
   if (grade === 5) g.children[0].material = gold();
-  // 소복한 밥: 낟알 모양으로 울퉁불퉁 + 낟알 사이 그늘
+  if (grade === 4) g.children[0].material = shiny(c, { rough: 0.15 }); // 옻칠 광택
+  // 소복한 밥: 등급이 오를수록 높게. 낟알 모양으로 울퉁불퉁 + 낟알 사이 그늘
   const heap = new THREE.SphereGeometry(0.4, 64, 24, 0, Math.PI * 2, 0, Math.PI / 2);
   const hp = heap.attributes.position, R = rng(50 + grade), bumps = Array.from({ length: 140 }, () => [R() * Math.PI * 2, R() * 0.95]);
   const grainAt = (x, y, z) => { const a = Math.atan2(z, x), t = 1 - y / 0.4; let k = 0; for (const [ba, bt] of bumps) { const d = Math.hypot(Math.atan2(Math.sin(a - ba), Math.cos(a - ba)) * (0.25 + t), (t - bt) * 1.3); k = Math.max(k, 1 - smooth(0.02, 0.07, d)); } return k; };
@@ -226,15 +294,23 @@ function riceBowl(grade) {
   for (let i = 0; i < hp.count; i++) { const x = hp.getX(i), y = hp.getY(i), z = hp.getZ(i), k = grainAt(x, y, z); ks[i] = k; const f = 1 + 0.035 * k; hp.setXYZ(i, x * f, y * f, z * f); }
   heap.computeVertexNormals();
   paint(heap, (x, y, z, i) => mixC(0xe6dccb, 0xfffdf6, ks[i]));
-  g.add(mesh(heap, mat(0xffffff, { vc: true, rough: 0.45 }), { p: [0, 0.2, 0], s: [1, 0.72, 1] }));
-  // 등급만큼 그릇 앞에 별 (★)
-  const star = []; for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + (i / 10) * Math.PI * 2, r = i % 2 ? 0.024 : 0.058; star.push([Math.cos(a) * r, Math.sin(a) * r]); }
-  const sm = mat(0xf6c62a, { rough: 0.3, metal: 0.3, emissive: 0x5a3a00, ei: 0.4 }), sg = flat(star, 0.015, false);
+  const mound = 0.5 + grade * 0.14;
+  g.add(mesh(heap, mat(0xffffff, { vc: true, rough: 0.45 }), { p: [0, 0.2, 0], s: [1, mound, 1] }));
+  // 김: 2등급부터 한 줄기씩 더
+  const top = 0.2 + 0.4 * mound, steam = mat(0xffffff, { rough: 0.9, opacity: 0.75 });
+  for (let i = 0; i < grade - 1; i++) { const x = (i - (grade - 2) / 2) * 0.12; g.add(mesh(tube([[x, top, 0], [x + 0.05, top + 0.1, 0.02], [x - 0.03, top + 0.2, 0], [x + 0.03, top + 0.3, 0]], 0.018, 12, 5), steam)); }
+  // 등급만큼 그릇 앞에 큰 별 (★) + 진한 테두리
+  const starPts = (k) => { const out = []; for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + (i / 10) * Math.PI * 2, r = (i % 2 ? 0.05 : 0.115) * k; out.push([Math.cos(a) * r, Math.sin(a) * r]); } return out; };
+  const sm = mat(0xffd23a, { rough: 0.3, metal: 0.2, emissive: 0x6a4a00, ei: 0.5 }), sg = flat(starPts(1), 0.02, false);
+  const om = mat(0x5a3418, { rough: 0.6 }), og = flat(starPts(1.3), 0.012, false);
+  const gap = grade > 3 ? 0.36 : 0.42;
   for (let i = 0; i < grade; i++) {
-    const a = (i - (grade - 1) / 2) * 0.32;
-    g.add(mesh(sg, sm, { p: [Math.sin(a) * 0.37, 0.15, Math.cos(a) * 0.37], r: [-0.45, a, 0] }));
+    const a = (i - (grade - 1) / 2) * gap;
+    const piv = group(mesh(og, om, { p: [0, 0, -0.012] }), mesh(sg, sm));
+    piv.position.set(Math.sin(a) * 0.4, 0.12, Math.cos(a) * 0.4); piv.rotation.set(-0.45, a, 0);
+    g.add(piv);
   }
-  if (grade === 5) g.add(sparkle([0.32, 0.55, 0.1], 0.1));
+  if (grade === 5) g.add(sparkle([0.32, 0.6, 0.1], 0.12));
   return g;
 }
 function bone() {
@@ -265,15 +341,15 @@ function weed() {
   g.add(mesh(sphere(0.12, 16, 10), mat(0x6a4a2a, { rough: 0.95 }), { p: [0, -0.06, 0], s: [1, 0.5, 1] }));
   return g;
 }
-const leafTag = (c = 0x4a9a32) => { const l = leaf(0.18, 0.1, c); l.position.set(-0.05, 0.3, 0.38); l.rotation.set(0, 0, 0.6); return l; };
+const leafTag = (c = 0x4a9a32) => { const l = leaf(0.18, 0.1, c); l.position.set(-0.08, 0.24, 0.4); l.rotation.set(-0.1, 0, 0.7); return l; };
 
 const BUILD = {
   goods_carrotjuice: () => glassCup({ fill: 0xf2902a, straw: 0xf6f0e0, garnish: (() => { const s = mesh(cyl(0.09, 0.09, 0.03, 20), mat(0xf28a2a), { p: [-0.18, 0.6, 0.06], r: [Math.PI / 2, 0, 0.3] }); return s; })() }),
   goods_kimchi: kimchi,
-  goods_juice: () => bottle({ fill: 0xd8342a, cap: 0x3e8a2a, mark: labelMark(0xe2402a, 0.22, { z: 0.198 }) }),
+  goods_juice: () => carafe({ fill: 0xe0402a, slice: fruitSlice(0xd8322a, 0xf26a4a, 0xf6d870, { p: [0.17, 0.8, 0.05], r: [Math.PI / 2 - 0.2, 0, -0.5] }) }), // 토마토 주스: 유리 주전자 + 토마토 조각
   goods_jam: () => jar({ fill: 0xc8202a, cloth: 0xe0403a, label: CREAM, mark: labelMark(0xe2302a, 0.25) }),
   goods_corntea: teaCup,
-  goods_honeyjam: () => jar({ fill: 0xe87a52, lid: 0xf2c23a, label: 0xfff0c0, mark: labelMark(0xe2302a, 0.25, { leafC: 0x4a9a32 }) }),
+  goods_honeyjam: honeyBerryJar, // 딸기 꿀절임: 꿀 속 딸기가 비치는 병 + 노란 체크 천 뚜껑
   goods_cheese: cheese,
   goods_yarn: () => yarnBall(),
   goods_castella: castella,
@@ -286,12 +362,12 @@ const BUILD = {
   clam, pearl,
   paddy: ricePaddy,
   rice_1: () => riceBowl(1), rice_2: () => riceBowl(2), rice_3: () => riceBowl(3), rice_4: () => riceBowl(4), rice_5: () => riceBowl(5),
-  rice_seed: () => sack({ c: 0xf2e6c8, seedC: 0xe8c050, band: 0xa8c870 }),
+  rice_seed: () => sack({ c: 0xd8c08a, extra: [grainStamp(0x3e7a22), spill(61, 14, () => sphere(0.03, 8, 6).scale(0.7, 0.55, 1.3), 0xe8c050)] }), // 볍씨: 삼베 자루 + 이삭 표시 + 쏟아진 낟알
   pet_treat: bone,
   bait,
-  compost: () => sack({ c: 0x7a5a3a, band: 0x5a8a3a, tag: leafTag(0x6ac04a) }),
+  compost: () => sack({ c: 0x5e4028, rope: 0x9a7a4a, extra: [leafTag(0x7ac04a), spill(67, 12, () => new THREE.DodecahedronGeometry(0.04, 0), 0x3a2616)] }), // 퇴비: 짙은 자루 + 잎 표시 + 흙 부스러기
   weed,
-  feed: () => sack({ c: 0xe8d4a0, band: 0xd8504a, seedC: 0xd8b060 }),
+  feed: () => sack({ c: 0xa8845a, rope: 0xd8504a, extra: [stamp([[-0.1, -0.08], [0.1, -0.08], [0.1, 0.08], [-0.1, 0.08]], 0xd8504a, { y: 0.32 }), spill(71, 16, () => new THREE.CylinderGeometry(0.028, 0.028, 0.06, 7), 0x8a5a2a)] }), // 사료: 짙은 삼베 + 빨간 표 + 알갱이 더미
 };
 export const GOODS_ICON_KEYS = Object.keys(BUILD);
 

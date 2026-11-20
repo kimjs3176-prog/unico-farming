@@ -4,7 +4,7 @@
 // 열쇠: ITEMS·작물·목장 생산물은 원래 id, 사료 feed, 코스튬 costume:<id>, 꾸미기 decor:<id>
 // CATS_DONE: 모든 아이템을 구운 분류 (이 분류만 아이콘으로, 나머지는 이모지 그대로 — 한 칸 묶음에 섞지 않기)
 // 주소는 사이트 뿌리 기준 (/ui/...) — 하위 경로에 배포하면 BASE_URL 을 앞에 붙여 쓰기. 첫 화면에서 받지 말고 창을 처음 열 때 받기
-export const URLS = ["/ui/items.webp?v=b9adf62fb9","/ui/items_deco.webp?v=3cc93bfe5f"];
+export const URLS = ["/ui/items.webp?v=cc1ea7827a","/ui/items_deco.webp?v=a11902f86d"];
 export const URL = URLS[0];
 export const CELL = 128;
 export const COLS = 12;

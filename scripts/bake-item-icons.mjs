@@ -1,7 +1,8 @@
 // 아이템 아이콘 굽기: 코드로 만든 메시(src/game/iconmesh/) · 게임 모델(꾸미기) · 유니코(코스튬) → 아이콘 한 장(아틀라스)
 //  결과: public/ui/items.webp (아이템) · public/ui/items_deco.webp (코스튬·꾸미기) — 128px 칸 한 줄 12칸, 칸 안쪽 4px 여백, 투명 배경, 장마다 250KB 이하
 //        src/ui/item_icons.gen.js (열쇠 → 칸 위치, 다 구운 분류 CATS_DONE, 주소에 ?v=<해시>)
-//  모든 칸이 같은 카메라(앞·위 3/4) · 같은 빛(주광 + 역광) · 2px 갈색 테두리 · 부드러운 바닥 그림자
+//  모든 칸이 같은 카메라(앞·위 3/4) · 같은 빛(주광 + 역광) · 3.5px 갈색 테두리(32px 로 줄여도 약 1px) · 부드러운 바닥 그림자
+//  칸 채우기: 상자 맞춤 뒤 실제로 칠해진 넓이가 작고 길쭉하면(장어·실잠자리 등) 화면에서 대각선으로 눕혀 다시 맞춤
 //  실행: npm run bake:icons   (개발용. Playwright Chromium 필요 — 저장소 의존성에는 없음: 전역 설치 또는 `npm i --no-save playwright`)
 //  옵션: --only fish,bug   그 분류만 구워 미리보기만 저장 (아틀라스·생성 모듈은 그대로)
 //        --sheet <파일.png> 크림색 바탕에 32·48·64px 로 늘어놓은 확인용 그림도 저장
@@ -20,7 +21,8 @@ const SHEET = arg('--sheet');
 const OUT_IMGS = [path.join(ROOT, 'public/ui/items.webp'), path.join(ROOT, 'public/ui/items_deco.webp')];
 const SHEET1 = ['costume', 'decor']; // 둘째 장에 넣는 분류
 const OUT_GEN = path.join(ROOT, 'src/ui/item_icons.gen.js');
-const CELL = 128, COLS = 12, PAD = 4, MAX_KB = 250, Q = +(arg('--q') || 0.7);
+const CELL = 128, COLS = 12, PAD = 4, MAX_KB = 250, Q = +(arg('--q') || 0.6);
+const OUTLINE = 3.5; // 테두리 굵기(px, 128px 칸 기준)
 
 async function loadChromium() {
   try { return (await import('playwright')).chromium; } catch { /* 다음 */ }
@@ -29,10 +31,10 @@ async function loadChromium() {
 }
 
 /** 브라우저 안에서 도는 굽기 (vite 개발 서버가 모듈을 풀어 줌) */
-async function bakeInPage({ CELL, COLS, PAD, ONLY, SHEET, Q, SHEET1 }) {
+async function bakeInPage({ CELL, COLS, PAD, ONLY, SHEET, Q, SHEET1, OUTLINE }) {
   const M = await import('/src/game/iconmesh/index.js');
   const THREE = M.THREE;
-  const IN = CELL - PAD * 2, SS = 2, R = IN * SS; // 칸 안쪽 120px, 두 배로 그려 줄임 (계단 없이)
+  const IN = CELL - PAD * 2, SS = 2, R = IN * SS, ALPHA_STEP = 8; // 칸 안쪽 120px, 두 배로 그려 줄임 (계단 없이)
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(1);
   renderer.setSize(R, R);
@@ -69,41 +71,79 @@ async function bakeInPage({ CELL, COLS, PAD, ONLY, SHEET, Q, SHEET1 }) {
     if (!obj) { failed.push([k, '만드는 함수 없음']); continue; }
     scene.add(obj);
     obj.updateMatrixWorld(true);
-    // 화면(카메라) 기준 실제 정점 범위 → 칸에 꼭 맞게
-    const clipY = obj.userData.clipY ?? null; // 이 높이 아래는 잘라서 안 그림 (코스튬 상반신)
+    // 코스튬 상반신: 높이 비율(clipFrac)로 자를 높이를 정함 (그룹 크기와 상관없이 월드 좌표)
+    let clipY = obj.userData.clipY ?? null;
+    if (obj.userData.clipFrac != null) {
+      let ya = Infinity, yb = -Infinity; // 보이는 메시만 (숨긴 이름표 빼고)
+      obj.traverse((o) => {
+        if (!o.isMesh) return;
+        for (let a = o; a; a = a.parent) if (!a.visible) return;
+        if (o.isSkinnedMesh) o.skeleton.update();
+        const pos = o.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i += 3) { o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld); if (v.y < ya) ya = v.y; if (v.y > yb) yb = v.y; }
+      });
+      clipY = ya + (yb - ya) * obj.userData.clipFrac;
+    }
     renderer.clippingPlanes = clipY != null ? [new THREE.Plane(new THREE.Vector3(0, 1, 0), -clipY)] : [];
-    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    obj.traverse((o) => {
-      if (!o.isMesh || !o.visible) return;
-      let vis = true; for (let a = o; a; a = a.parent) if (!a.visible) vis = false;
-      if (!vis) return;
-      const pos = o.geometry.attributes.position;
-      if (o.isSkinnedMesh) o.skeleton.update();
-      for (let i = 0; i < pos.count; i += 1) {
-        o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld);
-        if (clipY != null && v.y < clipY) continue;
-        v.applyMatrix4(cam.matrixWorldInverse);
-        if (v.x < x0) x0 = v.x; if (v.x > x1) x1 = v.x; if (v.y < y0) y0 = v.y; if (v.y > y1) y1 = v.y;
+    // 화면(카메라) 기준 실제 정점 범위 → 칸에 꼭 맞게
+    const fit = (margin) => {
+      obj.updateMatrixWorld(true);
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      obj.traverse((o) => {
+        if (!o.isMesh || !o.visible) return;
+        let vis = true; for (let a = o; a; a = a.parent) if (!a.visible) vis = false;
+        if (!vis) return;
+        const pos = o.geometry.attributes.position;
+        if (o.isSkinnedMesh) o.skeleton.update();
+        for (let i = 0; i < pos.count; i += 1) {
+          o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld);
+          if (clipY != null && v.y < clipY) continue;
+          v.applyMatrix4(cam.matrixWorldInverse);
+          if (v.x < x0) x0 = v.x; if (v.x > x1) x1 = v.x; if (v.y < y0) y0 = v.y; if (v.y > y1) y1 = v.y;
+        }
+      });
+      const fitW = IN - margin, fitH = IN - margin - 5; // 테두리 + 그림자 자리
+      const scale = Math.min(fitW / (x1 - x0), fitH / (y1 - y0)); // px / 단위
+      const cx = (x0 + x1) / 2, topPx = margin / 2 + (fitH - (y1 - y0) * scale) / 2, cyTop = y1 + topPx / scale;
+      cam.left = cx - IN / 2 / scale; cam.right = cx + IN / 2 / scale;
+      cam.top = cyTop; cam.bottom = cyTop - IN / scale;
+      cam.updateProjectionMatrix();
+      renderer.render(scene, cam);
+    };
+    const M8 = Math.ceil(OUTLINE) * 2 + 1;
+    fit(M8);
+    // 칠해진 넓이·긴 축 (작게 그려 셈). 넓이가 작고 길쭉하면 화면 대각선으로 눕혀 다시 맞춤
+    if (!['costume', 'decor'].includes(cat)) {
+      sctx.clearRect(0, 0, IN, IN); sctx.drawImage(renderer.domElement, 0, 0, IN, IN);
+      const px = sctx.getImageData(0, 0, IN, IN).data;
+      let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+      for (let y = 0; y < IN; y++) for (let x = 0; x < IN; x++) if (px[(y * IN + x) * 4 + 3] > 80) { n++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; }
+      const cover = n / (IN * IN);
+      if (n > 20 && cover < 0.22) {
+        const mx = sx / n, my = sy / n, cxx = sxx / n - mx * mx, cyy = syy / n - my * my, cxy = sxy / n - mx * my;
+        const ang = 0.5 * Math.atan2(2 * cxy, cxx - cyy); // 긴 축 (화면 y 아래 방향)
+        const l1 = (cxx + cyy) / 2 + Math.sqrt(((cxx - cyy) / 2) ** 2 + cxy * cxy), l2 = (cxx + cyy) / 2 - Math.sqrt(((cxx - cyy) / 2) ** 2 + cxy * cxy);
+        if (l1 > l2 * 9) { // 아주 길쭉함
+          const cur = -ang, want = Math.sign(cur || 1) * (Math.PI / 4); // 화면 위쪽이 + 인 각도로
+          const holder = new THREE.Group(); scene.remove(obj); holder.add(obj); scene.add(holder);
+          holder.quaternion.setFromAxisAngle(dir, want - cur); // 카메라 쪽 축으로 돌림 = 화면에서 돌림
+          fit(M8);
+          scene.remove(holder); holder.remove(obj); scene.add(obj);
+        }
       }
-    });
-    const fitW = IN - 8, fitH = IN - 13; // 테두리 2px + 그림자 자리
-    const scale = Math.min(fitW / (x1 - x0), fitH / (y1 - y0)); // px / 단위
-    const cx = (x0 + x1) / 2, topPx = 4 + (fitH - (y1 - y0) * scale) / 2, cyTop = y1 + topPx / scale;
-    cam.left = cx - IN / 2 / scale; cam.right = cx + IN / 2 / scale;
-    cam.top = cyTop; cam.bottom = cyTop - IN / scale;
-    cam.updateProjectionMatrix();
-    renderer.render(scene, cam);
+    }
     scene.remove(obj);
     sctx.clearRect(0, 0, IN, IN);
     sctx.imageSmoothingQuality = 'high';
     sctx.drawImage(renderer.domElement, 0, 0, IN, IN);
     const img = sctx.getImageData(0, 0, IN, IN), d = img.data;
-    // 테두리: 알파를 2px 넓혀 그 바깥 띠만 갈색으로
+    // 테두리: 알파를 OUTLINE px 넓혀 그 바깥 띠만 갈색으로
     const A = new Float32Array(IN * IN);
     for (let i = 0; i < IN * IN; i++) A[i] = d[i * 4 + 3] / 255;
     const out = new Float32Array(IN * IN);
     const offs = [];
-    for (let oy = -3; oy <= 3; oy++) for (let ox = -3; ox <= 3; ox++) { const w = Math.min(1, Math.max(0, 2.6 - Math.hypot(ox, oy))); if (w > 0) offs.push([ox, oy, w]); }
+    const OR = Math.ceil(OUTLINE) + 1;
+    for (let oy = -OR; oy <= OR; oy++) for (let ox = -OR; ox <= OR; ox++) { const w = Math.min(1, Math.max(0, OUTLINE + 0.6 - Math.hypot(ox, oy))); if (w > 0) offs.push([ox, oy, w]); }
     let bx0 = IN, bx1 = 0, by1 = 0;
     for (let y = 0; y < IN; y++) for (let x = 0; x < IN; x++) {
       let m = 0;
@@ -140,6 +180,12 @@ async function bakeInPage({ CELL, COLS, PAD, ONLY, SHEET, Q, SHEET1 }) {
   }
   // 장마다 실제로 쓴 줄까지만
   const fins = atlases.map((a, si) => { const f = document.createElement('canvas'); f.width = CELL * COLS; f.height = CELL * Math.max(1, Math.ceil(count[si] / COLS)); f.getContext('2d').drawImage(a, 0, 0); return f; });
+  // 알파를 몇 단계로 묶음 (거의 투명은 0): 눈으로는 같고 파일은 훨씬 작음 (테두리를 굵게 한 뒤 250KB 안에 들게)
+  for (const f of fins) {
+    const c = f.getContext('2d'), im = c.getImageData(0, 0, f.width, f.height), px = im.data;
+    for (let i = 3; i < px.length; i += 4) { const a = px[i]; px[i] = a < 5 ? 0 : a > 250 ? 255 : Math.round(a / ALPHA_STEP) * ALPHA_STEP; if (!px[i]) px[i - 1] = px[i - 2] = px[i - 3] = 0; }
+    c.putImageData(im, 0, 0);
+  }
   const webps = fins.map((f, si) => (count[si] ? f.toDataURL('image/webp', Q) : null));
   const n = count[0] + count[1];
   let sheet = null;
@@ -177,7 +223,7 @@ try {
   await page.route('**/__bake', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><body></body>' }));
   await page.goto(base + '/__bake');
   const t0 = Date.now();
-  const res = await page.evaluate(bakeInPage, { CELL, COLS, PAD, ONLY, SHEET: !!SHEET, Q, SHEET1 });
+  const res = await page.evaluate(bakeInPage, { CELL, COLS, PAD, ONLY, SHEET: !!SHEET, Q, SHEET1, OUTLINE });
   console.log(`bake:icons: ${Object.keys(res.cells).length}칸 (${((Date.now() - t0) / 1000).toFixed(0)}초)`);
   for (const [k, why] of res.failed) console.log(`  못 구움 ${k}: ${why}`);
   const webps = res.webps.map((w) => (w ? Buffer.from(w.split(',')[1], 'base64') : null));

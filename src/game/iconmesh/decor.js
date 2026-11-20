@@ -1,4 +1,5 @@
 import { DECOR, DECOR_BY_ID } from '../sim/decor.js';
+import { grainSack } from './goods.js';
 
 /**
  * 꾸미기 소품 아이콘: 게임에서 놓는 모델 그대로 (직접 만든 모델 · CC0 묶음, docs/ASSETS_CC0.md)
@@ -24,7 +25,10 @@ export async function prepareDecor() {
   }));
 }
 
+// 누운 곡식 자루 모델은 위에서 보면 방석처럼 보여서, 아이콘만 묶은 자루(아이템 아이콘과 같은 모양)로
+const OWN = { sack: () => grainSack() };
 export function decorIcon(id) {
+  if (OWN[id]) return OWN[id]();
   const d = DECOR_BY_ID[id];
   const src = d && models.get(d.model);
   if (!src) return null;
