@@ -363,3 +363,42 @@ test('선택지 기둥이 오른쪽에 떠 있는 PC 화면에서만: 말하는 
   assert.ok(Math.abs(Math.hypot(two.look[0] - plain.look[0], two.look[2] - plain.look[2]) - 0.5) < 1e-9, '두 사람 구도는 0.5m');
   assert.ok(ndcX(two.pos, two.look, { x: 1, z: 0 }, 1, fov, 1.6) < -0.05, '가운데가 왼쪽으로');
 });
+
+test('클로즈업 얼굴 축 이동: 얼굴을 축으로 돌며 다가가고, 이동 내내 얼굴이 화면 가운데 가까이, 끝은 최종 구도 그대로', async () => {
+  const { orbitLerp } = await import('../src/game/cutscene.js');
+  const face = [4, 1.3, -2], from = [16, 16, 26], fromLook = [0, 0, 0], to = [7.5, 1.65, 0.2], toLook = [3.6, 1.15, -1.6];
+  const a = orbitLerp(from, to, fromLook, toLook, face, 0), b = orbitLerp(from, to, fromLook, toLook, face, 1);
+  for (let i = 0; i < 3; i++) {
+    assert.ok(Math.abs(a.pos[i] - from[i]) < 1e-6 && Math.abs(a.look[i] - fromLook[i]) < 1e-6, '시작은 이전 샷 그대로 (끊김 없음)');
+    assert.ok(Math.abs(b.pos[i] - to[i]) < 1e-6 && Math.abs(b.look[i] - toLook[i]) < 1e-6, '끝은 최종 구도 그대로');
+  }
+  const dist = (p) => Math.hypot(p[0] - face[0], p[1] - face[1], p[2] - face[2]);
+  let prev = dist(from);
+  for (let k = 1; k <= 20; k++) {
+    const t = k / 20, o = orbitLerp(from, to, fromLook, toLook, face, t), d = dist(o.pos);
+    assert.ok(d <= prev + 1e-6, `얼굴 쪽으로만 다가감 (t=${t})`);
+    prev = d;
+    if (t >= 0.3) { // 앞쪽 30% 뒤로는 얼굴이 화면 가운데 근처
+      const x = ndcX(o.pos, o.look, { x: face[0], z: face[2] }, face[1], 45, 1.6);
+      assert.ok(Math.abs(x) < 0.35, `t=${t} 얼굴 가로 위치 ${x.toFixed(2)}`);
+    }
+  }
+});
+
+test('클로즈업 얼굴 축 이동: Cinematics 가 pivot 을 받으면 얼굴을 축으로 옮기고, 얼굴이 움직이면 따라가며, release 하면 풂', () => {
+  const camera = new THREE.PerspectiveCamera(45, 1.6, 0.1, 600);
+  camera.position.set(0, 6, 10); camera.lookAt(0, 0, 0);
+  const cin = new Cinematics({ camera, followCam: { smooth: new THREE.Vector3() } }, { append() {} });
+  const face = [3, 1.3, 0];
+  cin.shot([3, 1.6, 4], [3, 1.2, 0], 0.5, { pivot: () => face });
+  cin.t0 -= 1000;
+  for (let i = 0; i < 120; i++) cin.update(1 / 30);
+  assert.ok(camera.position.distanceTo(new THREE.Vector3(3, 1.6, 4)) < 0.05, '최종 구도에 도착');
+  face[0] = 4; // 얼굴이 1m 옮겨 감 → 카메라도 같이
+  for (let i = 0; i < 5; i++) cin.update(1 / 30);
+  assert.ok(Math.abs(cin.pos.x - 4) < 1e-6 && Math.abs(cin.look.x - 4) < 1e-6, '얼굴을 따라 구도째 옮김');
+  cin.release();
+  assert.equal(cin.pivot, null);
+  cin.shot([0, 2, 5], [0, 1, 0], 0.01);
+  assert.equal(cin.pivot, null, 'pivot 없는 샷은 예전처럼 직선 이동');
+});
