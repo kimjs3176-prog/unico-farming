@@ -32,7 +32,7 @@ test('일과: 주민마다 0~24시를 빈틈·겹침 없이 덮고, 어긋남은
 test('일과 자리: 제자리에서 12m 안, 밭·자전거 자리 밖, 서 있을 수 있는 곳', () => {
   for (const s of routineSpots()) {
     const home = LAYOUT.npcs[s.id];
-    assert.ok(Math.hypot(s.x - home.x, s.z - home.z) <= ROUTINE_REACH, `${s.id} ${Math.hypot(s.x - home.x, s.z - home.z).toFixed(1)}m`);
+    if (!s.fest) assert.ok(Math.hypot(s.x - home.x, s.z - home.z) <= ROUTINE_REACH, `${s.id} ${Math.hypot(s.x - home.x, s.z - home.z).toFixed(1)}m`);
     assert.ok(Math.abs(s.x) > FARM.x + 0.5 || Math.abs(s.z) > FARM.z + 0.5, `${s.id} 밭 위 (${s.x}, ${s.z})`);
     for (const b of LAYOUT.rides.bike) assert.ok(Math.hypot(s.x - b.x, s.z - b.z) > 2.4, `${s.id} 자전거 자리 옆`);
     assert.ok(!world.isBlocked(s.x, s.z, BODY_R), `${s.id} 막힌 자리 (${s.x}, ${s.z})`);

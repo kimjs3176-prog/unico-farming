@@ -2,6 +2,7 @@ import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { LAYOUT } from '../world.js';
 import { ITEMS, itemsOf } from '../sim/items.js';
+import { SEASON } from '../sim/season.js';
 import { RODS } from '../sim/angling.js';
 import { makeFish } from '../fishmesh.js';
 import { signTexture, attachSign } from './koat_view.js';
@@ -11,7 +12,11 @@ const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) 
 
 /** 호수 전용 물고기 힌트 (기록판·도감) */
 export const LAKE_HINT = (id) => {
-  const it = ITEMS[id];
+  const it = ITEMS[id], base = lakeHint(it);
+  const sn = (it.seasons || []).map((k) => `${SEASON[k].icon}${SEASON[k].name}`).join('·');
+  return sn ? `${sn} 제철 · ${base}` : base;
+};
+const lakeHint = (it) => {
   if (it.legend) return '전설 · 좋은 낚싯대와 떡밥이 있으면…';
   if (it.night) return '밤에만 나와요';
   if (it.cold) return '추운 날·눈 오는 날에 잘 잡혀요';
@@ -171,14 +176,14 @@ export class LakeView {
     this.splash(p.x, p.z, 1.1); // 물 위로 푸하!
     g.audio.play('splash', 0.5);
     const r = Math.random();
-    let text, to = { to: 'bag' }; // 가방으로 날아가는 것 / 코인은 지갑으로
-    if (r < 0.07) { g.economy.addItem('pearl', 1); text = `${ITEMS.pearl.emoji} 반짝반짝 ${ITEMS.pearl.name}!`; g.audio.play('levelup'); }
-    else if (r < 0.62) { g.economy.addItem('clam', 1); text = `${ITEMS.clam.emoji} ${ITEMS.clam.name}`; g.audio.play('coin'); }
+    let text, to = { to: 'bag' }, got = null; // 가방으로 날아가는 것 / 코인은 지갑으로
+    if (r < 0.07) { g.economy.addItem('pearl', 1); got = 'pearl'; text = `${ITEMS.pearl.emoji} 반짝반짝 ${ITEMS.pearl.name}!`; g.audio.play('levelup'); }
+    else if (r < 0.62) { g.economy.addItem('clam', 1); got = 'clam'; text = `${ITEMS.clam.emoji} ${ITEMS.clam.name}`; g.audio.play('coin'); }
     else if (r < 0.82) { const n = 30 + Math.floor(Math.random() * 6) * 10; g.economy.earn(n); text = `🪙 물에 빠진 동전 ${n}`; to = { to: 'coin', amount: n }; g.audio.play('coin'); }
-    else { g.economy.addItem('fish_snail', 1); const rec = g.collection.add('fish_snail', { size: 4 + Math.round(Math.random() * 3), day: g.world.day }); text = `🐌 우렁이${rec.isNew ? ' (도감 등록!)' : ''}`; g.afterCollect?.(); g.audio.play('harvest'); }
+    else { g.economy.addItem('fish_snail', 1); got = 'fish_snail'; const rec = g.collection.add('fish_snail', { size: 4 + Math.round(Math.random() * 3), day: g.world.day }); text = `🐌 우렁이${rec.isNew ? ' (도감 등록!)' : ''}`; g.afterCollect?.(); g.audio.play('harvest'); }
     g.fx.pop(p.x, p.z, text.split(' ')[0], to);
     g.ui.toast(`🤿 잠수해서 ${text}${josa(text, '을/를')} 찾았어요!`);
-    g.onEvent('dive');
+    g.onEvent('dive', 1, got);
   }
 
   /** 낚시터 근처인가 (첫 방문 컷신·안내) */

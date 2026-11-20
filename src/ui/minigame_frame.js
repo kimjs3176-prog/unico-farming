@@ -24,6 +24,7 @@ export const MINIGAMES = [
   { id: 'smart', icon: '📱', title: '스마트팜 환경 제어', unit: '점', th: [50, 70, 90] },
   { id: 'herd', icon: '🐑', title: '양 몰이', unit: '마리', th: [3, 5, 6] },
   { id: 'egg', icon: '🥚', title: '달걀 받기', unit: '점', th: [15, 30, 45] },
+  { id: 'fest', icon: '🎪', title: '축제 놀이 (계절마다 달라요)', unit: '점', th: [15, 30, 45] }, // 달걀 받기 규칙에 계절 그림 (sim/festival.js)
 ];
 
 export function starsHtml(n, on = true) {
@@ -113,7 +114,11 @@ export function mgResult(g, o) {
   const btns = h('div', 'mg-btns');
   if (o.onRetry) { const r = h('button', 'ghost', '🔁 다시 하기'); r.onclick = () => { ui.closePanel(); o.onRetry(); }; btns.append(r); }
   const ok = h('button', 'gold', '확인');
-  ok.onclick = () => { ui.closePanel(); o.onClose?.(); };
+  // 확인·✕·바깥 누르기 모두 onClose 를 한 번만 (ui.dismiss 가 onDismiss 를 부름)
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; o.onClose?.(); };
+  ok.onclick = () => { ui.closePanel(); close(); };
+  p.onDismiss = close;
   btns.append(ok);
   p.append(btns);
   // 점수 카운트업 → 별이 하나씩 → 등급
@@ -132,6 +137,7 @@ export function mgResult(g, o) {
         // 결과 보상: 통과는 주먹 불끈, 별 셋·새 기록은 만세 (소리도 등급대로)
         const tier = minigameTier(stars, isNew);
         if (tier) reward(g, tier);
+        g.onEvent?.('mgstars', stars, o.id); // 별 수 (경험치·도전 과제가 씀)
       }, 220 * stars + 200);
     }
   };

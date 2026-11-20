@@ -8,10 +8,11 @@ import { VILLAGER_SPECIES, villagerName } from '../species.js';
 import { talkShot, speakerShot, cheatYaw, liftFor, hudFrac } from '../cutscene.js';
 import { setHeroLabel, setLabelOccluders } from '../label.js';
 import { heightAt } from '../terrain.js';
-import { pickLine, remember, REACT, OUT_OF_LINES, OUT_OF_LINES_BY, WAKE } from '../sim/villager_lines.js';
+import { pickLine, remember, REACT, OUT_OF_LINES, OUT_OF_LINES_BY, WAKE, FESTIVAL_LINES } from '../sim/villager_lines.js';
+import { festivalAt, festState, takeFood } from '../sim/festival.js';
+import { ITEMS, inSeason } from '../sim/items.js';
 import { slotAt, legOf, hourOf, isNight, canDepart, ROUTINE_CHECK } from '../sim/routine.js';
 import { seasonOf } from '../sim/season.js';
-import { Economy } from '../sim/economy.js';
 
 const ROLE_ICON = { merchant: '🛒', researcher: '🔬', guide: '📣', granny: '🌾', kid: '🦋', fisher: '🎣' };
 /** 대화창 이름표 색 (역할별) */
@@ -149,13 +150,14 @@ export class NPCs {
     const tr = g.ride, tv = tr?.driving ? tr.vehicle : null;
     // 일과: 시각·비 (1초마다 자리 확인), 플레이어 얼굴 높이
     const hour = hourOf(W.time ?? 0.3), night = isNight(hour), rain = W.weatherKind === 'rain' || W.weatherKind === 'storm';
+    const fest = festivalAt(W.day ?? 1, W.time ?? 0.3)?.id ?? null; // 축제 마당이 열려 있으면 네 주민이 모임
     const pHeadY = (g.player?.position?.y ?? 0) + (g.player?.unico?.headH ?? 1.2);
     for (const e of this.list) {
       const p = e.u.group.position, u = e.u;
       if (tv && Math.abs(tv.speed) > 1.2 && Math.hypot(p.x - tv.x, p.z - tv.z) < 2.9 && !((e.bellUntil || 0) > performance.now() / 1000)) this.startle(e, tv); // 자전거 종을 들었으면 안 놀람
       const d = Math.hypot(p.x - playerPos.x, p.z - playerPos.z);
       const talking = this.talking === e;
-      this._routine(e, dt, d, hour, rain, talking, cam);
+      this._routine(e, dt, d, hour, rain, talking, cam, fest);
       // 비: 우산 (바뀔 때만)
       if (!!e.umb !== rain) { e.umb = rain; u.setUmbrella(rain, UMB_COLORS[e.id]); }
       if (e.route) this._walkRoute(e, dt);
@@ -289,7 +291,7 @@ export class NPCs {
    * 하루 일과: 1초마다 지금 있을 자리를 보고, 자리가 바뀌었으면 (플레이어가 4m 밖이고 대화 중이 아닐 때) 걸어서 옮김.
    * 카메라에서 30m 넘게 멀거나 처음(불러온 직후)이면 걷지 않고 바로 그 자리로
    */
-  _routine(e, dt, d, hour, rain, talking, cam) {
+  _routine(e, dt, d, hour, rain, talking, cam, fest = null) {
     e.checkT -= dt;
     if (e.checkT > 0) return;
     e.checkT = ROUTINE_CHECK;
@@ -298,7 +300,7 @@ export class NPCs {
     let gb = null, gd = 12;
     for (const o of this.list) { if (o === e) continue; const q = o.u.group.position, dd = Math.hypot(q.x - p.x, q.z - p.z); if (dd < gd) { gd = dd; gb = q; } }
     e.u.glanceAt = gb ? e.glance.set(gb.x, gb.y + 1.2, gb.z) : null;
-    const want = slotAt(e.id, hour, rain);
+    const want = slotAt(e.id, hour, rain, fest);
     if (!want || e.route) return;
     const curAt = e.cur?.at ?? null, wantAt = want.at ?? null;
     if (e.cur && sameSpot(curAt, wantAt)) { e.cur = want; return; }
@@ -600,8 +602,17 @@ export class NPCs {
       return ln.t;
     };
     let line = next(r.gained > 0) ?? OUT_OF_LINES_BY[id] ?? OUT_OF_LINES, out = false;
+    // 축제 마당: 축제마다 주민별 첫마디 + 축제 음식 한 번 (먼저 말 건 주민이 나눠 줌)
+    const W = g.world, fest = festivalAt(W.day ?? 1, W.time ?? 0.3);
+    const festLine = fest && e.festSaid !== fest.key ? FESTIVAL_LINES[id]?.[fest.id] : null;
+    if (festLine) {
+      e.festSaid = fest.key;
+      line = festLine;
+      const fl = (g.flags ||= {}), food = takeFood((fl.fest = festState(fl.fest, fest.key)), fest);
+      if (food) this._giveFood(e, food);
+    }
     // 장터 여우 첫 대화: 장터 쓰는 법 한 줄 (한 번만)
-    if (id === 'merchant' && !g.flags.marketTip) { g.flags.marketTip = true; line = '처음 왔구나! 여기서 씨앗·사료를 사고 키운 작물을 팔 수 있어. 시세는 매일 바뀌니까 잘 보고 팔아!'; }
+    else if (id === 'merchant' && !g.flags.marketTip) { g.flags.marketTip = true; line = '처음 왔구나! 여기서 씨앗·사료를 사고 키운 작물을 팔 수 있어. 시세는 매일 바뀌니까 잘 보고 팔아!'; }
     // 안내 강아지: 받을 보상·할 일이 있으면 그 귀띔부터
     else if (id === 'guide') { const h = g.guide?.hint?.(); if (h) line = h; }
     let after = null;
@@ -614,6 +625,7 @@ export class NPCs {
       if (!req.done) choices.push(have < req.n ? { label: '🔒 📝 부탁 들어주기', note: `${g.villagers.describeRequest(req)} 지금 ${have}/${req.n}개 있어!`, value: 'req', locked: true } : { label: '📝 부탁 들어주기', note: `${g.villagers.describeRequest(req)} · 보유 ${have}/${req.n}`, value: 'req' });
       choices.push({ label: '🎁 선물하기', note: v.lastGift === g.world.day ? '오늘은 이미 선물했어요' : '', value: 'gift', disabled: v.lastGift === g.world.day });
       if (id === 'merchant') choices.push({ label: '🛒 장터 열기', value: 'market' });
+      if (fest && g.festival?.open) choices.push({ label: `${fest.icon} 축제 마당 보기`, value: 'festival' });
       if (id === 'guide') {
         if (typeof g.guide?.whereTo === 'function') choices.push({ label: '📍 어디로 가면 돼?', value: 'where' });
         choices.push({ label: '📜 할 일(퀘스트) 보기', value: 'quests' });
@@ -648,6 +660,7 @@ export class NPCs {
     g.cinema.release(); // 창을 열기 전에 카메라를 돌려놓음 (talk 의 finally 에서 한 번 더 불러도 같음)
     if (after === 'gift') g.ui.openGiftPicker(e);
     else if (after === 'market') g.ui.openMarket();
+    else if (after === 'festival') g.festival.open();
     else if (after === 'quests') g.ui.openQuests();
     else if (after === 'where') g.guide.whereTo?.();
     else if (after === 'lakeshop') g.lake.openShop();
@@ -659,7 +672,7 @@ export class NPCs {
     const g = this.game, W = g.world, day = W.day ?? 1, k = W.weatherKind;
     return {
       season: seasonOf(day).id, weather: k === 'rain' || k === 'storm' ? 'rain' : k === 'snow' ? 'snow' : null,
-      night: isNight(hourOf(W.time ?? 0.3)), hearts: g.villagers.hearts(e.id), festival: Economy.isFestival(day),
+      night: isNight(hourOf(W.time ?? 0.3)), hearts: g.villagers.hearts(e.id), festival: festivalAt(day, W.time ?? 0.3)?.id ?? false,
       done: g.quests?.claimed || {}, species: !!e.u.species,
     };
   }
@@ -671,6 +684,16 @@ export class NPCs {
     if (!own.includes(title)) own.push(title);
     f.title = title;
     g.player?.setTitle?.(title);
+  }
+
+  /** 축제 음식 나눠 주기 (축제마다 한 번): 가방에 넣고 주민 머리 위에서 가방으로 날아감 */
+  _giveFood(e, food) {
+    const g = this.game, it = ITEMS[food], p = e.u.group.position;
+    g.economy.addItem(food, 1);
+    e.u.playAction('present', 1.4);
+    g.fx?.pop?.(p.x, p.z, it.emoji, { to: 'bag' });
+    g.ui.toast(`${it.emoji} ${e.name}에게 ${it.name}${josa(it.name, '을/를')} 받았어요! 축제 날 별미예요`);
+    g.audio.play('pop');
   }
 
   /** 하트 단계 보상 지급 */
@@ -698,6 +721,7 @@ export class NPCs {
   /** 오늘의 부탁 후보: 플레이어가 구할 수 있는 것 위주 */
   requestPool() {
     const lv = this.game.quests.level;
-    return [...Object.keys(CROPS).filter((k) => CROPS[k].unlockLevel <= lv), 'egg', 'milk', 'fruit_apple', 'fish_crucian', 'bug_butterfly'];
+    const season = seasonOf(this.game.world.day ?? 1).id; // 철 지난 과일·곤충은 부탁하지 않음
+    return [...Object.keys(CROPS).filter((k) => CROPS[k].unlockLevel <= lv), 'egg', 'milk', 'fish_crucian', ...['fruit_apple', 'fruit_peach', 'fruit_persimmon', 'bug_butterfly', 'bug_ladybug'].filter((k) => inSeason(k, season)).slice(0, 2)];
   }
 }

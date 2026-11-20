@@ -1,7 +1,9 @@
 // 가방·도감·씨앗 고르기 창
 import { h } from '../dom.js';
+import { josa } from '../../game/sim/josa.js';
 import { CROPS, PRODUCTS } from '../../game/sim/crops.js';
-import { ITEMS, CATEGORY_NAMES, itemsOf } from '../../game/sim/items.js';
+import { ITEMS, CATEGORY_NAMES, itemsOf, inSeason, seasonOnly } from '../../game/sim/items.js';
+import { seasonOf, SEASON } from '../../game/sim/season.js';
 import { BOOK_CATS, COMPLETE_REWARD } from '../../game/sim/collection.js';
 
 /** 가방·도감·씨앗 창 메서드 (UI.prototype 에 합쳐짐) */
@@ -17,16 +19,25 @@ export const BagPanel = {
       tabs.append(t);
     }
     p.append(tabs);
+    // 지금 계절: 제철인데 아직 못 모은 것 수 (철이 지나면 잘 안 나오니 지금 모으기)
+    const now = seasonOf(g.world.day ?? 1), list = itemsOf(cat);
+    const inNow = list.filter((k) => ITEMS[k].seasons?.includes(now.id)), left = inNow.filter((k) => !c.entries[k]).length;
+    const note = !inNow.length ? `${now.name}엔 제철 ${CATEGORY_NAMES[cat]}${josa(CATEGORY_NAMES[cat], '이/가')} 없어요 · 사철 나는 것과 드문 것만 가끔 보여요`
+      : left ? `제철인데 아직 못 만난 ${CATEGORY_NAMES[cat]} <b>${left}종</b> · ⏳ 표시는 이 계절에만 나와요` : '이 계절 제철은 다 모았어요! 🎉';
+    p.append(h('div', 'book-season', `<span class="bs-chip">${now.icon} 지금은 ${now.name}</span><span>${note}</span>`));
     const grid = h('div', 'book-grid');
-    for (const k of itemsOf(cat)) {
+    for (const k of list) {
       const it = ITEMS[k], e = c.entries[k];
-      grid.append(h('div', `book-cell${e ? '' : ' locked'}`, e
-        ? `<span class="em">${it.emoji}</span><b>${it.name}</b><small>${e.count}마리·개${e.best ? ` · 최대 ${e.best}cm` : ''}</small><small>${'⭐'.repeat(it.rarity || 1)}</small>`
-        : `<span class="em">❔</span><b>???</b><small>${'⭐'.repeat(it.rarity || 1)}</small>`));
+      // 계절 표시: 제철 계절 아이콘, 지금 철이면 강조, 한 계절에만 나오면 ⏳
+      const on = it.seasons && inSeason(k, now.id), only = on && seasonOnly(k);
+      const chip = it.seasons ? `<small class="bk-ss${on ? ' on' : ''}">${only ? '⏳ 이 계절에만 ' : ''}${it.seasons.map((x) => SEASON[x].icon).join('')}${on ? ' 제철' : ''}</small>` : '';
+      grid.append(h('div', `book-cell${e ? '' : ' locked'}${on ? ' in-season' : ''}`, e
+        ? `<span class="em">${it.emoji}</span><b>${it.name}</b><small>${e.count}마리·개${e.best ? ` · 최대 ${e.best}cm` : ''}</small><small>${'⭐'.repeat(it.rarity || 1)}</small>${chip}`
+        : `<span class="em">❔</span><b>???</b><small>${'⭐'.repeat(it.rarity || 1)}</small>${chip}`));
     }
     p.append(grid);
     const pr = c.progress(cat);
-    p.append(h('h3', '', pr.got === pr.total ? `🏅 ${CATEGORY_NAMES[cat]} 도감 완성! (보상 ${COMPLETE_REWARD[cat]}🪙 지급됨)` : `모두 모으면 보상 ${COMPLETE_REWARD[cat]}🪙 · 힌트: ${cat === 'fish' ? '비 오는 날·밤에 희귀한 물고기 · 남서쪽 낚시터에만 사는 물고기도 있어요' : cat === 'bug' ? '밤에는 반딧불이, 나무를 흔들면 풍뎅이' : '과수원 나무는 하루 한 번'}`));
+    p.append(h('h3', '', pr.got === pr.total ? `🏅 ${CATEGORY_NAMES[cat]} 도감 완성! (보상 ${COMPLETE_REWARD[cat]}🪙 지급됨)` : `모두 모으면 보상 ${COMPLETE_REWARD[cat]}🪙 · 힌트: ${cat === 'fish' ? '계절마다 잘 잡히는 물고기가 달라요 · 비 오는 날·밤에 희귀한 물고기 · 남서쪽 낚시터에만 사는 물고기도 있어요' : cat === 'bug' ? '반딧불이·매미는 여름 밤낮에, 고추잠자리·귀뚜라미는 가을에 · 나무를 흔들면 풍뎅이' : '복숭아는 여름, 사과·배·감은 가을 (겨울엔 홍시) · 나무는 하루 한 번'}`));
   },
 
   openInventory() {

@@ -25,7 +25,7 @@ import { Dialogue } from './ui/dialogue.js';
 import { RideView } from './game/view/ride_view.js';
 import { SmartFarmView } from './game/view/smartfarm_view.js';
 import { NPCs } from './game/view/npcs.js';
-import { Economy } from './game/sim/economy.js';
+import { Economy, FESTIVAL_MULT } from './game/sim/economy.js';
 import { Quests, QUESTS } from './game/sim/quests.js';
 import { UI } from './ui/ui.js';
 import { FX } from './game/fx.js';
@@ -54,6 +54,8 @@ import { SocialSim } from './game/sim/social.js';
 import { SocialView } from './game/view/social_view.js';
 import { SeasonView } from './game/view/season_view.js';
 import { DecorView } from './game/view/decor_view.js';
+import { FestivalView } from './game/view/festival_view.js'; // 축제 꾸미기 소품을 꾸미기 표에 넣음 (불러오기 전에)
+import { festivalTomorrow, fixFestival } from './game/sim/festival.js';
 import { DIVISIONS } from './game/sim/koat.js';
 import { boot, pushBackGuard } from './boot.js';
 import { patchShadowChunk } from './game/shadow_soft.js';
@@ -148,6 +150,8 @@ class Game {
     this.net = new Net(this);
     this.socialView = new SocialView(this);
     this.season = new SeasonView(this); // 계절 (7일마다 봄·여름·가을·겨울)
+    this.festival = new FestivalView(this); // 계절 축제 마당 (꾸미기 모델 등록 → decor 보다 먼저)
+    this.economy.onSale = (coins) => this.festival.onSale(coins); // 축제 날 판매 → 엽전
     this.decor = new DecorView(this);   // 농장 꾸미기
     this.juice = new Juice();
     this.minimap = new Minimap(this, document.getElementById('ui'));
@@ -164,7 +168,8 @@ class Game {
       // 아침 알림은 한 장으로 (시세·사건·내일 축제), 오늘 축제는 따로
       const morning = [`🌅 ${day}일차 아침! 장터 시세가 바뀌었어요`];
       if (ev) morning.push('📈 ' + ev.name);
-      if (!this.economy.festival && Economy.isFestival(day + 1)) morning.push('🎪 내일은 유니코 수확 축제! 수확물을 모아 두면 더 비싸게 팔 수 있어요');
+      const eve = !this.economy.festival && festivalTomorrow(day);
+      if (eve) morning.push(`🎪 내일은 ${eve.name}! 수확물을 모아 두면 더 비싸게 팔고, 장터 앞 축제 마당에서 놀 수 있어요`);
       this.ui.toast(morning.join(' · '), { type: 'info', key: 'day' });
       if (this.economy.festival) { this.ui.toast(this.economy.festival.name + ' (장터에서 팔면 이득!)'); this.audio.play('levelup'); this.onEvent('festival'); }
     };
@@ -175,6 +180,7 @@ class Game {
     this.watchLifecycle();
     this.watchOtherTabs();
     this.restore();
+    this.economy.festival = fixFestival(this.economy.festival, this.world.day, FESTIVAL_MULT); // 예전 저장: 축제 종류 채우기
     this.net.connect();
     // 현재 위치 실시간 날씨
     this.rainAcc = 0;
@@ -437,6 +443,7 @@ class Game {
       pick(this.lake.update(dt, pw));
       pick(this.farmcraft.update(dt, pw));
       pick(this.town.update(dt, pw));
+      pick(this.festival.update(dt, pw)); // 축제 마당 가판대
       pick(this.net.prompt(pw)); // 가까운 다른 플레이어
       pick(this.decor.update(dt, pp)); // 꾸미기 모드 (켜져 있을 때만, 다른 안내보다 먼저)
       const homePrompt = this.home.update(dt, pp);
@@ -473,6 +480,7 @@ class Game {
       this.lake.update(dt, pp);
       this.farmcraft.update(dt, pp);
       this.town.update(dt, pp);
+      this.festival.update(dt, null);
       this.home.update(dt, pp);
       // 운전 중에는 카메라가 트랙터 뒤를 따라감 (마우스·터치로 돌리는 동안은 멈추고, 손을 뗀 뒤 0.5초 지나면 천천히 복귀)
       const behind = this.ride.vehicle.heading + Math.PI;

@@ -81,10 +81,26 @@ export const hourOf = (time) => wrapHour(time * 24);
 /** 밤인가 (졸 시간) */
 export const isNight = (hour) => hour >= NIGHT_FROM || hour < NIGHT_TO;
 
-/** id 주민이 hour 시에 있을 자리 (비가 오면 dry 자리는 제자리로). 일과가 없으면 null */
-export function slotAt(id, hour, rain = false) {
+/**
+ * 축제 날 (sim/festival.js festivalAt 이 열려 있는 동안): 안내 강아지·연구원·할머니·꼬마는 장터 앞 축제 마당에 모임
+ * 장터 여우·낚시꾼은 제자리 (가게를 지킴). 마당은 밭(±7.2, ±3.6)·자전거 자리 밖, 장터(0, -10)를 바라봄
+ * 모두 밭 서쪽 길(x -7.6)과 밭 아래 줄(z -4.2)을 따라 걸어감 — 다른 주민 자리를 스치지 않게 자리마다 곧장 북쪽으로 들어감
+ */
+const FEST_FACE = (x, z) => Math.atan2(0.4 - x, -2.5 - z); // 길에서 오는 플레이어 쪽으로 비스듬히
+const WEST_LANE = [[-7.6, 6.0], [-7.6, -4.2]];
+export const FEST_SLOTS = {
+  guide: { at: { x: 1.8, z: -6.6 }, act: 'megaphone', via: [[3.0, 9.2], [-6.0, 9.2], ...WEST_LANE, [1.8, -4.2]] },
+  kid: { at: { x: -0.9, z: -6.8 }, act: 'cheer', via: [...WEST_LANE, [-0.9, -4.2]] },
+  granny: { at: { x: -3.4, z: -6.6 }, act: 'wave', via: [[-7.6, -11.5], [-7.6, -5.2], [-3.4, -5.2]] },
+  researcher: { at: { x: -5.4, z: -6.6 }, act: 'cheer', via: [[-12.6, -0.5], [-7.6, -0.5], [-7.6, -4.2], [-5.4, -4.2]] },
+};
+for (const s of Object.values(FEST_SLOTS)) Object.assign(s, { from: 0, to: 24, face: FEST_FACE(s.at.x, s.at.z), awake: true, fest: true });
+
+/** id 주민이 hour 시에 있을 자리 (비가 오면 dry 자리는 제자리로, 축제 마당이 열려 있으면(fest) 마당 자리). 일과가 없으면 null */
+export function slotAt(id, hour, rain = false, fest = null) {
   const R = ROUTINE[id];
   if (!R) return null;
+  if (fest && FEST_SLOTS[id]) return FEST_SLOTS[id];
   const h = wrapHour(hour - R.shift);
   let s = R.slots.find((x) => h >= x.from && h < x.to) || R.slots[0];
   if (rain && s.dry) s = HOME;
@@ -98,10 +114,11 @@ export function legOf(home, slot, back = false) {
   return back ? pts.reverse() : pts;
 }
 
-/** 모든 일과 자리 (장식 보호 구역용): [{ id, x, z }] */
+/** 모든 일과 자리 (장식 보호 구역용): [{ id, x, z, fest? }] — 축제 마당 자리도 (fest: true, 제자리에서 12m 넘음) */
 export function routineSpots() {
   const out = [];
   for (const [id, R] of Object.entries(ROUTINE)) for (const s of R.slots) if (s.at && !out.some((o) => o.id === id && o.x === s.at.x && o.z === s.at.z)) out.push({ id, x: s.at.x, z: s.at.z });
+  for (const [id, s] of Object.entries(FEST_SLOTS)) out.push({ id, x: s.at.x, z: s.at.z, fest: true });
   return out;
 }
 

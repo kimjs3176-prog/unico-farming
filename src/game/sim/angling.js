@@ -1,4 +1,5 @@
-import { ITEMS, itemsOf } from './items.js';
+import { ITEMS, itemsOf, inSeason } from './items.js';
+import { seasonOf } from './season.js';
 
 /**
  * 유니코 낚시터 (호수) 규칙
@@ -72,9 +73,10 @@ export class ReelFight {
   }
 }
 
-/** 오늘의 의뢰: 날짜로 정해짐 (모든 플레이어 같은 의뢰) */
+/** 오늘의 의뢰: 날짜로 정해짐 (모든 플레이어 같은 의뢰), 그 계절에 나는 물고기만 */
 export function dailyRequest(day) {
-  const pool = itemsOf('fish').filter((k) => ITEMS[k].where === 'lake' && ITEMS[k].rarity <= 3 && !ITEMS[k].night).concat(['fish_carp', 'fish_catfish', 'fish_crucian']);
+  const season = seasonOf(day).id;
+  const pool = itemsOf('fish').filter((k) => ITEMS[k].where === 'lake' && ITEMS[k].rarity <= 3 && !ITEMS[k].night).concat(['fish_carp', 'fish_catfish', 'fish_crucian']).filter((k) => inSeason(k, season));
   let h = (day * 2654435761) >>> 0;
   const next = () => { h = (h ^ (h >>> 13)) * 1274126177 >>> 0; return (h >>> 8) / 16777216; };
   const fish = pool[Math.floor(next() * pool.length)];

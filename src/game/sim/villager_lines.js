@@ -7,7 +7,7 @@
  *  해요체는 KOAT 안내데스크·체험 부스 담당 같은 기관 사람만.
  *
  * 줄마다 조건(모두 맞아야 나옴): season(spring|summer|autumn|winter) · weather(rain|snow) · night ·
- *  minHearts · festival · after(받은 퀘스트 id) · species(동물 주민일 때만)
+ *  minHearts · festival(true = 아무 축제, 'spring' 등 = 그 축제) · after(받은 퀘스트 id) · species(동물 주민일 때만)
  */
 export const LINES = {
   merchant: [
@@ -55,7 +55,7 @@ export const LINES = {
     { t: '겨울엔 눈밭에서 뛰는 게 최고야! 꼬리가 멈추질 않아!', season: 'winter' },
     { t: '비 온다! 밭에 물은 저절로 뿌려지니까 오늘은 낚시하러 가자!', weather: 'rain' },
     { t: '눈이다! 발자국 찍으면서 마을 한 바퀴 돌자!', weather: 'snow' },
-    { t: '오늘은 수확 축제야! 장터 여우한테 팔면 평소보다 비싸게 쳐 줘!', festival: true },
+    { t: '오늘은 축제 날이야! 장터 여우한테 팔면 평소보다 비싸게 쳐 줘!', festival: true },
     { t: '밤엔 가로등 불빛이 예뻐. 그래도 너무 늦게 자진 마!', night: true },
     { t: '자전거 세워 두는 데 옆에 뼈다귀 묻어 놨어. 너한테만 알려 주는 거야!', minHearts: 2 },
     { t: '처음 왔을 때 기억나? 이렇게 멋진 농부가 될 줄 알았어!', minHearts: 4 },
@@ -127,6 +127,46 @@ export const REACT = {
 
 /** 한 대화에서 할 얘기를 다 했을 때 */
 export const OUT_OF_LINES = '오늘은 할 얘기 다 했어, 내일 또 와!';
+/** 축제 날 첫마디 (주민마다 축제 4개, sim/festival.js 의 id) — 축제 마당에서 처음 말 걸 때 */
+export const FESTIVAL_LINES = {
+  merchant: {
+    spring: '봄꽃 축제야! 오늘은 뭐든 값을 더 쳐 줄게. 꽃구경하고 장도 보고 가~ 삽니다~!',
+    summer: '단오 축제다! 더운 날엔 장사도 신나야지. 오늘 판 만큼 엽전도 받아 가!',
+    autumn: '한가위엔 다들 넉넉해지지! 햇곡식 가져오면 오늘은 후하게 쳐 줄게!',
+    winter: '동지 축제야! 손은 시려도 장터는 뜨거워. 오늘 팔면 값을 더 쳐 줘!',
+  },
+  researcher: {
+    spring: '삼짇날엔 볍씨를 골랐대. 좋은 씨앗이 한 해 수확을 정하거든.',
+    summer: '단오쯤이면 모내기가 끝나. 이제 논물 높이를 잘 재야 하지.',
+    autumn: '한가위 햅쌀은 한 해 기록의 결과야. 데이터로 보면 더 뿌듯하거든.',
+    winter: '동지부터 해가 다시 길어져. 스마트팜 조명 계획도 새로 짜야 하지.',
+  },
+  guide: {
+    spring: '봄꽃 축제에 온 걸 환영해! 진달래 꽃잎 받기 놀이 해 봤어? 엽전도 준대!',
+    summer: '단오 축제야! 장터 앞 축제 마당에서 앵두 받기 하자, 내가 응원할게!',
+    autumn: '한가위 축제다! 보름달 아래서 송편 받기 놀이 같이 하자!',
+    winter: '동지 축제야! 새알심 받기 하고 따끈한 팥죽 먹으러 가자!',
+  },
+  granny: {
+    spring: '삼짇날엔 진달래로 화전을 부친단다. 하나 맛보거라.',
+    summer: '단오엔 창포물에 머리를 감았단다. 수리취떡도 먹어 보거라.',
+    autumn: '한가위엔 햅쌀로 송편을 빚는단다. 올해 농사도 수고 많았구나.',
+    winter: '동짓날엔 팥죽을 쑤어 나눠 먹는단다. 새알심도 나이만큼 먹거라.',
+  },
+  fisher: {
+    spring: '봄꽃 축제라도 물가는 조용하지. 구경 실컷 하고 낚시하러 오렴.',
+    summer: '단오엔 물놀이 철이 시작되지. 축제 끝나면 밤낚시 하러 오렴.',
+    autumn: '한가위 보름달 아래 낚시는 각별하지. 오늘 밤 호수에 오렴.',
+    winter: '동지 밤은 길지. 얼음 같은 물엔 빙어가 잘 나오니 들렀다 가렴.',
+  },
+  kid: {
+    spring: '꽃잎 받기 시합하자! 이번엔 내가 이길 거야!',
+    summer: '단오다! 그네 타고 앵두도 받자! 엽전 모아서 연 사자!',
+    autumn: '송편 받기 하자! 반달 모양으로 예쁘게 빚은 건 내 거야!',
+    winter: '동지 축제다! 눈사람 만들고 팥죽 먹자, 새알심은 내가 다 먹을 거야!',
+  },
+};
+
 export const OUT_OF_LINES_BY = { granny: '오늘 할 얘기는 다 했단다. 내일 또 오거라.' };
 /** 밤에 졸다 깼을 때 (플레이어가 가까이 오면) */
 export const WAKE = {
@@ -147,7 +187,7 @@ export function lineFits(ln, ctx) {
   if (ln.weather && ln.weather !== ctx.weather) return false;
   if (ln.night && !ctx.night) return false;
   if (ln.minHearts && (ctx.hearts ?? 0) < ln.minHearts) return false;
-  if (ln.festival && !ctx.festival) return false;
+  if (ln.festival && (!ctx.festival || (ln.festival !== true && ln.festival !== ctx.festival))) return false;
   if (ln.after && !ctx.done?.[ln.after]) return false;
   if (ln.species && !ctx.species) return false;
   return true;

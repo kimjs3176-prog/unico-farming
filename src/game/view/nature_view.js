@@ -2,7 +2,8 @@ import { josa } from '../sim/josa.js';
 import * as THREE from 'three';
 import { heightAt } from '../terrain.js';
 import { LAYOUT } from '../world.js';
-import { ITEMS } from '../sim/items.js';
+import { ITEMS, treeStage } from '../sim/items.js';
+import { seasonOf, SEASON } from '../sim/season.js';
 import { FishingSim, rollBug } from '../sim/fishing.js';
 import { ReelFight, needsFight, BAIT_RARE } from '../sim/angling.js';
 import { makeFish, showLength } from '../fishmesh.js';
@@ -10,6 +11,10 @@ import { makeLabel } from '../label.js';
 import { touchUI } from '../input.js';
 
 const FRUIT_COLOR = { fruit_apple: 0xe0413a, fruit_peach: 0xf7a8a0, fruit_pear: 0xd9d26a, fruit_persimmon: 0xf08a24 };
+/** 철 아닌 과일나무 모습: 봄 꽃송이(분홍), 여름 풋열매(작은 초록), 그 밖엔 열매 없음 · 겨울 감나무는 홍시 하나를 까치밥으로 남김 */
+const BLOSSOM_COLOR = 0xf6c9d8, UNRIPE_COLOR = 0x8fbf4a, HONGSI_COLOR = 0xe5541c;
+/** '여름에 열려요' 의 계절 이름 */
+const seasonsText = (fruit) => (ITEMS[fruit]?.seasons || []).map((k) => SEASON[k]?.name).filter(Boolean).join('·');
 const BUG_COLOR = { bug_butterfly: 0xffffff, bug_swallowtail: 0xf6d64a, bug_dragonfly: 0xe0413a, bug_ladybug: 0xd93025, bug_beetle: 0x5a3a22, bug_firefly: 0xd8ff6a };
 
 /**
@@ -37,8 +42,14 @@ export class NatureView {
         fruits.push(f);
       }
       const canopy = m.getObjectByName('Canopy');
-      return { ...o, m, canopy, fruits, shakenDay: 0, shake: 0 };
+      return { ...o, m, canopy, fruits, mat, shakenDay: 0, shake: 0, stage: null };
     });
+    // 철 아닌 나무 재질 (모든 나무가 같이 씀)
+    this.stageMat = {
+      blossom: new THREE.MeshStandardMaterial({ color: BLOSSOM_COLOR, roughness: 0.7 }),
+      green: new THREE.MeshStandardMaterial({ color: UNRIPE_COLOR, roughness: 0.5 }),
+      hongsi: new THREE.MeshStandardMaterial({ color: HONGSI_COLOR, roughness: 0.35 }),
+    };
     // ---- 곤충 ----
     const wing = new THREE.PlaneGeometry(0.16, 0.12).translate(0.08, 0, 0);
     this.bugs = [];
@@ -79,10 +90,23 @@ export class NatureView {
   }
 
   get night() { return this.game.world.daylight < 0.35; }
+  /** 지금 계절 id */
+  get season() { return seasonOf(this.game.world.day ?? 1).id; }
+
+  /** 계절이 바뀌면 나무 모습을 바꿈 (열매 색·크기만, 그리기 수 그대로) */
+  _treeLook(tr, season) {
+    const stage = treeStage(tr.fruit, season), kkachi = stage === 'ripe' && season === 'winter';
+    if (tr.stage === stage && tr.kkachi === kkachi) return;
+    tr.stage = stage; tr.kkachi = kkachi;
+    const mat = stage === 'ripe' ? (kkachi ? this.stageMat.hongsi : tr.mat) : this.stageMat[stage] || tr.mat;
+    const sc = stage === 'blossom' ? 1.35 : stage === 'green' ? 0.55 : 1;
+    for (const f of tr.fruits) { f.material = mat; f.scale.setScalar(sc); }
+  }
 
   spawnBug(b) {
     const night = this.night;
-    b.kind = rollBug(Math.random, { night, raining: ['rain', 'storm'].includes(this.game.world.weatherKind) });
+    b.kind = rollBug(Math.random, { night, raining: ['rain', 'storm'].includes(this.game.world.weatherKind), season: this.season });
+    if (!b.kind) { b.g.visible = false; b.respawn = 20; return; } // 이 계절·시간엔 나올 곤충이 없음
     // 꽃·풀밭 위 아무 곳 (길·논·연못 제외)
     for (let k = 0; k < 30; k++) {
       const x = (Math.random() - 0.5) * 60, z = (Math.random() - 0.5) * 50;
@@ -105,9 +129,12 @@ export class NatureView {
     let best = null;
     const consider = (d, p) => { if (d >= 0 && (!best || d < best.d)) best = { ...p, d }; };
     // ---- 과일 나무 ----
+    const season = this.season;
     for (const tr of this.trees) {
-      const ripe = tr.shakenDay !== day;
-      tr.fruits.forEach((f) => { if (!f.userData.falling) f.visible = ripe; });
+      this._treeLook(tr, season);
+      const fresh = tr.shakenDay !== day, ripe = fresh && tr.stage === 'ripe';
+      // 열매: 제철이면 흔들기 전까지, 꽃·풋열매는 늘, 빈 가지는 없음, 겨울 감나무는 흔든 뒤에도 까치밥 하나
+      tr.fruits.forEach((f, i) => { if (!f.userData.falling) f.visible = tr.stage === 'ripe' ? fresh || (tr.kkachi && i === tr.fruits.length - 1) : tr.stage !== 'bare'; });
       if (tr.shake > 0) {
         tr.shake -= dt;
         if (tr.canopy) tr.canopy.rotation.z = Math.sin(this.t * 40) * 0.06 * tr.shake;
@@ -119,7 +146,10 @@ export class NatureView {
         if (f.position.y < f.userData.floor) { f.position.y = 0; f.userData.falling = false; f.visible = false; }
       }
       const d = Math.hypot(tr.x - playerPos.x, tr.z - playerPos.z);
-      if (d < 2.6) consider(d, ripe ? { label: `나무 흔들기 (${ITEMS[tr.fruit].emoji} ${ITEMS[tr.fruit].name})`, key: 'shake', onInteract: () => this.shakeTree(tr) } : { label: `${ITEMS[tr.fruit].name} 나무 · 내일 다시 열려요`, key: 'tree' });
+      const nm = tr.kkachi ? '홍시' : ITEMS[tr.fruit].name;
+      if (d < 2.6) consider(d, ripe ? { label: `나무 흔들기 (${ITEMS[tr.fruit].emoji} ${nm})`, key: 'shake', onInteract: () => this.shakeTree(tr) }
+        : fresh ? { label: `${tr.stage === 'blossom' ? '🌸 ' : ''}${ITEMS[tr.fruit].name} 나무 · ${seasonsText(tr.fruit)}에 열려요`, key: 'shake', onInteract: () => this.shakeTree(tr) }
+          : { label: `${ITEMS[tr.fruit].name} 나무 · 내일 다시${tr.stage === 'ripe' ? ' 열려요' : ' 흔들 수 있어요'}`, key: 'tree' });
     }
     // ---- 곤충 ----
     const night = this.night;
@@ -161,9 +191,10 @@ export class NatureView {
     g.audio.play('rustle');
     g.player.unico.facing = Math.atan2(tr.x - g.player.position.x, tr.z - g.player.position.z);
     g.player.unico.playAction('push', 0.9);
+    if (tr.stage && tr.stage !== 'ripe') return this._shakeBare(tr);
     const wp = new THREE.Vector3();
     tr.fruits.forEach((f, i) => {
-      if (i > 2) return; // 3개만 떨어짐
+      if (i > 2 || (tr.kkachi && i === tr.fruits.length - 1)) return; // 3개만 떨어짐 (겨울 감나무 까치밥은 남김)
       f.getWorldPosition(wp);
       f.userData.falling = true;
       f.userData.v = 0;
@@ -171,13 +202,31 @@ export class NatureView {
     });
     g.economy.addItem(tr.fruit, 3);
     const rec = g.collection.add(tr.fruit, { day: g.world.day });
-    g.onEvent('shake');
-    let extra = '';
+    g.onEvent('shake', 1, tr.fruit);
+    let extra = tr.kkachi ? ' 하나는 까치밥으로 남겨 뒀어요 🐦' : '';
     const r = Math.random();
-    if (r < 0.15) { const bug = Math.random() < 0.5 ? 'bug_beetle' : 'bug_ladybug'; g.economy.addItem(bug, 1); g.collection.add(bug, { day: g.world.day }); g.onEvent('bug'); extra = ` 앗, ${ITEMS[bug].emoji} ${ITEMS[bug].name}도 떨어졌어요!`; }
+    if (r < 0.15) extra += this._dropBug();
     else if (r < 0.25) { g.economy.earn(100); g.ui.flyToCoin?.(100, new THREE.Vector3(tr.x ?? g.player.position.x, 2, tr.z ?? g.player.position.z)); extra = ' 💰 나무에서 100코인 주머니가 떨어졌어요!'; }
-    g.ui.toast(`${ITEMS[tr.fruit].emoji} ${ITEMS[tr.fruit].name} ×3${rec.isNew ? ' (도감 등록!)' : ''}.${extra}`);
+    g.ui.toast(`${ITEMS[tr.fruit].emoji} ${tr.kkachi ? '홍시' : ITEMS[tr.fruit].name} ×3${rec.isNew ? ' (도감 등록!)' : ''}.${extra}`);
     g.afterCollect?.();
+  }
+
+  /** 나무에서 곤충이 떨어짐 (풍뎅이·무당벌레) → 알림 뒷말 */
+  _dropBug() {
+    const g = this.game, bug = Math.random() < 0.5 ? 'bug_beetle' : 'bug_ladybug';
+    g.economy.addItem(bug, 1); g.collection.add(bug, { day: g.world.day }); g.onEvent('bug', 1, bug);
+    return ` 앗, ${ITEMS[bug].emoji} ${ITEMS[bug].name}도 떨어졌어요!`;
+  }
+
+  /** 철 아닌 나무 흔들기: 흔들림·소리·흔들기 퀘스트는 그대로, 열매 대신 꽃잎·나뭇잎 (가끔 곤충) */
+  _shakeBare(tr) {
+    const g = this.game, it = ITEMS[tr.fruit];
+    g.onEvent('shake', 1, null);
+    const leaf = tr.stage === 'blossom' ? '🌸 꽃잎이 흩날려요' : tr.stage === 'green' ? '🍃 풋열매가 아직 단단해요' : '🍂 나뭇잎만 우수수';
+    g.fx?.burst?.(tr.x, 2.4, tr.z, tr.stage === 'blossom' ? BLOSSOM_COLOR : 0x9cbf5a, 8);
+    const extra = Math.random() < 0.15 ? this._dropBug() : '';
+    g.ui.toast(`${leaf}… ${it.emoji} ${it.name}${josa(it.name, '은/는')} ${seasonsText(tr.fruit)}에 열려요.${extra}`);
+    if (extra) g.afterCollect?.();
   }
 
   catchBug(b) {
@@ -186,7 +235,7 @@ export class NatureView {
     b.respawn = 15 + Math.random() * 15;
     g.economy.addItem(b.kind, 1);
     const rec = g.collection.add(b.kind, { day: g.world.day });
-    g.onEvent('bug');
+    g.onEvent('bug', 1, b.kind);
     g.audio.play('swish'); // 잠자리채 휙 + 잡은 뽁
     setTimeout(() => g.audio.play('pop'), 160);
     g.player.unico.facing = Math.atan2(b.g.position.x - g.player.position.x, b.g.position.z - g.player.position.z);
@@ -216,7 +265,7 @@ export class NatureView {
     if (lake && A.useBait && g.economy.useItem('bait', 1)) bait = true;
     const rod = A.rodInfo;
     const W = g.world, cold = W.weatherKind === 'snow' || (W.weatherCur?.temperature ?? 20) < 8;
-    this.fsim.cast({ night: this.night, raining: ['rain', 'storm'].includes(W.weatherKind), lake: !!lake, cold, rare: lake ? rod.rare * (bait ? BAIT_RARE : 1) : 1, bait });
+    this.fsim.cast({ night: this.night, raining: ['rain', 'storm'].includes(W.weatherKind), lake: !!lake, cold, rare: lake ? rod.rare * (bait ? BAIT_RARE : 1) : 1, bait, season: this.season });
     this.fishing = { phase: 'cast', t: 0, dir, lake: !!lake, bait, rod };
     // 낚싯대 들고 던지기 동작 → 찌가 포물선으로 날아가 착수
     u.holding = 'rod';
@@ -422,7 +471,7 @@ export class NatureView {
     const it = ITEMS[r.fish];
     g.economy.addItem(r.fish, 1);
     const rec = g.collection.add(r.fish, { size: r.size, day: g.world.day });
-    g.onEvent('fish');
+    g.onEvent('fish', 1, r.fish);
     g.audio.play(r.fought ? 'levelup' : 'win');
     u.playAction('lift', 1.8);
     this._showCatch(r.fish, r.size);
@@ -430,8 +479,8 @@ export class NatureView {
     if (this.spot) g.waterfx.splash(this.spot.x, this.spot.z, 0.7); // 물고기를 끌어 올린 자리
     let extra = '';
     if (f?.lake) {
-      g.onEvent('lakefish');
-      if (r.fought) g.onEvent('fightwin');
+      g.onEvent('lakefish', 1, r.fish);
+      if (r.fought) g.onEvent('fightwin', 1, r.fish);
       const out = g.angling.record(r.fish, r.size, g.world.day, { fought: r.fought });
       if (out.request) extra += ' 📋 오늘의 의뢰 달성! 낚시꾼에게 보고하세요';
       else if (out.biggest) extra += ' 🏅 낚시터 최고 기록!';

@@ -1,14 +1,17 @@
 import { touchUI } from '../../game/input.js';
+import { josa } from '../../game/sim/josa.js';
 
 /**
- * 미니게임: 달걀 받기 (닭장)
+ * 미니게임: 달걀 받기 (닭장) · 축제 놀이 (skin 을 주면 같은 규칙에 계절 그림: sim/festival.js FESTIVALS[id].skin)
+ *  skin: { title, icon, sky:[위, 아래], ground, branch, bloom, moon?, good:[이모지…], gold, bad, goodName, goldName, badName }
  *  횃대 위 암탉들이 낳는 달걀을 바구니로 받기. 마우스/터치로 끌거나 ←→ / A·D 키.
  *  흰·갈색 달걀 +1, 황금 달걀 +5(반짝), 썩은 달걀 -3(콤보 끊김). 10연속부터 콤보 ×2, 20연속 ×3.
  *  45초 동안 점점 빨라짐. 결과: 달걀(점수/5) + 코인(점수×2), 최고 기록 저장.
  */
-export function playEggCatch(game) {
+export function playEggCatch(game, skin = null) {
   return new Promise((resolve) => {
-    const W = 720, H = 460, DUR = 45;
+    const W = 720, H = 460, DUR = 45, S = skin;
+    const BEST_KEY = S ? 'unico.mg.fest' : 'unico.egg.best';
     const T = touchUI(); // 터치 화면: 캔버스 안내 글자에 키보드 안내 대신 손가락 안내
     const wrap = document.createElement('div');
     wrap.className = 'mg-wrap';
@@ -16,7 +19,8 @@ export function playEggCatch(game) {
     document.getElementById('ui').append(wrap);
     const cv = wrap.querySelector('canvas'), c = cv.getContext('2d');
     game.player.frozen = true;
-    const best = +(localStorage.getItem('unico.egg.best') || 0);
+    let best = 0;
+    try { best = +(localStorage.getItem(BEST_KEY) || 0); } catch { /* 무시 */ }
     const hens = [0, 1, 2, 3, 4].map((i) => ({ x: 90 + i * 135, bob: Math.random() * 6, lay: 0 }));
     const st = { t: 0, score: 0, combo: 0, maxCombo: 0, caught: 0, basket: W / 2, bv: 0, eggs: [], fx: [], spawn: 1, started: false, over: false, keys: new Set() };
     let raf = 0, last = performance.now();
@@ -37,7 +41,8 @@ export function playEggCatch(game) {
       const r = Math.random(), lvl = st.t / DUR;
       const kind = r < 0.07 ? 'gold' : r < 0.07 + 0.08 + lvl * 0.1 ? 'rotten' : r < 0.6 ? 'white' : 'brown';
       h.lay = 0.3;
-      st.eggs.push({ x: h.x + (Math.random() - 0.5) * 20, y: 112, vy: 60 + lvl * 120 + Math.random() * 40, kind, rot: 0 });
+      const em = S ? (kind === 'gold' ? S.gold : kind === 'rotten' ? S.bad : S.good[kind === 'white' ? 0 : 1]) : null;
+      st.eggs.push({ x: h.x + (Math.random() - 0.5) * 20, y: 112, vy: 60 + lvl * 120 + Math.random() * 40, kind, rot: 0, em });
     }
     function burst(x, y, col, n = 10) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, s = 60 + Math.random() * 160; st.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 80, life: 0.6, col }); } }
     function text(x, y, s, col) { st.fx.push({ x, y, vx: 0, vy: -50, life: 0.9, txt: s, col }); }
@@ -60,7 +65,7 @@ export function playEggCatch(game) {
         e.vy += 260 * dt; e.y += e.vy * dt; e.rot += dt * 3;
         if (!e.done && e.y > H - 78 && e.y < H - 50 && Math.abs(e.x - st.basket) < 54) {
           e.done = true;
-          if (e.kind === 'rotten') { st.score = Math.max(0, st.score - 3); st.combo = 0; burst(e.x, e.y, '#8bbf4a', 14); text(e.x, e.y - 20, '-3 으악!', '#6a8f2a'); game.audio.play('deny'); }
+          if (e.kind === 'rotten') { st.score = Math.max(0, st.score - 3); st.combo = 0; burst(e.x, e.y, S ? '#8a8a8a' : '#8bbf4a', 14); text(e.x, e.y - 20, '-3 으악!', '#6a8f2a'); game.audio.play('deny'); }
           else {
             st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo); st.caught++;
             const mult = st.combo >= 20 ? 3 : st.combo >= 10 ? 2 : 1, pts = (e.kind === 'gold' ? 5 : 1) * mult;
@@ -95,7 +100,41 @@ export function playEggCatch(game) {
       c.fillStyle = '#efe6d4'; c.beginPath(); c.ellipse(-4, 2, 18, 11, -0.2, 0, 7); c.fill(); // 날개
       c.restore();
     }
+    /** 축제: 떨어지는 것 (이모지), 땅에 떨어지면 흐려지며 사라짐 */
+    function festItem(e) {
+      c.save(); c.translate(e.x, e.y);
+      if (e.splat) c.globalAlpha = Math.min(1, e.splat) * 0.5;
+      else c.rotate(Math.sin(e.rot) * 0.35);
+      c.font = `${e.kind === 'gold' ? 34 : 28}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      if (e.kind === 'gold' && !e.splat) { c.fillStyle = 'rgba(255,230,120,0.45)'; c.beginPath(); c.arc(0, 0, 22 + Math.sin(st.t * 8) * 3, 0, 7); c.fill(); }
+      c.fillText(e.em, 0, 0);
+      c.restore();
+    }
+    /** 축제 배경: 하늘·땅·나뭇가지(꽃)·연등 줄 */
+    function festBg() {
+      const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, S.sky[0]); g.addColorStop(1, S.sky[1]);
+      c.fillStyle = g; c.fillRect(0, 0, W, H);
+      if (S.moon) { c.fillStyle = '#fff3c4'; c.beginPath(); c.arc(W - 120, 160, 46, 0, 7); c.fill(); c.fillStyle = 'rgba(255,243,196,0.18)'; c.beginPath(); c.arc(W - 120, 160, 70, 0, 7); c.fill(); }
+      // 연등 줄
+      c.strokeStyle = 'rgba(90,58,26,0.45)'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, 30); c.quadraticCurveTo(W / 2, 70, W, 30); c.stroke();
+      const cols = ['#e8495a', '#fac03e', '#30b6aa', '#8e7cc3', '#f28bb0'];
+      for (let i = 1; i < 12; i++) { const x = (i * W) / 12, y = 30 + Math.sin((i / 12) * Math.PI) * 32; c.fillStyle = cols[i % cols.length]; c.beginPath(); c.moveTo(x - 9, y); c.lineTo(x + 9, y); c.lineTo(x, y + 18); c.fill(); }
+      c.fillStyle = S.ground; c.fillRect(0, H - 40, W, 40);
+      c.fillStyle = 'rgba(0,0,0,0.06)'; for (let i = 0; i < 40; i++) c.fillRect((i * 97) % W, H - 34 + (i * 13) % 26, 10, 3);
+      // 나뭇가지 (암탉 자리): 가지 + 꽃송이, 떨어뜨릴 때 흔들림
+      c.strokeStyle = S.branch; c.lineWidth = 10; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(0, 96); c.quadraticCurveTo(W / 2, 128, W, 96); c.stroke();
+      for (const h of hens) {
+        const sh = h.lay > 0 ? Math.sin((h.lay / 0.3) * Math.PI) * 5 : 0, b = Math.sin(h.bob) * 1.5;
+        c.save(); c.translate(h.x + sh, 100 + b);
+        c.strokeStyle = S.branch; c.lineWidth = 5; c.beginPath(); c.moveTo(0, 6); c.lineTo(0, -14); c.stroke();
+        c.fillStyle = S.bloom; for (const [dx, dy, r] of [[-14, -12, 11], [12, -14, 12], [0, -26, 12], [-4, 2, 9], [10, 2, 8]]) { c.beginPath(); c.arc(dx, dy, r, 0, 7); c.fill(); }
+        c.fillStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.arc(-3, -24, 4, 0, 7); c.fill();
+        c.restore();
+      }
+    }
     function egg(e) {
+      if (S) return festItem(e);
       c.save(); c.translate(e.x, e.y);
       if (e.splat) {
         c.globalAlpha = Math.min(1, e.splat);
@@ -113,6 +152,11 @@ export function playEggCatch(game) {
       c.restore();
     }
     function draw() {
+      if (S) festBg(); else henBg();
+      for (const e of st.eggs) egg(e);
+      drawRest();
+    }
+    function henBg() {
       // 배경: 닭장 안 나무 벽 + 창문 햇살 + 짚 바닥
       const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#f6d9a8'); g.addColorStop(1, '#e8b978');
       c.fillStyle = g; c.fillRect(0, 0, W, H);
@@ -124,7 +168,8 @@ export function playEggCatch(game) {
       // 횃대 + 암탉
       c.fillStyle = '#8a5a32'; c.fillRect(30, 104, W - 60, 12); c.fillStyle = '#6e4626'; c.fillRect(30, 114, W - 60, 4);
       for (const h of hens) hen(h.x, 78, h);
-      for (const e of st.eggs) egg(e);
+    }
+    function drawRest() {
       // 바구니
       const sq = st.squash > 0 ? Math.sin(st.squash / 0.18 * Math.PI) * 0.12 : 0;
       c.save(); c.translate(st.basket, H - 58); c.scale(1 + sq, 1 - sq);
@@ -140,14 +185,18 @@ export function playEggCatch(game) {
       c.globalAlpha = 1;
       // HUD
       c.fillStyle = 'rgba(255,250,240,0.92)'; c.beginPath(); c.roundRect(14, 12, 220, 46, 14); c.fill();
-      c.fillStyle = '#6b4a2e'; c.font = "22px 'Unico Coin', Jua, sans-serif"; c.textAlign = 'left'; c.fillText(`🥚 ${st.score}점`, 28, 43);
+      c.fillStyle = '#6b4a2e'; c.font = "22px 'Unico Coin', Jua, sans-serif"; c.textAlign = 'left'; c.fillText(`${S ? S.icon : '🥚'} ${st.score}점`, 28, 43);
       if (st.combo >= 3) { c.fillStyle = st.combo >= 20 ? '#e8495a' : st.combo >= 10 ? '#f28c28' : '#299d93'; c.fillText(`${st.combo} 연속!`, 132, 43); }
       const left = Math.max(0, DUR - st.t);
       c.fillStyle = 'rgba(255,250,240,0.92)'; c.beginPath(); c.roundRect(W - 234, 12, 220, 46, 14); c.fill();
       c.fillStyle = '#e8d6b8'; c.fillRect(W - 220, 30, 150, 12); c.fillStyle = left < 10 ? '#e8495a' : '#30b6aa'; c.fillRect(W - 220, 30, 150 * left / DUR, 12);
       c.fillStyle = '#6b4a2e'; c.textAlign = 'right'; c.fillText(`${Math.ceil(left)}초`, W - 24, 43);
-      if (!st.started) panel('🥚 달걀 받기', ['암탉이 낳는 달걀을 바구니로 받으세요!', T ? '화면을 손가락으로 끌어 바구니 옮기기' : '마우스·터치로 끌거나 ← → 키', '🟡 황금 달걀 +5 · 🟢 썩은 달걀은 피하기', '10연속 ×2, 20연속 ×3', '움직이면 시작!'], `최고 기록 ${best}점`);
-      if (st.over) panel('🎉 끝!', [`점수 ${st.score}점 (최대 ${st.maxCombo} 연속)`, `보상: 달걀 ${Math.floor(st.score / 5)}개 + ${st.score * 2}🪙`, st.score > best ? '🏆 새 최고 기록!' : `최고 기록 ${best}점`], T ? '화면을 눌러 마치기' : '클릭하거나 E 로 마치기');
+      const move = T ? '화면을 손가락으로 끌어 바구니 옮기기' : '마우스·터치로 끌거나 ← → 키';
+      if (!st.started) {
+        if (S) panel(`${S.icon} ${S.title}`, [`떨어지는 ${S.goodName}${josa(S.goodName, '을/를')} 바구니로 받으세요!`, move, `${S.gold} ${S.goldName} +5 · ${S.bad} ${S.badName}${josa(S.badName, '은/는')} 피하기`, '10연속 ×2, 20연속 ×3 · 별만큼 축제 엽전', '움직이면 시작!'], `최고 기록 ${best}점`);
+        else panel('🥚 달걀 받기', ['암탉이 낳는 달걀을 바구니로 받으세요!', move, '🟡 황금 달걀 +5 · 🟢 썩은 달걀은 피하기', '10연속 ×2, 20연속 ×3', '움직이면 시작!'], `최고 기록 ${best}점`);
+      }
+      if (st.over) panel('🎉 끝!', [`점수 ${st.score}점 (최대 ${st.maxCombo} 연속)`, S ? '별 개수만큼 축제 엽전을 받아요' : `보상: 달걀 ${Math.floor(st.score / 5)}개 + ${st.score * 2}🪙`, st.score > best ? '🏆 새 최고 기록!' : `최고 기록 ${best}점`], T ? '화면을 눌러 마치기' : '클릭하거나 E 로 마치기');
     }
     function panel(title, lines, foot) {
       c.fillStyle = 'rgba(35,25,22,0.45)'; c.fillRect(0, 0, W, H);
@@ -163,7 +212,7 @@ export function playEggCatch(game) {
       wrap.remove();
       game.player.frozen = false;
       const res = { score: st.score, eggs: st.over ? Math.floor(st.score / 5) : 0, coins: st.over ? st.score * 2 : 0, best: Math.max(best, st.score), prev: best, over: st.over, maxCombo: st.maxCombo };
-      if (st.over) try { localStorage.setItem('unico.egg.best', String(res.best)); } catch { /* 무시 */ }
+      if (st.over) try { localStorage.setItem(BEST_KEY, String(res.best)); } catch { /* 무시 */ }
       resolve(res);
     }
     raf = requestAnimationFrame(step);
