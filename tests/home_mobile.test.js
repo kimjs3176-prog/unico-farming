@@ -81,10 +81,10 @@ function homeGame() {
   };
 }
 
-test('옷장 (세로 폰): 물러나 바라보는 점을 낮추고, 지도로 바로 나가도 원래대로', () => {
+test('옷장 (세로 폰): 물러나 바라보는 점을 낮추고, 지도로 바로 나가도 원래대로', async () => {
   const g = homeGame(), h = new HomeView(g), cam = g.followCam;
   h.inside = true; h._cam = { yaw: 0.3, pitch: 0.45, distance: 9 };
-  h.openWardrobe();
+  await h.openWardrobe(); // 옷장 창 코드는 처음 열 때 받음 (약속)
   assert.equal(cam.distance, 6.5);
   assert.equal(cam.lookOffsetY, -1.25);
   h.leave(true);
@@ -93,12 +93,12 @@ test('옷장 (세로 폰): 물러나 바라보는 점을 낮추고, 지도로 �
   assert.equal(cam.distance, 9);
 });
 
-test('옷장 (세로 폰): 창을 닫으면 다음 프레임에 카메라가 원래대로', () => {
+test('옷장 (세로 폰): 창을 닫으면 다음 프레임에 카메라가 원래대로', async () => {
   const g = homeGame(), h = new HomeView(g), cam = g.followCam;
   h.inside = true;
   const p = el();
   g.ui.openPanel = () => p; g.ui.panel = p;
-  h.openWardrobe();
+  await h.openWardrobe(); // 옷장 창 코드는 처음 열 때 받음 (약속)
   assert.equal(cam.lookOffsetY, -1.25);
   g.ui.panel = null; // 창 닫음
   h._updateInside(0.016, g.player.position);

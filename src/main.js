@@ -3,7 +3,7 @@
 import { record, rethrowLater, showFatal, setCrashContext, FailGate } from './game/crash.js'; // 맨 먼저: 다른 모듈을 읽는 중의 오류부터 기록
 import { josa } from './game/sim/josa.js';
 import { isTitleId, titleIdOf } from './game/sim/titles.js';
-import { HomeView } from './game/view/home_view.js';
+import { HomeView, prefetchHomePanels } from './game/view/home_view.js';
 import { TownView } from './game/view/town_view.js';
 import { AutoPlay } from './game/autoplay.js';
 import * as THREE from 'three';
@@ -310,6 +310,7 @@ class Game {
     this.assets.loadDeferred?.().then(() => this.warmDeferred()).catch(() => {});
     this.camHintOnce();
     prefetchPanels(); // 창 코드(장터·가방·설정·체험관…)를 쉬는 동안 미리 받아 둠
+    setTimeout(() => { prefetchHomePanels().catch(() => {}); import('./ui/panels/festival.js').catch(() => {}); }, 3000); // 집·옷장·축제 창도
     this.careStorage?.(); // 농장 기록 지키기: 오래 보관 요청·홈 화면 안내·코드 저장 권유 (조용할 때)
   }
 

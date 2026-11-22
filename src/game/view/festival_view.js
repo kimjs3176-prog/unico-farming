@@ -4,7 +4,7 @@ import { heightAt } from '../terrain.js';
 import { ITEMS } from '../sim/items.js';
 import { festivalAt, festivalOf, festivalKey, festState, saleTokens, actTokens } from '../sim/festival.js';
 import { mgResult } from '../../ui/minigame_frame.js';
-import { openFestival, FEST_COIN } from '../../ui/panels/festival.js';
+import { FEST_COIN } from '../../ui/panels/festival_data.js'; // 축제 소품 등록 (시작할 때)
 
 /**
  * 계절 축제 마당 (규칙은 sim/festival.js)
@@ -118,7 +118,8 @@ export class FestivalView {
   open() {
     this.t = CHECK; this.update(0, null); // 날짜·시각이 막 바뀌었어도 바로 확인
     if (!this.cur) { this.game.ui?.toast?.('🎪 축제 날(계절 7일째)에 열려요'); return; }
-    openFestival(this.game, this);
+    import('../../ui/panels/festival.js').then(({ openFestival }) => openFestival(this.game, this)) // 축제 창 코드는 처음 열 때 받음
+      .catch(() => this.game.ui.toast('⚠️ 창을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요'));
   }
 
   /** 축제 놀이: 계절 그림의 받기 놀이 → 결과 카드 → 별만큼 엽전 */
