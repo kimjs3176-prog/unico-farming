@@ -28,7 +28,7 @@ import { SmartFarmView } from './game/view/smartfarm_view.js';
 import { NPCs } from './game/view/npcs.js';
 import { Economy, FESTIVAL_MULT } from './game/sim/economy.js';
 import { Quests, QUESTS } from './game/sim/quests.js';
-import { UI } from './ui/ui.js';
+import { UI, prefetchPanels } from './ui/ui.js';
 import { FX } from './game/fx.js';
 import { Audio } from './game/audio.js';
 import { Net } from './game/net.js';
@@ -309,6 +309,7 @@ class Game {
     // 목장 손님 동물은 ranch.update 가 1초마다 플레이어 위치를 보고 화면 밖 먼 자리에 풀어 놓음 (여기서 바로 넣으면 눈앞에 나타날 수 있음)
     this.assets.loadDeferred?.().then(() => this.warmDeferred()).catch(() => {});
     this.camHintOnce();
+    prefetchPanels(); // 창 코드(장터·가방·설정·체험관…)를 쉬는 동안 미리 받아 둠
     this.careStorage?.(); // 농장 기록 지키기: 오래 보관 요청·홈 화면 안내·코드 저장 권유 (조용할 때)
   }
 

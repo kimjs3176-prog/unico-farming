@@ -7,7 +7,9 @@ import { ITEMS, treeStage } from '../sim/items.js';
 import { seasonOf, SEASON } from '../sim/season.js';
 import { FishingSim, rollBug } from '../sim/fishing.js';
 import { ReelFight, needsFight, BAIT_RARE } from '../sim/angling.js';
-import { makeFish, showLength } from '../fishmesh.js';
+/** 물고기 모양 코드: 낚시를 시작할 때 받아 두고 낚으면 씀 (첫 화면 내려받기에서 뺌) */
+let FM = null;
+const loadFish = () => import('../fishmesh.js').then((m) => (FM = m));
 import { makeLabel } from '../label.js';
 import { touchUI } from '../input.js';
 
@@ -302,6 +304,7 @@ export class NatureView {
   // ---- 낚시 (연못·낚시터 공통) ----
   /** @param lake 낚시터면 LakeView.castFrom 결과 { dir, spot } */
   startFishing(pos, lake = null) {
+    loadFish().catch(() => {}); // 낚을 때 바로 들어 보이게 미리 받음
     const g = this.game, u = g.player.unico, A = g.angling;
     let dir, spot;
     if (lake) { dir = lake.dir.clone(); spot = lake.spot.clone(); }
@@ -475,8 +478,9 @@ export class NatureView {
   /** 낚은 물고기를 머리 위로 들어 보이기 (1.8초) */
   _showCatch(fish, size) {
     const g = this.game;
+    if (!FM) { loadFish().then(() => this._showCatch(fish, size)).catch(() => {}); return; } // 아직 못 받았으면 받고 나서
     if (this.catchShow) { g.world.scene.remove(this.catchShow.m); this.catchShow.m.userData.dispose(); }
-    const m = makeFish(fish, showLength(fish, size));
+    const m = FM.makeFish(fish, FM.showLength(fish, size));
     g.world.scene.add(m);
     this.catchShow = { m, t: 0 };
     // 이름표·화살표가 물고기를 가리지 않게 잠깐 숨김

@@ -6,7 +6,7 @@ import { isSubmitEnter } from './game/input.js';
 import { Audio } from './game/audio.js';
 import { Ambience } from './game/ambience.js';
 import { loadSaveInfo, loadBackup, parseCode, importSave, localSummary, CODE_ERR } from './game/save.js';
-import { compareCard } from './ui/panels/settings.js';
+import { compareCard } from './ui/panels/farm_compare.js';
 import { record, copyDiag } from './game/crash.js';
 import { onFetchRetry } from './game/fetch_gz.js';
 import { randomName } from './game/names.js';

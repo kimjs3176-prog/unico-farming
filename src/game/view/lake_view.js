@@ -6,7 +6,6 @@ import { LAYOUT } from '../world.js';
 import { ITEMS, itemsOf } from '../sim/items.js';
 import { SEASON } from '../sim/season.js';
 import { RODS } from '../sim/angling.js';
-import { makeFish } from '../fishmesh.js';
 import { signTexture, attachSign } from './koat_view.js';
 import { villagerName } from '../species.js';
 
@@ -85,16 +84,20 @@ export class LakeView {
     const water = new THREE.Mesh(new THREE.CircleGeometry(0.2, 14), new THREE.MeshStandardMaterial({ color: 0x4c97c4, roughness: 0.1 }));
     water.rotation.x = -Math.PI / 2; water.position.set(bucket.position.x, 0.27, bucket.position.z);
     W.scene.add(water);
-    const bf = makeFish('fish_crucian', 0.22); bf.position.set(bucket.position.x, 0.33, bucket.position.z); bf.rotation.z = 0.9;
-    W.scene.add(bf);
     // 기록판
     const B = K.board;
     this.board = W.place('sign', B.x, B.z, -0.9, 1.25, { collide: true, dynamic: true, r: 0.45 });
     W.signText(this.board, '🏆 낚시터 기록판', '오늘의 의뢰 · 최대어');
     // 튀어 오르는 물고기 (가끔)
-    this.jumper = makeFish('fish_trout', 0.45);
-    this.jumper.visible = false;
-    W.scene.add(this.jumper);
+    // 물고기 모양 코드는 따로 받음 (첫 화면 내려받기에서 뺌): 받으면 양동이 물고기·튀어 오르는 물고기를 놓음
+    this.jumper = null;
+    import('../fishmesh.js').then(({ makeFish }) => {
+      const bf = makeFish('fish_crucian', 0.22); bf.position.set(bucket.position.x, 0.33, bucket.position.z); bf.rotation.z = 0.9;
+      W.scene.add(bf);
+      this.jumper = makeFish('fish_trout', 0.45);
+      this.jumper.visible = false;
+      W.scene.add(this.jumper);
+    }).catch(() => { /* 물고기 장식 없이 */ });
     this.jumpT = 3;
     this.jump = null;
     // 물속 보물: 반짝이는 자리 + 올라오는 물방울 (헤엄쳐 가서 잠수하면 조개·진주·코인)
@@ -248,7 +251,7 @@ export class LakeView {
       s.m.rotation.z = -s.a;
     }
     // 가끔 물고기가 수면 위로 튀어 오름
-    if (close && !this.jump && (this.jumpT -= dt) <= 0) {
+    if (close && this.jumper && !this.jump && (this.jumpT -= dt) <= 0) {
       const a = Math.random() * 6.28, r = 1.5 + Math.random() * (K.r - 2.5);
       const x = K.x + Math.cos(a) * r, z = K.z + Math.sin(a) * r;
       if (!g.world.onDeck(x, z, -1)) {

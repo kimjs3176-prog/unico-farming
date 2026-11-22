@@ -1,4 +1,3 @@
-import { installKoatUI } from './koat_ui.js';
 import { h } from './dom.js';
 import { armScrim } from './scrim.js';
 import { HudUI } from './hud.js';
@@ -7,12 +6,8 @@ import { PromptUI } from './prompt.js';
 import { ToastUI } from './toast.js';
 import { ChatUI } from './chat.js';
 import { ActionbarUI } from './actionbar.js';
-import { MarketPanel } from './panels/market.js';
-import { QuestsPanel } from './panels/quests.js';
-import { BagPanel } from './panels/bag.js';
-import { VillagerPanel } from './panels/villager.js';
-import { SettingsPanel } from './panels/settings.js';
 import { ActivityUI } from './panels/activity.js';
+import { ItemIconUI } from './item_icons.js'; // 아이템 아이콘은 HUD·장터·도감이 바로 써서 첫 화면에 (작음)
 
 // 다른 파일이 ui.js 에서 가져가던 것은 그대로 (전체 화면·iOS 판별은 actionbar.js, 터치 화면 판별은 input.js)
 export { isIOS, canFullscreen, toggleFullscreen } from './actionbar.js';
@@ -102,5 +97,40 @@ export class UI {
   }
 }
 
-Object.assign(UI.prototype, HudUI, ObjectiveUI, PromptUI, ToastUI, ChatUI, ActionbarUI, MarketPanel, QuestsPanel, BagPanel, VillagerPanel, SettingsPanel, ActivityUI);
-installKoatUI(UI);
+Object.assign(UI.prototype, HudUI, ObjectiveUI, PromptUI, ToastUI, ChatUI, ActionbarUI, ActivityUI, ItemIconUI);
+
+/**
+ * 창 코드는 처음 열 때 받음 (사양 최적화: 첫 화면 내려받기를 줄임)
+ * 이름만 먼저 걸어 두고, 부르면 모듈을 받아 진짜 메서드로 바꾼 뒤 그대로 부름 (돌려주는 값은 약속)
+ * 이름 목록은 tests/lazy_panels.test.js 가 실제 모듈과 같은지 확인
+ */
+export const LAZY_PANELS = {
+  market: { load: () => import('./panels/market.js').then((m) => m.MarketPanel), names: ['openMarket'] },
+  quests: { load: () => import('./panels/quests.js').then((m) => m.QuestsPanel), names: ['openQuests'] },
+  bag: { load: () => import('./panels/bag.js').then((m) => m.BagPanel), names: ['openBook', 'refreshBook', 'bookRewardCard', 'openInventory', 'openSeedPicker'] },
+  villager: { load: () => import('./panels/villager.js').then((m) => m.VillagerPanel), names: ['openRooms', 'openVillager', 'openGiftPicker'] },
+  settings: { load: () => import('./panels/settings.js').then((m) => m.SettingsPanel), names: ['openSettings', 'farmMoveSection', 'openKeepTip', 'openHelp'] },
+  koat: { load: () => import('./koat_ui.js').then((m) => { const F = function () {}; m.installKoatUI(F); return F.prototype; }), names: ['openKoatBooth', 'startKoatGame', 'koatResult', 'koatRun', 'koatMatch', 'koatStages', 'koatSort', 'koatSmart', 'koatInspect', 'koatCarbon', 'openKoatDesk'] },
+};
+const lazyReady = {};
+/** 그 창 모듈을 받아 UI 에 붙임 (한 번만). 쉬는 동안 미리 받아 둘 때도 씀 */
+export function loadPanel(key) {
+  const L = LAZY_PANELS[key];
+  return (lazyReady[key] ||= L.load().then((mix) => { for (const n of L.names) if (typeof mix[n] === 'function') UI.prototype[n] = mix[n]; }));
+}
+for (const [key, L] of Object.entries(LAZY_PANELS)) {
+  for (const n of L.names) {
+    UI.prototype[n] = function (...a) {
+      return loadPanel(key).then(() => UI.prototype[n].apply(this, a)).catch((e) => {
+        lazyReady[key] = null; // 다음에 다시 시도
+        this.toast?.('⚠️ 창을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요');
+        console.warn('창 불러오기 실패', key, e);
+      });
+    };
+  }
+}
+/** 첫 화면이 뜬 뒤 쉬는 동안 창 코드를 미리 받아 둠 (처음 열 때 기다리지 않게) */
+export function prefetchPanels() {
+  const run = () => { for (const k of Object.keys(LAZY_PANELS)) loadPanel(k).catch(() => { lazyReady[k] = null; }); };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 4000 }); else setTimeout(run, 1500);
+}
