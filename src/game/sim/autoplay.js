@@ -1,4 +1,4 @@
-import { CROPS, FEED_PRICE } from './crops.js';
+import { CROPS, FEED_PRICE, totalYield } from './crops.js';
 import { ITEMS } from './items.js';
 
 /**
@@ -30,7 +30,7 @@ export function categoryOf(t) {
 /** 작물의 초당 이익 (다시 열리는 작물은 여러 번 수확) */
 export function cropValue(id) {
   const c = CROPS[id], n = 1 + (c.regrow || 0);
-  return ((c.basePrice * c.yield) * n - c.seedPrice) / (c.growTime * (1 + (c.regrow || 0) * 0.5));
+  return (c.basePrice * totalYield(c) - c.seedPrice) / (c.growTime * (1 + (c.regrow || 0) * 0.5)); // n 번 수확 (다시 열린 건 regrowYield)
 }
 
 /** 가진 씨앗 중 가장 이익이 큰 것 */

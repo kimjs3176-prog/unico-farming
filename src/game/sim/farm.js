@@ -1,4 +1,4 @@
-import { CROPS } from './crops.js';
+import { CROPS, harvestYield } from './crops.js';
 
 export const WATER_DURATION = 45; // 물 효과 지속(초)
 /** 밭농사 숙련도: 레벨별 누적 경험치 */
@@ -118,7 +118,8 @@ export class FarmSim {
     const crop = p.crop, C = CROPS[crop];
     const stars = Math.max(minStars, starsOf(this.care(i)));
     const giant = !!p.giant;
-    const amount = Math.max(1, C.yield + (stars - 2)) * (giant ? 3 : 1); // ★ -1, ★★ 기본, ★★★ +1
+    const first = p.regrowLeft === (C.regrow || 0); // 다시 열린 수확은 regrowYield
+    const amount = Math.max(1, harvestYield(C, first) + (stars - 2)) * (giant ? 3 : 1); // ★ -1, ★★ 기본, ★★★ +1
     const lv = this.level;
     const xp = Math.round(amount * (2 + stars) * (C.growTime / 90));
     this.xp += xp;

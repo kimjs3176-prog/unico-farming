@@ -235,3 +235,19 @@ test('배치: 흙길 판정과 새 마을 부지 예약 (나무·바위·덤불�
   const inRes = (x, z) => L.reserved.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1);
   for (const s of L.town.sites) assert.ok(inRes(s.x, s.z), `부지 (${s.x}, ${s.z}) 예약`);
 });
+
+test('다시 열리는 작물: 처음은 yield 개, 다시 열린 수확은 regrowYield 개 (토마토·딸기가 다른 작물을 압도하지 않게)', async () => {
+  const { CROPS, harvestYield, totalYield } = await import('../src/game/sim/crops.js');
+  const { FarmSim } = await import('../src/game/sim/farm.js');
+  assert.equal(harvestYield(CROPS.tomato, true), 3);
+  assert.equal(harvestYield(CROPS.tomato, false), 2);
+  assert.equal(harvestYield(CROPS.carrot, false), CROPS.carrot.yield, 'regrowYield 없으면 yield');
+  assert.equal(totalYield(CROPS.tomato), 3 + 2 * 2);
+  const f = new FarmSim(1);
+  const p = f.plots[0];
+  Object.assign(p, { state: 'ready', crop: 'tomato', progress: 1, water: 1, regrowLeft: 2, giant: false, careT: 1, careOk: 0.6 });
+  const a = f.harvest(0, 2);
+  Object.assign(p, { state: 'ready', progress: 1, giant: false, careT: 1, careOk: 0.6 });
+  const b = f.harvest(0, 2);
+  assert.equal(b.amount - a.amount, harvestYield(CROPS.tomato, false) - harvestYield(CROPS.tomato, true), `첫 ${a.amount}개, 다시 열린 것 ${b.amount}개`);
+});

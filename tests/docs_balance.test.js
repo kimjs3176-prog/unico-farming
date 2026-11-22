@@ -10,11 +10,12 @@ test('balanceMarkdown: 두 번 불러도 같고 출하 탭이 들어 있음', ()
   for (const k of ['crops', 'rice', 'ranch', 'book']) assert.ok(docBlock(a, k) !== null, `${k} 칸`);
 });
 
-test('다시 열리는 작물: 수확 1 + r 번, 한 주기 = 성장 × (1 + 0.5r)', () => {
+test('다시 열리는 작물: 수확 1 + r 번 (다시 열린 건 regrowYield 개), 한 주기 = 성장 × (1 + 0.5r)', () => {
   const rows = balanceRows();
   const st = rows.find((r) => r.id === 'strawberry'), carrot = rows.find((r) => r.id === 'carrot');
   assert.equal(st.cycle_s, 150 * 2.5);
-  assert.equal(st.profit, 65 * 3 * 4 - 40);
+  assert.equal(st.profit, 65 * (3 + 3 * 2) - 40); // 첫 수확 3개 + 다시 열린 3번 × 2개
+  assert.ok(!dominanceByTier().some((d) => d.dominant), '어느 해금 단계에도 지배 작물 없음');
   assert.equal(carrot.cycle_s, 60);
   assert.ok(rows.some((r) => r.id === 'honey' && r.feed === 0), '꿀은 사료 없음');
 });

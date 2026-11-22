@@ -35,7 +35,7 @@ export function balanceRows() {
   const rows = [];
   for (const [k, c] of Object.entries(CROPS)) {
     const r = c.regrow || 0, harvests = 1 + r, cycle = c.growTime * (1 + 0.5 * r);
-    const profit = c.basePrice * c.yield * harvests - c.seedPrice;
+    const profit = c.basePrice * (c.yield + r * (c.regrowYield ?? c.yield)) - c.seedPrice; // 다시 열린 수확은 regrowYield 개
     rows.push({ kind: 'crop', id: k, source: `밭 ${c.name} (물 줌)`, unlock: `Lv${c.unlockLevel}`, lv: c.unlockLevel, regrow: r, cycle_s: cycle, profit, perMin: (profit / cycle) * 60 });
   }
   const riceTime = RICE_STAGES.reduce((a, s) => a + s.time, 0);

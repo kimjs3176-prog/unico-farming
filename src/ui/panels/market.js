@@ -118,7 +118,7 @@ export const MarketPanel = {
         const seeds = h('div', 'rows');
         for (const [k, c] of Object.entries(CROPS)) {
           const locked = g.quests.level < c.unlockLevel ? `Lv.${c.unlockLevel} 해금` : '';
-          const segs = [g.season?.cur?.crops.includes(k) ? `${g.season.cur.icon} 제철` : '', `${c.growTime}초`, `판매 ${c.basePrice}🪙`, c.regrow ? `${c.regrow}번 더 열림` : ''];
+          const segs = [g.season?.cur?.crops.includes(k) ? `${g.season.cur.icon} 제철` : '', `${c.growTime}초`, `판매 ${c.basePrice}🪙`, c.regrow ? `${c.regrow}번 더 열림${c.regrowYield != null && c.regrowYield !== c.yield ? `(${c.regrowYield}개씩)` : ''}` : ''];
           seeds.append(buyRow(`seed:${k}`, c.emoji, `${c.name} 씨앗`, eco.inventory.seeds[k] || 0, c.seedPrice, [[1, (n) => eco.buySeed(k, n)], [5, (n) => eco.buySeed(k, n)]], segs, locked));
         }
         body.append(seeds);
