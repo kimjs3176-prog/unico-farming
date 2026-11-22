@@ -1,20 +1,19 @@
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { VignetteShader } from 'three/addons/shaders/VignetteShader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ColorGradeShader } from './surface.js';
-import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
-import { HorizontalTiltShiftShader } from 'three/addons/shaders/HorizontalTiltShiftShader.js';
-import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftShader.js';
 import { installGradeToneMapping, toneMappingFor } from './tonemap.js';
 import { visibleLabels, declutterLabels } from './label.js';
 
 installGradeToneMapping(); // 첫 셰이더 컴파일 전에: 저사양 톤 매핑에 색 보정을 넣어 둠
+
+/** 무거운 패스 모듈: 처음 필요할 때 한 번 받음 */
+let PASSES = null, passesLoading = null;
+const loadPasses = () => (passesLoading ||= import('./postfx_passes.js').then((m) => (PASSES = m)));
 
 const ENV = new WeakMap(); // 장면 → 환경맵 렌더 타깃
 const NO_CHILDREN = Object.freeze([]); // 이름표 장면은 그릴 때만 자식을 빌림
@@ -57,40 +56,21 @@ export class PostFX {
   constructor(renderer, scene, camera, quality = { bloom: true, smaa: true }) {
     this.renderer = renderer;
     this.composer = new EffectComposer(renderer);
-    this.composer.addPass(new RenderPass(scene, camera));
-    if (quality.ao) {
-      // 접촉면·틈새를 어둡게 해 물체가 땅에 붙어 보이고 형태가 또렷해짐
-      this.gtao = new GTAOPass(scene, camera, innerWidth, innerHeight);
-      this.gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: 12 });
-      this.gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
-      this.gtao.blendIntensity = 0.85;
-      this.composer.addPass(this.gtao);
-    }
-    // 꺼진 효과는 만들지 않음 (후처리를 끈 저사양에서 블룸·SMAA 객체와 이미지 디코딩을 아낌)
-    if (quality.bloom) {
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.09, 0.3, 1.6);
-      this.composer.addPass(this.bloom);
-    }
-    this.composer.addPass(new OutputPass());
+    this.renderPass = new RenderPass(scene, camera);
+    this.scene = scene;
+    this.camera = camera;
+    // 무거운 패스(GTAO·블룸·SMAA·틸트시프트)는 따로 받아 끼움 (받는 동안은 기본 패스만으로 그림). 꺼진 효과는 만들지 않음
+    this.output = new OutputPass();
     this.grade = new ShaderPass(ColorGradeShader);
-    this.composer.addPass(this.grade);
-    if (quality.smaa) {
-      this.smaa = new SMAAPass();
-      this.composer.addPass(this.smaa);
-    }
-    if (quality.tiltShift) {
-      this.tiltH = new ShaderPass(HorizontalTiltShiftShader);
-      this.tiltV = new ShaderPass(VerticalTiltShiftShader);
-      for (const t of [this.tiltH, this.tiltV]) t.uniforms.r.value = TILT_R;
-      this.composer.addPass(this.tiltH);
-      this.composer.addPass(this.tiltV);
+    this._q = quality;
+    if (quality.ao || quality.bloom || quality.smaa || quality.tiltShift) {
+      if (PASSES) this._addHeavy(PASSES);
+      else loadPasses().then((m) => { if (!this._disposed) { this._addHeavy(m); if (this._w) this.setSize(this._w, this._h); } }).catch(() => { /* 효과 없이 */ });
     }
     this.vignette = new ShaderPass(VignetteShader);
     this.vignette.uniforms.offset.value = 1.05;
     this.vignette.uniforms.darkness.value = 0.95;
-    this.composer.addPass(this.vignette);
-    this.scene = scene;
-    this.camera = camera;
+    this._order();
     // 이름표만 담는 빈 장면 (배경·안개·불빛 없음): 월드 장면의 이름표를 자식 목록으로만 빌려 마지막에 화면 위에 그림
     this.labelScene = new THREE.Scene();
     this.labelScene.matrixWorldAutoUpdate = false; // 월드 행렬은 본 장면을 그릴 때 이미 맞춰짐 (부모는 그대로)
@@ -128,7 +108,35 @@ export class PostFX {
     this.renderer.toneMapping = toneMappingFor(this._enabled);
   }
 
+  /** 무거운 패스 만들기 (모듈을 받은 뒤) */
+  _addHeavy(P) {
+    const q = this._q, scene = this.scene, camera = this.camera;
+    if (q.ao) {
+      // 접촉면·틈새를 어둡게 해 물체가 땅에 붙어 보이고 형태가 또렷해짐
+      this.gtao = new P.GTAOPass(scene, camera, innerWidth, innerHeight);
+      this.gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: 12 });
+      this.gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+      this.gtao.blendIntensity = 0.85;
+    }
+    if (q.bloom) this.bloom = new P.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.09, 0.3, 1.6);
+    if (q.smaa) this.smaa = new P.SMAAPass();
+    if (q.tiltShift) {
+      this.tiltH = new ShaderPass(P.HorizontalTiltShiftShader);
+      this.tiltV = new ShaderPass(P.VerticalTiltShiftShader);
+      for (const t of [this.tiltH, this.tiltV]) t.uniforms.r.value = TILT_R;
+    }
+    this._order();
+  }
+
+  /** 패스 순서: 장면 → GTAO → 블룸 → 출력(톤 매핑) → 색 보정 → SMAA → 틸트시프트 → 비네트 */
+  _order() {
+    const C = this.composer, pr = C._pixelRatio || 1;
+    C.passes = [this.renderPass, this.gtao, this.bloom, this.output, this.grade, this.smaa, this.tiltH, this.tiltV, this.vignette].filter(Boolean);
+    for (const p of C.passes) p.setSize?.(C._width * pr, C._height * pr); // addPass 와 같이 크기 맞춤
+  }
+
   setSize(w, h) {
+    this._w = w; this._h = h;
     this.composer.setSize(w, h);
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.gtao?.setSize(w, h);
@@ -137,6 +145,7 @@ export class PostFX {
 
   /** 컴포저에 넣은 패스 전부 해제 (SMAA 렌더 타깃·셰이더 패스·출력 패스 포함). 환경맵은 다음 PostFX 가 다시 씀 */
   dispose() {
+    this._disposed = true;
     for (const p of new Set([...this.composer.passes, this.bloom, this.smaa])) p?.dispose?.();
     this.composer.dispose?.();
   }

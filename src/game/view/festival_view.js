@@ -3,7 +3,6 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { heightAt } from '../terrain.js';
 import { ITEMS } from '../sim/items.js';
 import { festivalAt, festivalOf, festivalKey, festState, saleTokens, actTokens } from '../sim/festival.js';
-import { playEggCatch } from '../../ui/minigames/egg_catch.js';
 import { mgResult } from '../../ui/minigame_frame.js';
 import { openFestival, FEST_COIN } from '../../ui/panels/festival.js';
 
@@ -127,6 +126,7 @@ export class FestivalView {
     const g = this.game, f = this.cur;
     if (!f) return;
     g.ui.closePanel?.();
+    const { playEggCatch } = await import('../../ui/minigames/egg_catch.js'); // 처음 할 때 받음
     const r = await playEggCatch(g, f.skin);
     if (!r.over) return;
     g.onEvent('festplay', r.score);

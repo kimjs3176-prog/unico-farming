@@ -240,6 +240,8 @@ function titleIcons() {
 }
 
 // 개발 중에는 멀티플레이 서버(server/index.js, 기본 8787 포트)로 WebSocket 을 프록시
+const LAZY_THREE = /\/(GTAOPass|GTAOShader|PoissonDenoiseShader|SMAAPass|SMAAShader|UnrealBloomPass|LuminosityHighPassShader|HorizontalTiltShiftShader|VerticalTiltShiftShader)\.js$/;
+
 export default defineConfig(({ command }) => {
   const versions = command === 'build' ? modelVersions() : null; // 개발 서버는 버전 없이 (파일을 고쳐도 바로 반영)
   const build = versions ? buildId() : null;
@@ -261,7 +263,9 @@ export default defineConfig(({ command }) => {
       rollupOptions: {
         // 3D 판(index.html)과 도트 판(pixel.html) 두 페이지
         input: { main: 'index.html', pixel: 'pixel.html' },
-        output: { manualChunks: (id) => (id.includes('node_modules/three') ? 'three' : undefined) } },
+        // three 는 한 청크로 묶되, 보통·높음 화질에서만 쓰는 무거운 화면 효과(GTAO·블룸·SMAA·틸트시프트)는 빼서
+        // postfx_passes.js 를 부를 때 따로 받게 함 → 저사양 폰의 첫 화면 내려받기가 줄어듦
+        output: { manualChunks: (id) => (id.includes('node_modules/three') && !LAZY_THREE.test(id) ? 'three' : undefined) } },
     },
   };
 });

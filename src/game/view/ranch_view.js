@@ -48,7 +48,6 @@ import { BUY_SOUND } from '../reward.js';
 
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 const BABY = { cow: '송아지', sheep: '어린 양', chicken: '병아리' };
-import { playEggCatch } from '../../ui/minigames/egg_catch.js';
 import { mgResult } from '../../ui/minigame_frame.js';
 
 /**
@@ -341,6 +340,7 @@ export class RanchView {
 
   async eggCatch() {
     const g = this.game;
+    const { playEggCatch } = await import('../../ui/minigames/egg_catch.js'); // 미니게임 코드는 처음 할 때 받음 (첫 화면 내려받기에서 뺌)
     const r = await playEggCatch(g);
     if (!r.over) return;
     g.economy.addProduct('egg', r.eggs);

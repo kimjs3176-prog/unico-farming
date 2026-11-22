@@ -1,5 +1,6 @@
 // Game 믹스인: 그래픽 품질·절전 단계·UI 배율·화면 크기·셰이더 미리 준비
 // main.js 에서 Object.assign(Game.prototype, …) 으로 붙임 (축약 메서드라 this 는 Game)
+import { cullShadowCasters } from './shadow_cull.js';
 import * as THREE from 'three';
 import { DEFERRED_MODELS } from './assets.js';
 import { fovFor } from './camera.js';
@@ -58,6 +59,11 @@ export const GameGfx = {
     }
     // 그림자 맵은 loop 에서 한 프레임에 한 번만 갱신 (자동 갱신이면 GTAO·반사 연못의 추가 render 마다 똑같이 다시 그림)
     this.renderer.shadowMap.autoUpdate = false;
+    // 그림자 그리는 물체 줄이기: 납작한 것은 늘, 낮음은 작은 것도 (새로 놓인 꾸미기·건물도 잡게 8초마다 다시)
+    const low = q.level === 'low';
+    cullShadowCasters(this.world.scene, low);
+    clearInterval(this._cullIv);
+    this._cullIv = setInterval(() => { if (cullShadowCasters(this.world.scene, this.quality?.level === 'low')) this.renderer.shadowMap.needsUpdate = true; }, 8000);
     this.renderer.shadowMap.needsUpdate = true;
     this.world.scenery?.setDensity(q.grass);
     this.fx?.setQuality(q); // 입자 상한

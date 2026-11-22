@@ -1160,6 +1160,7 @@ export class Unico {
     this.scale = sp ? sp.scale : 1;
     this._gait = (sp && GAITS[sp.motion.gait]) || NO_GAIT;
     this.group = new THREE.Group();
+    this.group.userData.unico = true; // 그림자 줄이기(shadow_cull)가 캐릭터는 건드리지 않게
     this.position = this.group.position;
     this.root = new THREE.Group(); // 회전(진행 방향)
     if (sp) this.root.scale.setScalar(this.scale); // 이름표는 group 에 있어 글자 크기 그대로
