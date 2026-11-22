@@ -4,6 +4,24 @@ import { SURF } from './surface.js';
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 /**
+ * 얼굴 축 이동 (클로즈업): 카메라가 pivot(인물 얼굴)을 축으로 돌며 다가가는 t(0~1) 지점의 { pos, look } (배열 [x, y, z])
+ *  - 위치: pivot 기준 구면 좌표로 섞음 — 수평 각은 짧은 쪽으로 돌고, 높이 각은 고르게, 거리는 비율로 (멀리서 다가올 때도 고른 빠르기로 줌인)
+ *  - 시선: 처음엔 이전 시선에서 얼굴로 빠르게 옮겨 이동 내내 얼굴이 화면 가운데 → 끝에서 최종 구도 시선(to.look)으로 자리잡음
+ *  t 는 이징 전 값 (위치는 easeInOut, 시선은 앞쪽이 빠른 ease-out)
+ */
+export function orbitLerp(fromPos, toPos, fromLook, toLook, pivot, t) {
+  const [px, py, pz] = pivot, e = easeInOut(t);
+  const sph = (p) => { const x = p[0] - px, y = p[1] - py, z = p[2] - pz, h = Math.hypot(x, z); return { r: Math.max(0.5, Math.hypot(h, y)), yaw: Math.atan2(x, z), pitch: Math.atan2(y, h) }; };
+  const a = sph(fromPos), b = sph(toPos);
+  const yaw = a.yaw + wrapA(b.yaw - a.yaw) * e, pitch = a.pitch + (b.pitch - a.pitch) * e, r = a.r * Math.pow(b.r / a.r, e);
+  const ch = Math.cos(pitch) * r;
+  const pos = [px + Math.sin(yaw) * ch, py + Math.sin(pitch) * r, pz + Math.cos(yaw) * ch];
+  const k = 1 - Math.pow(1 - t, 3), m = e * e; // 얼굴로 빨리 → 끝에서 최종 시선으로
+  const look = [0, 1, 2].map((i) => { const l1 = fromLook[i] + (pivot[i] - fromLook[i]) * k; return l1 + (toLook[i] - l1) * m; });
+  return { pos, look };
+}
+
+/**
  * 대화 구도 거리: 두 인물 사이 d(m), 카메라 세로 시야각·화면비
  * 세로 폰처럼 가로 시야가 좁으면 두 인물(+몸 폭 여유)이 화면 안에 들도록 필요한 만큼만 물러남 (가로 화면은 기존 거리 그대로)
  */
@@ -302,12 +320,16 @@ export class Cinematics {
    * 연출 샷으로 이동 (현재 카메라 위치에서 이어서)
    * lift: 렌즈 올림 — true 면 대화창 윗변을 재서 얼굴이 그 위에 오게 (대화·반려견 구도만), 숫자면 그만큼, 0 이면 없음 (컷신 샷)
    */
-  shot(pos, look, dur = 1.2, { orbit = 0, lift = 0 } = {}) {
+  shot(pos, look, dur = 1.2, { orbit = 0, lift = 0, pivot = null } = {}) {
     const cam = this.game.camera;
     if (this.blend < 0.01) { this.pos.copy(cam.position); this.look.copy(this.game.followCam.look || this.game.followCam.smooth); }
     this.from.pos.copy(this.pos); this.from.look.copy(this.look);
     this.to.pos.set(...pos); this.to.look.set(...look);
     this.t = 0; this.dur = Math.max(0.01, dur); this.orbit = orbit;
+    // pivot(): 인물 얼굴 [x, y, z] — 있으면 그 얼굴을 축으로 돌며 다가가고(orbitLerp), 도착한 뒤에도 얼굴이 움직이면 같이 따라감
+    this.pivot = typeof pivot === 'function' ? pivot : pivot ? () => pivot : null;
+    const p0 = this.pivot?.();
+    this._piv0 = p0 ? [p0[0], p0[1], p0[2]] : null; // 시작 때 얼굴 자리 (복사해 둠)
     this.t0 = performance.now(); // 이동 진행은 실제 경과 시간 기준 (wait() 와 같은 시계)
     this.want = 1;
     this.liftAuto = lift === true;
@@ -337,6 +359,7 @@ export class Cinematics {
   /** 연출 끝: 따라가기 카메라로 돌아감 (렌즈 올림은 섞임과 함께 줄다가 0 이 되면 update 가 지움) */
   release() {
     this.want = 0;
+    this.pivot = null;
     this.liftAuto = false;
     this.liftWant = 0;
     for (const u of this.hidden || []) if (u.labelAlways && u.label) u.label.visible = true;
@@ -385,7 +408,14 @@ export class Cinematics {
     if (this.hidden) for (const u of this.hidden) { if (u.label) u.label.visible = false; }
     this._lens(dt);
     if (this.blend <= 0) return;
-    if (this.t < 1) {
+    const piv = this.pivot && this._piv0 ? this.pivot() : null;
+    if (piv) { // 얼굴 축 이동: 시작 때 얼굴 기준으로 계산하고, 그 뒤 얼굴이 옮겨 간 만큼 통째로 따라감
+      if (this.t < 1) this.t = Math.min(1, (performance.now() - this.t0) / 1000 / this.dur);
+      const p0 = this._piv0, d = [piv[0] - p0[0], piv[1] - p0[1], piv[2] - p0[2]];
+      const o = orbitLerp(this.from.pos.toArray(), this.to.pos.toArray(), this.from.look.toArray(), this.to.look.toArray(), p0, this.t);
+      this.pos.set(o.pos[0] + d[0], o.pos[1] + d[1], o.pos[2] + d[2]);
+      this.look.set(o.look[0] + d[0], o.look[1] + d[1], o.look[2] + d[2]);
+    } else if (this.t < 1) {
       this.t = Math.min(1, (performance.now() - this.t0) / 1000 / this.dur);
       const e = easeInOut(this.t);
       this.pos.lerpVectors(this.from.pos, this.to.pos, e);
@@ -463,7 +493,8 @@ export class Cinematics {
             if (W) this.faceLock(s.with, cheatYaw(W, S, f.pos, 12 * DEG)); // 듣는 쪽은 말하는 쪽을 보되 카메라로 살짝
             if (s.emote) s.face.playAction?.(s.emote, 1.6);
             const dur = s.dur ?? 1.4;
-            this.shot(f.pos, f.look, dur, { lift: true });
+            const who = s.face; // 클로즈업: 이 인물의 얼굴을 축으로 돌며 다가감 (이동 내내 얼굴이 화면 가운데)
+            this.shot(f.pos, f.look, dur, { lift: true, pivot: () => { const p = posOf(who); return p ? [p.x, faceY(who), p.z] : null; } });
             if (s.hold !== false) await this.wait(dur * (s.hold ?? 1));
           }
         } else if (s.say) await g.dialogue.say(s.say);
