@@ -389,6 +389,8 @@ export async function boot(Game) {
         // 화면 효과(보통·높음)가 켜져 있으면 실제로 그리는 효과용 버퍼로 준비해야 같은 셰이더가 만들어짐
         // (화면 대상으로 준비하면 톤매핑·색 공간이 달라 쓰이지 않는 셰이더를 한 벌 더 만들고, 진짜는 첫 프레임에 다시 컴파일 → 로딩·첫 화면 끊김)
         const PF = window.game.postfx, prevRT = R.getRenderTarget?.() ?? null, compileRT = PF?.enabled ? PF.composer.readBuffer : null;
+        // 보통·높음: 따로 받는 화면 효과(GTAO·SMAA 등)가 오면 아래 '로딩 화면 뒤 두 프레임'에서 그 셰이더도 준비됨 → 잠깐(최대 3초) 기다림
+        if (PF?.enabled) await Promise.race([Promise.resolve(PF.ready).catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
         let mainCompile;
         R.setRenderTarget?.(compileRT);
         try { mainCompile = R.compileAsync(sc, cm); } finally { R.setRenderTarget?.(prevRT); } // 만들기는 여기서 바로, 끝나기만 기다림

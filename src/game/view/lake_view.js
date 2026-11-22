@@ -90,14 +90,9 @@ export class LakeView {
     W.signText(this.board, '🏆 낚시터 기록판', '오늘의 의뢰 · 최대어');
     // 튀어 오르는 물고기 (가끔)
     // 물고기 모양 코드는 따로 받음 (첫 화면 내려받기에서 뺌): 받으면 양동이 물고기·튀어 오르는 물고기를 놓음
+    // 낚시터에 처음 가까이 올 때 받음 (로딩 중에는 받지 않음, update 의 close 에서 _loadFish)
     this.jumper = null;
-    import('../fishmesh.js').then(({ makeFish }) => {
-      const bf = makeFish('fish_crucian', 0.22); bf.position.set(bucket.position.x, 0.33, bucket.position.z); bf.rotation.z = 0.9;
-      W.scene.add(bf);
-      this.jumper = makeFish('fish_trout', 0.45);
-      this.jumper.visible = false;
-      W.scene.add(this.jumper);
-    }).catch(() => { /* 물고기 장식 없이 */ });
+    this._bucket = bucket;
     this.jumpT = 3;
     this.jump = null;
     // 물속 보물: 반짝이는 자리 + 올라오는 물방울 (헤엄쳐 가서 잠수하면 조개·진주·코인)
@@ -227,6 +222,19 @@ export class LakeView {
   /** 첨벙 (물방울·물보라·파문) */
   splash(x, z, s = 1) { this.game.waterfx?.splash(x, z, s); }
 
+  /** 양동이 물고기·튀어 오르는 물고기: 물고기 모양 코드를 받아 놓음 (실패하면 다음에 가까이 올 때 다시) */
+  _loadFish() {
+    this._fishReq = true;
+    const W = this.game.world, bucket = this._bucket;
+    import('../fishmesh.js').then(({ makeFish }) => {
+      const bf = makeFish('fish_crucian', 0.22); bf.position.set(bucket.position.x, 0.33, bucket.position.z); bf.rotation.z = 0.9;
+      W.scene.add(bf);
+      this.jumper = makeFish('fish_trout', 0.45);
+      this.jumper.visible = false;
+      W.scene.add(this.jumper);
+    }, () => { this._fishReq = false; });
+  }
+
   update(dt, pp) {
     const g = this.game, K = LAYOUT.lake;
     this.t += dt;
@@ -251,6 +259,7 @@ export class LakeView {
       s.m.rotation.z = -s.a;
     }
     // 가끔 물고기가 수면 위로 튀어 오름
+    if (close && !this._fishReq) this._loadFish();
     if (close && this.jumper && !this.jump && (this.jumpT -= dt) <= 0) {
       const a = Math.random() * 6.28, r = 1.5 + Math.random() * (K.r - 2.5);
       const x = K.x + Math.cos(a) * r, z = K.z + Math.sin(a) * r;

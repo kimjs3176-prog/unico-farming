@@ -268,3 +268,14 @@ test('낮음: 폰 화면은 화면 크기에 맞춰 선명하게 (예전 0.75배
   // 사용자 지정 해상도 슬라이더는 그대로 곱해짐
   assert.ok(Math.abs(resolveQuality({ ...base, preset: 'custom', post: false, ao: false, scale: 0.5 }, 3, 390 * 844).pixelRatio - phone.pixelRatio * 0.5) < 1e-9);
 });
+
+test('블룸: 보통 프리셋(자동 포함)만 끄고, 사용자 지정은 화면 효과를 켜면 그대로', () => {
+  // 준비·실행
+  const med = resolveQuality(applyPreset(base, 'medium'), 1);
+  const high = resolveQuality(applyPreset(base, 'high'), 1);
+  const custom = resolveQuality({ ...base, preset: 'custom', post: true, ao: false, scale: 1 }, 1);
+  // 확인
+  assert.equal(med.bloom, false, '보통');
+  assert.equal(high.bloom, true, '높음');
+  assert.equal(custom.bloom, true, '사용자 지정 (효과 켬·주변광 차폐 끔)');
+});

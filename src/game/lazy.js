@@ -5,7 +5,8 @@ export function lazyMethods(proto, load, names, onFail) {
   const get = () => (ready ||= load().then((mix) => { for (const n of names) if (typeof mix[n] === 'function') proto[n] = mix[n]; }).catch((e) => { ready = null; throw e; }));
   for (const n of names) {
     proto[n] = function (...a) {
-      return get().then(() => proto[n].apply(this, a)).catch((e) => { onFail?.call(this, e); console.warn('나중에 받는 코드 불러오기 실패', n, e); });
+      // 받기 실패만 onFail 로, 받은 메서드 안의 오류는 그대로 올려 보냄 (오류 기록이 잡게)
+      return get().then(() => proto[n].apply(this, a), (e) => { onFail?.call(this, e); console.warn('나중에 받는 코드 불러오기 실패', n, e); });
     };
   }
   return get; // 미리 받아 둘 때 부름

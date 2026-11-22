@@ -190,7 +190,7 @@ export function resolveQuality(s, dpr = typeof devicePixelRatio === 'number' ? d
     level,
     pixelRatio: Math.max(0.5, Math.min(dpr, maxDpr) * d.scale),
     shadows: d.shadows, shadowMap: sh.size || 1024, shadowEvery: sh.every,
-    grass: d.grass, post: d.post, bloom: d.post && d.ao, smaa: d.post, ao: d.ao, tiltShift: d.tiltShift, // 블룸(흐림 여러 번)은 높음만 — 보통은 SMAA·색 보정만
+    grass: d.grass, post: d.post, bloom: d.post && level !== 'medium' || (d.post && s.preset === 'custom'), smaa: d.post, ao: d.ao, tiltShift: d.tiltShift, // 블룸은 '보통' 프리셋(자동 포함)만 끔 — 사용자 지정은 화면 효과를 켜면 그대로
     ...levelExtras(level),
   };
 }

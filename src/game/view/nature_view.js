@@ -9,7 +9,8 @@ import { FishingSim, rollBug } from '../sim/fishing.js';
 import { ReelFight, needsFight, BAIT_RARE } from '../sim/angling.js';
 /** 물고기 모양 코드: 낚시를 시작할 때 받아 두고 낚으면 씀 (첫 화면 내려받기에서 뺌) */
 let FM = null;
-const loadFish = () => import('../fishmesh.js').then((m) => (FM = m));
+let fishLoading = null;
+const loadFish = () => (fishLoading ||= import('../fishmesh.js').then((m) => (FM = m), (e) => { fishLoading = null; throw e; })); // 실패하면 다음에 다시
 import { makeLabel } from '../label.js';
 import { touchUI } from '../input.js';
 
@@ -478,7 +479,11 @@ export class NatureView {
   /** 낚은 물고기를 머리 위로 들어 보이기 (1.8초) */
   _showCatch(fish, size) {
     const g = this.game;
-    if (!FM) { loadFish().then(() => this._showCatch(fish, size)).catch(() => {}); return; } // 아직 못 받았으면 받고 나서
+    if (!FM) { // 아직 못 받았으면 받고 나서 — 1.5초 넘게 걸리면 이미 지나간 일이라 들어 보이지 않음 (늦게 불쑥 뜨지 않게)
+      const at = performance.now();
+      loadFish().then(() => { if (performance.now() - at < 1500) this._showCatch(fish, size); }, () => {});
+      return;
+    }
     if (this.catchShow) { g.world.scene.remove(this.catchShow.m); this.catchShow.m.userData.dispose(); }
     const m = FM.makeFish(fish, FM.showLength(fish, size));
     g.world.scene.add(m);

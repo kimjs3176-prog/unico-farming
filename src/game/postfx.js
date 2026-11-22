@@ -13,7 +13,7 @@ installGradeToneMapping(); // 첫 셰이더 컴파일 전에: 저사양 톤 매�
 
 /** 무거운 패스 모듈: 처음 필요할 때 한 번 받음 */
 let PASSES = null, passesLoading = null;
-const loadPasses = () => (passesLoading ||= import('./postfx_passes.js').then((m) => (PASSES = m)));
+const loadPasses = () => (passesLoading ||= import('./postfx_passes.js').then((m) => (PASSES = m), (e) => { passesLoading = null; throw e; })); // 실패하면 다음에 다시
 
 const ENV = new WeakMap(); // 장면 → 환경맵 렌더 타깃
 const NO_CHILDREN = Object.freeze([]); // 이름표 장면은 그릴 때만 자식을 빌림
@@ -63,9 +63,15 @@ export class PostFX {
     this.output = new OutputPass();
     this.grade = new ShaderPass(ColorGradeShader);
     this._q = quality;
+    // ready: 무거운 패스까지 준비되면 풀리는 약속 (부팅이 셰이더를 로딩 화면 뒤에서 준비하려고 잠깐 기다림). 실패해도 풀림
+    this.ready = Promise.resolve();
     if (quality.ao || quality.bloom || quality.smaa || quality.tiltShift) {
       if (PASSES) this._addHeavy(PASSES);
-      else loadPasses().then((m) => { if (!this._disposed) { this._addHeavy(m); if (this._w) this.setSize(this._w, this._h); } }).catch(() => { /* 효과 없이 */ });
+      else {
+        const attempt = (n) => loadPasses().then((m) => { if (!this._disposed) { this._addHeavy(m); if (this._w) this.setSize(this._w, this._h); } },
+          () => { if (n < 3 && !this._disposed) setTimeout(() => attempt(n + 1), 10000); }); // 받기 실패: 10초 뒤 다시 (3번까지), 그동안은 효과 없이
+        this.ready = attempt(1);
+      }
     }
     this.vignette = new ShaderPass(VignetteShader);
     this.vignette.uniforms.offset.value = 1.05;
@@ -138,8 +144,7 @@ export class PostFX {
   setSize(w, h) {
     this._w = w; this._h = h;
     this.composer.setSize(w, h);
-    this.composer.setPixelRatio(this.renderer.getPixelRatio());
-    this.gtao?.setSize(w, h);
+    this.composer.setPixelRatio(this.renderer.getPixelRatio()); // 모든 패스(GTAO 포함)를 기기 픽셀 크기로 맞춤 — GTAO 만 CSS 크기로 다시 줄이지 않음
     if (this.tiltH) { this.tiltH.uniforms.h.value = 1.6 / w; this.tiltV.uniforms.v.value = 1.6 / h; }
   }
 

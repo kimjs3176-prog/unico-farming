@@ -29,3 +29,22 @@ test('크기는 세상 크기(배율 포함)로 봄', () => {
   cullShadowCasters(scene, true);
   assert.equal(m.castShadow, true, '4배로 키운 작은 상자는 큰 물체');
 });
+
+test('눕혀 만든 판자를 세우면 제 높이로 봄 (회전 포함)', () => {
+  const scene = new THREE.Scene(), board = mesh(1.5, 0.04, 1.2);
+  board.rotation.x = Math.PI / 2; // 세움 → 세상 높이 1.2m
+  scene.add(board); scene.updateMatrixWorld(true);
+  cullShadowCasters(scene, false);
+  assert.equal(board.castShadow, true, '세운 판자는 그림자를 그림');
+});
+
+test('공사 중 납작하게 시작한 건물도 다 자라면 그림자가 돌아옴', () => {
+  const scene = new THREE.Scene(), wall = mesh(2, 1.2, 0.3);
+  wall.scale.y = 0.08; // 공사 시작 (높이 0.096m)
+  scene.add(wall); scene.updateMatrixWorld(true);
+  cullShadowCasters(scene, false);
+  assert.equal(wall.castShadow, false, '공사 초반은 납작함');
+  wall.scale.y = 1; scene.updateMatrixWorld(true); // 완공
+  cullShadowCasters(scene, false);
+  assert.equal(wall.castShadow, true, '모양이 바뀌면 다시 판단');
+});

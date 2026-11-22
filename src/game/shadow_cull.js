@@ -14,19 +14,24 @@ function inCharacter(o) {
   return false;
 }
 
-/** 이 메시가 지금 품질에서 그림자를 그려야 하는가 (원래 castShadow 가 true 인 것만 물음) */
+/** 이 메시가 지금 품질에서 그림자를 그려야 하는가 (원래 castShadow 가 true 인 것만 물음)
+ *  크기는 세상 좌표 상자로 잼 (회전 포함: 눕혀 만든 뒤 세운 판자·바퀴도 제 높이로) */
 export function keepCaster(o, low) {
   const g = o.geometry;
   if (!g) return true;
   if (!g.boundingBox) g.computeBoundingBox();
-  o.getWorldScale(_s);
-  _box.copy(g.boundingBox);
-  const h = (_box.max.y - _box.min.y) * Math.abs(_s.y);
+  _box.copy(g.boundingBox).applyMatrix4(o.matrixWorld);
+  const h = _box.max.y - _box.min.y;
   if (h < FLAT_H) return false;
   if (!low) return true;
-  if (!g.boundingSphere) g.computeBoundingSphere();
-  const r = g.boundingSphere.radius * Math.max(Math.abs(_s.x), Math.abs(_s.y), Math.abs(_s.z));
-  return r >= SMALL_R;
+  _box.getSize(_s);
+  return Math.max(_s.x, _s.y, _s.z) / 2 >= SMALL_R;
+}
+
+/** 회전·크기 표시 (위치 빼고): 공사 중 자라는 건물·튀어나오는 소품처럼 모양이 바뀌면 달라짐 → 다시 판단 */
+function shapeSig(o) {
+  const e = o.matrixWorld.elements;
+  return Math.round((e[0] * 1 + e[1] * 3 + e[2] * 5 + e[4] * 7 + e[5] * 11 + e[6] * 13 + e[8] * 17 + e[9] * 19 + e[10] * 23) * 1000);
 }
 
 /**
@@ -35,13 +40,14 @@ export function keepCaster(o, low) {
  */
 export function cullShadowCasters(root, low) {
   let changed = 0;
+  root.updateMatrixWorld?.(); // 세상 좌표로 재므로 행렬을 맞춰 둠
   root.traverse((o) => {
     if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh) return;
     const culled = !!o.userData._culled;
     if (!o.castShadow && !culled) return; // 다른 코드가 끈 것은 건드리지 않음
-    const ud = o.userData;
-    if (ud._csFor === low) return; // 이 품질로 이미 판단함 (8초마다 다시 돌 때 새로 생긴 것만 계산 — 끊김 없게)
-    ud._csFor = low;
+    const ud = o.userData, sig = shapeSig(o);
+    if (ud._csFor === low && ud._csSig === sig) return; // 이 품질·이 모양으로 이미 판단함 (8초마다 다시 돌 때 새것·모양이 바뀐 것만 계산)
+    ud._csFor = low; ud._csSig = sig;
     if (inCharacter(o)) return;
     const want = keepCaster(o, low);
     if (!want && o.castShadow) { o.castShadow = false; o.userData._culled = true; changed++; }

@@ -6,7 +6,7 @@
  * - QR 만드는 코드는 처음 그릴 때 따로 받음 (첫 화면 내려받기에서 뺌): 캔버스는 바로 돌려주고 받으면 그림
  */
 let QR = null, loading = null;
-const loadQr = () => (loading ||= import('qrcode-generator').then((m) => (QR = m.default || m)));
+const loadQr = () => (loading ||= import('qrcode-generator').then((m) => (QR = m.default || m), (e) => { loading = null; throw e; })); // 실패하면 다음에 다시 받음
 export function joinUrl() {
   return `${location.origin}${location.pathname.replace(/index\.html$/, '')}`;
 }

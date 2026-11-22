@@ -121,7 +121,8 @@ export function loadPanel(key) {
 for (const [key, L] of Object.entries(LAZY_PANELS)) {
   for (const n of L.names) {
     UI.prototype[n] = function (...a) {
-      return loadPanel(key).then(() => UI.prototype[n].apply(this, a)).catch((e) => {
+      // 받기 실패만 '인터넷' 안내로 처리하고, 창 코드 안의 오류는 그대로 올려 보냄 (오류 기록·오류 카드가 잡게)
+      return loadPanel(key).then(() => UI.prototype[n].apply(this, a), (e) => {
         lazyReady[key] = null; // 다음에 다시 시도
         this.toast?.('⚠️ 창을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요');
         console.warn('창 불러오기 실패', key, e);
