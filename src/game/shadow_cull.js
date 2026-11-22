@@ -39,6 +39,9 @@ export function cullShadowCasters(root, low) {
     if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh) return;
     const culled = !!o.userData._culled;
     if (!o.castShadow && !culled) return; // 다른 코드가 끈 것은 건드리지 않음
+    const ud = o.userData;
+    if (ud._csFor === low) return; // 이 품질로 이미 판단함 (8초마다 다시 돌 때 새로 생긴 것만 계산 — 끊김 없게)
+    ud._csFor = low;
     if (inCharacter(o)) return;
     const want = keepCaster(o, low);
     if (!want && o.castShadow) { o.castShadow = false; o.userData._culled = true; changed++; }

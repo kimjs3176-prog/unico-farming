@@ -24,5 +24,6 @@ test('그림자 1탭 갈래: 모양이 다른 셰이더 조각은 건드리지 �
 
 test('그림자 반지름: 낮음 = 1탭, 보통·높음 = 5탭 반그림자', () => {
   assert.equal(shadowRadiusFor('low'), 1);
-  assert.ok(shadowRadiusFor('medium') > 1 && shadowRadiusFor('high') > 1);
+  assert.equal(shadowRadiusFor('medium'), 1, '보통도 1번 (내장 그래픽 부담)');
+  assert.ok(shadowRadiusFor('high') > 1);
 });

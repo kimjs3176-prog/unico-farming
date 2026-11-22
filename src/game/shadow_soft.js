@@ -18,4 +18,4 @@ export function patchShadowChunk(chunks = THREE.ShaderChunk) {
 }
 
 /** 품질 단계별 그림자 반지름: 낮음 = 1탭(1), 보통·높음 = 5탭 반그림자 */
-export const shadowRadiusFor = (level) => (level === 'low' ? 1 : 2);
+export const shadowRadiusFor = (level) => (level === 'high' ? 2 : 1); // 5번 샘플 반그림자는 높음만 (보통·낮음은 하드웨어 비교 1번, 경계는 이미 부드러움)

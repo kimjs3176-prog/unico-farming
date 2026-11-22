@@ -14,7 +14,7 @@ export const LEVELS = ['low', 'medium', 'high'];
 export const PRESET_INFO = {
   auto: { name: '자동', desc: '기기에 맞춰 시작하고, 화면이 끊기면 알아서 한 단계씩 낮춰요' },
   low: { name: '낮음', desc: '저사양 PC·휴대폰용. 화면 크기에 맞춘 해상도, 가벼운 그림자, 후처리·환경 반사 끔' },
-  medium: { name: '보통', desc: '일반 노트북용. 그림자·블룸·안티앨리어싱, 주변광 차폐 끔' },
+  medium: { name: '보통', desc: '일반 노트북용. 그림자·안티앨리어싱·색 보정 (블룸·주변광 차폐 끔)' },
   high: { name: '높음', desc: '게임용 PC용. 주변광 차폐·미니어처 초점까지 모든 효과' },
   custom: { name: '사용자 지정', desc: '세부 항목을 직접 고른 상태' },
 };
@@ -183,13 +183,14 @@ const viewArea = () => (typeof innerWidth === 'number' && innerWidth > 0 ? inner
 export function resolveQuality(s, dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, area = viewArea()) {
   const d = s.preset === 'auto' || PRESETS[s.preset] ? { ...s, ...PRESETS[s.preset === 'auto' ? autoNow(s) : s.preset] } : s;
   const sh = SHADOWS[d.shadows] || SHADOWS.medium;
-  const maxDpr = d.ao ? 2 : d.post ? 1.5 : lowPixelRatio(dpr, area);
+  // 보통(후처리만)은 1.25배까지: 내장 그래픽 노트북(윈도 배율 150% 등)에서 후처리 화면을 1.5배로 그리면 크게 느려짐
+  const maxDpr = d.ao ? 2 : d.post ? 1.25 : lowPixelRatio(dpr, area);
   const level = s.preset === 'auto' ? autoNow(s) : PRESETS[s.preset] ? s.preset : d.post ? (d.ao ? 'high' : 'medium') : 'low';
   return {
     level,
     pixelRatio: Math.max(0.5, Math.min(dpr, maxDpr) * d.scale),
     shadows: d.shadows, shadowMap: sh.size || 1024, shadowEvery: sh.every,
-    grass: d.grass, post: d.post, bloom: d.post, smaa: d.post, ao: d.ao, tiltShift: d.tiltShift,
+    grass: d.grass, post: d.post, bloom: d.post && d.ao, smaa: d.post, ao: d.ao, tiltShift: d.tiltShift, // 블룸(흐림 여러 번)은 높음만 — 보통은 SMAA·색 보정만
     ...levelExtras(level),
   };
 }
