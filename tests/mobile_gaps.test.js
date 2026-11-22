@@ -124,7 +124,10 @@ test('뒤에서 받는 동물 셰이더: 도착한 것만 모델마다 한 번, 
   assert.deepEqual(batches, [['q_horse'], ['q_donkey', 'q_wolf']]);
   assert.equal(g._warmedDeferred, true, '다 왔으면 멈춤');
   // 입장 전 컴파일(5초 경주) 안에서 함께, 게임 루프에서는 도착하는 대로 (목장이 풀기 전에)
-  assert.match(read('src/boot.js'), /Promise\.race\(\[Promise\.all\(\[R\.compileAsync\(sc, cm\), window\.game\.warmDeferred\(\)\]\)/);
+  const bootSrc = read('src/boot.js');
+  assert.match(bootSrc, /Promise\.race\(\[Promise\.all\(\[mainCompile, window\.game\.warmDeferred\(\)\]\)/);
+  // 본 장면도 실제로 그리는 대상(화면 효과 버퍼)으로 준비 — 화면 대상으로 준비하면 셰이더를 한 벌 더 만들고 첫 프레임에 다시 컴파일
+  assert.match(bootSrc, /R\.setRenderTarget\?\.\(compileRT\);\s*try \{ mainCompile = R\.compileAsync\(sc, cm\); \}/);
   const logic = main.slice(main.indexOf('  stepLogic('), main.indexOf('this.ranch.update(dt, pw)'));
   assert.ok(logic.length > 0);
   assert.match(logic, /if \(!this\._warmedDeferred\) this\.warmDeferred\(\)/);

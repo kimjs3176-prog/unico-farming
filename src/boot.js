@@ -386,8 +386,14 @@ export async function boot(Game) {
       // 닉네임을 고르는 동안 받아 둔 동물도 여기서 함께 (로딩 화면이 사라지는 순간에 컴파일이 몰리지 않게)
       const R = window.game.renderer, sc = window.game.world.scene, cm = window.game.camera;
       try {
-        try { await Promise.race([Promise.all([R.compileAsync(sc, cm), window.game.warmDeferred()]), new Promise((r) => setTimeout(r, 5000))]); }
-        catch { try { R.compile(sc, cm); } catch { /* 첫 프레임에 컴파일 */ } }
+        // 화면 효과(보통·높음)가 켜져 있으면 실제로 그리는 효과용 버퍼로 준비해야 같은 셰이더가 만들어짐
+        // (화면 대상으로 준비하면 톤매핑·색 공간이 달라 쓰이지 않는 셰이더를 한 벌 더 만들고, 진짜는 첫 프레임에 다시 컴파일 → 로딩·첫 화면 끊김)
+        const PF = window.game.postfx, prevRT = R.getRenderTarget?.() ?? null, compileRT = PF?.enabled ? PF.composer.readBuffer : null;
+        let mainCompile;
+        R.setRenderTarget?.(compileRT);
+        try { mainCompile = R.compileAsync(sc, cm); } finally { R.setRenderTarget?.(prevRT); } // 만들기는 여기서 바로, 끝나기만 기다림
+        try { await Promise.race([Promise.all([mainCompile, window.game.warmDeferred()]), new Promise((r) => setTimeout(r, 5000))]); }
+        catch { R.setRenderTarget?.(compileRT); try { R.compile(sc, cm); } catch { /* 첫 프레임에 컴파일 */ } finally { R.setRenderTarget?.(prevRT); } }
         window.game.warmUp?.();
       } finally { window.game.startLoop(); } // 이제부터 루프: 아래 두 프레임은 로딩 화면 뒤에서 실제로 그려짐
       bump();
