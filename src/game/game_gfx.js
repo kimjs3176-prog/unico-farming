@@ -68,7 +68,7 @@ export const GameGfx = {
     this.world.scenery?.setDensity(q.grass);
     this.fx?.setQuality(q); // 입자 상한
     if (rebuildPost) {
-      this.world.scenery?._water(); // 반사 연못은 화면 효과가 켜진 품질에서만
+      this.world.scenery?._water(); // 반사 연못은 높음(주변광 차폐가 켜진 품질)에서만
       this.postfx.dispose();
       this.postfx = new PostFX(this.renderer, this.world.scene, this.camera, q);
     }

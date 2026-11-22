@@ -428,9 +428,9 @@ export class Scenery {
       }`;
     const geo = mergeGeo(waters.map((W) => shoreWaterGeo(W, W.r > 5 ? 96 : 72)));
     let water;
-    if (q.post !== false && q.level !== 'low') {
-      // 실제 반사: 거울 카메라로 연못 위 장면을 렌더 (연못이 화면에 있을 때만 그려짐)
-      const res = q.ao ? 512 : 320;
+    if (q.post !== false && q.ao) {
+      // 실제 반사: 거울 카메라로 연못 위 장면을 한 번 더 렌더 → 높음만 (보통·낮음은 하늘빛 근사 물: 내장 그래픽 노트북 부담)
+      const res = 512;
       water = new Reflector(geo, {
         textureWidth: res, textureHeight: res, clipBias: 0.003,
         shader: {

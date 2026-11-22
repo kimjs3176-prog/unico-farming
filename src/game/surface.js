@@ -188,6 +188,10 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
     sh.uniforms.uSeeOn = SURF.seeOn;
     sh.uniforms.uSeeR = SURF.seeR;
     sh.uniforms.uSurfFloor = SURF.floor;
+    // 재질마다 다른 값(접지 그늘·테두리 빛·얼룩)은 유니폼으로 → 같은 종류 재질이 셰이더 하나를 함께 씀 (셰이더 수·첫 로딩 시간 줄임)
+    sh.uniforms.uContact = { value: contact ? 1 : 0 };
+    sh.uniforms.uRim = { value: rim };
+    sh.uniforms.uSpots = { value: spots };
     const leafAttr = !!m.userData.leafAttr, role = m.userData.leafRole || 0, leaf = kind === 'foliage' && (leafAttr || role > 0);
     if (leaf) {
       Object.assign(sh.uniforms, { uLeafRole: { value: role }, uLeafA: SURF.leafA, uLeafB: SURF.leafB, uLeafR: SURF.leafR, uLeafR2: SURF.leafR2, uLeafAmt: SURF.leafAmt, uBlossom: SURF.blossom, uBloomA: SURF.bloomA, uBloomB: SURF.bloomB });
@@ -226,7 +230,7 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
       vOP = position; // 바인드 포즈 기준 좌표: 뼈대 애니메이션에도 무늬가 몸에 붙어 다님
       vSN = normalize(mat3(modelMatrix) * objectNormal);`);
     const leafHead = leaf ? 'varying vec2 vLeaf; uniform vec3 uLeafA; uniform vec3 uLeafB; uniform vec3 uLeafR; uniform vec3 uLeafR2; uniform vec4 uLeafAmt; uniform float uBlossom; uniform vec3 uBloomA; uniform vec3 uBloomB;\n' : '';
-    sh.fragmentShader = 'varying vec3 vOP; uniform float uSurfSnow; uniform float uSurfWet; uniform float uSurfFloor; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn; uniform float uSeeR;\n' + leafHead + noise(SURF_DETAIL.oct) + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = 'varying vec3 vOP; uniform float uContact; uniform float uRim; uniform float uSpots; uniform float uSurfSnow; uniform float uSurfWet; uniform float uSurfFloor; uniform vec3 uSeeCam; uniform vec3 uSeeTarget; uniform float uSeeOn; uniform float uSeeR;\n' + leafHead + noise(SURF_DETAIL.oct) + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       float snowW = 1.0;
       ${kind !== 'fur' ? `// 시야 구멍: 카메라→캐릭터(몸 가운데, 따라가기 점보다 ${SEE_DROP}m 아래) 원뿔 안 조각을 버림. 안쪽은 다 비우고 가장자리만 얇게 점묘
       if (uSeeOn > 0.5 && vSW.y > 0.35) {
@@ -247,11 +251,13 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
         }
       }` : ''}
       ${(KIND_CODE[kind] || KIND_CODE.base).replace('LEAF_SEASON', leaf ? LEAF_SEASON : '')}
-      ${spots ? `float spt = smoothstep(0.5, 0.53, sfbm(vOP * ${spots.toFixed(2)} + vec3(3.7, 1.3, 8.1)));
-      #ifdef USE_COLOR
-        spt *= step(0.8, vColor.r) * step(0.8, vColor.g) * step(vColor.b, 0.95); // 흰 몸통에만 (눈·주둥이·발굽 제외)
-      #endif
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045, 0.04, 0.04), spt);` : ''}
+      ${kind === 'fur' ? `if (uSpots > 0.0) { // 얼룩 (젖소 등): 유니폼 분기라 얼룩 없는 털은 노이즈를 계산하지 않음
+        float spt = smoothstep(0.5, 0.53, sfbm(vOP * uSpots + vec3(3.7, 1.3, 8.1)));
+        #ifdef USE_COLOR
+          spt *= step(0.8, vColor.r) * step(0.8, vColor.g) * step(vColor.b, 0.95); // 흰 몸통에만 (눈·주둥이·발굽 제외)
+        #endif
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045, 0.04, 0.04), spt);
+      }` : ''}
       ${kind !== 'fur' ? `// 눈 오는 날: 위를 향한 면에 서서히 눈이 쌓임 (눈이 없으면 노이즈 계산을 건너뜀, 유니폼 분기라 모든 조각이 같은 길)
       if (uSurfSnow > 0.001) {
         float snowCov = min(1.0, uSurfSnow * snowW * smoothstep(0.45, 0.85, vSN.y) * smoothstep(0.25, 0.6, sfbm(vSW * 1.7) + uSurfSnow * 0.35 * snowW));
@@ -266,17 +272,19 @@ export function enhanceMaterial(m, kind = kindOf(m.name), { contact = true, rim 
         wc = mix(vec3(wl), wc, 1.12) * 0.8; // 젖은 면: 어둡고 살짝 진하게
         diffuseColor.rgb = mix(diffuseColor.rgb, max(wc, 0.0), wetW);
       }` : ''}
-      ${contact ? 'k *= mix(0.62, 1.0, smoothstep(0.0, 0.32, vSW.y - uSurfFloor));' : ''}
+      k *= mix(1.0, mix(0.62, 1.0, smoothstep(0.0, 0.32, vSW.y - uSurfFloor)), uContact);
       diffuseColor.rgb *= k;`);
     if (kind !== 'fur') sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
       roughnessFactor *= 1.0 - 0.4 * wetW;`);
-    if (rim > 0) {
+    if (kind === 'fur' || rim > 0) { // 테두리 빛: 털(동물)만 셰이더에 넣고 세기는 유니폼 (재질마다 셰이더를 나누지 않음)
       sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        float fres = pow(1.0 - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0), 3.0);
-        totalEmissiveRadiance += vec3(1.0, 0.97, 0.9) * fres * ${rim.toFixed(2)};`);
+        if (uRim > 0.0) {
+          float fres = pow(1.0 - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0), 3.0);
+          totalEmissiveRadiance += vec3(1.0, 0.97, 0.9) * fres * uRim;
+        }`);
     }
   };
-  m.customProgramCacheKey = () => `surf-${kind}-${contact}-${rim}-${spots}-${SURF_DETAIL.oct}` + (kind === 'foliage' ? (m.userData.leafAttr ? '-la' : m.userData.leafRole ? '-leaf' : '') : ''); // 역할은 유니폼 → 역할마다 셰이더를 따로 만들지 않음
+  m.customProgramCacheKey = () => `surf-${kind}${kind !== 'fur' && rim > 0 ? '-rim' : ''}-${SURF_DETAIL.oct}` + (kind === 'foliage' ? (m.userData.leafAttr ? '-la' : m.userData.leafRole ? '-leaf' : '') : ''); // 역할은 유니폼 → 역할마다 셰이더를 따로 만들지 않음
   m.needsUpdate = true;
   return m;
 }
