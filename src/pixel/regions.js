@@ -263,7 +263,7 @@ export const RegionMethods = {
   castOpts(lake) {
     const A = this.angling;
     const bait = lake && A.useBait && this.econ.useItem('bait');
-    return { night: this.night > 0.6, raining: this.raining, lake, rare: (lake ? A.rodInfo.rare : 1) * (bait ? BAIT_RARE : 1), bait };
+    return { night: this.night > 0.6, raining: this.raining, lake, rare: (lake ? A.rodInfo.rare : 1) * (bait ? BAIT_RARE : 1), bait, season: this.season.id }; // 제철 물고기 ×3
   },
   /** 입질에 당겼을 때: 큰 물고기면 힘겨루기로 */
   landFish(r, lake) {

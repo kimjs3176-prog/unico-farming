@@ -3,6 +3,7 @@ import { buildSprites } from './sprites.js';
 import { Renderer } from './render.js';
 import { Game } from './game.js';
 import { UI } from './ui.js';
+import { setupTitle } from './title.js';
 import { Audio } from '../game/audio.js';
 import { Music } from '../game/music.js';
 
@@ -33,6 +34,7 @@ ui.onAction = (a) => {
   else if (a === 'book') game.bookMenu?.();
   else if (a === 'menu') systemMenu();
   else if (a === 'decor') game.decorMenu();
+  else if (a === 'town') game.townMenu();
 };
 
 /** ☰ 메뉴: 자주 안 쓰는 설정은 여기로 모아 HUD 를 가볍게 (game-ui-design 스킬) */
@@ -44,6 +46,7 @@ function systemMenu() {
       sub: `${game.day}일차 · Lv.${game.level} · 자동 저장돼요`,
       items: [
         { icon: 'book', label: '도감', right: '수집 기록', onPick: () => { ui.closeMenu(); game.bookMenu?.(); } },
+        { icon: 'star', label: '우리 마을 별점', right: `${'★'.repeat(game.townStars || 0)}${'☆'.repeat(5 - (game.townStars || 0))}`, onPick: () => { ui.closeMenu(); game.townMenu(); } },
         { icon: 'gift', label: '농장 꾸미기', right: `${game.decor.count}개 · B`, onPick: () => { ui.closeMenu(); game.decorMenu(); } },
         { icon: game.raining ? 'rain' : 'sun', label: '날씨 바꾸기', right: game.raining ? '비' : '맑음', onPick: () => ui.onAction('weather') },
         { icon: 'star', label: 'HD-2D 효과', right: R.fx.dof ? '켬' : '끔', onPick: () => ui.onAction('fx') },
@@ -64,7 +67,7 @@ const KEYMAP = {
 const setMode = (m) => { if (ui.inputMode !== m) { ui.inputMode = m; ui.hint(ui._hintText); } };
 addEventListener('keydown', (e) => {
   setMode('key');
-  if (!started) { if (e.code === 'Enter' || e.code === 'Space') start(); return; }
+  if (!started) { if ((e.code === 'Enter' || e.code === 'Space') && titleFx.ready) start(); return; }
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { game.run = true; return; }
   if (e.code === 'Space' && game.tr.driving && !ui.busy) { e.preventDefault(); if (!e.repeat) game.togglePlow(); return; }
@@ -110,15 +113,15 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) game.
 let started = false;
 const title = document.getElementById('title');
 const btn = document.getElementById('start');
-btn.disabled = false;
-for (const [id, key, look, dir, f] of [['hero1', 'granny', { mane: 'silver', shawl: 'purple' }, 'right', 0], ['hero2', 'player', { scarf: 'scarf' }, 'down', 0], ['hero3', 'kid', { mane: 'rose', small: true }, 'left', 0]]) document.getElementById(id).src = S.char(key, look, dir, f).toDataURL();
+for (const [id, src] of [['hero1', S.villager('bear', 'right', 0)], ['hero2', S.char('player', { scarf: 'scarf' }, 'down', 0)], ['hero3', S.villager('rabbit', 'left', 0)]]) document.getElementById(id).src = src.toDataURL();
+const titleFx = setupTitle({ S, season: game.season.id });
 btn.onclick = () => start();
 function start() {
   if (started) return;
   started = true;
   document.body.classList.add('started');
   title.classList.add('out');
-  setTimeout(() => title.remove(), 700);
+  setTimeout(() => { titleFx.done(); title.remove(); }, 700);
   audio._ctx(); music.start();
   if (!localStorage.getItem('unico-pixel-intro')) {
     try { localStorage.setItem('unico-pixel-intro', '1'); } catch { /* */ }

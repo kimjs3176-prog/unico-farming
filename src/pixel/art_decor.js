@@ -151,3 +151,55 @@ export function treeWhole(t) {
   const g = c.getContext('2d'); g.drawImage(t.trunk, 0, 0); g.drawImage(t.crown, 0, 0);
   return c;
 }
+
+/* ── 축제 한정 꾸미기 · 축제 가판대 ── */
+export function festLantern() {
+  const s = new Spr(22, 48);
+  s.rect(10, 14, 2, 33, 'wood', 2); s.vline(10, 14, 46, 'wood', 3); s.rect(4, 12, 14, 2, 'wood', 3);
+  s.vline(15, 14, 17, 'iron', 2);
+  s.ell(15, 24, 6, 7, 'lamp', { lo: 1, hi: 3 }); s.hline(10, 20, 17, 'scarf', 1); s.hline(10, 20, 31, 'scarf', 1);
+  for (const y of [21, 25]) s.hline(11, 19, y, 'scarf', 2);
+  s.vline(15, 32, 35, 'gold', 3);
+  s.outline();
+  return s;
+}
+export function festAzalea() {
+  const s = new Spr(26, 28);
+  s.poly([6, 18, 20, 18, 18, 27, 8, 27], 'roof', { level: 2 }); s.hline(5, 21, 18, 'roof', 3);
+  s.ell(13, 11, 10, 8, 'leaf', { lo: 1, hi: 2 });
+  const r = rng(21); for (let i = 0; i < 16; i++) { const x = 5 + r() * 16 | 0, y = 4 + r() * 12 | 0; if (s.get(x, y)) { s.set(x, y, 'rose', 3); s.set(x + 1, y, 'rose', 2); s.set(x, y - 1, 'rose', 4); } }
+  s.outline();
+  return s;
+}
+export function festKite() {
+  const s = new Spr(30, 60);
+  s.rect(14, 20, 2, 39, 'wood', 2);
+  s.rect(4, 2, 22, 20, 'white', 4); s.ell(15, 12, 4, 4, 'white', { level: 2 });
+  s.ell(15, 7, 5, 3, 'scarf', { lo: 1, hi: 2, clip: (x, y) => y < 8 }); s.ell(15, 7, 5, 3, 'roofb', { lo: 2, hi: 3, clip: (x, y) => y >= 8 });
+  s.line(4, 2, 25, 21, 'iron', 2); s.line(25, 2, 4, 21, 'iron', 2); s.vline(15, 2, 21, 'iron', 2);
+  for (let i = 0; i < 4; i++) s.set(6 + i, 22 + i * 2, ['scarf', 'gold', 'roofb', 'leaf'][i], 2);
+  s.outline();
+  return s;
+}
+export function festSnowman() {
+  const s = new Spr(28, 36);
+  s.ell(14, 26, 11, 9, 'white', { lo: 2, hi: 4 }); s.ell(14, 12, 8, 7, 'white', { lo: 2, hi: 4 });
+  s.set(11, 11, 'eye', 0); s.set(17, 11, 'eye', 0); s.hline(13, 15, 14, 'carrot', 2); s.set(16, 14, 'carrot', 3);
+  s.rect(7, 4, 14, 3, 'scarf', 2); s.rect(9, 0, 10, 5, 'scarf', 1); s.ell(14, 19, 8, 2, 'roofb', { lo: 2 });
+  for (const y of [24, 28]) s.set(14, y, 'ink', 1);
+  s.outline();
+  return s;
+}
+/** 축제 가판대: 축제 색 차양 + 진열대 (계절 소품) */
+export function festStall(fest) {
+  const s = new Spr(64, 72);
+  const cols = { spring: ['rose', 'white'], summer: ['roofb', 'white'], autumn: ['apron', 'gold'], winter: ['purple', 'white'] }[fest] || ['scarf', 'white'];
+  s.rect(6, 28, 3, 40, 'wood', 2); s.rect(55, 28, 3, 40, 'wood', 2);
+  for (let x = 2; x < 62; x++) for (let y = 14; y < 30; y++) s.set(x, y, Math.floor((x - 2) / 6) % 2 ? cols[1] : cols[0], y > 26 ? 2 : 3);
+  for (let x = 2; x < 62; x += 6) { s.set(x + 2, 30, cols[0], 2); s.set(x + 3, 31, cols[0], 2); s.set(x + 4, 30, cols[0], 2); }
+  s.poly([2, 14, 32, 2, 62, 14], cols[0], { level: 2 });
+  s.rect(4, 50, 56, 18, 'wood', 3); s.hline(4, 59, 50, 'wood', 5); s.hline(4, 59, 67, 'wood', 1);
+  for (let x = 8; x < 58; x += 12) { s.ell(x + 4, 47, 4, 3, fest === 'winter' ? 'white' : fest === 'autumn' ? 'carrot' : 'rose', { lo: 1, hi: 3 }); }
+  s.outline();
+  return s;
+}

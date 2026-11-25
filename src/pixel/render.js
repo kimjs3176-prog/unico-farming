@@ -5,6 +5,7 @@ const CHUNK = 256;
 import { rampRGB, bayer } from './pxl.js';
 import { seasonMap, swapCanvas, seasonImg, SEASON_FX } from './season_pix.js';
 import { timeOfDay } from '../game/sim/tod.js';
+import { treeStage } from '../game/sim/items.js';
 
 const T = 32;
 const EXACT = new Set([G.paddy, G.field, G.plaza, G.hill, G.cliff, G.stairs, G.floor, G.wall, G.void]);
@@ -425,7 +426,7 @@ export class Renderer {
     for (let r = 0; r < F.rows; r++) for (let c = 0; c < F.cols; c++) {
       const x = (FIELD.x + c) * T - camX, y = (FIELD.y + r) * T - camY;
       if (x < -T || y < -T || x > VW || y > VH) continue;
-      g.drawImage(S.fieldCell[F.plowed[c + r * F.cols] ? 1 : 0], x, y);
+      g.drawImage(S.fieldCell[F.plowedAt[c + r * F.cols] >= 0 ? 1 : 0], x, y);
     }
     // 논: 바닥 → 물 → 벼
     const R = game.rice;
@@ -475,7 +476,10 @@ export class Renderer {
       let img = d.img;
       let x = Math.round(d.x - camX), y = Math.round(d.y - camY);
       if (d.crown) {
-        const t = d.o?.shaken && d.set === S.tree.fruit[d.o.fruit] ? S.tree.fruit[d.o.fruit + '_bare'] : d.set;
+        // 과일나무: 제철에만 열매, 봄엔 꽃(분홍), 딴 날·철 지나면 빈 가지
+        const fst = d.o?.item ? treeStage(d.o.item, sea) : 'ripe';
+        const t = (d.o?.shaken || fst !== 'ripe') && d.set === S.tree.fruit[d.o.fruit] ? S.tree.fruit[d.o.fruit + '_bare'] : d.set;
+        if (d.o?.item) d.alt = fst === 'blossom';
         img = t.crown;
         // 바람: 1px 좌우 흔들림 (비·바람 오면 더)
         const sway = Math.sin(this.t * (rain ? 2.2 : 1.1) + d.ph) * (rain ? 1.6 : 0.9) + (d.o?.shakeT > 0 ? Math.sin(d.o.shakeT * 40) * 2 : 0);

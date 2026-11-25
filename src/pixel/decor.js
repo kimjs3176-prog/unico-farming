@@ -64,9 +64,13 @@ export const DecorMethods = {
     if (this.indoors) { this.ui.toast('꾸미기는 바깥 농장에서 해요', 'star'); return; }
     const D = this.decor, e = this.econ;
     this.ui.openMenu({
-      title: '꾸미기', tabs: [...DECOR_CATS.map(([id, label]) => ({ id, label: label.replace(/^\S+\s/, '') })), { id: 'placed', label: '놓은 것' }], tab: 'garden',
+      title: '꾸미기', tabs: [...DECOR_CATS.map(([id, label]) => ({ id, label: label.replace(/^\S+\s/, '') })), { id: 'stored', label: '보관함' }, { id: 'placed', label: '놓은 것' }], tab: 'garden',
       build: (tab) => {
         const sub = `놓은 소품 <b>${D.count}</b>/${DECOR_MAX} · 가진 돈 ${e.money.toLocaleString()}코인 · 보관함에 있는 건 무료`;
+        if (tab === 'stored') {
+          const ids = Object.keys(D.stored).filter((k) => D.storedOf(k) > 0 && DECOR_BY_ID[k]);
+          return { sub, empty: '보관함이 비었어요 (치운 소품·축제 엽전으로 바꾼 소품이 여기 와요)', items: ids.map((k) => ({ img: this.S.decorIcon(k), label: DECOR_BY_ID[k].name, right: `${D.storedOf(k)}개 · 무료`, onPick: () => { this.ui.closeMenu(); this.decorStart(k); } })) };
+        }
         if (tab === 'placed') {
           return {
             sub, empty: '아직 놓은 소품이 없어요',
@@ -104,7 +108,7 @@ export const DecorMethods = {
     } else {
       const cost = D.place(M.id, x / K, y / K, M.rot, { money: this.econ.money, level: this.level });
       if (cost < 0) { this.ui.toast(D.whyNot(M.id, { money: this.econ.money, level: this.level }) || '놓을 수 없어요', 'star'); return true; }
-      if (cost) { this.econ.money -= cost; this.econ.stats.spent += cost; }
+      if (cost) this.econ.spend(cost);
       // 같은 걸 하나 더 놓을 수 있으면 계속 (돈이 모자라면 끝)
       if (D.whyNot(M.id, { money: this.econ.money, level: this.level })) this.decorMode = null;
       this.report('decor', D.count);
@@ -147,7 +151,10 @@ export const DecorMethods = {
   },
   decorLights() {
     const L = [];
-    for (const { x, y, p } of this.decorTiles()) if (p.id === 'lamp') L.push({ x: x * T + 16, y: y * T + T - 56, r: 92, c: [255, 200, 120], lamp: true });
+    for (const { x, y, p } of this.decorTiles()) {
+      if (p.id === 'lamp') L.push({ x: x * T + 16, y: y * T + T - 56, r: 92, c: [255, 200, 120], lamp: true });
+      else if (p.id === 'fest_lantern') L.push({ x: x * T + 20, y: y * T + T - 24, r: 56, c: [255, 130, 110], lamp: true });
+    }
     return L;
   },
 };
