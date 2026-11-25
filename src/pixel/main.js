@@ -46,6 +46,7 @@ function systemMenu() {
       sub: `${game.day}일차 · Lv.${game.level} · 자동 저장돼요`,
       items: [
         { icon: 'book', label: '도감', right: '수집 기록', onPick: () => { ui.closeMenu(); game.bookMenu?.(); } },
+        { icon: 'bug', label: '야생 동물 도감', right: `${Object.values(game.flags.wild || {}).filter((e) => e.seen).length}/7`, onPick: () => { ui.closeMenu(); game.wildBookMenu(); } },
         { icon: 'star', label: '우리 마을 별점', right: `${'★'.repeat(game.townStars || 0)}${'☆'.repeat(5 - (game.townStars || 0))}`, onPick: () => { ui.closeMenu(); game.townMenu(); } },
         { icon: 'gift', label: '농장 꾸미기', right: `${game.decor.count}개 · B`, onPick: () => { ui.closeMenu(); game.decorMenu(); } },
         { icon: game.raining ? 'rain' : 'sun', label: '날씨 바꾸기', right: game.raining ? '비' : '맑음', onPick: () => ui.onAction('weather') },

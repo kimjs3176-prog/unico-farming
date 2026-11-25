@@ -8,19 +8,21 @@ import { rampRGB } from './pxl.js';
  *  - 조작: ↑↓ 기술 고르기 · ←→ 부스트 0~3 · E 결정 · Esc 뒤로 (화면 버튼도 됨)
  */
 const W = 320, H = 180;
+const EX = 128; // 적 가운데 x (왼쪽 아래 명령 창에 가리지 않게)
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export class Battle {
   constructor(game, pest) {
     this.g = game; this.pest = pest;
-    this.sim = new BattleSim(pest.kind, { level: game.level, petHearts: game.pet.hearts });
+    this.sim = new BattleSim(pest.kind, { level: game.level, petHearts: game.pet.hearts, elv: pest.elv || 1 });
+    this.wild = !!pest.encounter;
     this.t = 0; this.fx = []; this.shake = 0; this.flash = {}; this.lunge = {};
     this.phase = 'intro'; this.who = 0; this.sel = 0; this.boost = 0; this.msg = '';
-    this.night = pest.kind !== 'crow';
+    this.night = this.wild ? !!pest.night : pest.kind !== 'crow';
     this.buildDom();
     this.bg = this.makeBg();
     game.audio.play('bump', 0.6);
-    setTimeout(() => game.audio.play(pest.kind === 'wolf' ? 'howl' : 'caw', 0.8), 400);
+    setTimeout(() => game.audio.play(pest.kind === 'wolf' ? 'howl' : pest.kind === 'crow' || pest.kind === 'sparrow' ? 'caw' : 'bump', 0.8), 400);
     this.run();
   }
 
@@ -67,7 +69,7 @@ export class Battle {
 
   syncHud() {
     const S = this.sim, E = S.enemy, R = this.root;
-    R.querySelector('.en').textContent = `${E.name}${E.broken ? '  BREAK!' : ''}`;
+    R.querySelector('.en').textContent = `${this.wild ? `Lv.${S.elv} ` : ''}${E.name}${E.broken ? '  BREAK!' : ''}`;
     R.querySelector('.hpbar i').style.width = `${(E.hp / E.max) * 100}%`;
     const weak = E.weak.map((t) => (E.known.has(t) ? TYPES[t].icon : '?'));
     R.querySelector('.shield').innerHTML = `<span class="sh${E.broken ? ' br' : ''}">방패 ${E.broken ? 0 : E.shield}</span> 약점 ${weak.map((w) => `<i class="${w === '?' ? 'q' : ''}">${w}</i>`).join('')}`;
@@ -101,7 +103,8 @@ export class Battle {
   /* ── 진행 ── */
   async run() {
     await wait(650); // 화면 전환
-    await this.say(`앗! ${josaW(this.sim.enemy.name, '이/가')} ${this.night ? '목장을 노리고 있다!' : '밭을 쪼아 먹고 있다!'}`, 1300);
+    if (this.wild) await this.say(`앗! 풀숲에서 야생의 ${josaW(`Lv.${this.sim.elv} ${this.sim.enemy.name}`, '이/가')} 튀어나왔다!`, 1400);
+    else await this.say(`앗! ${josaW(this.sim.enemy.name, '이/가')} ${this.night ? '목장을 노리고 있다!' : '밭을 쪼아 먹고 있다!'}`, 1300);
     this.hideMsg();
     while (this.sim.state === 'fight') {
       // 파티 명령
@@ -167,9 +170,9 @@ export class Battle {
     for (const e of ev) {
       if (e.kind !== 'hit') continue;
       this.flash.enemy = 0.18; this.shake = e.broke ? 0.5 : e.weak ? 0.22 : 0.12;
-      this.fx.push({ text: String(e.dmg), x: 92 + (Math.random() - 0.5) * 20, y: 92, t: 0, col: e.weak ? '#ffd870' : '#ffffff', big: e.weak });
-      if (e.weak) this.fx.push({ text: '약점!', x: 92, y: 70, t: 0, col: '#ff8670' });
-      if (e.broke) { this.fx.push({ text: 'BREAK!', x: 96, y: 56, t: 0, col: '#ffd870', huge: true }); this.g.audio.play('bump', 0.9); }
+      this.fx.push({ text: String(e.dmg), x: EX + (Math.random() - 0.5) * 20, y: 92, t: 0, col: e.weak ? '#ffd870' : '#ffffff', big: e.weak });
+      if (e.weak) this.fx.push({ text: '약점!', x: EX, y: 70, t: 0, col: '#ff8670' });
+      if (e.broke) { this.fx.push({ text: 'BREAK!', x: EX + 4, y: 56, t: 0, col: '#ffd870', huge: true }); this.g.audio.play('bump', 0.9); }
       this.g.audio.play('dig', 0.4);
       this.syncHud();
       await wait(e.broke ? 600 : 260);
@@ -181,11 +184,13 @@ export class Battle {
   async enemyAnim(ev) {
     for (const e of ev) {
       if (e.kind === 'stunned') { await this.say(`${josaW(this.sim.enemy.name, '은/는')} 브레이크 상태라 움직이지 못한다!`, 1000); continue; }
-      if (e.kind === 'recover') { this.fx.push({ text: '방패 회복', x: 92, y: 60, t: 0, col: '#c8ea80' }); await this.say(`${josaW(this.sim.enemy.name, '이/가')} 정신을 차렸다!`, 700); continue; }
+      if (e.kind === 'recover') { this.fx.push({ text: '방패 회복', x: EX, y: 60, t: 0, col: '#c8ea80' }); await this.say(`${josaW(this.sim.enemy.name, '이/가')} 정신을 차렸다!`, 700); continue; }
       if (e.kind === 'enemy') {
         this.lunge.enemy = 0.4;
         await this.say(`${this.sim.enemy.name}의 ${e.move}!`, 450);
-        if (e.buff) { this.g.audio.play('howl', 0.7); await this.say('늑대가 사나워졌다! (공격력 ↑)', 800); continue; }
+        if (e.buff) { this.g.audio.play(this.pest.kind === 'wolf' ? 'howl' : 'bump', 0.7); await this.say(`${josaW(this.sim.enemy.name, '이/가')} 사나워졌다! (공격력 ↑)`, 800); continue; }
+        if (e.heal !== undefined) { this.g.audio.play('plant', 0.6); this.fx.push({ text: `+${e.heal}`, x: EX, y: 80, t: 0, col: '#c8ea80' }); this.syncHud(); await this.say(`${josaW(this.sim.enemy.name, '이/가')} 새싹을 뜯어 먹고 기운을 차렸다!`, 800); continue; }
+        if (e.dig) { this.g.audio.play('dig', 0.7); this.fx.push({ text: '방패 +1', x: EX, y: 70, t: 0, col: '#c8ea80' }); this.syncHud(); await this.say(`${josaW(this.sim.enemy.name, '이/가')} 땅속으로 쏙 숨었다! (방패 +1)`, 800); continue; }
         this.g.audio.play('bump', 0.5);
         const tgt = e.target === 0 ? 'unico' : 'pet';
         this.flash[tgt] = 0.2; this.shake = 0.15;
@@ -201,9 +206,10 @@ export class Battle {
   async finish() {
     const g = this.g, S = this.sim, P = this.pest;
     this.phase = 'end'; this.renderCmd();
+    if (this.wild) return this.finishWild();
     if (S.state === 'win') {
       const coins = S.reward();
-      this.fx.push({ text: '도망갔다!', x: 92, y: 70, t: 0, col: '#c8ea80' });
+      this.fx.push({ text: '도망갔다!', x: EX, y: 70, t: 0, col: '#c8ea80' });
       g.audio.play('win');
       g.econ.earn(coins); g.report('shoo');
       await this.say(`${josaW(S.enemy.name, '을/를')} 쫓아냈어요! 밭과 목장을 지켰어요 · +${coins}코인`, 300);
@@ -217,8 +223,26 @@ export class Battle {
     this.close();
   }
 
+  async finishWild() {
+    const g = this.g, S = this.sim, P = this.pest;
+    const r = g.wildResult(P, S);
+    if (S.state === 'win') {
+      this.fx.push({ text: '도망갔다!', x: EX, y: 70, t: 0, col: '#c8ea80' });
+      g.audio.play('win');
+      await this.say(`${josaW(S.enemy.name, '을/를')} 쫓아냈다! +${r.coins}코인 · 경험치 +${r.xp}${r.first ? ` (처음 쫓아낸 동물 보너스!)` : ''}`, 300);
+    } else if (S.state === 'lose') {
+      g.audio.play('bump');
+      await this.say(`눈앞이 캄캄해졌다… ${josaW(S.enemy.name, '이/가')} ${r.hurt !== null && r.hurt !== undefined ? '밭을 헤집어 놓고' : '동물들을 놀라게 하고'} 사라졌다${r.lost ? ` (코인 ${r.lost}개를 떨어뜨렸다)` : ''}`, 300);
+    }
+    await new Promise((res) => { this.endOk = res; setTimeout(res, 4000); });
+    this.close();
+    if (S.state === 'lose') g.wakeAtHome();
+    if (r.levelUp) setTimeout(() => g.levelUpCard(r.levelUp.from, r.levelUp.to), 500);
+  }
+
   close() {
     const g = this.g, P = this.pest;
+    if (this.wild) { this.root.classList.add('out'); setTimeout(() => this.root.remove(), 400); g.battle = null; g.enc.afterBattle(); g.player.vx = g.player.vy = 0; return; }
     this.root.classList.add('out');
     setTimeout(() => this.root.remove(), 400);
     g.battle = null;
@@ -239,23 +263,24 @@ export class Battle {
     const ln = (k, dir) => (this.lunge[k] > 0 ? Math.round(Math.sin((this.lunge[k] / 0.35) * Math.PI) * 14 * dir) : 0);
     // 그림자
     g.fillStyle = 'rgba(10,8,30,0.35)';
-    for (const [x, y, w] of [[92, 140, 46], [236, 146, 30], [276, 150, 22]]) { g.beginPath(); g.ellipse(x, y, w, w * 0.22, 0, 0, 7); g.fill(); }
+    for (const [x, y, w] of [[EX, 140, 46], [236, 146, 30], [276, 150, 22]]) { g.beginPath(); g.ellipse(x, y, w, w * 0.22, 0, 0, 7); g.fill(); }
     // 적 (2배, 숨 쉬듯 위아래 · 브레이크면 쓰러져 깜빡)
     const E = Sm.enemy, kind = this.pest.kind;
     const set = S.pest[kind];
-    const fr = kind === 'crow' ? (Sm.state === 'win' ? 2 + (Math.floor(this.t * 12) % 2) : Math.floor(this.t * 2) % 2) : Math.floor(this.t * 2) % 2;
+    const bird = kind === 'crow' || kind === 'sparrow';
+    const fr = bird ? (Sm.state === 'win' ? 2 + (Math.floor(this.t * 12) % 2) : Math.floor(this.t * 2) % 2) : Math.floor(this.t * 2) % 2;
     const img = set[fr][0];
-    const sc = kind === 'crow' ? 3 : 2;
+    const sc = bird || kind === 'mole' ? 3 : 2;
     const ew = img.width * sc, eh = img.height * sc;
-    let ex = 92 - ew / 2 + ln('enemy', 1), ey = 140 - eh + Math.round(Math.sin(this.t * 3) * 1.5);
-    if (Sm.state === 'win') { const k = Math.min(1, (this.t - (this.winT ||= this.t)) / 1.2); ex -= k * 180; ey -= kind === 'crow' ? k * 80 : 0; }
+    let ex = EX - ew / 2 + ln('enemy', 1), ey = 140 - eh + Math.round(Math.sin(this.t * 3) * 1.5);
+    if (Sm.state === 'win') { const k = Math.min(1, (this.t - (this.winT ||= this.t)) / 1.2); ex -= k * 180; ey -= bird ? k * 80 : 0; }
     g.save();
     if (E.broken) { g.globalAlpha = Math.floor(this.t * 6) % 2 ? 0.75 : 1; }
     g.drawImage(img, Math.round(ex), Math.round(ey + (E.broken ? 6 : 0)), ew, eh);
     if (this.flash.enemy > 0) { g.globalCompositeOperation = 'source-atop'; }
     g.restore();
     if (this.flash.enemy > 0) { g.save(); g.globalAlpha = 0.7; g.filter = 'brightness(3)'; g.drawImage(img, Math.round(ex), Math.round(ey), ew, eh); g.restore(); }
-    if (E.broken) { for (let k = 0; k < 3; k++) { const a = this.t * 4 + k * 2.1; g.fillStyle = '#ffd870'; g.fillRect(Math.round(92 + Math.cos(a) * 18), Math.round(ey + 2 + Math.sin(a) * 4), 2, 2); } }
+    if (E.broken) { for (let k = 0; k < 3; k++) { const a = this.t * 4 + k * 2.1; g.fillStyle = '#ffd870'; g.fillRect(Math.round(EX + Math.cos(a) * 18), Math.round(ey + 2 + Math.sin(a) * 4), 2, 2); } }
     // 파티 (왼쪽 보기, 1.5배)
     const party = [['unico', S.char('player', { scarf: 'scarf' }, 'left', Sm.party[0].hp > 0 ? (Math.floor(this.t * 2) % 2 ? 0 : 0) : 0), 236, 148, 1.5, 0], ['pet', S.shiba.left[Math.floor(this.t * 3) % 2], 276, 152, 1.5, 1]];
     for (const [k, im, x, y, s2, idx] of party) {

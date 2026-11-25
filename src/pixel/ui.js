@@ -140,6 +140,13 @@ export class UI {
     while (box.children.length > 3) box.firstChild.remove();
   }
 
+  /** 화면 번쩍 (인카운터) — 움직임 줄이기면 짧게 어둡게만 */
+  flash() {
+    const f = el('div', 'flash');
+    this.root.appendChild(f);
+    setTimeout(() => f.remove(), 800);
+  }
+
   /** 코인이 화면 가운데에서 HUD 지갑으로 날아감 (움직임 줄이기면 생략) */
   coinFly(n) {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;

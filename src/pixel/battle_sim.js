@@ -22,7 +22,14 @@ export const ENEMIES = {
   crow: { name: '까마귀', hp: 34, shield: 3, weak: ['water', 'sound'], reward: 25, moves: [{ name: '쪼기', dmg: [4, 6] }, { name: '날개 치기', dmg: [3, 5] }, { name: '깍깍 울기', dmg: [0, 0], fx: 'rattle' }] },
   fox: { name: '산여우', hp: 52, shield: 4, weak: ['light', 'dash'], reward: 45, moves: [{ name: '할퀴기', dmg: [6, 9] }, { name: '꼬리 흔들어 홀리기', dmg: [2, 3], fx: 'rattle' }, { name: '덥석 물기', dmg: [8, 10] }] },
   wolf: { name: '늑대', hp: 84, shield: 5, weak: ['light', 'sound'], reward: 75, moves: [{ name: '물기', dmg: [9, 12] }, { name: '하울링', dmg: [0, 0], fx: 'howl' }, { name: '돌진', dmg: [11, 14] }] },
+  // 풀숲에서 튀어나오는 밭 손님들 (도트판 인카운터)
+  sparrow: { name: '참새떼', hp: 26, shield: 2, weak: ['sound', 'water'], reward: 18, xp: 10, moves: [{ name: '낟알 쪼아 먹기', dmg: [3, 5] }, { name: '짹짹 소란', dmg: [0, 0], fx: 'rattle' }, { name: '우르르 날아들기', dmg: [4, 6] }] },
+  gorani: { name: '고라니', hp: 46, shield: 3, weak: ['sound', 'light'], reward: 38, xp: 18, moves: [{ name: '뒷발 차기', dmg: [6, 9] }, { name: '새싹 뜯어 먹기', dmg: [0, 0], fx: 'heal' }, { name: '깡충 들이받기', dmg: [7, 10] }] },
+  mole: { name: '두더지', hp: 40, shield: 3, weak: ['water', 'dash'], reward: 32, xp: 16, moves: [{ name: '흙 뿌리기', dmg: [3, 5], fx: 'rattle' }, { name: '땅굴 파기', dmg: [0, 0], fx: 'dig' }, { name: '앞발 할퀴기', dmg: [6, 8] }] },
+  boar: { name: '멧돼지', hp: 96, shield: 6, weak: ['light', 'water'], reward: 90, xp: 40, moves: [{ name: '멧돼지 돌진', dmg: [11, 15] }, { name: '씩씩대기', dmg: [0, 0], fx: 'howl' }, { name: '코로 들이받기', dmg: [8, 11] }] },
 };
+/** 적 레벨 하나마다: 기운 +10% · 공격 +6% · 보상 +8% */
+export const LV_HP = 0.1, LV_DMG = 0.06, LV_REWARD = 0.08;
 
 /** 유니코 기술 / 콩이 기술: 속성·위력 */
 export const UNICO_SKILLS = [
@@ -43,10 +50,12 @@ export class BattleSim {
    * @param kind 'crow'|'fox'|'wolf'
    * @param opt { level: 플레이어 레벨, petHearts: 0~5, rng }
    */
-  constructor(kind, { level = 1, petHearts = 0, rng = Math.random } = {}) {
+  constructor(kind, { level = 1, petHearts = 0, rng = Math.random, elv = 1 } = {}) {
     const E = ENEMIES[kind];
     this.kind = kind; this.rng = rng;
-    this.enemy = { name: E.name, hp: E.hp, max: E.hp, shield: E.shield, shieldMax: E.shield, weak: E.weak, known: new Set(), broken: 0, power: 1 };
+    this.elv = Math.max(1, elv | 0);
+    const hpE = Math.round(E.hp * (1 + LV_HP * (this.elv - 1)));
+    this.enemy = { name: E.name, hp: hpE, max: hpE, shield: E.shield, shieldMax: E.shield, weak: E.weak, known: new Set(), broken: 0, power: 1 + LV_DMG * (this.elv - 1) };
     const hp = 36 + level * 4;
     this.party = [
       { id: 'unico', name: '유니코', hp, max: hp, bp: 1 },
@@ -101,7 +110,11 @@ export class BattleSim {
     }
     const moves = ENEMIES[this.kind].moves;
     const mv = moves[Math.floor(this.rng() * moves.length)];
-    if (mv.fx === 'howl') { E.power = Math.min(1.6, E.power + 0.25); out.push({ kind: 'enemy', move: mv.name, buff: true }); this.endRound(); return out; }
+    if (mv.fx === 'howl') { E.power = Math.min(1.6 + LV_DMG * (this.elv - 1), E.power + 0.25); out.push({ kind: 'enemy', move: mv.name, buff: true }); this.endRound(); return out; }
+    // 새싹 뜯어 먹기: 기운 회복 (최대의 15%)
+    if (mv.fx === 'heal') { const n = Math.min(E.max - E.hp, Math.round(E.max * 0.15)); E.hp += n; out.push({ kind: 'enemy', move: mv.name, heal: n }); this.endRound(); return out; }
+    // 땅굴 파기: 땅속으로 숨어 방패가 하나 차오름
+    if (mv.fx === 'dig') { if (!E.broken) E.shield = Math.min(E.shieldMax, E.shield + 1); out.push({ kind: 'enemy', move: mv.name, dig: true }); this.endRound(); return out; }
     // 대상: 쓰러지지 않은 쪽, 유니코를 더 자주
     const alive = this.party.map((m, i) => (m.hp > 0 ? i : -1)).filter((i) => i >= 0);
     const target = alive.length > 1 && this.rng() < 0.35 ? 1 : alive[0];
@@ -126,5 +139,7 @@ export class BattleSim {
   /** 도망: 70% (적이 브레이크 중이면 100%) */
   flee() { const ok = this.enemy.broken > 0 || this.rng() < 0.7; if (ok) this.state = 'fled'; return ok; }
 
-  reward() { return this.state === 'win' ? ENEMIES[this.kind].reward + (this.turn <= 3 ? 20 : 0) : 0; }
+  reward() { return this.state === 'win' ? Math.round(ENEMIES[this.kind].reward * (1 + LV_REWARD * (this.elv - 1))) + (this.turn <= 3 ? 20 : 0) : 0; }
+  /** 이겼을 때 경험치 (인카운터) */
+  xp() { return this.state === 'win' ? Math.round((ENEMIES[this.kind].xp || 10) * (1 + 0.1 * (this.elv - 1))) : 0; }
 }
