@@ -1,5 +1,6 @@
 import { villager } from './art_villagers.js';
 import * as DA from './art_decor.js';
+import { bikeStack, cartStack, RIDE_ANCHOR } from './art_rides.js';
 import { definePalette } from './palette.js';
 import { Spr } from './pxl.js';
 import * as C from './art_chars.js';
@@ -82,6 +83,10 @@ export function buildSprites() {
   const step = () => { if (warm >= 64) return; S.tractor(warm >= 32, warm % 32); warm++; idle(step); };
   setTimeout(() => idle(step), 1500);
   S.tractorAnchor = W.TRACTOR_ANCHOR;
+  // 자전거·농장 카트 (32방향, 쓰일 때 구움)
+  const rcache = { bike: [], cart: [], cartBody: [], cartRoof: [] };
+  S.ride = (kind, k) => (rcache[kind][k] ||= cv(kind === 'bike' ? bikeStack((k / 32) * Math.PI * 2) : cartStack((k / 32) * Math.PI * 2, kind === 'cartBody' ? 'body' : kind === 'cartRoof' ? 'roof' : 'all')));
+  S.rideAnchor = RIDE_ANCHOR;
   // 새 지역
   S.greenhouse = cv(W.greenhouse());
   S.sensor = [0, 1, 2].map((f) => cv(W.sensorPole(f * 3)));
@@ -143,6 +148,11 @@ export function buildSprites() {
     bucket: () => ({ img: cv(DA.bucket()), ay: 19 }),
     hay: () => ({ img: S.hay, ay: 26 }),
     cart: () => ({ img: cv(DA.cart()), ay: 30 }),
+    fest_lantern: () => ({ img: cv(DA.festLantern()), glow: glow(DA.festLantern()), ay: 46, tall: true }),
+    fest_azalea: () => ({ img: cv(DA.festAzalea()), ay: 27 }),
+    fest_kite: () => ({ img: cv(DA.festKite()), ay: 58, tall: true }),
+    fest_scarecrow: () => ({ img: cv(DA.scarecrow()), ay: 56, tall: true }),
+    fest_snowman: () => ({ img: cv(DA.festSnowman()), ay: 34 }),
   };
   S.decor = (id, flip = false) => {
     const k = id + (flip ? '|f' : '');
@@ -154,6 +164,8 @@ export function buildSprites() {
     }
     return d;
   };
+  const stallCache = {};
+  S.festStall = (id) => (stallCache[id] ||= cv(DA.festStall(id)));
   const decorIcons = {};
   S.decorIcon = (id) => {
     if (decorIcons[id]) return decorIcons[id];

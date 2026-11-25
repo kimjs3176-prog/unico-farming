@@ -58,8 +58,8 @@ export const BugMethods = {
       // 주인공 근처(화면 안쪽) 꽃밭 중 하나
       const near = this.bugSpots.filter((s) => Math.hypot(s.x - this.player.wx, s.y - this.player.wy) < 520);
       const sp = (near.length ? near : this.bugSpots)[Math.floor(Math.random() * (near.length || this.bugSpots.length))];
-      const kind = rollBug(Math.random, { night, raining: this.raining });
-      this.bugs.push({ kind, hx: sp.x + (Math.random() - 0.5) * 30, hy: sp.y + (Math.random() - 0.5) * 16, ph: Math.random() * 6, x: sp.x, y: sp.y, h: 0, hop: 0 });
+      const kind = rollBug(Math.random, { night, raining: this.raining, season: this.season.id }); // 제철 곤충 (겨울엔 거의 없음)
+      if (kind) this.bugs.push({ kind, hx: sp.x + (Math.random() - 0.5) * 30, hy: sp.y + (Math.random() - 0.5) * 16, ph: Math.random() * 6, x: sp.x, y: sp.y, h: 0, hop: 0 });
     }
     for (const b of this.bugs) {
       b.ph += dt;

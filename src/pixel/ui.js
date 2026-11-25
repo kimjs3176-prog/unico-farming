@@ -15,6 +15,7 @@ export class UI {
         <div class="panel status">
           <div class="srow"><img class="ico tod"><b class="day"></b><span class="time"></span><img class="ico wx"></div>
           <div class="srow"><img class="ico" src="${S.iconURL('coin')}"><b class="coins">0</b><span class="lv chip"></span></div>
+          <div class="srow"><button class="stars" data-act="town" aria-label="우리 마을 별점"></button></div>
         </div>
         <div class="panel quest hidden" data-act="quests"><img class="ico" src="${S.iconURL('quest')}"><div class="qbody"><div class="qt"></div><div class="qbar"><i></i></div><div class="qd"></div></div></div>
       </div>
@@ -61,6 +62,7 @@ export class UI {
     const coins = this.q('.coins');
     if (coins.dataset.v !== String(s.money)) { coins.dataset.v = s.money; coins.textContent = s.money.toLocaleString(); coins.classList.remove('bump'); void coins.offsetWidth; coins.classList.add('bump'); }
     this.q('.lv').textContent = `Lv.${s.level}`;
+    const st = this.q('.stars'); if (st.dataset.v !== String(s.stars)) { st.dataset.v = s.stars; st.innerHTML = `${'<i class="on">★</i>'.repeat(s.stars)}${'<i>★</i>'.repeat(5 - s.stars)} <span>마을</span>`; }
     const qp = this.q('.quest');
     // 목표: 대화·메뉴 중에는 숨김 (화면을 가리지 않게)
     if (s.quest && !this.busy) {
@@ -136,6 +138,40 @@ export class UI {
     t._t1 = setTimeout(() => t.classList.add('out'), 2600);
     t._t2 = setTimeout(() => t.remove(), 3000);
     while (box.children.length > 3) box.firstChild.remove();
+  }
+
+  /** 코인이 화면 가운데에서 HUD 지갑으로 날아감 (움직임 줄이기면 생략) */
+  coinFly(n) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const to = this.q('.coins').getBoundingClientRect();
+    const sx = innerWidth / 2, sy = innerHeight / 2 - 40;
+    for (let i = 0; i < n; i++) {
+      const c = el('img', 'coinfly');
+      c.src = this.S.iconURL('coin'); c.alt = '';
+      c.style.left = `${sx}px`; c.style.top = `${sy}px`;
+      this.root.appendChild(c);
+      const dx = (Math.random() - 0.5) * 80, dy = -30 - Math.random() * 40;
+      c.animate([
+        { transform: 'translate(-50%, -50%) scale(1)' },
+        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1.2)`, offset: 0.35 },
+        { transform: `translate(calc(-50% + ${to.left + to.width / 2 - sx}px), calc(-50% + ${to.top + to.height / 2 - sy}px)) scale(0.6)` },
+      ], { duration: 650 + i * 70, easing: 'cubic-bezier(.5,0,.6,1)' }).onfinish = () => {
+        c.remove();
+        const coins = this.q('.coins'); coins.classList.remove('bump'); void coins.offsetWidth; coins.classList.add('bump');
+        if (i === n - 1) this.audio.play('coin', 0.4);
+      };
+    }
+  }
+
+  /** 큰 축하 카드 (레벨 업·마을 별): 누르거나 E 로 닫음 */
+  celebrate(title, big, lines = []) {
+    const card = el('div', 'celebrate', `<div class="cel-card panel"><div class="cel-burst"></div><b class="cel-big">${big}</b><h2>${title}</h2>${lines.map((l) => `<p>${l}</p>`).join('')}<small>${this.keyName('ok')} 닫기</small></div>`);
+    this.root.appendChild(card);
+    const close = () => { card.classList.add('out'); setTimeout(() => card.remove(), 300); removeEventListener('keydown', kd, true); };
+    const kd = (e) => { if (['KeyE', 'Space', 'Enter', 'Escape'].includes(e.code)) { e.preventDefault(); e.stopPropagation(); close(); } };
+    setTimeout(() => addEventListener('keydown', kd, true), 400);
+    card.onclick = close;
+    setTimeout(close, 6000);
   }
 
   /** 지금 입력 방식에 맞는 버튼 이름 */
