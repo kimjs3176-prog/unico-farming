@@ -91,6 +91,10 @@ body:not(.started) #ui { visibility: hidden; }
 .cel-burst { position: absolute; inset: calc(var(--u) * -10); z-index: -2; background: repeating-conic-gradient(rgba(247, 207, 98, 0.22) 0 10deg, transparent 10deg 20deg); border-radius: 50%; animation: spin 8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.flash { position: fixed; inset: 0; z-index: 25; pointer-events: none !important; background: #fff; animation: flash 0.75s steps(6) forwards; }
+@keyframes flash { 0%, 30%, 60% { opacity: 0.9; } 15%, 45% { opacity: 0; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .flash { background: #07050f; opacity: 0.4; } }
+
 /* 지금 목표 (진행 막대) */
 .quest { display: flex; gap: calc(var(--u) * 3); align-items: flex-start; cursor: pointer; max-width: calc(var(--fs) * 18); }
 .quest .ico { margin-top: calc(var(--u) * 1); }

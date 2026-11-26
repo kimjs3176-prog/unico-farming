@@ -947,3 +947,24 @@ export function chair(flip = false) { const s = new Spr(24, 34); s.rect(4, 2, 16
 export function rug() { const s = new Spr(128, 64); s.ell(64, 32, 62, 30, 'rose', { level: 2 }); s.ell(64, 32, 54, 24, 'rose', { level: 3 }); s.ell(64, 32, 44, 18, 'gold', { level: 3 }); s.ell(64, 32, 34, 12, 'rose', { level: 2 }); for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; s.set(Math.round(64 + Math.cos(a) * 49), Math.round(32 + Math.sin(a) * 21), 'white', 4); } return s; }
 export function plantPot() { const s = new Spr(28, 40); s.poly([7, 28, 21, 28, 19, 39, 9, 39], 'band', { level: 2 }); s.hline(6, 21, 28, 'band', 3); for (let k = 0; k < 6; k++) { const a = -Math.PI / 2 + (k - 2.5) * 0.45; s.ell(14 + Math.cos(a) * 8, 20 + Math.sin(a) * 12, 4, 6, 'leaf', { lo: 1 }); } s.outline(); return s; }
 export function floorLamp(night = false) { const s = new Spr(24, 70); s.rect(11, 18, 2, 48, 'iron', 2); s.rect(6, 64, 12, 4, 'iron', 1); s.poly([4, 18, 8, 2, 16, 2, 20, 18], night ? 'lamp' : 'cream', { level: night ? 2 : 2 }); s.outline(); return s; }
+
+/** 풀숲 (무릎까지 오는 수풀): back = 뒤쪽 키 큰 잎, front = 앞쪽 잎 (주인공 다리를 가림) */
+export function tallGrass(v = 0, front = false) {
+  const r = rng(31 + v * 7 + (front ? 100 : 0));
+  const s = new Spr(32, front ? 26 : 30);
+  const H = s.h;
+  const n = front ? 9 : 11;
+  for (let k = 0; k < n; k++) {
+    const x0 = 2 + Math.round((k / (n - 1)) * 27 + (r() - 0.5) * 3), h = front ? 10 + r() * 10 : 16 + r() * 12;
+    const lean = (r() - 0.5) * 6, lv = front ? 3 + (k % 2) : 3 + (k % 3 === 0 ? 1 : 0);
+    for (let j = 0; j < h; j++) {
+      const u = j / h, x = Math.round(x0 + lean * u * u), y = H - 1 - j;
+      s.set(x, y, 'grass', Math.min(5, lv + (u > 0.75 ? 1 : 0)));
+      if (u < 0.55) s.set(x + 1, y, 'grass', Math.max(2, lv - 1));
+      if (u > 0.85 && k % 2) s.set(x - 1, y, 'grass', 5); // 잎끝 빛
+    }
+  }
+  if (!front) for (let x = 1; x < 31; x++) { s.set(x, H - 1, 'grass', 2); s.set(x, H - 2, 'grass', 3); }
+  s.outline();
+  return s;
+}

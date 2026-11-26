@@ -29,7 +29,8 @@ export function buildSprites() {
   const dirs = ['down', 'up', 'left', 'right'];
   S.shiba = Object.fromEntries(dirs.map((d) => [d, [0, 1].map((f) => cv(C.shiba(d, f)))]));
   const both = (make) => { const s = make(); return [cv(s), cv(s.flipped())]; };
-  S.pest = { crow: [0, 1, 2, 3].map((f) => both(() => C.crow(f))), fox: [0, 1].map((f) => both(() => C.fox(f))), wolf: [0, 1].map((f) => both(() => C.wolf(f))) };
+  S.pest = { crow: [0, 1, 2, 3].map((f) => both(() => C.crow(f))), fox: [0, 1].map((f) => both(() => C.fox(f))), wolf: [0, 1].map((f) => both(() => C.wolf(f))),
+    sparrow: [0, 1, 2, 3].map((f) => both(() => C.sparrow(f))), gorani: [0, 1].map((f) => both(() => C.gorani(f))), mole: [0, 1].map((f) => both(() => C.mole(f))), boar: [0, 1].map((f) => both(() => C.boar(f))) };
   S.animal = {};
   for (const [type, fn] of [['cow', C.cow], ['sheep', C.sheep], ['chicken', C.chicken]]) {
     S.animal[type] = {};
@@ -163,6 +164,18 @@ export function buildSprites() {
       decorCache.set(k, d);
     }
     return d;
+  };
+  // 풀숲 3가지 (뒤·앞)
+  S.tallGrass = { back: [0, 1, 2].map((v) => cv(W.tallGrass(v, false))), front: [0, 1, 2].map((v) => cv(W.tallGrass(v, true))) };
+  // 야생 동물 도감 아이콘 (첫 프레임을 32칸에 맞춤)
+  const pestIcons = {};
+  S.pestIcon = (k) => {
+    if (pestIcons[k]) return pestIcons[k];
+    const im = S.pest[k][0][0], c = document.createElement('canvas'); c.width = c.height = 32;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    const sc = Math.min(1, 32 / im.width, 32 / im.height), w = Math.round(im.width * sc), h = Math.round(im.height * sc);
+    g.drawImage(im, (32 - w) >> 1, 32 - h, w, h);
+    return (pestIcons[k] = c.toDataURL());
   };
   const stallCache = {};
   S.festStall = (id) => (stallCache[id] ||= cv(DA.festStall(id)));

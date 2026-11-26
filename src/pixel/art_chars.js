@@ -353,3 +353,77 @@ function canid(f, { R, belly, big }) {
 }
 export const fox = (f = 0) => canid(f, { R: 'carrot', belly: 'cream' });
 export const wolf = (f = 0) => canid(f, { R: 'stone', belly: 'silver', big: true });
+
+/* ── 들판 인카운터 야생 동물 (밭을 망치는 녀석들) ── */
+/** 참새떼: 작은 갈색 새 셋 (0·1 앉아 쪼기 / 2·3 날기) */
+export function sparrow(f = 0) {
+  const s = new Spr(30, 22);
+  const fly = f >= 2;
+  const bird = (cx, cy, peck, wingUp) => {
+    s.ell(cx, cy, 4, 3, 'bark', { lo: 1, hi: 3 });
+    s.ell(cx - 0.5, cy + 1, 2.4, 1.4, 'cream', { lo: 1, clip: (x, y) => s.get(x, y) !== 0 });
+    s.poly([cx - 3, cy - 1, cx - 7, cy - 2, cx - 6, cy + 1], 'bark', { level: 1 });
+    if (fly) s.poly(wingUp ? [cx - 2, cy - 1, cx + 1, cy - 7, cx + 3, cy - 1] : [cx - 2, cy, cx + 1, cy + 5, cx + 3, cy], 'bark', { level: 2 });
+    else s.ell(cx - 1, cy, 2.6, 1.6, 'bark', { lo: 2, hi: 3 });
+    const hx = cx + 3, hy = peck ? cy + 1 : cy - 2;
+    s.ell(hx, hy, 2.4, 2.2, 'bark', { lo: 2, hi: 3 }); s.set(hx, hy - 1, 'shiba', 1);
+    s.set(hx + 1, hy, 'eye', 0); s.set(hx + 3, hy + 1, 'gold', 2); s.set(hx + 2, hy + 1, 'gold', 3);
+    if (!fly) { s.set(cx - 1, cy + 3, 'gold', 1); s.set(cx + 1, cy + 3, 'gold', 1); }
+  };
+  bird(7, fly ? 9 : 15, f === 1, f === 2); bird(21, fly ? 6 : 14, f === 0, f === 3); bird(15, fly ? 15 : 8, false, f === 2);
+  s.outline({ ink: ['ink', 0] });
+  return s;
+}
+
+/** 고라니: 가는 다리·둥근 귀·작은 송곳니 (새싹을 뜯어 먹는 밭 손님) */
+export function gorani(f = 0) {
+  const s = new Spr(46, 40);
+  const st = f ? 1 : -1;
+  for (const [x, near, ph] of [[13, 0, 1], [30, 0, -1], [16, 1, -1], [33, 1, 1]]) { const X = x + st * ph * 2; s.rect(X - 1, 22, 2, 15, 'shiba', near ? 2 : 1); s.rect(X - 1, 36, 2, 2, 'hoof', 1); }
+  s.ell(22, 19, 13, 7, 'shiba', { lo: 1, hi: 3, dither: 0.08 });
+  s.ell(22, 23, 8, 2.6, 'cream', { lo: 1, clip: (x, y) => s.get(x, y) !== 0 && y > 21 });
+  s.ell(8, 16, 2.6, 2.2, 'cream', { lo: 2 }); // 꼬리
+  // 목·머리
+  s.poly([30, 18, 34, 8, 39, 9, 36, 20], 'shiba', { level: 2 });
+  const hx = 38, hy = 8;
+  s.ell(hx, hy, 5, 4.2, 'shiba', { lo: 1, hi: 3 });
+  s.ell(hx + 4, hy + 2, 3, 2, 'shiba', { lo: 2, hi: 3 }); s.set(hx + 7, hy + 1, 'eye', 0);
+  s.ell(hx - 3, hy - 4, 2.6, 3.4, 'shiba', { lo: 2 }); s.ell(hx - 3, hy - 4, 1.2, 2, 'pink', { level: 2 }); s.ell(hx + 1, hy - 5, 2.4, 3.2, 'shiba', { lo: 2 });
+  s.set(hx + 1, hy - 1, 'eye', 0); s.set(hx + 1, hy - 2, 'white', 4);
+  s.vline(hx + 4, hy + 4, hy + 6, 'white', 4); // 송곳니
+  s.outline();
+  return s;
+}
+
+/** 두더지: 둥근 검은 몸·분홍 코·삽 같은 큰 손, 흙더미에서 고개를 내밂 */
+export function mole(f = 0) {
+  const s = new Spr(40, 30);
+  s.ell(20, 25, 17, 5, 'soil', { lo: 2, hi: 4 }); // 흙더미
+  for (let i = 0; i < 6; i++) s.set(6 + i * 5, 22 + (i % 2), 'soil', 1);
+  const up = f ? 1 : 0;
+  s.ell(20, 16 - up, 10, 9, 'patch', { lo: 0, hi: 2, clip: (x, y) => y < 24 });
+  s.ell(20, 19 - up, 5, 3, 'face', { lo: 1, clip: (x, y) => s.get(x, y) !== 0 });
+  s.ell(20, 14 - up, 3, 2, 'pink', { lo: 1, hi: 3 }); s.set(19, 13 - up, 'pink', 3);
+  s.set(16, 11 - up, 'eye', 2); s.set(24, 11 - up, 'eye', 2);
+  for (const sx of [-1, 1]) { const X = 20 + sx * 11; s.ell(X, 20 - up + (f ? sx : 0), 3.6, 2.6, 'pink', { lo: 1, hi: 2 }); for (let k = -1; k <= 1; k++) s.set(X + sx * 3, 20 - up + k + (f ? sx : 0), 'cream', 3); }
+  s.outline();
+  return s;
+}
+
+/** 멧돼지: 크고 검은 갈색 몸·뻣뻣한 등털·흰 엄니 */
+export function boar(f = 0) {
+  const s = new Spr(54, 38);
+  const st = f ? 1 : -1;
+  for (const [x, near, ph] of [[14, 0, 1], [34, 0, -1], [17, 1, -1], [37, 1, 1]]) { const X = x + st * ph * 2; s.rect(X - 2, 24, 4, 11, 'bark', near ? 2 : 1); s.rect(X - 2, 34, 4, 2, 'hoof', 0); }
+  s.ell(25, 19, 18, 10, 'bark', { lo: 0, hi: 3, dither: 0.1 });
+  for (let x = 12; x < 38; x += 3) s.vline(x, 9 - (x % 2), 11, 'fdark', 1); // 등 갈기
+  s.ell(6, 14, 2, 3, 'bark', { lo: 1 });
+  const hx = 43, hy = 18;
+  s.ell(hx, hy, 8, 7, 'bark', { lo: 1, hi: 3 });
+  s.ell(hx + 7, hy + 2, 3.4, 3, 'pink', { lo: 1, hi: 2 }); s.set(hx + 7, hy + 1, 'eye', 0); s.set(hx + 8, hy + 3, 'eye', 0);
+  s.poly([hx + 4, hy + 4, hx + 8, hy - 2, hx + 6, hy + 4], 'white', { level: 4 }); // 엄니
+  s.poly([hx - 4, hy - 5, hx - 1, hy - 12, hx + 1, hy - 5], 'bark', { level: 2 });
+  s.set(hx + 2, hy - 3, 'scarf', 2); s.set(hx + 2, hy - 4, 'white', 4);
+  s.outline();
+  return s;
+}

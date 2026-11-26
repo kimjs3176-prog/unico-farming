@@ -28,6 +28,8 @@ import { ActionMethods } from './actions.js';
 import { initRides, rideSave, rideLoad, RideMethods } from './rides.js';
 import { initFestival, FestivalMethods } from './festival.js';
 import { initProgress, progressSave, progressLoad, ProgressMethods } from './progress.js';
+import { initEncounter, encounterSave, encounterLoad, EncounterMethods } from './encounter.js';
+import { REPEL_PRICE } from './encounter_sim.js';
 import { initDecor, decorSave, decorLoad, DecorMethods } from './decor.js';
 
 const T = 32;
@@ -114,6 +116,7 @@ export class Game {
     initRides(this);
     initFestival(this);
     initProgress(this);
+    initEncounter(this);
     this.battle = null;
     this.load();
     this.refreshDayWeather(false);
@@ -127,7 +130,7 @@ export class Game {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         v: 1, day: this.day, time: this.time, seed: this.seed, raining: this.raining,
-        farm: this.farm.toJSON(), econ: this.econ.toJSON(), ranch: this.ranch.toJSON(), villagers: this.villagers.toJSON(), quests: this.quests.toJSON(), rice: { ...this.rice.toJSON(), batches: this.riceBatches }, rides: rideSave(this), flags: this.flags, challenges: progressSave(this), pet: this.pet.toJSON(), book: { entries: this.book.entries, rewarded: this.book.rewarded },
+        farm: this.farm.toJSON(), econ: this.econ.toJSON(), ranch: this.ranch.toJSON(), villagers: this.villagers.toJSON(), quests: this.quests.toJSON(), rice: { ...this.rice.toJSON(), batches: this.riceBatches }, rides: rideSave(this), flags: this.flags, challenges: progressSave(this), enc: encounterSave(this), pet: this.pet.toJSON(), book: { entries: this.book.entries, rewarded: this.book.rewarded },
         region: regionSave(this), craft: craftSave(this), decor: decorSave(this), player: { x: this.player.x, y: this.player.y, dir: this.player.dir }, trees: this.fruitTrees.map((t) => t.lastShake || 0),
       }));
     } catch { /* 저장 불가 (사생활 보호 모드 등) */ }
@@ -137,7 +140,7 @@ export class Game {
     try { d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch { d = null; }
     if (!d) return;
     this.day = d.day || 1; this.time = d.time ?? 0.27; this.seed = d.seed || 'carrot'; this.raining = !!d.raining;
-    this.farm.load(d.farm); this.econ.load(d.econ); this.ranch.load(d.ranch); this.villagers.load(d.villagers); this.quests.load(d.quests); this.pet.load(d.pet); regionLoad(this, d.region); craftLoad(this, d.craft); decorLoad(this, d.decor); this.rice.load(d.rice); this.riceBatches = d.rice?.batches || []; rideLoad(this, d.rides); if (d.flags && typeof d.flags === 'object') this.flags = d.flags; progressLoad(this, d.challenges);
+    this.farm.load(d.farm); this.econ.load(d.econ); this.ranch.load(d.ranch); this.villagers.load(d.villagers); this.quests.load(d.quests); this.pet.load(d.pet); regionLoad(this, d.region); craftLoad(this, d.craft); decorLoad(this, d.decor); this.rice.load(d.rice); this.riceBatches = d.rice?.batches || []; rideLoad(this, d.rides); if (d.flags && typeof d.flags === 'object') this.flags = d.flags; progressLoad(this, d.challenges); encounterLoad(this, d.enc); this.flags.wild ||= {};
     if (d.book) { this.book.entries = d.book.entries || {}; this.book.rewarded = d.book.rewarded || {}; }
     if (d.player && !this.blocked(d.player.x, d.player.y)) { this.player.place(d.player.x, d.player.y); this.player.dir = d.player.dir || 'down'; this.dog.place(d.player.x, d.player.y); }
     (d.trees || []).forEach((v, i) => { if (this.fruitTrees[i]) { this.fruitTrees[i].lastShake = v; this.fruitTrees[i].shaken = v === this.day; } });
@@ -233,7 +236,9 @@ export class Game {
     this.rideTick(dt, busy);
     this.festTick();
     if (this._townDirty && !busy) { this.townT = (this.townT || 0) - dt; if (this.townT <= 0) { this.townT = 2; this._townDirty = false; this.checkTown(); } }
-    if (this.tr.driving) this.drive(dt, busy); else this.movePlayer(dt, frozen);
+    const frz = frozen || this.encounterT > 0;
+    if (this.tr.driving) this.drive(dt, busy); else this.movePlayer(dt, frz);
+    this.encounterTick(dt, frz);
     if (this.threshing && !busy) this.threshTick(dt);
     this.moveDog(dt);
     // 집 안 문간을 밟으면 밖으로
@@ -751,6 +756,7 @@ export class Game {
           items.push({ icon: 'rice', label: '볍씨 (논에 모내기)', right: `${ITEMS.rice_seed.price} · 보유 ${e.inventory.items.rice_seed || 0}`, disabled: e.money < ITEMS.rice_seed.price, onPick: () => e.buyItem('rice_seed') && this.audio.play('coin') });
           items.push({ icon: 'feed', label: '가축 사료', right: `${FEED_PRICE} · 보유 ${e.inventory.feed}`, disabled: e.money < FEED_PRICE, onPick: () => e.buyFeed() && this.audio.play('coin') });
           items.push({ icon: 'treat', label: '강아지 간식', right: `${ITEMS.pet_treat.price} · 보유 ${e.inventory.items.pet_treat || 0}`, disabled: e.money < ITEMS.pet_treat.price, onPick: () => e.buyItem('pet_treat') && this.audio.play('coin') });
+          items.push({ icon: 'seed', label: `쑥 향주머니 (${this.enc.repel ? `남은 ${this.enc.repel}칸 · ` : ''}한동안 풀숲에서 야생 동물이 안 나옴)`, right: `${REPEL_PRICE}`, disabled: e.money < REPEL_PRICE, onPick: () => this.buyRepel() });
           items.push({ icon: 'compost', label: '퇴비 (심을 때 자동)', right: `${ITEMS.compost.price} · 보유 ${e.inventory.items.compost || 0}`, disabled: e.money < ITEMS.compost.price, onPick: () => e.buyItem('compost') && this.audio.play('coin') });
           return { sub, items };
         }
@@ -915,7 +921,7 @@ export class Game {
     const pImg = S.char('player', { scarf: 'scarf' }, p.dir, busyHands ? 0 : p.frame);
     const body = this.actBody();
     this.pushActDrawables(out);
-    out.push({ img: pImg, x: p.wx - 20 + body.dx, y: p.wy - 50 + body.dy, sy: p.wy, shadow: 'm', sx: p.wx, shy: p.wy - 1, player: true, bubble: this.fish?.state === 'bite' ? '!' : null });
+    out.push({ img: pImg, x: p.wx - 20 + body.dx, y: p.wy - 50 + body.dy, sy: p.wy, shadow: 'm', sx: p.wx, shy: p.wy - 1, player: true, bubble: this.fish?.state === 'bite' || this.wildBang ? '!' : null });
     return out.concat(this.drawOthers());
   }
   drawOthers() {
@@ -923,6 +929,7 @@ export class Game {
     this.drawPests(out);
     this.pushDecorDrawables(out);
     this.pushFestDrawables(out);
+    this.pushGrassDrawables(out);
     // 스마트팜 드론 (비닐하우스 위를 천천히 돎)
     { const t = performance.now() / 1000, cx = (59 + 4) * T, cy = (17 - 2) * T; const dx = cx + Math.cos(t * 0.4) * 150, dy = cy + Math.sin(t * 0.4) * 60; out.push({ img: S.drone[Math.floor(t * 20) % 2], x: dx - 15, y: dy - 60 + Math.sin(t * 2) * 3, sy: dy + 200, shadow: 's', sx: dx, shy: dy + 10 }); }
     // 반려견
@@ -1062,6 +1069,7 @@ Object.assign(Game.prototype, ActionMethods);
 Object.assign(Game.prototype, RideMethods);
 Object.assign(Game.prototype, FestivalMethods);
 Object.assign(Game.prototype, ProgressMethods);
+Object.assign(Game.prototype, EncounterMethods);
 Object.assign(Game.prototype, DecorMethods);
 /** 도감: 종 수 퀘스트 + 카테고리 완성 보상 (3D 판과 같은 Collection) */
 Game.prototype.checkBook = function () {
