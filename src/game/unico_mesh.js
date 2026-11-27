@@ -20,6 +20,17 @@ export const BONES = ['body', 'head', 'legFL', 'legFR', 'legBL', 'legBR', 'tail'
 export const ARM_K = 0.8;
 /** 두 발 유니코 어깨·팔 굵기(반지름 m): 어깨 공과 팔 뿌리가 같은 굵기 */
 export const ARM_R = 0.076;
+/**
+ * 팔 벌림(rad): 어깨(팔 뼈 자리)는 그대로 두고 팔이 늘어지는 방향만 바깥으로 이만큼 돌림 — 모든 종·유니코 같은 값.
+ * 팔 안쪽이 몸통에 묻히면 그 자리에 정점이 없어 팔을 들 때 몸통 쪽 피부가 막처럼 늘어남(만세·손 인사에서 울퉁불퉁) → 2026-11-27 9°
+ * 손 위치(unico.js HAND_R)·코스튬 소매(unico_costume.js)도 armOut() 으로 같이 돌림
+ */
+export const ARM_OUT = 9 * Math.PI / 180;
+/** 어깨 기준 팔 방향 벡터 d 를 앞에서 본 평면(z 축)에서 바깥으로 ARM_OUT 만큼 돌림. sx: 오른팔 +1, 왼팔 -1 */
+export function armOut(d, sx) {
+  const a = sx * ARM_OUT, c = Math.cos(a), s = Math.sin(a);
+  return [d[0] * c - d[1] * s, d[0] * s + d[1] * c, d[2]];
+}
 
 /**
  * 리그: quad = 네 발 (NPC 주민), biped = 두 발 두 손으로 선 유니코 (주인공·접속자, 원본 일러스트처럼)
@@ -121,7 +132,7 @@ function primitivesBiped() {
   //  어깨→손 길이는 ARM_K(0.8)배로 짧게 (손 도구 위치 HAND_R_HERO 도 같은 비율)
   for (const [sx, bone] of [[-1, 'armL'], [1, 'armR']]) {
     const J = bonePos('biped', bone).toArray();
-    const at = (p) => [J[0] + (p[0] - J[0]) * ARM_K, J[1] + (p[1] - J[1]) * ARM_K, J[2] + (p[2] - J[2]) * ARM_K]; // 어깨 기준으로 줄임
+    const at = (p) => { const d = armOut([(p[0] - J[0]) * ARM_K, (p[1] - J[1]) * ARM_K, (p[2] - J[2]) * ARM_K], sx); return [J[0] + d[0], J[1] + d[1], J[2] + d[2]]; }; // 어깨 기준으로 줄이고 바깥으로 벌림
     // 어깨 공과 팔 뿌리를 같은 굵기(ARM_R)로 → 어깨선에서 팔이 그대로 이어짐 (공이 붙은 가는 관처럼 보이지 않게). 손목 쪽만 살짝 가늘게
     push(sph(J, ARM_R), 0.16, 'body', 'body');
     push(rcone(J, at([sx * 0.42, 0.53, 0.06]), ARM_R, ARM_R * 0.92), 0.06, 'body', bone);

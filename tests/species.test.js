@@ -14,7 +14,7 @@ globalThis.fetch = async (url) => {
 const ctx2d = new Proxy({ createRadialGradient: () => ({ addColorStop() {} }), measureText: () => ({ width: 60 }) }, { get: (t, k) => (k in t ? t[k] : () => {}) });
 globalThis.document ??= { createElement: () => ({ width: 0, height: 0, getContext: () => ctx2d }) };
 
-const { buildUnicoGeometry, parseUnicoBin, unicoDecoderReady, SLOTS } = await import('../src/game/unico_mesh.js');
+const { buildUnicoGeometry, parseUnicoBin, unicoDecoderReady, SLOTS, armOut } = await import('../src/game/unico_mesh.js');
 const { Unico, loadUnicoMesh, prebuildTemplates } = await import('../src/game/unico.js');
 const { SPECIES, SPECIES_IDS, VILLAGER_SPECIES, villagerName } = await import('../src/game/species.js');
 const { shapeHash, speciesShape } = await import('../scripts/lib/species_shapes.mjs');
@@ -430,7 +430,7 @@ test('만세: 주민은 손이 머리 타원 밖 옆으로 (V 실루엣, 머리�
     const R = BIN[sp].full.meta.head, k = u.scale;
     u.headG.getWorldPosition(hc).add(new THREE.Vector3(...R.c).multiplyScalar(k));
     for (const [arm, sx] of [[u.arms[0], -1], [u.arms[1], 1]]) {
-      arm.localToWorld(h.set(sx * 0.16, -0.34, 0.045));
+      arm.localToWorld(h.set(...armOut([sx * 0.16, -0.34, 0.045], sx)));
       const e = Math.hypot((h.x - hc.x) / (R.r[0] * k), (h.y - hc.y) / (R.r[1] * k), (h.z - hc.z) / (R.r[2] * k));
       assert.ok(e > 1.25, `${sp}: 손이 머리 가까이 (${e.toFixed(2)})`);
       assert.ok(Math.abs(h.x) > 0.45 * k + 0.02, `${sp}: 손이 옆으로 (${h.x.toFixed(2)})`);

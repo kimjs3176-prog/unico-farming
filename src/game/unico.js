@@ -4,7 +4,7 @@ import { heightAt } from './terrain.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeLabel } from './label.js';
 import { enhanceMaterial } from './surface.js';
-import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, RIGS, bonePos, SLOTS, registerRig, unicoDecoderReady, ARM_K } from './unico_mesh.js';
+import { makeSDF, surfacePoint, normalAt, parseUnicoBin, colorAttribute, RIGS, bonePos, SLOTS, registerRig, unicoDecoderReady, ARM_K, armOut } from './unico_mesh.js';
 import { costumeShape } from './unico_costume.js';
 import { SPECIES, labelHeights } from './species.js';
 
@@ -1032,7 +1032,7 @@ function applyPalette(root, id) {
 // 감정표현 → 머리 위 아이콘
 // 행동별 손에 드는 도구 (두 발 캐릭터 오른손)
 const PROP_OF = { hoe: 'hoe', water: 'can', net: 'net', cast: 'rod', fishwait: 'rod', reel: 'rod', brush: 'brush', count: 'coins' };
-const HAND_R = [0.16, -0.34, 0.045]; // 오른팔 뼈 기준 손 위치 (주민 동물)
+const HAND_R = armOut([0.16, -0.34, 0.045], 1); // 오른팔 뼈 기준 손 위치 (주민 동물) — 몸 모양과 같이 바깥으로 ARM_OUT 만큼 벌림
 /** 주민이 플레이어를 알아보는 순간: 웃는 눈 시간(초), 고개 갸웃(rad), 다시 하기까지(초) */
 const NOTICE_T = 0.6, NOTICE_TILT = 0.04, NOTICE_GAP = 8;
 const UMB_ARM = [-0.95, 0, 0.25]; // 우산 든 왼팔 각도(앞으로 듦·안쪽으로)

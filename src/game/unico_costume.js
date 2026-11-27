@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeBodySDF, surfacePoint, bonePos } from './unico_mesh.js';
+import { makeBodySDF, surfacePoint, bonePos, armOut } from './unico_mesh.js';
 import { COSTUME } from './sim/costume.js';
 
 /**
@@ -74,7 +74,7 @@ const onBody = (y, phi, off = 0.04) => bodyPoint(y, phi).addScaledVector(V(Math.
 
 // 팔·다리 뼈 기준 좌표
 const ARM = (sx) => bonePos('biped', sx < 0 ? 'armL' : 'armR');
-const handLocal = (sx) => V(sx * 0.43, 0.485, 0.065).sub(ARM(sx)); // 손 중심
+const handLocal = (sx) => V(...armOut(V(sx * 0.43, 0.485, 0.065).sub(ARM(sx)).toArray(), sx)); // 손 중심 (몸 모양과 같이 바깥으로 ARM_OUT 만큼 벌림)
 const legLocal = (sx, y) => V(sx * 0.135, y, 0.012).sub(bonePos('biped', sx < 0 ? 'legL' : 'legR'));
 
 /** 팔 전체를 감싸는 소매 (어깨 → 손목 비율 t) */
