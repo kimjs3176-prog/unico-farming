@@ -41,6 +41,7 @@ Anthropic 이 공개한 **Agent Skills(SKILL.md) 포맷**의 커뮤니티 스킬
 ## 이 저장소 전용 스킬·규칙
 - `.claude/skills/unico-farm-assets/SKILL.md` — Blender 에셋 재생성·포즈 추가·검증 절차
 - `.claude/skills/unico-a11y-check/SKILL.md` — 접근성 점검 (WCAG 2.1 AA): `npm run a11y` 자동 점검 + 수동 점검표, 기록 `docs/a11y/`
+- `.claude/skills/stylized-character/SKILL.md` — 스타일화된 캐릭터 제작 방법론 (2026-11-27 추가). 원본 [droppedoutofcontext/claude-3d-character-skill](https://github.com/droppedoutofcontext/claude-3d-character-skill) (MIT, LICENSE 포함) 의 러시아어 원문을 한국어로 옮기고, 캐릭터는 Blender 대신 SDF 코드로 만드는 이 저장소 규칙에 맞춤: 2~3등신 동물 몸 비율·이음새 규칙과 반복 절차 `references/unico-chibi-body.md`, 리뷰어 요청문에 치비 점검 줄 추가. `scripts/` 는 원본 그대로
 - `.claude/skills/unico-perf-budget/SKILL.md` — 성능 예산: `docs/perf/budget.json` + `npm run perf`, 실제 폰 측정법, three.js 병목 점검표, 기록 `docs/perf/`
 - `.claude/rules/` — 파일 경로에 따라 자동으로 적용되는 코드 규칙: `sim-code.md`(`src/game/sim/**` 순수 규칙·rng 주입·dt), `ui-code.md`(`src/ui/**`·`src/game/view/**` 상태는 sim 메서드로만·접근성·DOM 갱신), `test-standards.md`(`tests/**` 한국어 이름·결정적·버그 수정은 먼저 실패 확인)
 
