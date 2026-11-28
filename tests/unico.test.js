@@ -157,7 +157,7 @@ test('두 발 유니코의 어깨는 양쪽 1.5cm 안쪽에서 일반·원거리
         assert.ok(i < position.count);
         before.fromBufferAttribute(position, i);
         before.x += dx;
-        before.sub(pivot).applyQuaternion(arm.quaternion).add(pivot);
+        before.sub(pivot).multiply(arm.scale).applyQuaternion(arm.quaternion).add(pivot);
         mesh.getVertexPosition(i, after);
         assert.ok(after.distanceTo(before) < 1e-5);
       }

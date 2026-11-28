@@ -212,6 +212,11 @@ const BODY_Y = 0.8;
 const HEAD_AT = V(0, 0.78, 0.66); // 몸통 기준 머리 중심
 const HEAD_R = 0.42;
 const TPLS = {};
+// 바닥부터 턱까지 두 단위, 턱부터 정수리까지 한 단위 (귀·뿔 제외).
+const CHIN_Y = 0.96, FACE_HEIGHT = CHIN_Y / 2;
+const LEG_SHAPE = V(1.12, 0.92, 0.88);
+const EYE_SPREAD = 0.08;
+const eyeAxis = V(0, 1, 0);
 
 function buildTemplate(rig = 'quad') {
   const T = {};
@@ -269,7 +274,7 @@ function buildTemplate(rig = 'quad') {
   // ---- 눈 (깜빡임용): 주둥이 위 이마 쪽에 양옆으로, 표면에 살짝 박힘 ----
   const eyes = [], happy = [], eyeC = V(0, 0, 0);
   for (const sx of [-1, 1]) {
-    const e = onFace(FACE ? V(sx * FACE.eye[0], FACE.eye[1], FACE.eye[2]) : V(sx * 0.42, 0.05, 0.9), 0.016);
+    const e = onFace(FACE ? V(sx * FACE.eye[0], FACE.eye[1], FACE.eye[2]).applyAxisAngle(eyeAxis, sx * EYE_SPREAD) : V(sx * 0.42, 0.05, 0.9), 0.016);
     const ey = FACE ? 0.075 : 0.088;
     eyes.push([sph(ey, { s: [0.85, 1.2, 0.42], q: outward(e.n), p: e.p.toArray() }, 20), C.eye()]);
     eyes.push([sph(0.024, { p: e.p.clone().addScaledVector(e.n, 0.03).add(V(sx * -0.012 + 0.018, 0.032, 0)).toArray() }, 10), C.shine()]);
@@ -675,7 +680,13 @@ function openMouthGeo(mouthAt, quad, nose, smile) {
 }
 
 function buildSpeciesTemplate(rig, sp) {
-  const M = RIGS[rig].meta, A = M.anchors, L = M.lines, F = sp.face, pal = sp.palette;
+  const M = RIGS[rig].meta, A = { ...M.anchors }, L = M.lines, F = sp.face, pal = sp.palette;
+  // 눈·눈썹·눈꺼풀을 얼굴 곡면을 따라 같은 각도로 벌린다.
+  const spread = (point, side) => V(...point).applyAxisAngle(eyeAxis, side * EYE_SPREAD);
+  for (const [side, sign] of SIDE) for (const part of ['eye', 'brow']) {
+    const key = part + side, anchor = A[key];
+    if (anchor) A[key] = { ...anchor, p: spread(anchor.p, sign).toArray(), n: spread(anchor.n, sign).toArray() };
+  }
   const v = (a) => V(a[0], a[1], a[2]);
   const at = (a, off = 0) => v(a.p).addScaledVector(v(a.n), off); // 앵커 + 법선 방향 off
   const T = {};
@@ -693,8 +704,8 @@ function buildSpeciesTemplate(rig, sp) {
   }
   for (const pl of L.Y || []) face.push([tube(pl.map(v), F.mouth.r), F.mouth.color]);
   if (F.cheek) for (const [s] of SIDE) { const a = A['cheek' + s]; if (a) face.push([sph(F.cheek.r, { s: [1, 0.72, 0.28], q: outward(v(a.n)), p: at(a, -0.01).toArray() }, 12), mixHex(F.cheek.color, pal[SLOTS[a.s]], 1 - F.cheek.a), 0.8]); }
-  if (F.lids) for (const pl of L.lids || []) face.push([tube(pl.map(v), F.lids.r), F.lids.color]);
-  if (F.crinkle) for (const pl of L.crinkle || []) face.push([tube(pl.map(v), F.crinkle.r), F.crinkle.color]);
+  if (F.lids) for (const pl of L.lids || []) face.push([tube(pl.map((p) => spread(p, Math.sign(pl[0][0]))), F.lids.r), F.lids.color]);
+  if (F.crinkle) for (const pl of L.crinkle || []) face.push([tube(pl.map((p) => spread(p, Math.sign(pl[0][0]))), F.crinkle.r), F.crinkle.color]);
   if (F.brows?.kind === 'flat') for (const [s] of SIDE) { const a = A['brow' + s]; face.push([sph(1, { s: [F.brows.r, 0.015, 0.012], q: outward(v(a.n)), p: at(a, 0.002).toArray() }, 10), F.brows.color, 0.8]); }
   if (F.whiskers) for (const [s, sx] of SIDE) {
     const list = A['whisker' + s] || [];
@@ -1189,7 +1200,6 @@ export class Unico {
     this.boneMap = boneMap;
     this.costumeMeshes = {}; // 코스튬 id → 부위별 메시 (처음 입을 때 만듦)
     this.root.updateMatrixWorld(true);
-    this.headH = this.headG.getWorldPosition(new THREE.Vector3()).y; // 머리 높이 (시선 계산용, 한 번만)
     this.headG.rotation.order = 'YXZ'; // 고개: 돌리고 → 끄덕 (갸웃이 섞이지 않게)
     this.skeleton = new THREE.Skeleton(R.bones.map((b) => boneMap[b[0]]));
     // 몸 색: 종 팔레트(+가짜 AO) 또는 유니콘 팔레트. 원본이 아직 없으면 저해상도로 시작해 나중에 지오메트리만 올림 (생성은 늘 동기·늘 보임)
@@ -1218,9 +1228,29 @@ export class Unico {
       presetBounds(this.skinLod);
       this.skinLod.onBeforeRender = seen;
     }
-    // 바인드 자세를 기록한 뒤 양쪽 어깨를 각각 1.5cm 안쪽에 둔다.
-    // 일반·원거리 팔과 팔에 붙는 소매·손 도구가 같은 피벗을 따른다.
-    for (const arm of this.arms) arm.position.x -= Math.sign(arm.position.x) * 0.015;
+    let modelTop = sp ? R.meta.top : this.biped ? 2.0 : 2.2;
+    if (this.biped) {
+      const head = R.meta?.head ?? { c: [0, 0, 0], r: [0.44, 0.42, 0.42] };
+      const sy = FACE_HEIGHT / (2 * head.r[1]);
+      const oldPivotY = this.bodyY + this.headG.position.y;
+      const newPivotY = CHIN_Y + FACE_HEIGHT / 2 - head.c[1] * sy;
+      this.headG.scale.set(0.76, sy, 0.73);
+      this.headG.position.y = newPivotY - this.bodyY;
+      modelTop = newPivotY + (modelTop - oldPivotY) * sy;
+      for (const arm of this.arms) {
+        arm.position.x -= Math.sign(arm.position.x) * 0.015;
+        arm.scale.set(1.04, 0.85, 1.1);
+      }
+      // 보행 애니메이션의 scale.y는 기존처럼 1에서 시작한다. 다리 길이·발 모양은
+      // 바인드 좌표에 적용하고 엉덩이 피벗을 내리면 발바닥이 땅에 붙는다.
+      const legShape = new THREE.Matrix4().makeScale(LEG_SHAPE.x, LEG_SHAPE.y, LEG_SHAPE.z);
+      for (const leg of this.legs) {
+        this.skeleton.boneInverses[this.skeleton.bones.indexOf(leg)].premultiply(legShape);
+        leg.position.y -= this.legLen * (1 - LEG_SHAPE.y);
+      }
+      this.legLen *= LEG_SHAPE.y;
+    }
+    this.headH = this.headG.getWorldPosition(new THREE.Vector3()).y;
     this.bodyMesh = new THREE.Object3D(); // (호환) 숨쉬기는 몸통 뼈 미세 이동으로 대체
     this.acc = {};
     if (sp) this._buildSpeciesParts(TPL, boneMap); // 주민 동물: 얼굴·종별 옷 (유니콘 소품·코스튬 없음)
@@ -1310,9 +1340,9 @@ export class Unico {
     this._speakUntil = 0;
     this._talkSeed = Math.random() * 1000; // 말하기 입 박자 (캐릭터마다 다르게)
     // 이름표·감정 아이콘·말풍선 높이: 종은 굽힌 키로, 유니콘은 예전 값
-    const LH = sp ? labelHeights(sp, R.meta.top) : this.biped ? { label: 2.3, emote: 2.6, bubble: 3.0 } : { label: 2.55, emote: 2.6, bubble: 3.0 };
+    const LH = sp ? labelHeights(sp, modelTop) : this.biped ? { label: modelTop + 0.3, emote: modelTop + 0.6, bubble: modelTop + 1 } : { label: 2.55, emote: 2.6, bubble: 3.0 };
     this.labelY = LH.label; this.emoteY = LH.emote; this.bubbleY = LH.bubble;
-    this._topY = sp ? R.meta.top * sp.scale : this.biped ? 2.0 : 2.2; // 귀·뿔 끝 높이 (우산 자리)
+    this._topY = modelTop * this.scale; // 귀·뿔 끝 높이 (우산 자리)
     if (!sp) applyPalette(this.root, palette);
     this.palette = palette;
     if (name) this.setName(name, labelColor, labelBg);
@@ -1330,6 +1360,7 @@ export class Unico {
         const parent = part === 'head' ? this.headAcc : part === 'body' ? this.bodyG : this.boneMap[part];
         if (!parent || !pieces.length) continue;
         const m = meshOf(COSTUME_GEO[`${f.costume}:${part}`] ||= bundle(pieces.map(([g, mt]) => [g.clone(), mt])));
+        if (part === 'legL' || part === 'legR') m.scale.copy(LEG_SHAPE);
         parent.add(m); list.push(m);
       }
       this.costumeMeshes[f.costume] = list;
@@ -1401,6 +1432,7 @@ export class Unico {
     if (!this.props[kind]) {
       const m = makeProp(kind);
       m.position.set(...(this.species ? HAND_R : HAND_R_HERO));
+      m.scale.divide(this.arms[1].scale);
       m.visible = false;
       this.arms[1].add(m);
       this.props[kind] = m;
