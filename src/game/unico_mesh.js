@@ -18,7 +18,7 @@ export const TAIL_AT = new THREE.Vector3(0, 0.12, -0.56);
 export const BONES = ['body', 'head', 'legFL', 'legFR', 'legBL', 'legBR', 'tail'];
 /** 두 발 유니코(주인공) 팔 길이 배율: 어깨→손을 이만큼으로 (주민 동물은 1 그대로) */
 export const ARM_K = 0.8;
-/** 두 발 유니코 어깨·팔 굵기(반지름 m): 어깨 공과 팔 뿌리가 같은 굵기 */
+/** 두 발 유니코 어깨·팔 굵기(반지름 m): 팔 뿌리의 기준 굵기 */
 export const ARM_R = 0.076;
 /**
  * 팔 벌림(rad): 어깨(팔 뼈 자리)는 그대로 두고 팔이 늘어지는 방향만 바깥으로 이만큼 돌림 — 모든 종·유니코 같은 값.
@@ -125,18 +125,17 @@ function primitivesBiped() {
     // 발굽: 납작한 원기둥 대신 앞으로 둥근 장화 모양 (주민 동물 발과 같은 크기·자리, 색은 청록 그대로)
     push(ell([sx * 0.135, 0.07, 0.05], [0.1, 0.07, 0.135]), 0.05, 'hoof', bone);
   }
-  // 팔: 어깨에서 몸 옆으로 내려오는 통통한 짧은 팔 + 청록 손끝.
-  //  어깨는 몸통에 녹아든 둥근 '공 관절'(몸통 뼈)이고, 팔 뿌리는 그 공 안(팔 뼈 회전 중심)에서 나옴
-  //  → 팔을 어느 쪽으로 돌려도 뿌리가 공 안에 숨어 겨드랑이가 찢기거나 늘어나지 않음. 아래팔은 몸통과 띄워 둠
-  //  2026-11-17: 어깨 공을 몸통에 더 녹여(혹처럼 튀어나오지 않고 비탈로) 팔과 같은 굵기로 이어지게,
-  //  어깨→손 길이는 ARM_K(0.8)배로 짧게 (손 도구 위치 HAND_R_HERO 도 같은 비율)
+  // 팔 전체를 하나의 둥근 테이퍼로 만든다. 청록 손끝은 같은 표면에 칠해 손목에 턱이 생기지 않는다.
   for (const [sx, bone] of [[-1, 'armL'], [1, 'armR']]) {
-    const J = bonePos('biped', bone).toArray();
-    const at = (p) => { const d = armOut([(p[0] - J[0]) * ARM_K, (p[1] - J[1]) * ARM_K, (p[2] - J[2]) * ARM_K], sx); return [J[0] + d[0], J[1] + d[1], J[2] + d[2]]; }; // 어깨 기준으로 줄이고 바깥으로 벌림
-    // 어깨 공과 팔 뿌리를 같은 굵기(ARM_R)로 → 어깨선에서 팔이 그대로 이어짐 (공이 붙은 가는 관처럼 보이지 않게). 손목 쪽만 살짝 가늘게
-    push(sph(J, ARM_R), 0.16, 'body', 'body');
-    push(rcone(J, at([sx * 0.42, 0.53, 0.06]), ARM_R, ARM_R * 0.92), 0.06, 'body', bone);
-    push(ell(at([sx * 0.43, 0.485, 0.065]), [0.072, 0.074, 0.072]), 0.03, 'hoof', bone); // 손끝: 주민 동물처럼 조금 도톰하게
+    const shoulder = bonePos('biped', bone).toArray();
+    const handOffset = [sx * 0.43, 0.485, 0.065].map((v, i) => (v - shoulder[i]) * ARM_K);
+    const hand = armOut(handOffset, sx).map((v, i) => shoulder[i] + v);
+    // 몸통 쪽 어깨를 팔 안에 살짝 묻어 피벗은 덮고 겹친 구면의 돌출은 줄인다.
+    push(sph(shoulder, ARM_R * 0.90), 0.13, 'body', 'body');
+    P.push({
+      f: rcone(shoulder, hand, ARM_R, 0.067), k: 0.035, slot: 'body', bone,
+      paint: { f: sph(hand, 0.081), si: SLOTS.indexOf('hoof'), w: 0.018 },
+    });
   }
   // 갈기: 정수리 곱슬 → 뒤통수 → 등
   const headMane = [[0, 0.38, -0.1, 0.16], [0, 0.26, -0.3, 0.16], [0, 0.06, -0.4, 0.15], [0.13, 0.36, 0.15, 0.1], [0.03, 0.41, 0.08, 0.095], [-0.12, 0.37, 0.02, 0.09]];
@@ -206,7 +205,8 @@ export function buildUnicoGeometry(step = 0.022, rig = 'quad', { thick = 0 } = {
   let P, sdf, bounds, boneNames, sigma, PAINT = [];
   if (!shape) {
     ({ P, sdf } = makeSDF(rig));
-    bounds = RIGS[rig].bounds; boneNames = RIGS[rig].bones.map((b) => b[0]); sigma = SIGMA;
+    bounds = RIGS[rig].bounds; boneNames = RIGS[rig].bones.map((b) => b[0]); sigma = rig === 'biped' ? { ...SIGMA, armL: 0.022, armR: 0.022 } : SIGMA;
+    PAINT = P.filter((q) => q.paint).map((q) => q.paint);
   } else {
     P = thick ? shape.P.map((q) => (THIN_BONES.has(q.bone) ? { ...q, f: ((f) => (x, y, z) => f(x, y, z) - thick)(q.f) } : q)) : shape.P;
     sdf = thick || !shape.sdf ? unionSDF(P) : shape.sdf;
