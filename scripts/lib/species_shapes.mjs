@@ -2,9 +2,9 @@
 // 좌표: 발바닥 y=0, 정면 +Z, 단위 m, 루트 기준·스케일 전. 숫자는 docs/CHARACTERS.md(아트 바이블)와 같음
 import * as THREE from 'three';
 import { sph, ell, cap, rcone, squashZ, smin, flat, inter, minus, band, half, front, rotAbout } from '../../src/game/sdf.js';
-import { surfacePoint, normalAt, SLOTS } from '../../src/game/unico_mesh.js';
+import { surfacePoint, normalAt, SLOTS, armOut, ARM_OUT } from '../../src/game/unico_mesh.js';
 
-export const SHAPES_VERSION = 1; // sdf.js·공통 몸이 바뀌면 올림
+export const SHAPES_VERSION = 2; // sdf.js·공통 몸이 바뀌면 올림 (2: 팔 벌림 ARM_OUT)
 export const SPECIES_IDS = ['fox', 'raccoon', 'puppy', 'bear', 'cat', 'rabbit'];
 
 // ------------------------------------------------------------------ 벡터 도우미 (배열)
@@ -53,10 +53,12 @@ function commonBody(push, b, armX) {
     push(ell([sx * 0.135, foot.y, foot.z], [foot.rx, foot.ry, foot.rz]), 0.05, 'hoof', 'leg' + s);
   }
   for (const [sx, s] of SIDES) {
-    const J = [sx * armX, 0.82, 0.02], Hd = [sx * (armX + 0.15), 0.53, 0.06];
+    // 팔 방향은 어깨 기준으로 바깥으로 ARM_OUT 만큼 벌림 (팔 안쪽이 몸통에 묻히지 않게 — unico_mesh.js ARM_OUT)
+    const J = [sx * armX, 0.82, 0.02], fromJ = (p) => add(J, armOut(sub(p, J), sx));
+    const Hd = fromJ([sx * (armX + 0.15), 0.53, 0.06]);
     push(sph(J, arm[0] + 0.012), 0.11, 'body', 'body');
     push(rcone(J, Hd, arm[0], arm[1]), 0.015, 'body', 'arm' + s);
-    push(ell([sx * (armX + 0.16), 0.485, 0.065], [0.072, 0.074, 0.072]), 0.03, 'hoof', 'arm' + s);
+    push(ell(fromJ([sx * (armX + 0.16), 0.485, 0.065]), [0.072, 0.074, 0.072]), 0.03, 'hoof', 'arm' + s);
   }
 }
 
@@ -329,7 +331,7 @@ export function speciesShape(sp, { thick = 0 } = {}) {
 export function shapeHash(sp) {
   const def = SPECIES_SHAPES[sp];
   const json = JSON.stringify(def, (k, v) => (typeof v === 'function' ? v.toString() : v));
-  const s = `${SHAPES_VERSION}|${json}|${commonBody}|${pointyEar}|${rigBones}`;
+  const s = `${SHAPES_VERSION}|${ARM_OUT}|${json}|${commonBody}|${pointyEar}|${rigBones}`;
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
   return h >>> 0;
