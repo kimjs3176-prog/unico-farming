@@ -1218,6 +1218,9 @@ export class Unico {
       presetBounds(this.skinLod);
       this.skinLod.onBeforeRender = seen;
     }
+    // 바인드 자세를 기록한 뒤 양쪽 어깨를 각각 1.5cm 안쪽에 둔다.
+    // 일반·원거리 팔과 팔에 붙는 소매·손 도구가 같은 피벗을 따른다.
+    for (const arm of this.arms) arm.position.x -= Math.sign(arm.position.x) * 0.015;
     this.bodyMesh = new THREE.Object3D(); // (호환) 숨쉬기는 몸통 뼈 미세 이동으로 대체
     this.acc = {};
     if (sp) this._buildSpeciesParts(TPL, boneMap); // 주민 동물: 얼굴·종별 옷 (유니콘 소품·코스튬 없음)
