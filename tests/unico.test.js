@@ -139,3 +139,28 @@ test('품질을 따로 알려 주지 않으면 게임의 현재 품질(자동으
     if (had) globalThis.game = prev; else delete globalThis.game;
   }
 });
+
+test('두 발 유니코의 어깨는 양쪽 1.5cm 안쪽에서 일반·원거리 팔을 함께 돌린다', () => {
+  const u = new Unico(null, { rig: 'biped' });
+  const before = new THREE.Vector3(), after = new THREE.Vector3(), pivot = new THREE.Vector3();
+  for (const [side, arm] of u.arms.entries()) {
+    const bone = u.skeleton.bones.indexOf(arm);
+    const dx = side === 0 ? 0.015 : -0.015;
+    for (const angle of [0, 2.2]) {
+      arm.rotation.z = angle;
+      u.root.updateMatrixWorld(true);
+      arm.getWorldPosition(pivot);
+      for (const mesh of [u.skin, u.skinLod]) {
+        const { position, skinIndex } = mesh.geometry.attributes;
+        let i = 0;
+        while (i < position.count && skinIndex.getX(i) !== bone) i++;
+        assert.ok(i < position.count);
+        before.fromBufferAttribute(position, i);
+        before.x += dx;
+        before.sub(pivot).applyQuaternion(arm.quaternion).add(pivot);
+        mesh.getVertexPosition(i, after);
+        assert.ok(after.distanceTo(before) < 1e-5);
+      }
+    }
+  }
+});
