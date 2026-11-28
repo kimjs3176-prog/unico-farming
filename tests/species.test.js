@@ -424,19 +424,19 @@ test('몸빼: 바짓가랑이 바깥쪽·엉덩이 고리가 몸(팔 빼고) 표
 });
 
 test('만세: 주민은 손이 머리 타원 밖 옆으로 (V 실루엣, 머리를 뚫지 않음)', () => {
-  const cam = camAt(6), hc = new THREE.Vector3(), h = new THREE.Vector3();
+  const cam = camAt(6), h = new THREE.Vector3();
   for (const sp of SPECIES_IDS) {
     const u = new Unico(null, { species: sp });
     u.playAction('cheer', 3);
     for (let t = 0; t < 1.05; t += 1 / 30) u.update(1 / 30, cam);
     u.root.updateMatrixWorld(true);
     const R = BIN[sp].full.meta.head, k = u.scale;
-    u.headG.getWorldPosition(hc).add(new THREE.Vector3(...R.c).multiplyScalar(k));
     for (const [arm, sx] of [[u.arms[0], -1], [u.arms[1], 1]]) {
       arm.localToWorld(h.set(...armOut([sx * 0.16, -0.34, 0.045], sx)));
-      const e = Math.hypot((h.x - hc.x) / (R.r[0] * k), (h.y - hc.y) / (R.r[1] * k), (h.z - hc.z) / (R.r[2] * k));
+      const local = u.headG.worldToLocal(h.clone()).sub(new THREE.Vector3(...R.c));
+      const e = Math.hypot(local.x / R.r[0], local.y / R.r[1], local.z / R.r[2]);
       assert.ok(e > 1.25, `${sp}: 손이 머리 가까이 (${e.toFixed(2)})`);
-      assert.ok(Math.abs(h.x) > 0.45 * k + 0.02, `${sp}: 손이 옆으로 (${h.x.toFixed(2)})`);
+      assert.ok(Math.abs(h.x) > R.r[0] * u.headG.scale.x * k + 0.02, `${sp}: 손이 옆으로 (${h.x.toFixed(2)})`);
     }
   }
 });
@@ -545,4 +545,18 @@ test('시선: 옆 3m 대상을 1초 보면 고개가 그쪽으로 (몸은 그대
   u.lookTarget = null;
   for (let i = 0; i < 90; i++) u.update(1 / 60, camAt(6));
   assert.ok(Math.abs(u.lookYawApplied) < 0.05, `돌아옴 ${u.lookYawApplied}`);
+});
+
+test('두 발 캐릭터 7종: 귀·뿔을 제외한 머리 높이는 바닥~정수리의 1/3', () => {
+  for (const id of ['biped', ...SPECIES_IDS]) {
+    const hero = id === 'biped';
+    const u = new Unico(null, hero ? { rig: id } : { species: id });
+    const head = hero ? { c: [0, 0, 0], r: [0.44, 0.42, 0.42] } : BIN[id].full.meta.head;
+    const center = new THREE.Vector3(...head.c);
+    const up = new THREE.Vector3(0, head.r[1], 0);
+    const crown = u.headG.localToWorld(center.clone().add(up)).y;
+    const chin = u.headG.localToWorld(center.clone().sub(up)).y;
+    assert.ok(Math.abs((crown - chin) / crown - 1 / 3) < 1e-5, id);
+    assert.ok(u.legLen < 0.32 && u.arms.every((arm) => arm.scale.y < 1 && arm.scale.z > 1), id);
+  }
 });
