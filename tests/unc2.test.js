@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildUnicoGeometry, parseUnicoBin, unicoDecoderReady, SLOTS } from '../src/game/unico_mesh.js';
+import { buildUnicoGeometry, parseUnicoBin, unicoDecoderReady, RIGS, SLOTS } from '../src/game/unico_mesh.js';
 import { encodeUNC2, sections, ready as encoderReady } from '../scripts/lib/unc2.mjs';
 
 await encoderReady;
@@ -110,8 +110,8 @@ test('유니코 bin 4개: 정점·삼각형 수와 크기 상자가 승인한 �
   const BEFORE = {
     'unico_body.bin': [11238, 22472, [-0.42963, 0, -0.93992], [0.42963, 2.1199, 1.22992]],
     'unico_body_lod.bin': [2926, 5848, [-0.42992, 0, -0.93769], [0.42992, 2.11974, 1.22979]],
-    'unico_biped.bin': [15062, 30120, [-0.50499, -0.0071, -0.68991], [0.50496, 1.83984, 0.53982]],
-    'unico_biped_lod.bin': [3468, 6944, [-0.49784, -0.00675, -0.68981], [0.50468, 1.83944, 0.53906]],
+    'unico_biped.bin': [15544, 31076, [-0.50499, -0.0071, -0.68991], [0.50496, 1.83984, 0.53982]],
+    'unico_biped_lod.bin': [3581, 7152, [-0.49784, -0.00675, -0.68981], [0.50468, 1.83944, 0.53906]],
   };
   for (const [f, [nv, nt, mn, mx]] of Object.entries(BEFORE)) {
     const ab = bin(f);
@@ -125,6 +125,31 @@ test('유니코 bin 4개: 정점·삼각형 수와 크기 상자가 승인한 �
     for (let k = 0; k < 3; k++) {
       assert.ok(Math.abs(b.min.getComponent(k) - mn[k]) < 1e-4, `${f} min ${k}`);
       assert.ok(Math.abs(b.max.getComponent(k) - mx[k]) < 1e-4, `${f} max ${k}`);
+    }
+  }
+});
+
+test('두 발 모델의 좌우 팔은 각각 한 뼈를 따르는 닫힌 표면이고 겨드랑이를 잇는 면이 없다', () => {
+  const models = ['unico_biped', ...['fox', 'raccoon', 'puppy', 'bear', 'cat', 'rabbit'].map((s) => 'villager_' + s)];
+  for (const model of models) for (const level of ['', '_lod']) {
+    const file = model + level + '.bin';
+    const { geometry, meta } = parseUnicoBin(bin(file));
+    const bones = meta?.bones ?? RIGS.biped.bones;
+    const { skinIndex, skinWeight } = geometry.attributes;
+    for (const name of ['armL', 'armR']) {
+      const bone = bones.findIndex(([id]) => id === name);
+      const edges = new Map();
+      for (let i = 0; i < geometry.index.count; i += 3) {
+        const tri = geometry.index.array.subarray(i, i + 3);
+        if (!tri.some((v) => skinIndex.getX(v) === bone)) continue;
+        assert.ok(tri.every((v) => skinIndex.getX(v) === bone && skinWeight.getX(v) === 1), file + ' ' + name);
+        for (let j = 0; j < 3; j++) {
+          const a = tri[j], b = tri[(j + 1) % 3];
+          const key = Math.min(a, b) * skinIndex.count + Math.max(a, b);
+          edges.set(key, (edges.get(key) || 0) + 1);
+        }
+      }
+      assert.ok(edges.size > 0 && [...edges.values()].every((count) => count >= 2 && count % 2 === 0), file + ' ' + name);
     }
   }
 });

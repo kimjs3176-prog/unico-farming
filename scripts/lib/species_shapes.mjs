@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { sph, ell, cap, rcone, squashZ, smin, flat, inter, minus, band, half, front, rotAbout } from '../../src/game/sdf.js';
 import { surfacePoint, normalAt, SLOTS, armOut, ARM_OUT } from '../../src/game/unico_mesh.js';
 
-export const SHAPES_VERSION = 2; // sdf.js·공통 몸이 바뀌면 올림 (2: 팔 벌림 ARM_OUT)
+export const SHAPES_VERSION = 3; // sdf.js·공통 몸이 바뀌면 올림 (3: 둥근 팔을 어깨와 분리해 굽기)
 export const SPECIES_IDS = ['fox', 'raccoon', 'puppy', 'bear', 'cat', 'rabbit'];
 
 // ------------------------------------------------------------------ 벡터 도우미 (배열)
@@ -43,7 +43,7 @@ function rigBones(r) {
 }
 
 /** §3.2 공통 몸: 몸통 종·배·다리·발·어깨 공·팔·손 */
-function commonBody(push, b, armX) {
+function commonBody(push, paint, b, armX) {
   const top = b.top ?? 0.95, sq = b.sq ?? 0.9, leg = b.leg ?? [0.112, 0.1], arm = b.arm ?? [0.074, 0.06];
   const foot = { rx: 0.1, ry: 0.07, rz: 0.135, y: 0.07, z: 0.05, ...(b.foot || {}) };
   push(squashZ(rcone([0, 0.46, 0.01], [0, top, 0], b.r0 ?? 0.26, b.r1 ?? 0.14), sq), 0, 'body', 'body');
@@ -55,10 +55,10 @@ function commonBody(push, b, armX) {
   for (const [sx, s] of SIDES) {
     // 팔 방향은 어깨 기준으로 바깥으로 ARM_OUT 만큼 벌림 (팔 안쪽이 몸통에 묻히지 않게 — unico_mesh.js ARM_OUT)
     const J = [sx * armX, 0.82, 0.02], fromJ = (p) => add(J, armOut(sub(p, J), sx));
-    const Hd = fromJ([sx * (armX + 0.15), 0.53, 0.06]);
-    push(sph(J, arm[0] + 0.012), 0.11, 'body', 'body');
-    push(rcone(J, Hd, arm[0], arm[1]), 0.015, 'body', 'arm' + s);
-    push(ell(fromJ([sx * (armX + 0.16), 0.485, 0.065]), [0.072, 0.074, 0.072]), 0.03, 'hoof', 'arm' + s);
+    const hand = fromJ([sx * (armX + 0.16), 0.485, 0.065]);
+    push(sph(J, arm[0] * 0.90), 0.13, 'body', 'body');
+    push(rcone(J, hand, arm[0], arm[1]), 0.035, 'body', 'arm' + s);
+    paint(sph(hand, arm[1] + 0.015), 'hoof', 1, 0.018);
   }
 }
 
@@ -317,7 +317,7 @@ export function speciesShape(sp, { thick = 0 } = {}) {
   const THIN = /^(ear|tail)/;
   const push = (f, k, slot, bone) => P.push({ f: thick && THIN.test(bone) ? ((g) => (x, y, z) => g(x, y, z) - thick)(f) : f, k, slot, bone });
   const paint = (f, slot, layer = 1, w = 0.02) => PAINT.push({ f, slot, layer, w });
-  commonBody(push, def.body, def.rig.armX ?? 0.27);
+  commonBody(push, paint, def.body, def.rig.armX ?? 0.27);
   def.build(push, paint, { H, T, B });
   const sdf = (x, y, z) => {
     let d = P[0].f(x, y, z);

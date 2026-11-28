@@ -109,7 +109,10 @@ test('색 슬롯 비율: 표식이 실제로 칠해짐 (가면·반달·줄무�
   assert.ok(p('fox', 'maneD') >= 0.8 && p('fox', 'mane') >= 1.5, '여우 귀 끝·꼬리 끝');
   assert.ok(p('raccoon', 'maneD') >= 4, '너구리 가면·고리');
   assert.ok(p('puppy', 'maneD') >= 8, '강아지 귀·눈 얼룩');
-  assert.ok(p('bear', 'mane') >= 0.95 && p('bear', 'maneD') >= 1, '곰 반달(앞면만 가는 초승달)·눈가 패치');
+  // 팔의 닫힌 안쪽 표면을 추가해도 가슴 반달·눈가 패치의 면적 기준은 같아야 한다.
+  const bear = ST.bear.full;
+  const trunkAndHead = bear.n - bear.own.armL - bear.own.armR;
+  assert.ok(bear.slot[SLOTS.indexOf('mane')] / trunkAndHead >= 0.0095 && p('bear', 'maneD') >= 1, '곰 반달·눈가 패치');
   assert.ok(p('cat', 'maneD') >= 3 && p('cat', 'mane') >= 0.5, '고양이 줄무늬·귀 안');
   assert.ok(p('rabbit', 'mane') >= 1 && p('rabbit', 'maneD') >= 1, '토끼 귀 안·귀 끝');
 });
