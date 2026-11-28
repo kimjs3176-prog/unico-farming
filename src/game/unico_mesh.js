@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { sph, ell, cap, rcone, rcyl, squashZ, smin } from './sdf.js';
 
@@ -214,6 +215,25 @@ export function buildUnicoGeometry(step = 0.022, rig = 'quad', { thick = 0 } = {
     // 칠하기: 층 오름차순, 같은 층은 선언 순 (위 층이 아래 층을 덮음)
     PAINT = (shape.PAINT || []).map((q, i) => ({ ...q, i, si: SLOTS.indexOf(q.slot) })).sort((a, b) => (a.layer ?? 1) - (b.layer ?? 1) || a.i - b.i);
   }
+  const bake = (primitives, field) => extractSurface(step, primitives, field, bounds, boneNames, sigma, PAINT);
+  if (!boneNames.includes('armL')) return bake(P, sdf);
+
+  // 겨드랑이를 가로지르는 삼각형은 팔을 들면 뒤집힌다. 같은 피벗에서 겹치는
+  // 닫힌 어깨와 둥근 팔을 따로 추출하고, 그리기와 UNC2 저장에는 한 메시로 합친다.
+  const isArm = (q) => q.bone === 'armL' || q.bone === 'armR';
+  const torso = P.filter((q) => !isArm(q)), arms = P.filter(isArm);
+  const bodyPart = bake(torso, unionSDF(torso)), armPart = bake(arms, unionSDF(arms));
+  const geometry = mergeGeometries([bodyPart.geometry, armPart.geometry]);
+  geometry.computeBoundingSphere();
+  const slotWeights = new Float32Array(bodyPart.slotWeights.length + armPart.slotWeights.length);
+  slotWeights.set(bodyPart.slotWeights);
+  slotWeights.set(armPart.slotWeights, bodyPart.slotWeights.length);
+  const stats = { ...bodyPart.stats, verts: geometry.attributes.position.count, tris: geometry.index.count / 3,
+    clip: bodyPart.stats.clip + armPart.stats.clip };
+  return { geometry, slotWeights, sdf, stats };
+}
+
+function extractSurface(step, P, sdf, bounds, boneNames, sigma, PAINT) {
   const [min, max] = bounds;
   const nx = Math.ceil((max[0] - min[0]) / step) + 1, ny = Math.ceil((max[1] - min[1]) / step) + 1, nz = Math.ceil((max[2] - min[2]) / step) + 1;
   const field = new Float32Array(nx * ny * nz);
